@@ -1,0 +1,68 @@
+import { useState, useCallback } from 'react';
+import { get, post } from '../lib/api';
+
+export function useAuth() {
+    const [user, setUser] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('rtt_user')); } catch { return null; }
+    });
+    const [token, setToken] = useState(() => localStorage.getItem('rtt_token'));
+
+    const login = useCallback(async (credentials) => {
+        const res = await post('/auth/login', credentials);
+        // res is the full response body: { data: { token, user }, message, errors, meta }
+        const { token: t, user: u } = res.data ?? res;
+        localStorage.setItem('rtt_token', t);
+        localStorage.setItem('rtt_user', JSON.stringify(u));
+        setToken(t);
+        setUser(u);
+        return u;
+    }, []);
+
+    // Fetch fresh user data from /auth/me and update localStorage + state.
+    // Called on AppLayout mount to ensure roles are always up-to-date.
+    const refreshUser = useCallback(async () => {
+        try {
+            const res = await get('/auth/me');
+            // get() returns body JSON: { data: { user: {...} }, message, errors, meta }
+            const freshUser = res.data?.user ?? res.data;
+            if (freshUser) {
+                localStorage.setItem('rtt_user', JSON.stringify(freshUser));
+                setUser(freshUser);
+            }
+            return freshUser;
+        } catch {
+            localStorage.removeItem('rtt_token');
+            localStorage.removeItem('rtt_user');
+            setToken(null);
+            setUser(null);
+            window.location.href = '/login';
+            return null;
+        }
+    }, []);
+
+    const logout = useCallback(async () => {
+        try { await post('/auth/logout'); } catch {}
+        localStorage.removeItem('rtt_token');
+        localStorage.removeItem('rtt_user');
+        setToken(null);
+        setUser(null);
+        window.location.href = '/login';
+    }, []);
+
+    // Roles may arrive as plain strings ['super_admin'] or as Spatie objects [{name: 'super_admin', ...}]
+    const hasRole = useCallback((role) => {
+        if (!user?.roles) return false;
+        return user.roles.some((r) => (typeof r === 'string' ? r : r.name) === role);
+    }, [user]);
+
+    const hasAnyRole = useCallback((roles) => roles.some((r) => hasRole(r)), [hasRole]);
+
+    const hasPermission = useCallback((perm) => {
+        if (!user?.permissions) return false;
+        return user.permissions.some((p) => (typeof p === 'string' ? p : p.name) === perm);
+    }, [user]);
+
+    const isAuthenticated = !!token && !!user;
+
+    return { user, setUser, token, login, logout, refreshUser, isAuthenticated, hasRole, hasAnyRole, hasPermission };
+}

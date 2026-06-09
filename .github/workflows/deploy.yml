@@ -1,0 +1,52 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          port: ${{ secrets.PROD_PORT }}
+          script: |
+            set -e
+            cd /var/www/rtt-platform
+
+            echo "Pulling latest code..."
+            git pull origin main
+
+            echo "Installing dependencies..."
+            composer install --no-dev --optimize-autoloader --no-interaction
+
+            echo "Running migrations..."
+            php artisan migrate --force
+
+            echo "Clearing and caching config..."
+            php artisan optimize:clear
+            php artisan config:cache
+            php artisan route:cache
+            php artisan view:cache
+            php artisan event:cache
+
+            echo "Building frontend..."
+            npm ci --production
+            npm run build
+
+            echo "Restarting queue workers..."
+            php artisan queue:restart
+
+            echo "Warming cache..."
+            php artisan cache:warm-dashboard
+
+            echo "Deployment complete."
