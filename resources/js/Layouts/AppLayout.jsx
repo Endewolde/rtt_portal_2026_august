@@ -7,10 +7,10 @@ import {
     Activity, Award, BookOpen, Database,
     BarChart, BarChart2, TrendingUp, TrendingDown,
     Users, Building, Building2, Shield, Settings, Bell, Key,
-    LogOut, FlaskConical, ChevronLeft, ChevronRight, X,
+    Globe, LogOut, FlaskConical, ChevronLeft, ChevronRight, X,
     FolderOpen, EyeOff, Presentation, ClipboardList,
     BadgeDollarSign, Trophy, ListChecks, ShieldCheck,
-    User, ChevronDown, ChevronUp, Lock, Clock,
+    User, ChevronDown, ChevronUp, Lock, Clock, UserX,
 } from 'lucide-react'
 import NotificationBell from '../Components/NotificationBell'
 import { useAuth } from '../hooks/useAuth'
@@ -29,6 +29,7 @@ const _AO = [..._OR, 'college_officer']
 // Maps URL prefix → roles that may access it. Longer paths must come first.
 const ROUTE_PERMISSIONS = [
     ['/admin/settings',            ['super_admin']],
+    ['/admin/public-site',         ['super_admin']],
     ['/admin/roles',               ['super_admin']],
     ['/admin/permissions',         ['super_admin']],
     ['/admin/features',            ['super_admin']],
@@ -38,6 +39,8 @@ const ROUTE_PERMISSIONS = [
     ['/admin/users',               _A],
     ['/admin/colleges',            _A],
     ['/admin/departments',         _A],
+    ['/admin/reviewer-workload',   _A],
+    ['/admin/resources',           _A],
     ['/admin/validation-queue',    [..._A, ..._OR]],
     ['/admin/central-evaluation',  [..._A, ..._OR]],
     ['/admin/funding',             [..._A, ..._OR]],
@@ -200,6 +203,7 @@ const ICONS = {
     Users, Building, Building2, Shield, Settings, Bell, Key,
     FolderOpen, EyeOff, Presentation, ClipboardList,
     BadgeDollarSign, Trophy, ListChecks, ShieldCheck,
+    Globe,
     BuildingOffice: Building2,
 }
 
@@ -213,6 +217,7 @@ const ROLE_LABELS = {
     college_officer:    'College Officer',
     support_officer:    'Support Officer',
     staff:              'Staff',
+    guest:              'Guest',
 }
 
 const ROLE_COLORS = {
@@ -228,6 +233,7 @@ const ROLE_COLORS = {
     college_officer:    'from-teal-500 to-green-600',
     support_officer:    'from-yellow-500 to-amber-500',
     staff:              'from-emerald-500 to-teal-600',
+    guest:              'from-gray-400 to-gray-500',
     default:            'from-indigo-500 to-purple-600',
 }
 
@@ -359,6 +365,34 @@ function NavBadge({ count, collapsed }) {
     )
 }
 
+// ─── Guest access banner ──────────────────────────────────────────────────────
+
+function GuestBanner() {
+    const [dismissed, setDismissed] = useState(false)
+    if (dismissed) return null
+    return (
+        <div className="flex items-center justify-between gap-3 px-5 py-3
+                        bg-amber-50 border-b border-amber-200 shrink-0">
+            <div className="flex items-center gap-2.5 min-w-0">
+                <div className="shrink-0 h-7 w-7 rounded-lg bg-amber-100 flex items-center justify-center">
+                    <UserX size={14} className="text-amber-600" />
+                </div>
+                <p className="text-xs text-amber-800 leading-snug">
+                    <span className="font-semibold">You are logged in as a Guest.</span>
+                    {' '}You have limited access. Please contact the administrator to be assigned the appropriate role.
+                </p>
+            </div>
+            <button
+                onClick={() => setDismissed(true)}
+                className="shrink-0 text-amber-500 hover:text-amber-700 transition-colors"
+                title="Dismiss"
+            >
+                <X size={14} />
+            </button>
+        </div>
+    )
+}
+
 // ─── AppLayout ────────────────────────────────────────────────────────────────
 
 export default function AppLayout({ children, breadcrumb }) {
@@ -383,7 +417,10 @@ export default function AppLayout({ children, breadcrumb }) {
     const appSettings = usePage().props.app_settings ?? {}
     const sidebarBg          = appSettings.sidebar_color      || '#ffffff'
     const systemName         = appSettings.system_name        || 'RTT Platform'
+    const systemTagline      = appSettings.system_tagline     || 'Research & Tech Transfer'
     const systemLogo         = appSettings.system_logo        || null
+    const logoW              = parseInt(appSettings.logo_width  || '28', 10)
+    const logoH              = parseInt(appSettings.logo_height || '28', 10)
     const announcementActive = appSettings.announcement_active === 'true'
     const announcementMsg    = appSettings.announcement_message || ''
     const footerText         = appSettings.footer_text        || ''
@@ -512,6 +549,10 @@ export default function AppLayout({ children, breadcrumb }) {
                     show: hasAnyRole(ALL_ADMIN) && hasFeature('evaluation'),
                 },
                 {
+                    label: 'Reviewer Workload', href: '/admin/reviewer-workload', icon: 'Users',
+                    show: hasAnyRole(ALL_ADMIN) && hasFeature('evaluation'),
+                },
+                {
                     label: 'Complaints', href: '/complaints', icon: 'AlertCircle',
                     show: hasAnyRole([...ALL_ADMIN, ...ALL_OFFICERS, 'staff']) && hasFeature('complaints'),
                     badge: c => c.open_complaints,
@@ -596,10 +637,6 @@ export default function AppLayout({ children, breadcrumb }) {
                     show: hasAnyRole(ALL_ADMIN) && hasFeature('reports'),
                 },
                 {
-                    label: 'Reviewer Workload', href: '/reports?type=reviewer_workload', icon: 'Users',
-                    show: hasAnyRole(ALL_ADMIN) && hasFeature('reports'),
-                },
-                {
                     label: 'Budget Utilization', href: '/reports?type=budget_utilization', icon: 'TrendingDown',
                     show: hasAnyRole([...ALL_ADMIN, 'support_officer', ...OFFICER_ROLES]) && hasFeature('reports'),
                 },
@@ -633,6 +670,10 @@ export default function AppLayout({ children, breadcrumb }) {
                     show: hasAnyRole(ALL_ADMIN),
                 },
                 {
+                    label: 'Resources', href: '/admin/resources', icon: 'FolderOpen',
+                    show: hasAnyRole(ALL_ADMIN),
+                },
+                {
                     label: 'Audit Logs', href: '/admin/audit-logs', icon: 'Shield',
                     show: hasAnyRole(ALL_ADMIN),
                 },
@@ -645,7 +686,8 @@ export default function AppLayout({ children, breadcrumb }) {
         {
             group: 'Settings',
             items: [
-                { label: 'Settings', href: '/admin/settings', icon: 'Settings', show: hasRole('super_admin') },
+                { label: 'Settings',    href: '/admin/settings',   icon: 'Settings', show: hasRole('super_admin') },
+                { label: 'Public Site', href: '/admin/public-site', icon: 'Globe',    show: hasRole('super_admin') },
             ],
         },
     ]
@@ -681,17 +723,19 @@ export default function AppLayout({ children, breadcrumb }) {
                     {/* Logo icon — custom image or default icon */}
                     {systemLogo ? (
                         <img src={systemLogo} alt={systemName}
-                            className="h-7 w-7 rounded-lg object-contain shrink-0" />
+                            style={{ width: logoW, height: logoH }}
+                            className="rounded-lg object-contain shrink-0" />
                     ) : (
-                        <div className="h-7 w-7 rounded-lg bg-linear-to-br from-indigo-500 to-violet-600
+                        <div style={{ width: logoW, height: logoH }}
+                            className="rounded-lg bg-linear-to-br from-indigo-500 to-violet-600
                                         flex items-center justify-center shrink-0 shadow-sm">
-                            <FlaskConical size={14} className="text-white" />
+                            <FlaskConical size={Math.round(logoW * 0.5)} className="text-white" />
                         </div>
                     )}
                     {!collapsed && (
                         <div className="min-w-0">
                             <p className={cn('text-sm font-bold leading-none truncate', sc.logoTitle)}>{systemName}</p>
-                            <p className={cn('text-[10px] mt-0.5', sc.logoSub)}>Research & Tech Transfer</p>
+                            <p className={cn('text-[10px] mt-0.5 truncate', sc.logoSub)}>{systemTagline}</p>
                         </div>
                     )}
                 </div>
@@ -875,6 +919,9 @@ export default function AppLayout({ children, breadcrumb }) {
                         )}
                     </div>
                 </header>
+
+                {/* Guest access banner */}
+                {primaryRole === 'guest' && <GuestBanner />}
 
                 {/* Announcement banner */}
                 {announcementActive && announcementMsg && !announcementDismissed && (

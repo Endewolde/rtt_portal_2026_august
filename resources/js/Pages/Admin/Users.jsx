@@ -4,6 +4,8 @@ import {
     UserCheck, UserX, Building2, Calendar, ChevronLeft, ChevronRight,
     X, Eye, Filter, RefreshCw, Mail, Phone, CreditCard,
     CheckCircle2, XCircle, AlertTriangle, User,
+    Upload, Download, FileDown, FileUp, AlertCircle, CheckCircle,
+    FileText, ChevronDown,
 } from 'lucide-react';
 import { Link } from '@inertiajs/react';
 import AppLayout from '../../Layouts/AppLayout';
@@ -408,6 +410,342 @@ function AssignRolesModal({ user, allRoles, onSave, onClose }) {
     );
 }
 
+// ─── Download helper (blob from axios) ───────────────────────────────────────
+
+async function downloadBlob(axiosPromise, filename) {
+    const response = await axiosPromise;
+    const url      = URL.createObjectURL(new Blob([response.data]));
+    const a        = document.createElement('a');
+    a.href         = url;
+    a.download     = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+// ─── Import modal ─────────────────────────────────────────────────────────────
+
+const EXPECTED_COLS = ['name', 'email', 'password', 'role', 'college_code', 'employee_id', 'phone', 'gender'];
+
+const IMPORT_ROLE_LABELS = {
+    super_admin: 'super_admin', admin: 'admin',
+    staff: 'staff', reviewer: 'reviewer', pi: 'pi',
+    college_officer: 'college_officer', research_officer: 'research_officer',
+    community_officer: 'community_officer', technology_officer: 'technology_officer',
+    central_officer: 'central_officer',
+};
+
+function parseLocalCsv(text) {
+    const lines = text.trim().split('\n').filter(Boolean);
+    if (!lines.length) return { headers: [], rows: [] };
+    const parseLine = (line) =>
+        line.split(',').map(c => c.replace(/^"|"$/g, '').replace(/""/g, '"').trim());
+    const bom    = '﻿';
+    const first  = lines[0].startsWith(bom) ? lines[0].slice(1) : lines[0];
+    const headers = parseLine(first);
+    const rows    = lines.slice(1).map(parseLine);
+    return { headers, rows };
+}
+
+function ImportModal({ onClose, onDone }) {
+    const { success, error: toastError } = useToast();
+    const fileRef   = useRef(null);
+    const [file, setFile]             = useState(null);
+    const [preview, setPreview]       = useState(null); // { headers, rows }
+    const [importing, setImporting]   = useState(false);
+    const [result, setResult]         = useState(null);
+    const [dragOver, setDragOver]     = useState(false);
+
+    const handleFile = (f) => {
+        if (!f) return;
+        setFile(f);
+        setResult(null);
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const { headers, rows } = parseLocalCsv(e.target.result);
+            setPreview({ headers, rows: rows.slice(0, 5) });
+        };
+        reader.readAsText(f);
+    };
+
+    const handleDrop = (e) => {
+        e.preventDefault();
+        setDragOver(false);
+        const dropped = e.dataTransfer.files[0];
+        if (dropped?.name.endsWith('.csv') || dropped?.type === 'text/csv') {
+            handleFile(dropped);
+        } else {
+            toastError('Please drop a .csv file.');
+        }
+    };
+
+    const downloadTemplate = async () => {
+        try {
+            await downloadBlob(
+                api.get('/users/import-template', { responseType: 'blob' }),
+                'users_import_template.csv'
+            );
+        } catch { toastError('Could not download template.'); }
+    };
+
+    const doImport = async () => {
+        if (!file) return;
+        setImporting(true);
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            const res = await api.post('/users/import', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
+            setResult(res.data?.data);
+            success(res.data?.message || 'Import complete.');
+            onDone();
+        } catch (e) {
+            toastError(e.response?.data?.message || 'Import failed.');
+        }
+        setImporting(false);
+    };
+
+    const missingCols = preview
+        ? EXPECTED_COLS.filter(c => !preview.headers.includes(c))
+        : [];
+
+    return (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center p-4 pt-10 overflow-y-auto">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden mb-10">
+
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                    <div className="flex items-center gap-3">
+                        <div className="h-9 w-9 bg-indigo-50 rounded-xl flex items-center justify-center">
+                            <Upload size={16} className="text-indigo-600" />
+                        </div>
+                        <div>
+                            <h2 className="text-base font-bold text-gray-900">Import Users</h2>
+                            <p className="text-xs text-gray-400">Upload a CSV file to bulk-create users</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+                        <X size={18} />
+                    </button>
+                </div>
+
+                <div className="px-6 py-5 space-y-5 max-h-[75vh] overflow-y-auto">
+
+                    {/* Template download */}
+                    <div className="flex items-center justify-between bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3">
+                        <div>
+                            <p className="text-sm font-semibold text-indigo-800">Need a template?</p>
+                            <p className="text-xs text-indigo-500 mt-0.5">
+                                Download the CSV template with example rows and all required columns.
+                            </p>
+                        </div>
+                        <button
+                            onClick={downloadTemplate}
+                            className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700 transition shrink-0"
+                        >
+                            <FileDown size={13} /> Template
+                        </button>
+                    </div>
+
+                    {/* Expected columns */}
+                    <div>
+                        <p className="text-xs font-semibold text-gray-500 mb-2">Expected CSV columns:</p>
+                        <div className="flex flex-wrap gap-1.5">
+                            {EXPECTED_COLS.map(c => (
+                                <span key={c} className={`text-xs px-2 py-0.5 rounded-md font-mono font-medium ${
+                                    c === 'name' || c === 'email' || c === 'role'
+                                        ? 'bg-red-50 text-red-600 border border-red-200'
+                                        : 'bg-gray-100 text-gray-600'
+                                }`}>
+                                    {c}{(c === 'name' || c === 'email' || c === 'role') && ' *'}
+                                </span>
+                            ))}
+                        </div>
+                        <p className="text-[10px] text-gray-400 mt-1.5">
+                            * required · <code className="font-mono">college_code</code> = college's short code (e.g. CBE) ·
+                            password blank = random generated · duplicate emails are skipped
+                        </p>
+                    </div>
+
+                    {/* Drop zone */}
+                    {!result && (
+                        <div
+                            onDrop={handleDrop}
+                            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                            onDragLeave={() => setDragOver(false)}
+                            onClick={() => fileRef.current?.click()}
+                            className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition ${
+                                dragOver
+                                    ? 'border-indigo-400 bg-indigo-50'
+                                    : file
+                                    ? 'border-emerald-300 bg-emerald-50'
+                                    : 'border-gray-200 hover:border-indigo-300 hover:bg-gray-50'
+                            }`}
+                        >
+                            <input
+                                ref={fileRef}
+                                type="file"
+                                accept=".csv,text/csv"
+                                className="hidden"
+                                onChange={(e) => handleFile(e.target.files[0])}
+                            />
+                            {file ? (
+                                <div className="flex flex-col items-center gap-2">
+                                    <FileText size={28} className="text-emerald-500" />
+                                    <p className="text-sm font-semibold text-emerald-700">{file.name}</p>
+                                    <p className="text-xs text-gray-400">
+                                        {(file.size / 1024).toFixed(1)} KB · Click to change
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-center gap-2">
+                                    <Upload size={28} className="text-gray-300" />
+                                    <p className="text-sm font-medium text-gray-500">
+                                        Drag &amp; drop a CSV file here, or click to browse
+                                    </p>
+                                    <p className="text-xs text-gray-400">CSV only · max 2 MB</p>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Column mismatch warning */}
+                    {preview && missingCols.length > 0 && (
+                        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                            <AlertCircle size={15} className="text-amber-500 shrink-0 mt-0.5" />
+                            <div>
+                                <p className="text-xs font-semibold text-amber-700">Missing columns detected:</p>
+                                <p className="text-xs text-amber-600 mt-0.5">
+                                    {missingCols.map(c => <code key={c} className="font-mono mr-1">{c}</code>)}
+                                </p>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Preview table */}
+                    {preview && !result && (
+                        <div>
+                            <p className="text-xs font-semibold text-gray-500 mb-2">
+                                Preview <span className="text-gray-300">(first {preview.rows.length} data rows)</span>
+                            </p>
+                            <div className="overflow-x-auto rounded-xl border border-gray-100">
+                                <table className="min-w-full text-xs">
+                                    <thead>
+                                        <tr className="bg-gray-50 border-b border-gray-100">
+                                            {preview.headers.map((h, i) => (
+                                                <th key={i} className="px-3 py-2 text-left font-semibold text-gray-500 whitespace-nowrap">
+                                                    {h}
+                                                </th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-50">
+                                        {preview.rows.map((row, ri) => (
+                                            <tr key={ri} className="hover:bg-gray-50">
+                                                {row.map((cell, ci) => (
+                                                    <td key={ci} className="px-3 py-2 text-gray-700 whitespace-nowrap max-w-45 truncate">
+                                                        {cell || <span className="text-gray-300">—</span>}
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Result */}
+                    {result && (
+                        <div className="space-y-4">
+                            {/* Summary cards */}
+                            <div className="grid grid-cols-4 gap-3">
+                                {[
+                                    { label: 'Total',   val: result.summary.total,   color: 'bg-gray-50 text-gray-700 border-gray-200' },
+                                    { label: 'Created', val: result.summary.created, color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+                                    { label: 'Skipped', val: result.summary.skipped, color: 'bg-amber-50 text-amber-700 border-amber-200' },
+                                    { label: 'Errors',  val: result.summary.errors,  color: 'bg-red-50 text-red-700 border-red-200' },
+                                ].map(({ label, val, color }) => (
+                                    <div key={label} className={`border rounded-xl px-3 py-3 text-center ${color}`}>
+                                        <p className="text-2xl font-bold leading-none">{val}</p>
+                                        <p className="text-[10px] font-semibold uppercase tracking-wide mt-1">{label}</p>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Error list */}
+                            {result.errors?.length > 0 && (
+                                <div>
+                                    <p className="text-xs font-semibold text-red-600 mb-2 flex items-center gap-1">
+                                        <AlertCircle size={12} /> Row errors:
+                                    </p>
+                                    <div className="border border-red-100 rounded-xl overflow-hidden max-h-48 overflow-y-auto">
+                                        <table className="min-w-full text-xs">
+                                            <thead>
+                                                <tr className="bg-red-50 border-b border-red-100">
+                                                    <th className="px-3 py-2 text-left font-semibold text-red-500">Row</th>
+                                                    <th className="px-3 py-2 text-left font-semibold text-red-500">Email</th>
+                                                    <th className="px-3 py-2 text-left font-semibold text-red-500">Error</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-red-50">
+                                                {result.errors.map((e, i) => (
+                                                    <tr key={i} className="bg-white">
+                                                        <td className="px-3 py-2 font-mono text-gray-500">{e.row}</td>
+                                                        <td className="px-3 py-2 text-gray-700">{e.email}</td>
+                                                        <td className="px-3 py-2 text-red-600">{e.error}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+
+                            <button
+                                onClick={() => { setFile(null); setPreview(null); setResult(null); }}
+                                className="text-xs text-indigo-600 hover:underline"
+                            >
+                                ← Import another file
+                            </button>
+                        </div>
+                    )}
+                </div>
+
+                {/* Footer */}
+                <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between gap-3">
+                    <p className="text-xs text-gray-400">
+                        {preview && !result
+                            ? `${preview.rows.length} preview rows shown`
+                            : result
+                            ? `${result.summary.created} users created`
+                            : 'Select a CSV file to begin'}
+                    </p>
+                    <div className="flex gap-3">
+                        <button onClick={onClose}
+                            className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-100 transition-colors">
+                            {result ? 'Close' : 'Cancel'}
+                        </button>
+                        {!result && (
+                            <button
+                                onClick={doImport}
+                                disabled={!file || importing || missingCols.some(c => ['name','email','role'].includes(c))}
+                                className="flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white text-sm font-semibold
+                                           rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                            >
+                                {importing
+                                    ? <><RefreshCw size={13} className="animate-spin" /> Importing…</>
+                                    : <><Upload size={13} /> Import Users</>
+                                }
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function AdminUsers() {
@@ -430,6 +768,8 @@ export default function AdminUsers() {
     const [assignModal,   setAssignModal]   = useState(null);
     const [deleteConfirm, setDeleteConfirm] = useState(null);
     const [statusConfirm, setStatusConfirm] = useState(null);
+    const [importModal,   setImportModal]   = useState(false);
+    const [exporting,     setExporting]     = useState(false);
 
     const searchTimer = useRef(null);
     const [searchInput, setSearchInput] = useState('');
@@ -485,6 +825,21 @@ export default function AdminUsers() {
         catch (e) { error(e.response?.data?.message || 'Update failed.'); }
     };
 
+    const handleExport = async () => {
+        setExporting(true);
+        try {
+            const params = new URLSearchParams();
+            if (search)       params.set('search', search);
+            if (roleFilter)   params.set('role', roleFilter);
+            if (statusFilter) params.set('status', statusFilter);
+            await downloadBlob(
+                api.get(`/users/export?${params.toString()}`, { responseType: 'blob' }),
+                `users_export_${new Date().toISOString().slice(0, 10)}.csv`
+            );
+        } catch { error('Export failed. Please try again.'); }
+        setExporting(false);
+    };
+
     const hasFilters = search || roleFilter || statusFilter;
 
     return (
@@ -506,9 +861,37 @@ export default function AdminUsers() {
                     </div>
                     <div className="flex items-center gap-2">
                         <button onClick={load} disabled={loading}
-                            className="p-2 rounded-xl border border-gray-200 text-gray-400 hover:text-gray-700 hover:border-gray-300 transition-colors">
+                            className="p-2 rounded-xl border border-gray-200 text-gray-400 hover:text-gray-700 hover:border-gray-300 transition-colors"
+                            title="Refresh">
                             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
                         </button>
+
+                        {/* Export */}
+                        <button
+                            onClick={handleExport}
+                            disabled={exporting}
+                            title={hasFilters ? 'Export filtered users' : 'Export all users'}
+                            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 hover:border-gray-300 disabled:opacity-50 transition-colors"
+                        >
+                            {exporting
+                                ? <RefreshCw size={14} className="animate-spin" />
+                                : <Download size={14} />
+                            }
+                            Export
+                            {hasFilters && <span className="text-[10px] bg-indigo-100 text-indigo-600 font-semibold px-1.5 py-0.5 rounded-full">filtered</span>}
+                        </button>
+
+                        {/* Import */}
+                        {isSuperAdmin && (
+                            <button
+                                onClick={() => setImportModal(true)}
+                                className="flex items-center gap-1.5 px-3 py-2 border border-indigo-200 bg-indigo-50 text-indigo-700 rounded-xl text-sm font-medium hover:bg-indigo-100 transition-colors"
+                            >
+                                <Upload size={14} /> Import
+                            </button>
+                        )}
+
+                        {/* Add user */}
                         {isSuperAdmin && (
                             <button onClick={() => setCreateModal(true)}
                                 className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm
@@ -745,6 +1128,13 @@ export default function AdminUsers() {
                     confirmLabel={statusConfirm.newStatus === 'active' ? 'Activate' : 'Deactivate'}
                     confirmVariant={statusConfirm.newStatus === 'active' ? 'default' : 'danger'}
                     onConfirm={handleStatus} onCancel={() => setStatusConfirm(null)} />
+            )}
+
+            {importModal && (
+                <ImportModal
+                    onClose={() => setImportModal(false)}
+                    onDone={() => { load(); }}
+                />
             )}
         </AppLayout>
     );

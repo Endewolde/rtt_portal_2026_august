@@ -14,24 +14,24 @@ beforeEach(function () {
 
 test('user can register with valid data', function () {
     $response = $this->postJson('/api/v1/auth/register', [
-        'name'                  => 'Jane Doe',
-        'email'                 => 'jane@example.com',
-        'password'              => 'Password123!',
+        'name' => 'Jane Doe',
+        'email' => 'jane@example.com',
+        'password' => 'Password123!',
         'password_confirmation' => 'Password123!',
     ]);
 
     $response->assertCreated()
-        ->assertJsonPath('message', 'Registration successful.')
-        ->assertJsonStructure(['data' => ['user', 'token']]);
+        ->assertJsonPath('message', 'Registration successful. Please check your email to verify your account.')
+        ->assertJsonStructure(['data' => ['user']]);
 
     $this->assertDatabaseHas('users', ['email' => 'jane@example.com']);
 });
 
 test('registered user is assigned guest role automatically', function () {
     $this->postJson('/api/v1/auth/register', [
-        'name'                  => 'Jane Doe',
-        'email'                 => 'jane@example.com',
-        'password'              => 'Password123!',
+        'name' => 'Jane Doe',
+        'email' => 'jane@example.com',
+        'password' => 'Password123!',
         'password_confirmation' => 'Password123!',
     ])->assertCreated();
 
@@ -41,9 +41,9 @@ test('registered user is assigned guest role automatically', function () {
 
 test('registered user has notification_preferences row created', function () {
     $this->postJson('/api/v1/auth/register', [
-        'name'                  => 'Jane Doe',
-        'email'                 => 'jane@example.com',
-        'password'              => 'Password123!',
+        'name' => 'Jane Doe',
+        'email' => 'jane@example.com',
+        'password' => 'Password123!',
         'password_confirmation' => 'Password123!',
     ])->assertCreated();
 
@@ -54,9 +54,9 @@ test('registered user has notification_preferences row created', function () {
 
 test('registration is logged in audit_logs', function () {
     $this->postJson('/api/v1/auth/register', [
-        'name'                  => 'Jane Doe',
-        'email'                 => 'jane@example.com',
-        'password'              => 'Password123!',
+        'name' => 'Jane Doe',
+        'email' => 'jane@example.com',
+        'password' => 'Password123!',
         'password_confirmation' => 'Password123!',
     ])->assertCreated();
 
@@ -73,18 +73,18 @@ test('cannot register with duplicate email', function () {
     User::factory()->create(['email' => 'existing@example.com']);
 
     $this->postJson('/api/v1/auth/register', [
-        'name'                  => 'Another User',
-        'email'                 => 'existing@example.com',
-        'password'              => 'Password123!',
+        'name' => 'Another User',
+        'email' => 'existing@example.com',
+        'password' => 'Password123!',
         'password_confirmation' => 'Password123!',
     ])->assertUnprocessable();
 });
 
 test('cannot register with password shorter than 8 characters', function () {
     $this->postJson('/api/v1/auth/register', [
-        'name'                  => 'Jane Doe',
-        'email'                 => 'jane@example.com',
-        'password'              => 'short',
+        'name' => 'Jane Doe',
+        'email' => 'jane@example.com',
+        'password' => 'short',
         'password_confirmation' => 'short',
     ])->assertUnprocessable()
         ->assertJsonPath('errors.password.0', fn ($msg) => str_contains($msg, '8'));

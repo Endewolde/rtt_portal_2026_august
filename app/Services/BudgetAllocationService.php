@@ -2,19 +2,23 @@
 
 namespace App\Services;
 
+use App\Jobs\StoreInAppNotificationJob;
 use App\Models\Award;
 use App\Models\BudgetAllocation;
 use App\Models\College;
 use App\Models\Proposal;
 use App\Models\User;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 class BudgetAllocationService
 {
     /**
      * Allocate a budget envelope to a college for a fiscal year (audit record only).
      *
-     * @throws \Illuminate\Auth\Access\AuthorizationException
+     * @throws AuthorizationException
      */
     public function allocateToCollege(
         College $college,
@@ -24,22 +28,22 @@ class BudgetAllocationService
         ?string $notes = null
     ): BudgetAllocation {
         if (! $allocatedBy->can('budget_allocations.create')) {
-            throw new \Illuminate\Auth\Access\AuthorizationException(
+            throw new AuthorizationException(
                 'You do not have permission to allocate budgets.'
             );
         }
 
         return BudgetAllocation::create([
-            'college_id'        => $college->id,
-            'proposal_id'       => null,
-            'fiscal_year'       => $fiscalYear,
-            'total_amount'      => $amount,
-            'allocated_amount'  => 0,
+            'college_id' => $college->id,
+            'proposal_id' => null,
+            'fiscal_year' => $fiscalYear,
+            'total_amount' => $amount,
+            'allocated_amount' => 0,
             'remaining_balance' => $amount,
-            'allocation_type'   => 'college',
-            'status'            => 'approved',
-            'allocated_by'      => $allocatedBy->id,
-            'notes'             => $notes,
+            'allocation_type' => 'college',
+            'status' => 'approved',
+            'allocated_by' => $allocatedBy->id,
+            'notes' => $notes,
         ]);
     }
 
@@ -88,16 +92,16 @@ class BudgetAllocationService
             }
 
             return BudgetAllocation::create([
-                'college_id'        => $proposal->college_id,
-                'proposal_id'       => $proposal->id,
-                'fiscal_year'       => $fiscalYear,
-                'total_amount'      => $amount,
-                'allocated_amount'  => 0,
+                'college_id' => $proposal->college_id,
+                'proposal_id' => $proposal->id,
+                'fiscal_year' => $fiscalYear,
+                'total_amount' => $amount,
+                'allocated_amount' => 0,
                 'remaining_balance' => $amount,
-                'allocation_type'   => 'proposal',
-                'status'            => 'pending',
-                'allocated_by'      => $allocatedBy->id,
-                'notes'             => $notes,
+                'allocation_type' => 'proposal',
+                'status' => 'pending',
+                'allocated_by' => $allocatedBy->id,
+                'notes' => $notes,
             ]);
         });
     }
@@ -138,12 +142,50 @@ class BudgetAllocationService
         }
 
         $allocation->update([
-            'status'      => 'approved',
+            'status' => 'approved',
             'approved_by' => $approvedBy->id,
             'approved_at' => now(),
         ]);
 
-        return $allocation->fresh();
+        $fresh = $allocation->fresh()->load('proposal.pi');
+        $this->notifyAllocationApproved($fresh);
+
+        return $fresh;
+    }
+
+    private function notifyAllocationApproved(BudgetAllocation $allocation): void
+    {
+        $proposal = $allocation->proposal;
+        $pi = $proposal?->pi;
+
+        if (! $pi || ! $pi->email) {
+            return;
+        }
+
+        app(MailConfigService::class)->applyFromDatabase();
+
+        $data = [
+            'title' => $proposal->title,
+            'tracker_number' => $proposal->tracker_number,
+            'allocated_amount' => $allocation->total_amount ?? $allocation->allocated_amount ?? null,
+            'fiscal_year' => $allocation->fiscal_year ?? null,
+        ];
+
+        try {
+            Mail::html(
+                view('emails.notifications.budget_allocated', array_merge($data, ['recipient' => $pi]))->render(),
+                fn ($msg) => $msg->to($pi->email, $pi->name)
+                    ->subject("Budget Allocated — {$proposal->tracker_number}")
+            );
+        } catch (\Exception $e) {
+            Log::error("Budget allocation email failed for {$pi->email}: ".$e->getMessage());
+        }
+
+        try {
+            StoreInAppNotificationJob::dispatchSync($pi->id, 'budget_allocated', $data);
+        } catch (\Exception) {
+            // Non-critical
+        }
     }
 
     /**
@@ -158,7 +200,7 @@ class BudgetAllocationService
             ->where('allocation_type', 'proposal')
             ->where('status', 'pending')
             ->update([
-                'status'      => 'approved',
+                'status' => 'approved',
                 'approved_by' => $approvedBy->id,
                 'approved_at' => now(),
             ]);
@@ -180,9 +222,9 @@ class BudgetAllocationService
         }
 
         $allocation->update([
-            'total_amount'      => $amount,
+            'total_amount' => $amount,
             'remaining_balance' => $amount,
-            'notes'             => $notes,
+            'notes' => $notes,
         ]);
 
         return $allocation->fresh();

@@ -9,6 +9,7 @@ use App\Services\AwardService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 
 class AwardController extends Controller
 {
@@ -36,10 +37,10 @@ class AwardController extends Controller
             ]);
 
             return response()->json([
-                'data'    => $existing->fresh()->load('approvedBy:id,name'),
+                'data' => $existing->fresh()->load('approvedBy:id,name'),
                 'message' => 'Award updated.',
-                'errors'  => [],
-                'meta'    => [],
+                'errors' => [],
+                'meta' => [],
             ]);
         }
 
@@ -51,17 +52,17 @@ class AwardController extends Controller
             }
 
             return response()->json([
-                'data'    => $award->fresh()->load('approvedBy:id,name'),
+                'data' => $award->fresh()->load('approvedBy:id,name'),
                 'message' => 'Award generated. Grant: '.$award->grant_reference,
-                'errors'  => [],
-                'meta'    => [],
+                'errors' => [],
+                'meta' => [],
             ], 201);
         } catch (\Exception $e) {
             return response()->json([
-                'data'    => null,
+                'data' => null,
                 'message' => $e->getMessage(),
-                'errors'  => [],
-                'meta'    => [],
+                'errors' => [],
+                'meta' => [],
             ], 422);
         }
     }
@@ -74,18 +75,18 @@ class AwardController extends Controller
 
         if (! $award) {
             return response()->json([
-                'data'    => null,
-                'message' => 'No award found for this proposal.',
-                'errors'  => [],
-                'meta'    => [],
-            ], 404);
+                'data' => null,
+                'message' => '',
+                'errors' => [],
+                'meta' => [],
+            ]);
         }
 
         return response()->json([
-            'data'    => $award,
+            'data' => $award,
             'message' => '',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ]);
     }
 
@@ -115,14 +116,14 @@ class AwardController extends Controller
         }
 
         return response()->json([
-            'data'    => $award->fresh()->load('approvedBy:id,name'),
+            'data' => $award->fresh()->load('approvedBy:id,name'),
             'message' => 'Award updated successfully.',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ]);
     }
 
-    public function downloadLetter(string $id): \Illuminate\Http\Response
+    public function downloadLetter(string $id): Response
     {
         $proposal = Proposal::with([
             'pi:id,name,email',
@@ -137,28 +138,28 @@ class AwardController extends Controller
 
         $universityName = \DB::table('app_settings')->where('key', 'site_name')->value('value')
             ?? config('app.name');
-        $academicYear   = $proposal->academic_year
+        $academicYear = $proposal->academic_year
             ?? \DB::table('app_settings')->where('key', 'current_academic_year')->value('value')
             ?? now()->year.'-'.(now()->year + 1);
 
-        $department   = $proposal->college?->name ?? '—';
-        $callTitle    = $proposal->proposalCall?->title ?? 'Research Grant Call';
-        $letterDate   = ($award->approved_at ?? now())->format('d F Y');
+        $department = $proposal->college?->name ?? '—';
+        $callTitle = $proposal->proposalCall?->title ?? 'Research Grant Call';
+        $letterDate = ($award->approved_at ?? now())->format('d F Y');
         $returnDeadline = ($award->approved_at ?? now())->addDays(14)->format('d F Y');
         $formattedAmount = 'ETB '.number_format((float) $award->awarded_amount, 2);
 
         $pdf = Pdf::loadView('pdf.award_letter', [
-            'proposal'        => $proposal,
-            'award'           => $award,
-            'pi'              => $proposal->pi,
-            'department'      => $department,
-            'callTitle'       => $callTitle,
-            'universityName'  => $universityName,
-            'academicYear'    => $academicYear,
-            'letterDate'      => $letterDate,
-            'returnDeadline'  => $returnDeadline,
+            'proposal' => $proposal,
+            'award' => $award,
+            'pi' => $proposal->pi,
+            'department' => $department,
+            'callTitle' => $callTitle,
+            'universityName' => $universityName,
+            'academicYear' => $academicYear,
+            'letterDate' => $letterDate,
+            'returnDeadline' => $returnDeadline,
             'formattedAmount' => $formattedAmount,
-            'approvedBy'      => $award->approvedBy,
+            'approvedBy' => $award->approvedBy,
         ])->setPaper('a4', 'portrait');
 
         $filename = 'Award-Letter-'.$award->grant_reference.'.pdf';

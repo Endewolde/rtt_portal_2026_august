@@ -4,9 +4,13 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\DefenceSession;
+use App\Models\EvaluationCategory;
+use App\Models\EvaluationQuestion;
 use App\Models\EvaluationType;
 use App\Models\Proposal;
+use App\Models\ProposalMember;
 use App\Models\ReviewAssignment;
+use App\Models\ReviewScore;
 use App\Services\DefenceSessionService;
 use App\Services\ReviewAssignmentService;
 use App\Services\ReviewScoreService;
@@ -31,12 +35,12 @@ class ReviewController extends Controller
     public function assign(string $id, Request $request): JsonResponse
     {
         $request->validate([
-            'reviewer_ids'       => 'required|array|min:1',
+            'reviewer_ids' => 'required|array|min:1',
             'evaluation_type_id' => 'required|string',
         ]);
 
-        $proposal     = Proposal::findOrFail($id);
-        $assignments  = $this->assignmentService->assign(
+        $proposal = Proposal::findOrFail($id);
+        $assignments = $this->assignmentService->assign(
             $proposal,
             $request->reviewer_ids,
             $request->evaluation_type_id,
@@ -51,7 +55,7 @@ class ReviewController extends Controller
         $request->validate(['answers' => 'required|array']);
 
         $assignment = ReviewAssignment::findOrFail($id);
-        $result     = $this->scoreService->submitScore($assignment, $request->answers, $request->user());
+        $result = $this->scoreService->submitScore($assignment, $request->answers, $request->user());
 
         return response()->json(['data' => $result]);
     }
@@ -59,12 +63,12 @@ class ReviewController extends Controller
     public function scheduleDefence(string $id, Request $request): JsonResponse
     {
         $request->validate([
-            'scheduled_date'     => 'required|date|after:today',
-            'scheduled_time'     => 'required',
-            'venue'              => 'required|string|max:300',
-            'online_link'        => 'nullable|url',
-            'reviewer_ids'       => 'nullable|array',
-            'reviewer_ids.*'     => 'uuid|exists:users,id',
+            'scheduled_date' => 'required|date|after:today',
+            'scheduled_time' => 'required',
+            'venue' => 'required|string|max:300',
+            'online_link' => 'nullable|url',
+            'reviewer_ids' => 'nullable|array',
+            'reviewer_ids.*' => 'uuid|exists:users,id',
             'evaluation_type_id' => 'nullable|uuid|exists:evaluation_types,id',
         ]);
 
@@ -74,24 +78,24 @@ class ReviewController extends Controller
             $session = $this->defenceService->schedule($proposal, $request->all(), $request->user());
 
             return response()->json([
-                'data'    => $session,
+                'data' => $session,
                 'message' => 'Open defence scheduled successfully.',
-                'errors'  => [],
-                'meta'    => [],
+                'errors' => [],
+                'meta' => [],
             ], 201);
         } catch (\Exception $e) {
             return response()->json([
-                'data'    => null,
+                'data' => null,
                 'message' => $e->getMessage(),
-                'errors'  => [],
-                'meta'    => [],
+                'errors' => [],
+                'meta' => [],
             ], 422);
         }
     }
 
     public function processDefenceResult(string $id, Request $request): JsonResponse
     {
-        $session  = DefenceSession::findOrFail($id);
+        $session = DefenceSession::findOrFail($id);
         $proposal = $this->defenceService->processDefenceResult($session, $request->user());
 
         return response()->json(['data' => $proposal]);
@@ -108,10 +112,10 @@ class ReviewController extends Controller
 
         if (! $session) {
             return response()->json([
-                'data'    => null,
+                'data' => null,
                 'message' => 'No active defence session found for this proposal.',
-                'errors'  => [],
-                'meta'    => [],
+                'errors' => [],
+                'meta' => [],
             ], 422);
         }
 
@@ -119,17 +123,17 @@ class ReviewController extends Controller
             $updated = $this->defenceService->processDefenceResult($session, $request->user());
 
             return response()->json([
-                'data'    => ['status' => $updated->status],
+                'data' => ['status' => $updated->status],
                 'message' => 'Defence result processed. New status: '.$updated->status,
-                'errors'  => [],
-                'meta'    => [],
+                'errors' => [],
+                'meta' => [],
             ]);
         } catch (\Exception $e) {
             return response()->json([
-                'data'    => null,
+                'data' => null,
                 'message' => $e->getMessage(),
-                'errors'  => [],
-                'meta'    => [],
+                'errors' => [],
+                'meta' => [],
             ], 422);
         }
     }
@@ -148,10 +152,10 @@ class ReviewController extends Controller
     public function storeEvaluationType(Request $request): JsonResponse
     {
         $request->validate([
-            'name'              => 'required|string|unique:evaluation_types,name',
-            'label'             => 'required|string',
+            'name' => 'required|string|unique:evaluation_types,name',
+            'label' => 'required|string',
             'proposal_category' => 'required|in:research,community_engagement,technology_transfer,innovation,other',
-            'description'       => 'nullable|string',
+            'description' => 'nullable|string',
         ]);
 
         $type = EvaluationType::create($request->only('name', 'label', 'proposal_category', 'description') + ['is_active' => true]);
@@ -169,7 +173,7 @@ class ReviewController extends Controller
 
     public function evaluationCategories(string $id): JsonResponse
     {
-        $categories = \App\Models\EvaluationCategory::where('evaluation_type_id', $id)
+        $categories = EvaluationCategory::where('evaluation_type_id', $id)
             ->withCount('questions')
             ->orderBy('order_index')
             ->get();
@@ -180,16 +184,16 @@ class ReviewController extends Controller
     public function storeCategory(Request $request, string $id): JsonResponse
     {
         $request->validate([
-            'name'   => 'required|string',
+            'name' => 'required|string',
             'weight' => 'required|numeric|min:0|max:100',
         ]);
 
-        $category = \App\Models\EvaluationCategory::create([
+        $category = EvaluationCategory::create([
             'evaluation_type_id' => $id,
-            'name'               => $request->name,
-            'description'        => $request->description,
-            'weight'             => $request->weight,
-            'order_index'        => \App\Models\EvaluationCategory::where('evaluation_type_id', $id)->count(),
+            'name' => $request->name,
+            'description' => $request->description,
+            'weight' => $request->weight,
+            'order_index' => EvaluationCategory::where('evaluation_type_id', $id)->count(),
         ]);
 
         return response()->json(['data' => $category, 'message' => 'Category created.', 'errors' => [], 'meta' => []]);
@@ -197,7 +201,7 @@ class ReviewController extends Controller
 
     public function updateCategory(Request $request, string $id): JsonResponse
     {
-        $category = \App\Models\EvaluationCategory::findOrFail($id);
+        $category = EvaluationCategory::findOrFail($id);
         $category->update($request->only('name', 'description', 'weight', 'order_index'));
 
         return response()->json(['data' => $category->fresh(), 'message' => 'Updated.', 'errors' => [], 'meta' => []]);
@@ -205,13 +209,13 @@ class ReviewController extends Controller
 
     public function destroyCategory(string $id): JsonResponse
     {
-        $category = \App\Models\EvaluationCategory::findOrFail($id);
+        $category = EvaluationCategory::findOrFail($id);
 
         if ($category->questions()->count() > 0) {
             return response()->json([
-                'data'    => null,
+                'data' => null,
                 'message' => 'Cannot delete category with questions. Delete questions first.',
-                'errors'  => [],
+                'errors' => [],
             ], 422);
         }
 
@@ -222,7 +226,7 @@ class ReviewController extends Controller
 
     public function evaluationQuestions(string $id): JsonResponse
     {
-        $questions = \App\Models\EvaluationQuestion::where('evaluation_category_id', $id)
+        $questions = EvaluationQuestion::where('evaluation_category_id', $id)
             ->orderBy('order_index')
             ->get();
 
@@ -233,18 +237,18 @@ class ReviewController extends Controller
     {
         $request->validate([
             'question_text' => 'required|string',
-            'max_score'     => 'required|integer|min:1|max:10',
-            'weight'        => 'nullable|numeric|min:0',
-            'is_required'   => 'boolean',
+            'max_score' => 'required|integer|min:1|max:10',
+            'weight' => 'nullable|numeric|min:0',
+            'is_required' => 'boolean',
         ]);
 
-        $question = \App\Models\EvaluationQuestion::create([
+        $question = EvaluationQuestion::create([
             'evaluation_category_id' => $id,
-            'question_text'          => $request->question_text,
-            'max_score'              => $request->max_score,
-            'weight'                 => $request->weight ?? 1,
-            'is_required'            => $request->is_required ?? true,
-            'order_index'            => \App\Models\EvaluationQuestion::where('evaluation_category_id', $id)->count(),
+            'question_text' => $request->question_text,
+            'max_score' => $request->max_score,
+            'weight' => $request->weight ?? 1,
+            'is_required' => $request->is_required ?? true,
+            'order_index' => EvaluationQuestion::where('evaluation_category_id', $id)->count(),
         ]);
 
         return response()->json(['data' => $question, 'message' => 'Question created.', 'errors' => [], 'meta' => []]);
@@ -252,7 +256,7 @@ class ReviewController extends Controller
 
     public function updateQuestion(Request $request, string $id): JsonResponse
     {
-        $question = \App\Models\EvaluationQuestion::findOrFail($id);
+        $question = EvaluationQuestion::findOrFail($id);
         $question->update($request->only('question_text', 'max_score', 'weight', 'is_required', 'order_index'));
 
         return response()->json(['data' => $question->fresh(), 'message' => 'Updated.', 'errors' => [], 'meta' => []]);
@@ -260,7 +264,7 @@ class ReviewController extends Controller
 
     public function destroyQuestion(string $id): JsonResponse
     {
-        \App\Models\EvaluationQuestion::findOrFail($id)->delete();
+        EvaluationQuestion::findOrFail($id)->delete();
 
         return response()->json(['data' => null, 'message' => 'Question deleted.', 'errors' => [], 'meta' => []]);
     }
@@ -268,7 +272,7 @@ class ReviewController extends Controller
     public function proposalReviewList(Request $request): JsonResponse
     {
         $rawStatus = $request->input('status', 'under_blind_review');
-        $statuses  = array_filter(array_map('trim', explode(',', $rawStatus)));
+        $statuses = array_filter(array_map('trim', explode(',', $rawStatus)));
 
         $query = Proposal::with([
             'pi:id,name,email',
@@ -290,43 +294,61 @@ class ReviewController extends Controller
         return response()->json(['data' => $query->get(), 'message' => '', 'errors' => [], 'meta' => []]);
     }
 
+    public function reviewerWorkload(Request $request): JsonResponse
+    {
+        $assignments = ReviewAssignment::with([
+            'proposal:id,title,tracker_number,college_id',
+            'proposal.college:id,name',
+            'reviewer:id,name,email',
+            'evaluationType:id,name,label',
+        ])
+            ->when($request->college_id, fn ($q) => $q->whereHas(
+                'proposal',
+                fn ($p) => $p->where('college_id', $request->college_id)
+            ))
+            ->orderBy('assigned_at', 'desc')
+            ->get();
+
+        return response()->json(['data' => $assignments, 'message' => '', 'errors' => [], 'meta' => []]);
+    }
+
     public function reassignReviewer(Request $request, string $id): JsonResponse
     {
         $request->validate([
             'new_reviewer_id' => 'required|uuid|exists:users,id',
-            'due_date'        => 'nullable|date',
+            'due_date' => 'nullable|date',
         ]);
 
         $assignment = ReviewAssignment::findOrFail($id);
 
-        $isConflicted = \App\Models\ProposalMember::where('proposal_id', $assignment->proposal_id)
+        $isConflicted = ProposalMember::where('proposal_id', $assignment->proposal_id)
             ->where('user_id', $request->new_reviewer_id)
             ->where('status', 'active')
             ->exists();
 
         if ($isConflicted) {
             return response()->json([
-                'data'    => null,
+                'data' => null,
                 'message' => 'This user is a team member and cannot review this proposal.',
-                'errors'  => [],
-                'meta'    => [],
+                'errors' => [],
+                'meta' => [],
             ], 422);
         }
 
         $assignment->update([
-            'reviewer_id'  => $request->new_reviewer_id,
-            'status'       => 'pending',
-            'due_date'     => $request->due_date ?? $assignment->due_date,
+            'reviewer_id' => $request->new_reviewer_id,
+            'status' => 'pending',
+            'due_date' => $request->due_date ?? $assignment->due_date,
             'submitted_at' => null,
         ]);
 
-        \App\Models\ReviewScore::where('review_assignment_id', $assignment->id)->delete();
+        ReviewScore::where('review_assignment_id', $assignment->id)->delete();
 
         return response()->json([
-            'data'    => $assignment->fresh()->load('staff'),
+            'data' => $assignment->fresh()->load('staff'),
             'message' => 'Reviewer reassigned successfully.',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ]);
     }
 
@@ -337,10 +359,10 @@ class ReviewController extends Controller
         $assignment->update(['due_date' => $request->due_date]);
 
         return response()->json([
-            'data'    => $assignment->fresh(),
+            'data' => $assignment->fresh(),
             'message' => 'Due date extended.',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ]);
     }
 
@@ -387,7 +409,7 @@ class ReviewController extends Controller
         // can gate access until the scheduled date is reached.
         $data = $assignment->toArray();
         if (str_starts_with($assignment->evaluationType?->name ?? '', 'open_defence')) {
-            $session = \App\Models\DefenceSession::where('proposal_id', $assignment->proposal_id)
+            $session = DefenceSession::where('proposal_id', $assignment->proposal_id)
                 ->where('status', 'scheduled')
                 ->latest()
                 ->first();
@@ -395,7 +417,7 @@ class ReviewController extends Controller
             $data['defence_session'] = $session ? [
                 'scheduled_date' => $session->scheduled_date?->toDateString(),
                 'scheduled_time' => $session->scheduled_time,
-                'venue'          => $session->venue,
+                'venue' => $session->venue,
             ] : null;
         }
 

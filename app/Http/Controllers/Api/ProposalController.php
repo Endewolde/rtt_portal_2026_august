@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ProposalResource;
 use App\Models\Proposal;
+use App\Models\ProposalBudget;
 use App\Models\User;
 use App\Models\WorkflowLog;
 use Illuminate\Http\JsonResponse;
@@ -12,10 +13,44 @@ use Illuminate\Http\Request;
 
 class ProposalController extends Controller
 {
+    /** Public, unauthenticated listing — only shows non-draft proposals. */
+    public function publicIndex(Request $request): JsonResponse
+    {
+        $PUBLIC_STATUSES = ['submitted', 'validated', 'under_blind_review', 'accepted', 'funded', 'midterm_evaluation', 'completed', 'archived'];
+
+        $query = Proposal::with(['pi:id,name', 'college:id,name'])
+            ->whereIn('status', $PUBLIC_STATUSES)
+            ->whereNull('deleted_at');
+
+        if ($request->filled('search')) {
+            $q = $request->search;
+            $query->where(fn ($sq) => $sq
+                ->where('title', 'LIKE', "%{$q}%")
+                ->orWhere('abstract', 'LIKE', "%{$q}%")
+            );
+        }
+        if ($request->filled('category')) {
+            $query->where('category', $request->category);
+        }
+        if ($request->filled('college_id')) {
+            $query->where('college_id', $request->college_id);
+        }
+        if ($request->filled('academic_year')) {
+            $query->where('academic_year', $request->academic_year);
+        }
+        if ($request->filled('sort') && $request->sort === 'oldest') {
+            $query->orderBy('created_at');
+        } else {
+            $query->orderByDesc('created_at');
+        }
+
+        return response()->json(['data' => $query->paginate(20)]);
+    }
+
     public function index(Request $request): JsonResponse
     {
         /** @var User $user */
-        $user  = $request->user();
+        $user = $request->user();
         $query = Proposal::with(['pi', 'college', 'proposalCall'])
             ->whereNull('deleted_at');
 
@@ -61,13 +96,13 @@ class ProposalController extends Controller
 
     public function involved(Request $request): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $loads = ['proposalCall:id,title,academic_year', 'college:id,name', 'members', 'budgets', 'award:id,proposal_id,grant_reference,awarded_amount'];
 
         $map = fn ($p) => array_merge($p->toArray(), [
             'co_investigators_count' => $p->members->where('role', 'co_investigator')->where('status', 'active')->count(),
-            'budget_total'           => $p->budgets->sum('amount'),
-            'award'                  => $p->award
+            'budget_total' => $p->budgets->sum('amount'),
+            'award' => $p->award
                 ? ['grant_reference' => $p->award->grant_reference, 'awarded_amount' => $p->award->awarded_amount]
                 : null,
         ]);
@@ -80,9 +115,9 @@ class ProposalController extends Controller
             ->map($map);
 
         $asCoPi = Proposal::whereHas('members', fn ($q) => $q
-                ->where('user_id', $user->id)
-                ->where('role', 'co_investigator')
-                ->where('status', 'active'))
+            ->where('user_id', $user->id)
+            ->where('role', 'co_investigator')
+            ->where('status', 'active'))
             ->where('pi_user_id', '!=', $user->id)
             ->whereNull('deleted_at')
             ->with($loads)
@@ -91,10 +126,10 @@ class ProposalController extends Controller
             ->map($map);
 
         return response()->json([
-            'data'    => ['as_pi' => $asPI, 'as_co_pi' => $asCoPi],
+            'data' => ['as_pi' => $asPI, 'as_co_pi' => $asCoPi],
             'message' => '',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ]);
     }
 
@@ -107,10 +142,10 @@ class ProposalController extends Controller
             ->get()
             ->map(fn ($p) => array_merge($p->toArray(), [
                 'co_investigators_count' => $p->members->where('role', 'co_investigator')->where('status', 'active')->count(),
-                'budget_total'           => $p->budgets->sum('amount'),
-                'award'                  => $p->award ? [
+                'budget_total' => $p->budgets->sum('amount'),
+                'award' => $p->award ? [
                     'grant_reference' => $p->award->grant_reference,
-                    'awarded_amount'  => $p->award->awarded_amount,
+                    'awarded_amount' => $p->award->awarded_amount,
                 ] : null,
             ]));
 
@@ -136,14 +171,14 @@ class ProposalController extends Controller
 
     public function budget(string $id): JsonResponse
     {
-        $items = \App\Models\ProposalBudget::where('proposal_id', $id)->get();
+        $items = ProposalBudget::where('proposal_id', $id)->get();
         $total = $items->sum('amount');
 
         return response()->json([
-            'data'    => ['items' => $items, 'total' => $total],
+            'data' => ['items' => $items, 'total' => $total],
             'message' => '',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ]);
     }
 
@@ -161,7 +196,7 @@ class ProposalController extends Controller
     {
         $user = $request->user();
 
-        $baseQuery = \App\Models\Proposal::whereNull('deleted_at');
+        $baseQuery = Proposal::query();
 
         if ($user->hasRole('college_officer') || $user->hasRole('college_officer')) {
             $baseQuery->where('college_id', $user->college_id);
@@ -201,7 +236,7 @@ class ProposalController extends Controller
                              ("funded","midterm_evaluation","completed","archived")
                              THEN 1 ELSE 0 END) as funded')
             ->groupBy('departments.id', 'departments.name',
-                      'departments.code', 'colleges.name')
+                'departments.code', 'colleges.name')
             ->orderByDesc('total')
             ->limit(10)
             ->get();
@@ -228,32 +263,32 @@ class ProposalController extends Controller
             ->pluck('total', 'category');
 
         $totals = [
-            'total'        => (clone $baseQuery)->count(),
-            'submitted'    => (clone $baseQuery)->whereNotIn('status', ['draft'])->count(),
-            'funded'       => (clone $baseQuery)->whereIn('status', ['funded', 'midterm_evaluation', 'completed', 'archived'])->count(),
-            'rejected'     => (clone $baseQuery)->where('status', 'rejected')->count(),
+            'total' => (clone $baseQuery)->count(),
+            'submitted' => (clone $baseQuery)->whereNotIn('status', ['draft'])->count(),
+            'funded' => (clone $baseQuery)->whereIn('status', ['funded', 'midterm_evaluation', 'completed', 'archived'])->count(),
+            'rejected' => (clone $baseQuery)->where('status', 'rejected')->count(),
             'under_review' => (clone $baseQuery)->whereIn('status', ['under_blind_review', 'under_open_defence', 'accepted'])->count(),
         ];
 
         return response()->json([
             'data' => [
-                'totals'        => $totals,
-                'by_college'    => $byCollege,
+                'totals' => $totals,
+                'by_college' => $byCollege,
                 'by_department' => $byDepartment,
-                'by_gender'     => $byGender,
-                'by_status'     => $byStatus,
-                'by_category'   => $byCategory,
+                'by_gender' => $byGender,
+                'by_status' => $byStatus,
+                'by_category' => $byCategory,
             ],
             'message' => '',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ]);
     }
 
     public function workflowHistory(string $id): JsonResponse
     {
         $proposal = Proposal::findOrFail($id);
-        $user     = request()->user();
+        $user = request()->user();
 
         $isAdmin = $user?->hasAnyRole(['super_admin', 'central_officer', 'college_officer']);
 
@@ -261,7 +296,7 @@ class ProposalController extends Controller
             ->orderBy('created_at', 'asc')
             ->get()
             ->map(function ($log) use ($isAdmin) {
-                $actor      = \App\Models\User::find($log->actor_id);
+                $actor = User::find($log->actor_id);
                 $actorLabel = $actor?->name ?? 'System';
 
                 if (! $isAdmin && $actor?->hasRole('staff')) {
@@ -269,11 +304,11 @@ class ProposalController extends Controller
                 }
 
                 return [
-                    'from_stage'  => $log->from_stage,
-                    'action'      => $log->action,
-                    'to_stage'    => $log->to_stage,
-                    'actor'       => $actorLabel,
-                    'notes'       => $log->notes,
+                    'from_stage' => $log->from_stage,
+                    'action' => $log->action,
+                    'to_stage' => $log->to_stage,
+                    'actor' => $actorLabel,
+                    'notes' => $log->notes,
                     'occurred_at' => $log->created_at,
                 ];
             });

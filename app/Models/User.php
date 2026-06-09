@@ -3,35 +3,32 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
-use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
-
-use Illuminate\Database\Eloquent\Concerns\HasUuids;
-
-
 
 #[Fillable(['name', 'email', 'password'])]
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
-
-
-
-use HasApiTokens, HasRoles, HasUuids, HasFactory, Notifiable, SoftDeletes;
+    use HasApiTokens, HasFactory, HasRoles, HasUuids, Notifiable, SoftDeletes;
 
     // Force Spatie to look up roles/permissions under 'web' guard
     // regardless of which guard (sanctum, api, etc.) authenticated the request.
     protected $guard_name = 'web';
 
     protected $primaryKey = 'id';
+
     public $incrementing = false;
+
     protected $keyType = 'string';
 
     protected $fillable = [
@@ -48,6 +45,9 @@ use HasApiTokens, HasRoles, HasUuids, HasFactory, Notifiable, SoftDeletes;
         'gender',
         'avatar',
         'status',
+        'email_verified_at',
+        'email_verification_token',
+        'email_verification_expires_at',
     ];
 
     protected $hidden = [
@@ -59,23 +59,23 @@ use HasApiTokens, HasRoles, HasUuids, HasFactory, Notifiable, SoftDeletes;
     protected function casts(): array
     {
         return [
-            'email_verified_at'              => 'datetime',
+            'email_verified_at' => 'datetime',
             'telegram_link_token_expires_at' => 'datetime',
-            'password'                       => 'hashed',
+            'password' => 'hashed',
         ];
     }
 
-    public function assignedComplaints(): \Illuminate\Database\Eloquent\Relations\HasMany
+    public function assignedComplaints(): HasMany
     {
         return $this->hasMany(Complaint::class, 'assigned_to');
     }
 
-    public function college(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    public function college(): BelongsTo
     {
         return $this->belongsTo(College::class);
     }
 
-    public function department(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    public function department(): BelongsTo
     {
         return $this->belongsTo(Department::class);
     }

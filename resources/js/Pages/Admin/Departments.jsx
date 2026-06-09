@@ -1,8 +1,23 @@
 import { useState, useEffect } from 'react';
-import { Building2, Plus, Pencil, RefreshCw } from 'lucide-react';
+import { Building2, Plus, Pencil, RefreshCw, Search, X, Users, CheckCircle, AlertCircle } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import api from '../../lib/api';
 import { useToast } from '../../Components/Toast';
+
+function StatCard({ label, value, icon: Icon, color, sub }) {
+    return (
+        <div className="bg-white rounded-2xl border border-gray-100 p-5 flex items-center gap-4 shadow-sm">
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${color}`}>
+                <Icon size={22} className="text-white" />
+            </div>
+            <div>
+                <p className="text-2xl font-bold text-gray-900 leading-none">{value}</p>
+                <p className="text-xs text-gray-500 mt-1">{label}</p>
+                {sub && <p className="text-[10px] text-gray-400">{sub}</p>}
+            </div>
+        </div>
+    );
+}
 
 function DeptModal({ dept, colleges, onSave, onClose }) {
     const [form, setForm] = useState(
@@ -30,53 +45,90 @@ function DeptModal({ dept, colleges, onSave, onClose }) {
                 success('Department created.');
             }
             onSave();
-        } catch (e) { error(e.response?.data?.message || 'Failed to save department.'); }
+        } catch (e) {
+            error(e.response?.data?.message || 'Failed to save department.');
+        }
         setSaving(false);
     };
 
     return (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-                <h3 className="text-base font-semibold text-gray-900 mb-4">
-                    {dept ? 'Edit Department' : 'New Department'}
-                </h3>
-                <div className="space-y-4">
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+                    <h3 className="text-base font-semibold text-gray-900">
+                        {dept ? 'Edit Department' : 'New Department'}
+                    </h3>
+                    <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition">
+                        <X size={16} />
+                    </button>
+                </div>
+
+                <div className="px-6 py-5 space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">College <span className="text-red-500">*</span></label>
-                        <select value={form.college_id} onChange={e => set('college_id', e.target.value)}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                            College <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                            value={form.college_id}
+                            onChange={e => set('college_id', e.target.value)}
+                            className="w-full border border-gray-200 bg-gray-50 focus:bg-white rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                        >
                             <option value="">— Select college —</option>
                             {colleges.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                         </select>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Name <span className="text-red-500">*</span></label>
-                        <input value={form.name} onChange={e => set('name', e.target.value)}
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                            Name <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                            value={form.name}
+                            onChange={e => set('name', e.target.value)}
                             placeholder="e.g. Computer Science"
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                            className="w-full border border-gray-200 bg-gray-50 focus:bg-white rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                        />
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Code <span className="text-red-500">*</span></label>
-                        <input value={form.code} onChange={e => set('code', e.target.value.toUpperCase())}
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                            Code <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                            value={form.code}
+                            onChange={e => set('code', e.target.value.toUpperCase())}
                             placeholder="e.g. CS"
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
+                            className="w-full border border-gray-200 bg-gray-50 focus:bg-white rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono transition"
+                        />
                     </div>
                     {dept && (
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                            <select value={form.status} onChange={e => set('status', e.target.value)}
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                                <option value="active">Active</option>
-                                <option value="inactive">Inactive</option>
-                            </select>
+                            <label className="block text-sm font-medium text-gray-700 mb-1.5">Status</label>
+                            <div className="flex gap-3">
+                                {['active', 'inactive'].map(s => (
+                                    <button
+                                        key={s}
+                                        onClick={() => set('status', s)}
+                                        className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition ${
+                                            form.status === s
+                                                ? s === 'active'
+                                                    ? 'bg-emerald-50 border-emerald-400 text-emerald-700'
+                                                    : 'bg-gray-100 border-gray-400 text-gray-700'
+                                                : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+                                        }`}
+                                    >
+                                        {s.charAt(0).toUpperCase() + s.slice(1)}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                     )}
                 </div>
-                <div className="flex gap-3 mt-6">
-                    <button onClick={onClose} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Cancel</button>
-                    <button onClick={save} disabled={saving}
-                        className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-60">
-                        {saving ? 'Saving…' : 'Save'}
+
+                <div className="flex gap-3 px-6 pb-5">
+                    <button onClick={onClose} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-700 hover:bg-gray-50 font-medium transition">
+                        Cancel
+                    </button>
+                    <button onClick={save} disabled={saving} className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-60 transition">
+                        {saving ? 'Saving…' : 'Save Changes'}
                     </button>
                 </div>
             </div>
@@ -90,6 +142,7 @@ export default function Departments() {
     const [colleges, setColleges]       = useState([]);
     const [loading, setLoading]         = useState(true);
     const [filterCollege, setFilterCollege] = useState('');
+    const [search, setSearch]           = useState('');
     const [modal, setModal]             = useState(null);
 
     const load = async () => {
@@ -101,7 +154,9 @@ export default function Departments() {
             ]);
             setDepartments(dRes.data?.data ?? []);
             setColleges(cRes.data?.data ?? []);
-        } catch { error('Failed to load departments.'); }
+        } catch {
+            error('Failed to load departments.');
+        }
         setLoading(false);
     };
 
@@ -109,87 +164,149 @@ export default function Departments() {
 
     const afterSave = () => { setModal(null); load(); };
 
-    // Group by college
-    const grouped = departments.reduce((acc, d) => {
+    const filtered = departments.filter((d) =>
+        !search || d.name.toLowerCase().includes(search.toLowerCase()) || d.code.toLowerCase().includes(search.toLowerCase())
+    );
+
+    const grouped = filtered.reduce((acc, d) => {
         const key = d.college?.name ?? 'Unknown';
-        if (!acc[key]) acc[key] = [];
-        acc[key].push(d);
+        if (!acc[key]) { acc[key] = { college: d.college, items: [] }; }
+        acc[key].items.push(d);
         return acc;
     }, {});
 
+    const activeCount   = departments.filter(d => d.status === 'active').length;
+    const inactiveCount = departments.filter(d => d.status !== 'active').length;
+
     return (
         <AppLayout breadcrumb="Departments">
-            <div className="max-w-5xl mx-auto">
-                <div className="flex items-center justify-between mb-6">
+            <div className="max-w-5xl mx-auto space-y-6">
+
+                {/* Header */}
+                <div className="flex items-center justify-between">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                            <Building2 size={22} className="text-blue-600" /> Departments
+                        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2.5">
+                            <Building2 size={24} className="text-blue-600" /> Departments
                         </h1>
-                        <p className="text-sm text-gray-500 mt-1">{departments.length} departments across {Object.keys(grouped).length} colleges</p>
+                        <p className="text-sm text-gray-500 mt-1">
+                            {departments.length} departments across {Object.keys(grouped).length} colleges
+                        </p>
                     </div>
                     <div className="flex items-center gap-2">
-                        <button onClick={load} className="flex items-center gap-1.5 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">
+                        <button onClick={load} className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition">
                             <RefreshCw size={14} /> Refresh
                         </button>
-                        <button onClick={() => setModal({ dept: null })}
-                            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+                        <button
+                            onClick={() => setModal({ dept: null })}
+                            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition shadow-sm shadow-blue-200"
+                        >
                             <Plus size={14} /> Add Department
                         </button>
                     </div>
                 </div>
 
-                {/* Filter */}
-                <div className="mb-4">
-                    <select value={filterCollege} onChange={e => setFilterCollege(e.target.value)}
-                        className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
+                {/* Stats */}
+                <div className="grid grid-cols-3 gap-4">
+                    <StatCard label="Total Departments" value={departments.length} icon={Building2}     color="bg-blue-500" />
+                    <StatCard label="Active"            value={activeCount}        icon={CheckCircle}   color="bg-emerald-500" />
+                    <StatCard label="Inactive"          value={inactiveCount}      icon={AlertCircle}   color="bg-amber-400" />
+                </div>
+
+                {/* Filters */}
+                <div className="flex items-center gap-3">
+                    <div className="flex items-center border border-gray-200 bg-white rounded-xl px-3.5 py-2.5 gap-2 focus-within:ring-2 focus-within:ring-blue-500 shadow-sm flex-1">
+                        <Search size={15} className="text-gray-400 shrink-0" />
+                        <input
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            placeholder="Search departments by name or code…"
+                            className="flex-1 text-sm outline-none text-gray-800 placeholder-gray-400 bg-transparent"
+                        />
+                        {search && (
+                            <button onClick={() => setSearch('')} className="text-gray-400 hover:text-gray-600">
+                                <X size={14} />
+                            </button>
+                        )}
+                    </div>
+                    <select
+                        value={filterCollege}
+                        onChange={e => setFilterCollege(e.target.value)}
+                        className="border border-gray-200 bg-white rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm text-gray-700"
+                    >
                         <option value="">All Colleges</option>
                         {colleges.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </select>
                 </div>
 
+                {/* Content */}
                 {loading ? (
                     <div className="flex justify-center py-16">
                         <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
                     </div>
                 ) : Object.keys(grouped).length === 0 ? (
-                    <div className="bg-white border border-gray-200 rounded-xl p-12 text-center">
-                        <Building2 size={36} className="mx-auto text-gray-300 mb-3" />
-                        <p className="text-gray-500">No departments found.</p>
+                    <div className="bg-white border border-gray-100 rounded-2xl p-14 text-center shadow-sm">
+                        <div className="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-4">
+                            <Building2 size={28} className="text-blue-300" />
+                        </div>
+                        <p className="text-gray-600 font-medium">No departments found</p>
+                        <p className="text-sm text-gray-400 mt-1">
+                            {search || filterCollege ? 'Try adjusting your filters.' : 'Add departments to get started.'}
+                        </p>
                     </div>
                 ) : (
-                    <div className="space-y-6">
-                        {Object.entries(grouped).map(([collegeName, depts]) => (
-                            <div key={collegeName} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-                                <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
-                                    <h2 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                                        <Building2 size={14} className="text-blue-500" /> {collegeName}
-                                        <span className="text-xs text-gray-400 font-normal">({depts.length})</span>
-                                    </h2>
+                    <div className="space-y-5">
+                        {Object.entries(grouped).map(([collegeName, { college, items: depts }]) => (
+                            <div key={collegeName} className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
+                                {/* College header */}
+                                <div className="px-5 py-3.5 bg-linear-to-r from-blue-50 to-indigo-50 border-b border-blue-100 flex items-center justify-between">
+                                    <div className="flex items-center gap-2.5">
+                                        <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
+                                            <Building2 size={15} className="text-white" />
+                                        </div>
+                                        <div>
+                                            <h2 className="text-sm font-semibold text-gray-800">{collegeName}</h2>
+                                            <p className="text-[10px] text-gray-400">{depts.length} department{depts.length !== 1 ? 's' : ''}</p>
+                                        </div>
+                                    </div>
+                                    <span className="text-xs font-mono text-blue-600 bg-blue-100 px-2 py-0.5 rounded-md">
+                                        {college?.code ?? '—'}
+                                    </span>
                                 </div>
+
+                                {/* Departments table */}
                                 <table className="w-full text-sm">
-                                    <thead className="text-xs text-gray-500 uppercase border-b border-gray-100">
-                                        <tr>
-                                            <th className="px-4 py-2 text-left font-medium">Name</th>
-                                            <th className="px-4 py-2 text-left font-medium">Code</th>
-                                            <th className="px-4 py-2 text-left font-medium">Status</th>
-                                            <th className="px-4 py-2" />
+                                    <thead>
+                                        <tr className="text-xs text-gray-400 uppercase border-b border-gray-50">
+                                            <th className="px-5 py-2.5 text-left font-medium">Name</th>
+                                            <th className="px-5 py-2.5 text-left font-medium">Code</th>
+                                            <th className="px-5 py-2.5 text-left font-medium">Status</th>
+                                            <th className="px-5 py-2.5" />
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-50">
                                         {depts.map(d => (
-                                            <tr key={d.id} className="hover:bg-gray-50">
-                                                <td className="px-4 py-2.5 font-medium text-gray-900">{d.name}</td>
-                                                <td className="px-4 py-2.5 font-mono text-xs text-gray-500">{d.code}</td>
-                                                <td className="px-4 py-2.5">
-                                                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                                                        d.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                                            <tr key={d.id} className="hover:bg-blue-50/30 transition-colors group">
+                                                <td className="px-5 py-3">
+                                                    <span className="font-semibold text-gray-900">{d.name}</span>
+                                                </td>
+                                                <td className="px-5 py-3">
+                                                    <span className="font-mono text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-md">{d.code}</span>
+                                                </td>
+                                                <td className="px-5 py-3">
+                                                    <span className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-semibold ${
+                                                        d.status === 'active'
+                                                            ? 'bg-emerald-100 text-emerald-700'
+                                                            : 'bg-gray-100 text-gray-500'
                                                     }`}>
+                                                        <span className={`w-1.5 h-1.5 rounded-full ${d.status === 'active' ? 'bg-emerald-500' : 'bg-gray-400'}`} />
                                                         {d.status}
                                                     </span>
                                                 </td>
-                                                <td className="px-4 py-2.5 text-right">
-                                                    <button onClick={() => setModal({ dept: d })}
-                                                        className="p-1.5 text-gray-400 hover:text-blue-600 rounded-lg hover:bg-blue-50">
+                                                <td className="px-5 py-3 text-right">
+                                                    <button
+                                                        onClick={() => setModal({ dept: d })}
+                                                        className="p-1.5 text-gray-300 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition opacity-0 group-hover:opacity-100"
+                                                    >
                                                         <Pencil size={13} />
                                                     </button>
                                                 </td>
@@ -203,7 +320,7 @@ export default function Departments() {
                 )}
             </div>
 
-            {modal && (
+            {modal !== null && (
                 <DeptModal
                     dept={modal.dept}
                     colleges={colleges}

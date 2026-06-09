@@ -29,29 +29,29 @@ class RolePermissionSeeder extends Seeder
     private function createPermissions(): void
     {
         $map = [
-            'proposals'            => ['view_any', 'view', 'create', 'update', 'delete', 'export', 'submit', 'validate', 'assign_reviewer', 'review', 'track'],
-            'proposal_calls'       => ['view_any', 'view', 'create', 'update', 'delete', 'export'],
-            'reviews'              => ['view_any', 'view', 'create', 'update', 'delete'],
-            'review_assignments'   => ['view_any', 'view', 'create', 'update', 'delete'],
-            'defence_sessions'     => ['view_any', 'view', 'create', 'update', 'delete'],
-            'complaints'           => ['view_any', 'view', 'create', 'update', 'delete'],
-            'budget_allocations'   => ['view_any', 'view', 'create', 'update', 'delete'],
-            'budget_requests'      => ['view_any', 'view', 'create', 'update', 'delete', 'export'],
-            'disbursements'        => ['view_any', 'view', 'create', 'update', 'delete'],
-            'settlements'          => ['view_any', 'view', 'create', 'update', 'delete'],
-            'midterm_evaluations'  => ['view_any', 'view', 'create', 'update', 'delete'],
+            'proposals' => ['view_any', 'view', 'create', 'update', 'delete', 'export', 'submit', 'validate', 'assign_reviewer', 'review', 'track'],
+            'proposal_calls' => ['view_any', 'view', 'create', 'update', 'delete', 'export'],
+            'reviews' => ['view_any', 'view', 'create', 'update', 'delete'],
+            'review_assignments' => ['view_any', 'view', 'create', 'update', 'delete'],
+            'defence_sessions' => ['view_any', 'view', 'create', 'update', 'delete'],
+            'complaints' => ['view_any', 'view', 'create', 'update', 'delete'],
+            'budget_allocations' => ['view_any', 'view', 'create', 'update', 'delete'],
+            'budget_requests' => ['view_any', 'view', 'create', 'update', 'delete', 'export'],
+            'disbursements' => ['view_any', 'view', 'create', 'update', 'delete'],
+            'settlements' => ['view_any', 'view', 'create', 'update', 'delete'],
+            'midterm_evaluations' => ['view_any', 'view', 'create', 'update', 'delete'],
             'completion_workshops' => ['view_any', 'view', 'create', 'update', 'delete'],
-            'research_outputs'     => ['view_any', 'view', 'create', 'update', 'delete'],
-            'repository'           => ['view_any', 'view', 'export'],
-            'reports'              => ['view_any', 'view', 'create', 'export'],
-            'users'                => ['view_any', 'view', 'create', 'update', 'delete', 'import'],
-            'roles'                => ['view_any', 'view', 'create', 'update', 'delete', 'assign'],
-            'colleges'             => ['view_any', 'view', 'create', 'update', 'delete'],
-            'departments'          => ['view_any', 'view', 'create', 'update', 'delete'],
-            'settings'             => ['view_any', 'view', 'update', 'manage'],
-            'awards'               => ['view_any', 'view', 'create', 'update'],
-            'audit_logs'           => ['view_any', 'view'],
-            'features'             => ['view_any', 'manage'],
+            'research_outputs' => ['view_any', 'view', 'create', 'update', 'delete'],
+            'repository' => ['view_any', 'view', 'export'],
+            'reports' => ['view_any', 'view', 'create', 'export'],
+            'users' => ['view_any', 'view', 'create', 'update', 'delete', 'import'],
+            'roles' => ['view_any', 'view', 'create', 'update', 'delete', 'assign'],
+            'colleges' => ['view_any', 'view', 'create', 'update', 'delete'],
+            'departments' => ['view_any', 'view', 'create', 'update', 'delete'],
+            'settings' => ['view_any', 'view', 'update', 'manage'],
+            'awards' => ['view_any', 'view', 'create', 'update'],
+            'audit_logs' => ['view_any', 'view'],
+            'features' => ['view_any', 'manage'],
         ];
 
         foreach ($map as $resource => $actions) {
@@ -76,6 +76,7 @@ class RolePermissionSeeder extends Seeder
             'college_officer',
             'support_officer',
             'staff',
+            'guest',
         ];
 
         foreach ($roles as $role) {
@@ -234,6 +235,9 @@ class RolePermissionSeeder extends Seeder
             'proposals.view_any', 'proposals.view',
             'complaints.view_any', 'complaints.view',
         ]);
+
+        // ── guest: login only, no permissions ────────────────────────────────
+        Role::findByName('guest')->syncPermissions([]);
 
         // ── staff: proposal submission & reviews ─────────────────────────────
         Role::findByName('staff')->syncPermissions([

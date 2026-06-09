@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\StoreInAppNotificationJob;
 use App\Models\Award;
 use App\Models\BudgetAllocation;
 use App\Models\BudgetRequest;
@@ -14,10 +15,13 @@ use App\Services\BudgetAllocationService;
 use App\Services\BudgetRequestService;
 use App\Services\BudgetSettlementService;
 use App\Services\DisbursementService;
+use App\Services\MailConfigService;
 use App\Services\SignatureService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 class BudgetController extends Controller
 {
@@ -755,14 +759,67 @@ class BudgetController extends Controller
 
     public function approve(string $id, Request $request): JsonResponse
     {
-        $budgetRequest = BudgetRequest::findOrFail($id);
+        $budgetRequest = BudgetRequest::with(['proposal.pi', 'proposal.members.user'])->findOrFail($id);
         $budgetRequest->update([
             'status' => 'approved',
             'approved_at' => now(),
             'college_review_notes' => $request->input('notes'),
         ]);
 
+        $this->notifyBudgetRequestApproved($budgetRequest->fresh()->load(['proposal.pi', 'proposal.members.user']));
+
         return response()->json(['data' => $budgetRequest->fresh()]);
+    }
+
+    private function notifyBudgetRequestApproved(BudgetRequest $budgetRequest): void
+    {
+        $proposal = $budgetRequest->proposal;
+        if (! $proposal) {
+            return;
+        }
+
+        app(MailConfigService::class)->applyFromDatabase();
+
+        $data = [
+            'tracker_number' => $proposal->tracker_number,
+            'title' => $proposal->title,
+            'round_number' => $budgetRequest->funding_round,
+            'requested_amount' => $budgetRequest->total_requested ?? null,
+            'notes' => $budgetRequest->college_review_notes,
+        ];
+
+        $recipients = collect();
+
+        if ($proposal->pi) {
+            $recipients->push($proposal->pi);
+        }
+
+        $proposal->members
+            ->where('role', 'co_investigator')
+            ->where('status', 'active')
+            ->each(fn ($m) => $m->user && $recipients->push($m->user));
+
+        foreach ($recipients->unique('id') as $user) {
+            if (! $user->email) {
+                continue;
+            }
+            try {
+                Mail::html(
+                    view('emails.notifications.budget_request_approved', array_merge($data, ['recipient' => $user]))->render(),
+                    fn ($msg) => $msg->to($user->email, $user->name)
+                        ->subject("Budget Request Approved — {$proposal->tracker_number}")
+                );
+            } catch (\Exception $e) {
+                Log::error("Budget approval email failed for {$user->email}: ".$e->getMessage());
+            }
+
+            // Store in-app notification
+            try {
+                StoreInAppNotificationJob::dispatchSync($user->id, 'budget_request_approved', $data);
+            } catch (\Exception) {
+                // Non-critical
+            }
+        }
     }
 
     public function disburse(string $id, Request $request): JsonResponse

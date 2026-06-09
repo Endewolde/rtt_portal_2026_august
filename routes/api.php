@@ -2,7 +2,6 @@
 
 use App\Http\Controllers\Api\ActionCountController;
 use App\Http\Controllers\Api\AuditLogController;
-use App\Http\Controllers\Api\FeatureController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AwardController;
 use App\Http\Controllers\Api\BudgetController;
@@ -12,6 +11,7 @@ use App\Http\Controllers\Api\ComplaintController;
 use App\Http\Controllers\Api\CompletionWorkshopController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DisbursementController;
+use App\Http\Controllers\Api\FeatureController;
 use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\MidtermEvaluationController;
 use App\Http\Controllers\Api\NotificationController;
@@ -22,13 +22,13 @@ use App\Http\Controllers\Api\ProposalWizardController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\RepositoryController;
 use App\Http\Controllers\Api\ResearchOutputController;
+use App\Http\Controllers\Api\ResourceController;
 use App\Http\Controllers\Api\ReviewController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\SettlementController;
 use App\Http\Controllers\Api\SimilarityController;
 use App\Http\Controllers\Api\StatsController;
-
 use App\Http\Controllers\Api\UserController;
 use App\Models\FormTemplate;
 use Illuminate\Support\Facades\Route;
@@ -38,15 +38,20 @@ Route::prefix('v1')->group(function () {
     // Health check — no auth, no rate limit
     Route::get('/health', [HealthController::class, 'check']);
 
-    // ── Public auth — strictly rate limited ───────────────────────────────────
-    // 5 attempts per minute per IP
-    Route::middleware('throttle:5,1')->post('/auth/login', [AuthController::class, 'login']);
+    // ── Public auth — rate limited ────────────────────────────────────────────
+    // 30 attempts per minute per IP
+    Route::middleware('throttle:30,1')->post('/auth/login', [AuthController::class, 'login']);
 
-    // 3 attempts per hour per IP
-    Route::middleware('throttle:3,60')->group(function () {
+    // 30 attempts per hour per IP
+    Route::middleware('throttle:30,60')->group(function () {
         Route::post('/auth/register', [AuthController::class, 'register']);
         Route::post('/auth/forgot-password', [AuthController::class, 'forgotPassword'])->name('password.email');
+        Route::post('/auth/reset-password', [AuthController::class, 'resetPassword']);
+        Route::post('/auth/resend-verification', [AuthController::class, 'resendVerification']);
     });
+
+    // Email verification (GET — clicked from the email link)
+    Route::get('/auth/verify-email', [AuthController::class, 'verifyEmail']);
 
     // Telegram webhook — 30 per minute per IP
     Route::middleware('throttle:30,1')->post('/auth/telegram/webhook', [AuthController::class, 'telegramWebhook']);
@@ -60,6 +65,9 @@ Route::prefix('v1')->group(function () {
     Route::get('/repository/{id}', [RepositoryController::class, 'show']);
     Route::get('/tracker/{number}', [RepositoryController::class, 'tracker']);
     Route::get('/stats', [StatsController::class, 'index']);
+    Route::get('/resources', [ResourceController::class, 'publicIndex']);
+    Route::get('/proposals/public', [ProposalController::class, 'publicIndex']);
+    Route::get('/colleges/public', [CollegeController::class, 'publicList']);
 
     // ── Authenticated — 300 requests per minute per user ─────────────────────
     Route::middleware(['auth:sanctum', 'user.active', 'throttle:300,1', 'college.scope', 'category.scope'])->group(function () {
@@ -73,6 +81,9 @@ Route::prefix('v1')->group(function () {
         // Users
         Route::get('/users', [UserController::class, 'index']);
         Route::post('/users', [UserController::class, 'store']);
+        Route::get('/users/export', [UserController::class, 'export']);
+        Route::get('/users/import-template', [UserController::class, 'importTemplate']);
+        Route::post('/users/import', [UserController::class, 'import']);
         Route::get('/users/{id}', [UserController::class, 'show']);
         Route::put('/users/{id}', [UserController::class, 'update']);
         Route::delete('/users/{id}', [UserController::class, 'destroy']);
@@ -110,17 +121,17 @@ Route::prefix('v1')->group(function () {
         Route::put('/features', [FeatureController::class, 'update']);
 
         // Settings — static segments must come before {key} wildcard
-        Route::get('/settings',                    [SettingsController::class, 'index']);
-        Route::put('/settings',                    [SettingsController::class, 'update']);
-        Route::get('/settings/app',                [SettingsController::class, 'appSettings']);
-        Route::put('/settings/app/bulk',           [SettingsController::class, 'updateBulk']);
-        Route::get('/settings/system-info',        [SettingsController::class, 'systemInfo']);
-        Route::post('/settings/clear-cache',       [SettingsController::class, 'clearCache']);
-        Route::post('/settings/toggle-maintenance',[SettingsController::class, 'toggleMaintenance']);
-        Route::post('/settings/test-email',        [SettingsController::class, 'testEmail']);
-        Route::post('/settings/upload-asset',      [SettingsController::class, 'uploadAsset']);
-        Route::post('/settings/send-email',        [SettingsController::class, 'sendBroadcastEmail']);
-        Route::put('/settings/app/{key}',          [SettingsController::class, 'updateAppSetting']);
+        Route::get('/settings', [SettingsController::class, 'index']);
+        Route::put('/settings', [SettingsController::class, 'update']);
+        Route::get('/settings/app', [SettingsController::class, 'appSettings']);
+        Route::put('/settings/app/bulk', [SettingsController::class, 'updateBulk']);
+        Route::get('/settings/system-info', [SettingsController::class, 'systemInfo']);
+        Route::post('/settings/clear-cache', [SettingsController::class, 'clearCache']);
+        Route::post('/settings/toggle-maintenance', [SettingsController::class, 'toggleMaintenance']);
+        Route::post('/settings/test-email', [SettingsController::class, 'testEmail']);
+        Route::post('/settings/upload-asset', [SettingsController::class, 'uploadAsset']);
+        Route::post('/settings/send-email', [SettingsController::class, 'sendBroadcastEmail']);
+        Route::put('/settings/app/{key}', [SettingsController::class, 'updateAppSetting']);
 
         // Proposal Calls — admin actions
         Route::post('/proposal-calls', [ProposalCallController::class, 'store']);
@@ -178,7 +189,14 @@ Route::prefix('v1')->group(function () {
         Route::delete('/evaluation-questions/{id}', [ReviewController::class, 'destroyQuestion']);
 
         // Review management
+        // Resources (downloadable files)
+        Route::get('/admin/resources', [ResourceController::class, 'index']);
+        Route::post('/admin/resources', [ResourceController::class, 'store']);
+        Route::put('/admin/resources/{id}', [ResourceController::class, 'update']);
+        Route::delete('/admin/resources/{id}', [ResourceController::class, 'destroy']);
+
         Route::get('/admin/review-management', [ReviewController::class, 'proposalReviewList']);
+        Route::get('/admin/reviewer-workload', [ReviewController::class, 'reviewerWorkload']);
         Route::put('/review-assignments/{id}/reassign', [ReviewController::class, 'reassignReviewer']);
         Route::put('/review-assignments/{id}/extend', [ReviewController::class, 'extendDueDate']);
 

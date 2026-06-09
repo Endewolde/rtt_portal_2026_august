@@ -12,6 +12,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use Spatie\Permission\Models\Role;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class UserController extends Controller
 {
@@ -55,9 +57,15 @@ class UserController extends Controller
         }
 
         if ($role = $request->query('role')) {
-            // Accept comma-separated roles: role=pi,staff
-            $roles = str_contains($role, ',') ? explode(',', $role) : $role;
-            $query->role($roles);
+            $requested = str_contains($role, ',') ? explode(',', $role) : [$role];
+            // Filter to only roles that actually exist — prevents RoleDoesNotExist exceptions
+            // for legacy names like 'pi' that were renamed.
+            $existing = Role::whereIn('name', $requested)
+                ->pluck('name')
+                ->all();
+            if (! empty($existing)) {
+                $query->role($existing);
+            }
         }
 
         if ($isAdmin && ($status = $request->query('status'))) {
@@ -243,6 +251,229 @@ class UserController extends Controller
         $user->update($request->only('name', 'email', 'college_id', 'department_id', 'employee_id', 'phone', 'gender', 'status'));
 
         return response()->json(['data' => $user->fresh()->load('roles'), 'message' => 'User updated.', 'errors' => [], 'meta' => []]);
+    }
+
+    public function export(Request $request): StreamedResponse
+    {
+        if (! $request->user()?->can('users.view_any')) {
+            abort(403, 'Forbidden.');
+        }
+
+        $query = User::with(['roles:id,name', 'college:id,name,code', 'department:id,name'])
+            ->orderBy('name');
+
+        if ($search = $request->query('search')) {
+            $query->where(fn ($q) => $q
+                ->where('name', 'like', "%{$search}%")
+                ->orWhere('email', 'like', "%{$search}%")
+            );
+        }
+
+        if ($role = $request->query('role')) {
+            $roles = str_contains($role, ',') ? explode(',', $role) : $role;
+            $query->role($roles);
+        }
+
+        if ($status = $request->query('status')) {
+            $query->where('status', $status);
+        }
+
+        $users = $query->get();
+
+        $headers = [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="users_export_'.date('Y-m-d').'.csv"',
+            'Cache-Control' => 'no-cache',
+        ];
+
+        return response()->stream(function () use ($users) {
+            $handle = fopen('php://output', 'w');
+
+            // UTF-8 BOM for Excel compatibility
+            fwrite($handle, "\xEF\xBB\xBF");
+
+            fputcsv($handle, [
+                'Name', 'Email', 'Employee ID', 'Role', 'College', 'College Code',
+                'Department', 'Phone', 'Gender', 'Status', 'Created At',
+            ]);
+
+            foreach ($users as $user) {
+                $primaryRole = $user->roles->first()?->name ?? '';
+                fputcsv($handle, [
+                    $user->name,
+                    $user->email,
+                    $user->employee_id ?? '',
+                    $primaryRole,
+                    $user->college?->name ?? '',
+                    $user->college?->code ?? '',
+                    $user->department?->name ?? '',
+                    $user->phone ?? '',
+                    $user->gender ?? '',
+                    $user->status,
+                    $user->created_at?->format('Y-m-d'),
+                ]);
+            }
+
+            fclose($handle);
+        }, 200, $headers);
+    }
+
+    public function importTemplate(): StreamedResponse
+    {
+        $headers = [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="users_import_template.csv"',
+            'Cache-Control' => 'no-cache',
+        ];
+
+        return response()->stream(function () {
+            $handle = fopen('php://output', 'w');
+
+            fwrite($handle, "\xEF\xBB\xBF");
+
+            fputcsv($handle, [
+                'name', 'email', 'password', 'role',
+                'college_code', 'employee_id', 'phone', 'gender',
+            ]);
+
+            // Example rows
+            fputcsv($handle, [
+                'John Doe', 'john.doe@example.com', 'Password123', 'staff',
+                'CBE', 'EMP-001', '+251911000001', 'male',
+            ]);
+            fputcsv($handle, [
+                'Jane Smith', 'jane.smith@example.com', 'Password123', 'reviewer',
+                'CSSH', 'EMP-002', '+251911000002', 'female',
+            ]);
+
+            fclose($handle);
+        }, 200, $headers);
+    }
+
+    public function import(Request $request): JsonResponse
+    {
+        if (! $request->user()?->can('users.create')) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        $request->validate([
+            'file' => 'required|file|mimes:csv,txt|max:2048',
+        ]);
+
+        $file = $request->file('file');
+        $handle = fopen($file->getRealPath(), 'r');
+
+        // Read header row, stripping BOM if present
+        $rawHeaders = fgetcsv($handle);
+        if ($rawHeaders) {
+            $rawHeaders[0] = ltrim($rawHeaders[0], "\xEF\xBB\xBF");
+        }
+        $headerMap = array_flip(array_map('trim', $rawHeaders ?? []));
+
+        $col = fn (string $name) => $headerMap[$name] ?? null;
+
+        $colleges = College::pluck('id', 'code')->toArray();
+        $validRoles = DB::table('roles')->pluck('name')->toArray();
+
+        $created = 0;
+        $skipped = 0;
+        $errors = [];
+        $rowIndex = 1;
+
+        while (($row = fgetcsv($handle)) !== false) {
+            $rowIndex++;
+
+            $name = trim($row[$col('name')] ?? '');
+            $email = strtolower(trim($row[$col('email')] ?? ''));
+            $password = trim($row[$col('password')] ?? '');
+            $role = trim($row[$col('role')] ?? '');
+            $collegeCode = strtoupper(trim($row[$col('college_code')] ?? ''));
+            $employeeId = trim($row[$col('employee_id')] ?? '');
+            $phone = trim($row[$col('phone')] ?? '');
+            $gender = strtolower(trim($row[$col('gender')] ?? ''));
+
+            // Row-level validation
+            $rowErrors = [];
+            if (! $name) {
+                $rowErrors[] = 'name is required';
+            }
+            if (! $email) {
+                $rowErrors[] = 'email is required';
+            }
+            if ($email && ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $rowErrors[] = 'invalid email';
+            }
+            if (! $role) {
+                $rowErrors[] = 'role is required';
+            }
+            if ($role && ! in_array($role, $validRoles, true)) {
+                $rowErrors[] = "unknown role \"{$role}\"";
+            }
+            if ($gender && ! in_array($gender, ['male', 'female', 'other'], true)) {
+                $gender = '';
+            }
+
+            if ($rowErrors) {
+                $errors[] = ['row' => $rowIndex, 'email' => $email ?: '—', 'error' => implode('; ', $rowErrors)];
+
+                continue;
+            }
+
+            if (User::where('email', $email)->exists()) {
+                $skipped++;
+
+                continue;
+            }
+
+            $collegeId = $collegeCode && isset($colleges[$collegeCode]) ? $colleges[$collegeCode] : null;
+
+            $user = User::create([
+                'name' => $name,
+                'email' => $email,
+                'password' => Hash::make($password ?: Str::random(16)),
+                'college_id' => $collegeId,
+                'employee_id' => $employeeId ?: null,
+                'phone' => $phone ?: null,
+                'gender' => $gender ?: null,
+                'status' => 'active',
+                'email_verified_at' => now(),
+            ]);
+
+            $user->assignRole($role);
+            NotificationPreference::create(['user_id' => $user->id]);
+
+            $created++;
+        }
+
+        fclose($handle);
+
+        DB::table('audit_logs')->insert([
+            'id' => Str::uuid()->toString(),
+            'auditable_type' => User::class,
+            'auditable_id' => $request->user()->id,
+            'event' => 'users.imported',
+            'actor_id' => $request->user()->id,
+            'old_values' => null,
+            'new_values' => json_encode(['created' => $created, 'skipped' => $skipped, 'errors' => count($errors)]),
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent() ?? '',
+            'created_at' => now(),
+        ]);
+
+        return response()->json([
+            'data' => [
+                'summary' => [
+                    'total' => $created + $skipped + count($errors),
+                    'created' => $created,
+                    'skipped' => $skipped,
+                    'errors' => count($errors),
+                ],
+                'errors' => $errors,
+            ],
+            'message' => "Import complete. {$created} created, {$skipped} skipped, ".count($errors).' errors.',
+            'errors' => [],
+            'meta' => [],
+        ]);
     }
 
     public function destroy(Request $request, string $id): JsonResponse

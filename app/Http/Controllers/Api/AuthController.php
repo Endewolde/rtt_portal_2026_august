@@ -7,9 +7,15 @@ use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\RegisterRequest;
 use App\Models\User;
 use App\Services\AuthService;
+use App\Services\MailConfigService;
 use App\Services\SubscriptionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -24,9 +30,9 @@ class AuthController extends Controller
         $result = $this->authService->register($request->validated());
 
         return response()->json([
-            'data'    => ['user' => $result['user'], 'token' => $result['token']],
-            'message' => 'Registration successful.',
-            'errors'  => [],
+            'data' => ['user' => $result['user']],
+            'message' => 'Registration successful. Please check your email to verify your account.',
+            'errors' => [],
         ], 201);
     }
 
@@ -36,22 +42,22 @@ class AuthController extends Controller
             $result = $this->authService->login($request->validated());
         } catch (ValidationException $e) {
             return response()->json([
-                'data'    => null,
+                'data' => null,
                 'message' => 'Invalid credentials.',
-                'errors'  => $e->errors(),
+                'errors' => $e->errors(),
             ], 422);
         }
 
         $user = $result['user'];
 
         return response()->json([
-            'data'    => [
+            'data' => [
                 'token' => $result['token'],
-                'user'  => $this->buildUserPayload($user),
+                'user' => $this->buildUserPayload($user),
             ],
             'message' => 'Login successful.',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ]);
     }
 
@@ -60,9 +66,9 @@ class AuthController extends Controller
         $this->authService->logout($request->user());
 
         return response()->json([
-            'data'    => null,
+            'data' => null,
             'message' => 'Logged out successfully.',
-            'errors'  => [],
+            'errors' => [],
         ]);
     }
 
@@ -71,10 +77,10 @@ class AuthController extends Controller
         $user = $request->user()->load('roles');
 
         return response()->json([
-            'data'    => ['user' => $this->buildUserPayload($user)],
+            'data' => ['user' => $this->buildUserPayload($user)],
             'message' => 'Authenticated user retrieved.',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ]);
     }
 
@@ -84,13 +90,13 @@ class AuthController extends Controller
         $subscription = null;
 
         if ($user->college_id) {
-            $college      = $user->college()->first();
+            $college = $user->college()->first();
             $subscription = $college ? $this->subscriptionService->getSubscriptionSummary($college) : null;
         }
 
         return array_merge($user->toArray(), [
-            'roles'        => $user->getRoleNames()->values()->toArray(),
-            'permissions'  => $user->getAllPermissions()->pluck('name')->values()->toArray(),
+            'roles' => $user->getRoleNames()->values()->toArray(),
+            'permissions' => $user->getAllPermissions()->pluck('name')->values()->toArray(),
             'subscription' => $subscription,
         ]);
     }
@@ -98,11 +104,11 @@ class AuthController extends Controller
     public function updateProfile(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'name'        => ['sometimes', 'string', 'max:255'],
-            'phone'       => ['sometimes', 'nullable', 'string', 'max:30'],
-            'avatar'      => ['sometimes', 'nullable', 'string', 'max:500'],
+            'name' => ['sometimes', 'string', 'max:255'],
+            'phone' => ['sometimes', 'nullable', 'string', 'max:30'],
+            'avatar' => ['sometimes', 'nullable', 'string', 'max:500'],
             'employee_id' => ['sometimes', 'nullable', 'string', 'max:50'],
-            'gender'      => ['sometimes', 'nullable', 'in:male,female,other'],
+            'gender' => ['sometimes', 'nullable', 'in:male,female,other'],
         ]);
 
         $request->user()->update($validated);
@@ -110,9 +116,9 @@ class AuthController extends Controller
         $user = $request->user()->fresh()->load('roles');
 
         return response()->json([
-            'data'    => ['user' => $user],
+            'data' => ['user' => $user],
             'message' => 'Profile updated.',
-            'errors'  => [],
+            'errors' => [],
         ]);
     }
 
@@ -121,14 +127,14 @@ class AuthController extends Controller
         $request->validate(['avatar' => 'required|image|max:2048']);
 
         $path = $request->file('avatar')->store('avatars', 'public');
-        $url  = \Illuminate\Support\Facades\Storage::url($path);
+        $url = Storage::url($path);
 
         $request->user()->update(['avatar' => $url]);
 
         return response()->json([
-            'data'    => ['url' => $url],
+            'data' => ['url' => $url],
             'message' => 'Avatar updated.',
-            'errors'  => [],
+            'errors' => [],
         ]);
     }
 
@@ -136,25 +142,189 @@ class AuthController extends Controller
     {
         $request->validate([
             'current_password' => ['required', 'string'],
-            'password'         => ['required', 'string', 'min:8', 'confirmed'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
 
-        if (! \Illuminate\Support\Facades\Hash::check($request->current_password, $request->user()->password)) {
+        if (! Hash::check($request->current_password, $request->user()->password)) {
             return response()->json([
-                'data'    => null,
+                'data' => null,
                 'message' => 'Current password is incorrect.',
-                'errors'  => ['current_password' => ['Current password is incorrect.']],
+                'errors' => ['current_password' => ['Current password is incorrect.']],
             ], 422);
         }
 
         $request->user()->update([
-            'password' => \Illuminate\Support\Facades\Hash::make($request->password),
+            'password' => Hash::make($request->password),
         ]);
 
         return response()->json([
-            'data'    => null,
+            'data' => null,
             'message' => 'Password changed successfully.',
-            'errors'  => [],
+            'errors' => [],
+        ]);
+    }
+
+    // ── Forgot / Reset password ───────────────────────────────────────────────
+
+    public function forgotPassword(Request $request): JsonResponse
+    {
+        $request->validate(['email' => ['required', 'email']]);
+
+        $user = User::where('email', $request->email)->first();
+
+        // Always respond the same way — never reveal whether the email exists
+        if ($user) {
+            app(MailConfigService::class)->applyFromDatabase();
+
+            $rawToken = Str::random(64);
+            $hashedToken = hash('sha256', $rawToken);
+
+            DB::table('password_reset_tokens')->upsert(
+                ['email' => $user->email, 'token' => $hashedToken, 'created_at' => now()],
+                ['email'],
+                ['token', 'created_at'],
+            );
+
+            $resetUrl = config('app.url').'/reset-password?token='.$rawToken.'&email='.urlencode($user->email);
+            $expiresAt = now()->addMinutes(60)->format('d M Y, H:i');
+
+            try {
+                Mail::html(
+                    view('emails.password_reset', [
+                        'userName' => $user->name,
+                        'resetUrl' => $resetUrl,
+                        'expiresAt' => $expiresAt,
+                        'senderName' => config('mail.from.name'),
+                    ])->render(),
+                    fn ($msg) => $msg->to($user->email, $user->name)->subject('Reset Your Password — RTT Platform')
+                );
+            } catch (\Exception) {
+                // Silently absorb mail failures; never leak internals to the client
+            }
+        }
+
+        return response()->json([
+            'data' => null,
+            'message' => 'If that email exists in our system, you will receive a reset link shortly.',
+            'errors' => [],
+        ]);
+    }
+
+    public function resetPassword(Request $request): JsonResponse
+    {
+        $request->validate([
+            'token' => ['required', 'string'],
+            'email' => ['required', 'email'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'password_confirmation' => ['required', 'string'],
+        ]);
+
+        $hashedToken = hash('sha256', $request->token);
+        $record = DB::table('password_reset_tokens')
+            ->where('email', $request->email)
+            ->where('token', $hashedToken)
+            ->first();
+
+        if (! $record) {
+            return response()->json([
+                'message' => 'This reset link is invalid.',
+                'errors' => ['token' => ['Invalid or expired reset link.']],
+            ], 422);
+        }
+
+        // Expire after 60 minutes
+        if (now()->diffInMinutes($record->created_at, false) < -60) {
+            DB::table('password_reset_tokens')->where('email', $request->email)->delete();
+
+            return response()->json([
+                'message' => 'This reset link has expired. Please request a new one.',
+                'errors' => ['token' => ['Reset link has expired.']],
+            ], 422);
+        }
+
+        $user = User::where('email', $request->email)->first();
+        if (! $user) {
+            return response()->json(['message' => 'User not found.', 'errors' => []], 422);
+        }
+
+        $user->update(['password' => Hash::make($request->password)]);
+        $user->tokens()->delete(); // Invalidate all existing sessions
+
+        DB::table('password_reset_tokens')->where('email', $request->email)->delete();
+
+        return response()->json([
+            'data' => null,
+            'message' => 'Password reset successfully. You can now log in with your new password.',
+            'errors' => [],
+        ]);
+    }
+
+    // ── Email verification ────────────────────────────────────────────────────
+
+    public function verifyEmail(Request $request): JsonResponse
+    {
+        $request->validate([
+            'token' => ['required', 'string'],
+            'email' => ['required', 'email'],
+        ]);
+
+        $user = User::where('email', $request->email)->first();
+
+        if (! $user || $user->email_verification_token !== $request->token) {
+            return response()->json([
+                'message' => 'Invalid verification link.',
+                'errors' => ['token' => ['This verification link is invalid.']],
+            ], 422);
+        }
+
+        if ($user->email_verification_expires_at && now()->isAfter($user->email_verification_expires_at)) {
+            return response()->json([
+                'message' => 'Verification link has expired. Please register again or request a new link.',
+                'errors' => ['token' => ['Verification link expired.']],
+            ], 422);
+        }
+
+        if ($user->email_verified_at) {
+            // Already verified — just issue a token so they can log in
+            $token = $user->createToken('auth_token')->plainTextToken;
+
+            return response()->json([
+                'data' => ['token' => $token, 'user' => $this->buildUserPayload($user->load('roles'))],
+                'message' => 'Email already verified. You are now logged in.',
+                'errors' => [],
+            ]);
+        }
+
+        $user->update([
+            'email_verified_at' => now(),
+            'email_verification_token' => null,
+            'email_verification_expires_at' => null,
+        ]);
+
+        $token = $user->createToken('auth_token')->plainTextToken;
+
+        return response()->json([
+            'data' => ['token' => $token, 'user' => $this->buildUserPayload($user->fresh()->load('roles'))],
+            'message' => 'Email verified successfully! You are now logged in.',
+            'errors' => [],
+        ]);
+    }
+
+    public function resendVerification(Request $request): JsonResponse
+    {
+        $request->validate(['email' => ['required', 'email']]);
+
+        $user = User::where('email', $request->email)->whereNull('email_verified_at')->first();
+
+        // Never reveal whether the email exists
+        if ($user) {
+            $this->authService->sendVerificationEmail($user);
+        }
+
+        return response()->json([
+            'data' => null,
+            'message' => 'If that email is pending verification, a new link has been sent.',
+            'errors' => [],
         ]);
     }
 
@@ -163,22 +333,22 @@ class AuthController extends Controller
         $token = $this->authService->generateTelegramLinkToken($request->user());
 
         return response()->json([
-            'data'    => ['token' => $token],
+            'data' => ['token' => $token],
             'message' => 'Telegram link token generated.',
-            'errors'  => [],
+            'errors' => [],
         ]);
     }
 
     public function telegramWebhook(Request $request): JsonResponse
     {
-        $token  = $request->input('token');
+        $token = $request->input('token');
         $chatId = $request->input('chat_id');
 
         if (! $token || ! $chatId) {
             return response()->json([
-                'data'    => null,
+                'data' => null,
                 'message' => 'Token and chat_id are required.',
-                'errors'  => [],
+                'errors' => [],
             ], 422);
         }
 
@@ -186,16 +356,16 @@ class AuthController extends Controller
             $user = $this->authService->linkTelegramAccount($token, $chatId);
         } catch (\Exception $e) {
             return response()->json([
-                'data'    => null,
+                'data' => null,
                 'message' => $e->getMessage(),
-                'errors'  => [],
+                'errors' => [],
             ], 422);
         }
 
         return response()->json([
-            'data'    => ['user_id' => $user->id],
+            'data' => ['user_id' => $user->id],
             'message' => 'Telegram account linked successfully.',
-            'errors'  => [],
+            'errors' => [],
         ]);
     }
 }

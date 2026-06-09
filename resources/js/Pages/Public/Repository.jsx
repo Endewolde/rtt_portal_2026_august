@@ -388,7 +388,7 @@ export default function Repository() {
     useEffect(() => { load(); }, [load]);
 
     useEffect(() => {
-        get('/colleges').then(r => setColleges(r.data ?? [])).catch(() => {});
+        get('/colleges/public').then(r => setColleges(r.data ?? [])).catch(() => {});
     }, []);
 
     const handleSearchInput = (val) => {

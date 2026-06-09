@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -21,36 +22,36 @@ class AuthService
     {
         $user = DB::transaction(function () use ($data) {
             $user = User::create([
-                'name'          => $data['name'],
-                'email'         => $data['email'],
-                'password'      => Hash::make($data['password']),
-                'employee_id'   => $data['employee_id'] ?? null,
-                'college_id'    => $data['college_id'] ?? null,
+                'name' => $data['name'],
+                'email' => $data['email'],
+                'password' => Hash::make($data['password']),
+                'employee_id' => $data['employee_id'] ?? null,
+                'college_id' => $data['college_id'] ?? null,
                 'department_id' => $data['department_id'] ?? null,
-                'phone'         => $data['phone'] ?? null,
-                'status'        => 'active',
+                'phone' => $data['phone'] ?? null,
+                'status' => 'active',
             ]);
 
-            $user->assignRole('staff');
+            $user->assignRole('guest');
 
             NotificationPreference::create([
-                'user_id'          => $user->id,
-                'email_enabled'    => true,
+                'user_id' => $user->id,
+                'email_enabled' => true,
                 'telegram_enabled' => true,
-                'inapp_enabled'    => true,
+                'inapp_enabled' => true,
             ]);
 
             DB::table('audit_logs')->insert([
-                'id'             => Str::uuid()->toString(),
+                'id' => Str::uuid()->toString(),
                 'auditable_type' => User::class,
-                'auditable_id'   => $user->id,
-                'event'          => 'user.registered',
-                'actor_id'       => $user->id,
-                'old_values'     => null,
-                'new_values'     => json_encode(['email' => $user->email, 'role' => 'staff']),
-                'ip_address'     => request()->ip() ?? '127.0.0.1',
-                'user_agent'     => request()->userAgent() ?? '',
-                'created_at'     => now(),
+                'auditable_id' => $user->id,
+                'event' => 'user.registered',
+                'actor_id' => $user->id,
+                'old_values' => null,
+                'new_values' => json_encode(['email' => $user->email, 'role' => 'guest']),
+                'ip_address' => request()->ip() ?? '127.0.0.1',
+                'user_agent' => request()->userAgent() ?? '',
+                'created_at' => now(),
             ]);
 
             return $user;
@@ -58,9 +59,10 @@ class AuthService
 
         event(new Registered($user));
 
-        $token = $user->createToken('auth_token')->plainTextToken;
+        // Send verification email; token is issued only after email is verified
+        $this->sendVerificationEmail($user);
 
-        return ['user' => $user, 'token' => $token];
+        return ['user' => $user, 'token' => null];
     }
 
     /**
@@ -80,6 +82,12 @@ class AuthService
             ]);
         }
 
+        if (! $user->email_verified_at) {
+            throw ValidationException::withMessages([
+                'email' => ['email_not_verified'],
+            ]);
+        }
+
         if ($user->status !== 'active') {
             throw ValidationException::withMessages([
                 'email' => ['Your account is not active. Please contact the administrator.'],
@@ -87,16 +95,16 @@ class AuthService
         }
 
         DB::table('audit_logs')->insert([
-            'id'             => Str::uuid()->toString(),
+            'id' => Str::uuid()->toString(),
             'auditable_type' => User::class,
-            'auditable_id'   => $user->id,
-            'event'          => 'user.login',
-            'actor_id'       => $user->id,
-            'old_values'     => null,
-            'new_values'     => json_encode(['ip' => request()->ip()]),
-            'ip_address'     => request()->ip() ?? '127.0.0.1',
-            'user_agent'     => request()->userAgent() ?? '',
-            'created_at'     => now(),
+            'auditable_id' => $user->id,
+            'event' => 'user.login',
+            'actor_id' => $user->id,
+            'old_values' => null,
+            'new_values' => json_encode(['ip' => request()->ip()]),
+            'ip_address' => request()->ip() ?? '127.0.0.1',
+            'user_agent' => request()->userAgent() ?? '',
+            'created_at' => now(),
         ]);
 
         $token = $user->createToken('auth_token')->plainTextToken;
@@ -112,16 +120,16 @@ class AuthService
         $user->currentAccessToken()->delete();
 
         DB::table('audit_logs')->insert([
-            'id'             => Str::uuid()->toString(),
+            'id' => Str::uuid()->toString(),
             'auditable_type' => User::class,
-            'auditable_id'   => $user->id,
-            'event'          => 'user.logout',
-            'actor_id'       => $user->id,
-            'old_values'     => null,
-            'new_values'     => null,
-            'ip_address'     => request()->ip() ?? '127.0.0.1',
-            'user_agent'     => request()->userAgent() ?? '',
-            'created_at'     => now(),
+            'auditable_id' => $user->id,
+            'event' => 'user.logout',
+            'actor_id' => $user->id,
+            'old_values' => null,
+            'new_values' => null,
+            'ip_address' => request()->ip() ?? '127.0.0.1',
+            'user_agent' => request()->userAgent() ?? '',
+            'created_at' => now(),
         ]);
     }
 
@@ -133,7 +141,7 @@ class AuthService
         $token = Str::random(32);
 
         $user->update([
-            'telegram_link_token'            => $token,
+            'telegram_link_token' => $token,
             'telegram_link_token_expires_at' => now()->addMinutes(10),
         ]);
 
@@ -156,11 +164,40 @@ class AuthService
         }
 
         $user->update([
-            'telegram_chat_id'               => $chatId,
-            'telegram_link_token'            => null,
+            'telegram_chat_id' => $chatId,
+            'telegram_link_token' => null,
             'telegram_link_token_expires_at' => null,
         ]);
 
         return $user;
+    }
+
+    /** Generate a verification token, persist it, and send the confirmation email. */
+    public function sendVerificationEmail(User $user): void
+    {
+        $token = Str::random(64);
+
+        $user->update([
+            'email_verification_token' => $token,
+            'email_verification_expires_at' => now()->addHours(24),
+        ]);
+
+        app(MailConfigService::class)->applyFromDatabase();
+
+        $verifyUrl = config('app.url').'/verify-email?token='.$token.'&email='.urlencode($user->email);
+
+        try {
+            Mail::html(
+                view('emails.verify_email', [
+                    'userName' => $user->name,
+                    'verifyUrl' => $verifyUrl,
+                    'senderName' => config('mail.from.name'),
+                ])->render(),
+                fn ($msg) => $msg->to($user->email, $user->name)
+                    ->subject('Please Verify Your Email — RTT Platform')
+            );
+        } catch (\Exception) {
+            // Absorb mail failures silently; token is still stored for resend
+        }
     }
 }

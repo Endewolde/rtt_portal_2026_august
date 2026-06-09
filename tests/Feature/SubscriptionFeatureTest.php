@@ -8,6 +8,7 @@ use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Gate;
+use Spatie\Permission\Models\Role;
 
 uses(RefreshDatabase::class);
 
@@ -173,13 +174,13 @@ test('enabled_features is shared via Inertia props', function () {
 
 test('new roles exist in the database', function () {
     foreach (['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer', 'college_officer', 'support_officer', 'staff'] as $role) {
-        expect(\Spatie\Permission\Models\Role::where('name', $role)->exists())->toBeTrue("Role {$role} should exist");
+        expect(Role::where('name', $role)->exists())->toBeTrue("Role {$role} should exist");
     }
 });
 
 test('old roles no longer exist', function () {
-    foreach (['central_office', 'college_admin', 'pi', 'reviewer', 'finance', 'guest', 'department_head'] as $role) {
-        expect(\Spatie\Permission\Models\Role::where('name', $role)->exists())->toBeFalse("Old role {$role} should be gone");
+    foreach (['central_office', 'college_admin', 'pi', 'reviewer', 'finance', 'department_head'] as $role) {
+        expect(Role::where('name', $role)->exists())->toBeFalse("Old role {$role} should be gone");
     }
 });
 

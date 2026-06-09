@@ -7,6 +7,7 @@ use Inertia\Inertia;
 
 // ── Public ────────────────────────────────────────────────────────────────────
 Route::get('/', fn () => Inertia::render('Public/Home'));
+Route::get('/download', fn () => Inertia::render('Public/Download'));
 Route::get('/explore', fn () => Inertia::render('Public/Explore'));
 Route::get('/repository', fn () => Inertia::render('Public/Repository'));
 Route::get('/tracker', fn () => Inertia::render('Public/Tracker'));
@@ -20,6 +21,8 @@ Route::get('/proposal-calls/public', fn () => Inertia::render('Public/ProposalCa
 Route::get('/login', fn () => Inertia::render('Auth/Login'));
 Route::get('/register', fn () => Inertia::render('Auth/Register'));
 Route::get('/forgot-password', fn () => Inertia::render('Auth/ForgotPassword'));
+Route::get('/reset-password', fn () => Inertia::render('Auth/ResetPassword'));
+Route::get('/verify-email', fn () => Inertia::render('Auth/VerifyEmail'));
 
 // ── Protected (auth handled client-side via useAuth hook) ────────────────────
 Route::get('/dashboard', fn () => Inertia::render('Dashboard/Index'));
@@ -35,16 +38,16 @@ Route::get('/reviews/{id}/score', fn () => Inertia::render('Reviews/Score'));
 Route::get('/budget-requests', fn () => Inertia::render('Finance/BudgetRequests'));
 Route::get('/budget-requests/{id}', fn () => Inertia::render('Finance/BudgetRequestDetail'));
 Route::get('/admin/validation-queue', fn () => Inertia::render('Admin/ValidationQueue'));
-Route::get('/my-proposals',               fn () => Inertia::render('Proposals/MyProposals'));
-Route::get('/admin/departments',          fn () => Inertia::render('Admin/Departments'));
-Route::get('/admin/roles',                fn () => Inertia::render('Admin/Roles'));
-Route::get('/admin/permissions',          fn () => Inertia::render('Admin/Permissions'));
-Route::get('/admin/evaluation-criteria',  fn () => Inertia::render('Admin/EvaluationCriteria'));
-Route::get('/admin/blind-review',         fn () => Inertia::render('Admin/BlindReview'));
-Route::get('/admin/open-defence',         fn () => Inertia::render('Admin/OpenDefence'));
-Route::get('/admin/central-evaluation',   fn () => Inertia::render('Admin/CentralEvaluation'));
-Route::get('/admin/funding',              fn () => Inertia::render('Admin/ProposalFunding'));
-Route::get('/admin/awarded',              fn () => Inertia::render('Admin/AwardedProposals'));
+Route::get('/my-proposals', fn () => Inertia::render('Proposals/MyProposals'));
+Route::get('/admin/departments', fn () => Inertia::render('Admin/Departments'));
+Route::get('/admin/roles', fn () => Inertia::render('Admin/Roles'));
+Route::get('/admin/permissions', fn () => Inertia::render('Admin/Permissions'));
+Route::get('/admin/evaluation-criteria', fn () => Inertia::render('Admin/EvaluationCriteria'));
+Route::get('/admin/blind-review', fn () => Inertia::render('Admin/BlindReview'));
+Route::get('/admin/open-defence', fn () => Inertia::render('Admin/OpenDefence'));
+Route::get('/admin/central-evaluation', fn () => Inertia::render('Admin/CentralEvaluation'));
+Route::get('/admin/funding', fn () => Inertia::render('Admin/ProposalFunding'));
+Route::get('/admin/awarded', fn () => Inertia::render('Admin/AwardedProposals'));
 Route::get('/admin/review-assignment/{id}', fn () => Inertia::render('Admin/ReviewAssignment'));
 Route::get('/reports', fn () => Inertia::render('Reports/Index'));
 Route::get('/complaints', fn () => Inertia::render('Complaints/Index'));
@@ -56,6 +59,9 @@ Route::get('/admin/settings', fn () => Inertia::render('Admin/Settings'));
 Route::get('/admin/similarity-flags', fn () => Inertia::render('Admin/SimilarityFlags'));
 Route::get('/admin/features', fn () => Inertia::render('Admin/FeatureManagement'));
 Route::get('/admin/repository', fn () => Inertia::render('Admin/Repository'));
+Route::get('/admin/public-site', fn () => Inertia::render('Admin/PublicSite'));
+Route::get('/admin/reviewer-workload', fn () => Inertia::render('Admin/ReviewerWorkload'));
+Route::get('/admin/resources', fn () => Inertia::render('Admin/Resources'));
 
 Route::get('/budget-allocations', fn () => Inertia::render('Finance/BudgetAllocations'));
 Route::get('/disbursements', fn () => Inertia::render('Finance/Disbursements'));
@@ -68,9 +74,9 @@ Route::get('/profile', fn () => Inertia::render('Profile/Edit'));
 
 // ── Private file download (signed + time-limited) ─────────────────────────────
 Route::get('/files/download', function (Request $request) {
-    $path      = base64_decode($request->path);
-    $expires   = (int) $request->expires;
-    $expected  = hash_hmac('sha256', $path.'|'.$expires, config('app.key'));
+    $path = base64_decode($request->path);
+    $expires = (int) $request->expires;
+    $expected = hash_hmac('sha256', $path.'|'.$expires, config('app.key'));
 
     if (! hash_equals($expected, (string) $request->signature)) {
         abort(403, 'Invalid signature.');

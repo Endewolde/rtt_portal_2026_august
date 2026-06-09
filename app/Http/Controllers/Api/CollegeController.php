@@ -10,6 +10,14 @@ use Illuminate\Http\Request;
 
 class CollegeController extends Controller
 {
+    /** Public, unauthenticated — returns id, name, code only. */
+    public function publicList(): JsonResponse
+    {
+        return response()->json([
+            'data' => College::orderBy('name')->get(['id', 'name', 'code']),
+        ]);
+    }
+
     public function index(): JsonResponse
     {
         $colleges = College::withCount('departments')
@@ -17,10 +25,10 @@ class CollegeController extends Controller
             ->get();
 
         return response()->json([
-            'data'    => $colleges,
+            'data' => $colleges,
             'message' => 'Colleges retrieved.',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ]);
     }
 
@@ -31,19 +39,19 @@ class CollegeController extends Controller
         }
 
         $validated = $request->validate([
-            'name'       => ['required', 'string', 'max:255', 'unique:colleges,name'],
-            'code'       => ['required', 'string', 'max:20', 'unique:colleges,code'],
-            'dean_name'  => ['nullable', 'string', 'max:255'],
+            'name' => ['required', 'string', 'max:255', 'unique:colleges,name'],
+            'code' => ['required', 'string', 'max:20', 'unique:colleges,code'],
+            'dean_name' => ['nullable', 'string', 'max:255'],
             'dean_email' => ['nullable', 'email', 'max:255'],
-            'status'     => ['nullable', 'in:active,inactive'],
+            'status' => ['nullable', 'in:active,inactive'],
         ]);
 
         $college = College::create($validated + ['status' => $validated['status'] ?? 'active']);
 
         return response()->json([
-            'data'    => $college,
+            'data' => $college,
             'message' => 'College created.',
-            'errors'  => [],
+            'errors' => [],
         ], 201);
     }
 
@@ -53,21 +61,21 @@ class CollegeController extends Controller
             return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
         }
 
-        $college   = College::findOrFail($id);
+        $college = College::findOrFail($id);
         $validated = $request->validate([
-            'name'       => ['sometimes', 'string', 'max:255', 'unique:colleges,name,'.$college->id],
-            'code'       => ['sometimes', 'string', 'max:20', 'unique:colleges,code,'.$college->id],
-            'dean_name'  => ['nullable', 'string', 'max:255'],
+            'name' => ['sometimes', 'string', 'max:255', 'unique:colleges,name,'.$college->id],
+            'code' => ['sometimes', 'string', 'max:20', 'unique:colleges,code,'.$college->id],
+            'dean_name' => ['nullable', 'string', 'max:255'],
             'dean_email' => ['nullable', 'email', 'max:255'],
-            'status'     => ['nullable', 'in:active,inactive'],
+            'status' => ['nullable', 'in:active,inactive'],
         ]);
 
         $college->update($validated);
 
         return response()->json([
-            'data'    => $college->fresh(),
+            'data' => $college->fresh(),
             'message' => 'College updated.',
-            'errors'  => [],
+            'errors' => [],
         ]);
     }
 
@@ -78,9 +86,9 @@ class CollegeController extends Controller
             ->get(['id', 'name', 'code', 'status']);
 
         return response()->json([
-            'data'    => $departments,
+            'data' => $departments,
             'message' => 'Departments retrieved.',
-            'errors'  => [],
+            'errors' => [],
         ]);
     }
 
@@ -98,15 +106,15 @@ class CollegeController extends Controller
     {
         $request->validate([
             'college_id' => 'required|uuid|exists:colleges,id',
-            'name'       => 'required|string|max:255',
-            'code'       => 'required|string|max:20|unique:departments,code',
+            'name' => 'required|string|max:255',
+            'code' => 'required|string|max:20|unique:departments,code',
         ]);
 
         $dept = Department::create([
             'college_id' => $request->college_id,
-            'name'       => $request->name,
-            'code'       => $request->code,
-            'status'     => 'active',
+            'name' => $request->name,
+            'code' => $request->code,
+            'status' => 'active',
         ]);
 
         return response()->json(['data' => $dept->load('college'), 'message' => 'Department created.', 'errors' => [], 'meta' => []], 201);
@@ -116,8 +124,8 @@ class CollegeController extends Controller
     {
         $dept = Department::findOrFail($id);
         $request->validate([
-            'name'   => 'sometimes|string|max:255',
-            'code'   => 'sometimes|string|max:20|unique:departments,code,'.$dept->id,
+            'name' => 'sometimes|string|max:255',
+            'code' => 'sometimes|string|max:20|unique:departments,code,'.$dept->id,
             'status' => 'sometimes|in:active,inactive',
         ]);
 

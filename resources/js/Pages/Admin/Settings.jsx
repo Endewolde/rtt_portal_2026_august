@@ -3,6 +3,7 @@ import { cn } from '../../lib/utils'
 import {
     Settings, Shield, Users, Mail, HardDrive, Server,
     Palette, BookOpen, Activity, Database, Puzzle,
+    Globe, Layout, FileText, Star, Bell,
     ChevronRight, Save, RefreshCw, AlertTriangle,
     Eye, EyeOff, Upload, Info, CheckCircle2,
     ToggleLeft, ToggleRight, Zap, X, Send,
@@ -25,7 +26,8 @@ const SECTIONS = [
     { key: 'thresholds',  label: 'Review Thresholds',     icon: BookOpen,  bg: 'bg-teal-100',   text: 'text-teal-600'   },
     { key: 'audit',       label: 'Audit & Logging',       icon: Activity,  bg: 'bg-amber-100',  text: 'text-amber-600'  },
     { key: 'backup',      label: 'Backup & Recovery',     icon: Database,  bg: 'bg-cyan-100',   text: 'text-cyan-600'   },
-    { key: 'integration', label: 'Integrations',          icon: Puzzle,    bg: 'bg-indigo-100', text: 'text-indigo-600' },
+    { key: 'integration', label: 'Integrations',          icon: Puzzle,    bg: 'bg-indigo-100',  text: 'text-indigo-600'  },
+    { key: 'public_site', label: 'Public Site',           icon: Globe,     bg: 'bg-emerald-100', text: 'text-emerald-600' },
 ]
 
 // Dropdown options for every `select` type setting
@@ -78,6 +80,12 @@ const KEY_LABELS = {
     redis_host: 'Redis Host', redis_port: 'Redis Port',
     primary_color: 'Primary Color', secondary_color: 'Secondary Color',
     sidebar_color: 'Sidebar Background Color',
+    system_tagline: 'Sidebar Tagline',
+    login_institution_text: 'Login Panel Institution Text',
+    auth_panel_from_color:  'Login Panel — Gradient Start Color',
+    auth_panel_to_color:    'Login Panel — Gradient End Color',
+    logo_width: 'Logo Width (px)',
+    logo_height: 'Logo Height (px)',
     footer_text: 'Footer Text', custom_css: 'Custom CSS',
     homepage_banner: 'Homepage Banner', theme: 'Theme',
     blind_threshold: 'Blind Review Threshold (%)', defence_threshold: 'Open Defence Threshold (%)',
@@ -89,6 +97,54 @@ const KEY_LABELS = {
     ldap_enabled: 'LDAP Enabled', ldap_host: 'LDAP Host',
     oauth_enabled: 'OAuth Enabled', google_client_id: 'Google Client ID',
     webhook_url: 'Webhook URL',
+    // Public site
+    public_header_tagline:     'Header Tagline',
+    public_hero_badge:         'Badge Text',
+    public_hero_heading:       'Main Heading',
+    public_hero_highlight:     'Highlighted Words',
+    public_hero_subtitle:      'Hero Subtitle',
+    public_hero_cta_primary:   'Primary CTA Button',
+    public_hero_cta_secondary: 'Secondary CTA Button',
+    public_show_stats:         'Show Statistics Strip',
+    public_show_open_calls:    'Show Open Calls',
+    public_show_how_it_works:  'Show How It Works',
+    public_show_features:      'Show Platform Features',
+    public_show_cta:           'Show CTA Banner',
+    public_step_1_title:       'Step 1 Title', public_step_1_desc: 'Step 1 Description',
+    public_step_2_title:       'Step 2 Title', public_step_2_desc: 'Step 2 Description',
+    public_step_3_title:       'Step 3 Title', public_step_3_desc: 'Step 3 Description',
+    public_step_4_title:       'Step 4 Title', public_step_4_desc: 'Step 4 Description',
+    public_features_title:     'Features Section Title',
+    public_features_subtitle:  'Features Section Subtitle',
+    public_cta_title:          'CTA Headline',
+    public_cta_subtitle:       'CTA Subtitle',
+    public_cta_primary:        'CTA Primary Button',
+    public_cta_secondary:      'CTA Secondary Button',
+    public_hero_bg:            'Hero Background Colour',
+    public_cards_bg:           'Open Calls Section Background',
+    public_features_bg:        'Features Section Background',
+    public_footer_bg:          'Footer Background Colour',
+    // Nav items
+    public_nav_item_1_label: 'Menu Item 1 Label', public_nav_item_1_href: 'Menu Item 1 URL', public_nav_item_1_show: 'Show Menu Item 1',
+    public_nav_item_2_label: 'Menu Item 2 Label', public_nav_item_2_href: 'Menu Item 2 URL', public_nav_item_2_show: 'Show Menu Item 2',
+    public_nav_item_3_label: 'Menu Item 3 Label', public_nav_item_3_href: 'Menu Item 3 URL', public_nav_item_3_show: 'Show Menu Item 3',
+    public_nav_item_4_label: 'Menu Item 4 Label', public_nav_item_4_href: 'Menu Item 4 URL', public_nav_item_4_show: 'Show Menu Item 4',
+    public_nav_item_5_label: 'Menu Item 5 Label', public_nav_item_5_href: 'Menu Item 5 URL', public_nav_item_5_show: 'Show Menu Item 5',
+    // Downloads
+    ...Object.fromEntries(
+        Array.from({ length: 8 }, (_, i) => [
+            [`public_download_${i+1}_title`, `Item ${i+1} Title`],
+            [`public_download_${i+1}_url`,   `Item ${i+1} URL`],
+            [`public_download_${i+1}_desc`,  `Item ${i+1} Description`],
+        ]).flat()
+    ),
+    // Social
+    public_social_telegram:  'Telegram URL',
+    public_social_facebook:  'Facebook URL',
+    public_social_twitter:   'Twitter / X URL',
+    public_social_linkedin:  'LinkedIn URL',
+    public_social_instagram: 'Instagram URL',
+    public_social_youtube:   'YouTube URL',
 }
 
 function label(key) {
@@ -478,6 +534,852 @@ function SidebarColorSection({ currentValue, onSave }) {
     )
 }
 
+// ─── Public Site panel ───────────────────────────────────────────────────────
+
+const PUBLIC_HERO_KEYS = [
+    { key: 'public_hero_badge',         type: 'string',   hint: 'Small chip above the headline.' },
+    { key: 'public_hero_heading',        type: 'string',   hint: 'First line of the headline (plain text).' },
+    { key: 'public_hero_highlight',      type: 'string',   hint: 'Second line shown in gradient colour.' },
+    { key: 'public_hero_subtitle',       type: 'textarea', hint: 'Supporting paragraph below the headline.' },
+    { key: 'public_hero_cta_primary',    type: 'string',   hint: 'Label for the primary action button.' },
+    { key: 'public_hero_cta_secondary',  type: 'string',   hint: 'Label for the secondary action button.' },
+]
+
+const PUBLIC_VISIBILITY_KEYS = [
+    { key: 'public_show_stats',        label: 'Statistics Strip'        },
+    { key: 'public_show_open_calls',   label: 'Open Calls Section'      },
+    { key: 'public_show_how_it_works', label: 'How It Works Section'    },
+    { key: 'public_show_features',     label: 'Platform Features'       },
+    { key: 'public_show_cta',          label: 'CTA Banner'              },
+]
+
+const PUBLIC_STEPS = [1, 2, 3, 4]
+
+const DEFAULT_NAV_LABELS = ['Home', 'Open Calls', 'Explore', 'Repository', 'Track Proposal']
+const DEFAULT_NAV_HREFS  = ['/', '/proposal-calls/public', '/explore', '/repository', '/tracker']
+
+const SOCIAL_KEYS = [
+    { key: 'public_social_telegram',  placeholder: 'https://t.me/yourgroup'          },
+    { key: 'public_social_facebook',  placeholder: 'https://facebook.com/yourpage'    },
+    { key: 'public_social_twitter',   placeholder: 'https://x.com/yourhandle'         },
+    { key: 'public_social_linkedin',  placeholder: 'https://linkedin.com/company/...' },
+    { key: 'public_social_instagram', placeholder: 'https://instagram.com/yourhandle' },
+    { key: 'public_social_youtube',   placeholder: 'https://youtube.com/@yourchannel' },
+]
+
+// ── Email Settings Panel ──────────────────────────────────────────────────────
+
+const DRIVER_OPTIONS = [
+    { val: 'smtp',    label: 'SMTP',        desc: 'Standard email server'        },
+    { val: 'log',     label: 'Log (Dev)',   desc: 'Writes to storage/logs'       },
+    { val: 'mailgun', label: 'Mailgun',     desc: 'Mailgun API'                  },
+    { val: 'ses',     label: 'Amazon SES',  desc: 'AWS Simple Email Service'     },
+]
+const ENCRYPTION_OPTIONS = [
+    { val: 'tls', label: 'TLS (port 587)' },
+    { val: 'ssl', label: 'SSL (port 465)' },
+    { val: '',    label: 'None'           },
+]
+const ROLES_LIST = ['super_admin','admin','central_officer','research_officer','community_officer','technology_officer','college_officer','support_officer','staff','guest']
+
+function Field({ label: lbl, hint, children }) {
+    return (
+        <div>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">{lbl}</label>
+            {children}
+            {hint && <p className="text-[11px] text-gray-400 mt-1">{hint}</p>}
+        </div>
+    )
+}
+function Input({ className = '', ...props }) {
+    return (
+        <input
+            className={`w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-gray-50
+                        focus:bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-100
+                        outline-none transition-colors ${className}`}
+            {...props}
+        />
+    )
+}
+function SectionCard({ icon: Icon, color, title, subtitle, children, action }) {
+    return (
+        <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+            <div className={`flex items-center justify-between px-5 py-4 border-b border-gray-100 ${color}`}>
+                <div className="flex items-center gap-3">
+                    <div className="h-8 w-8 rounded-xl bg-white/80 flex items-center justify-center shrink-0 shadow-sm">
+                        <Icon size={15} className="text-gray-700" />
+                    </div>
+                    <div>
+                        <p className="text-sm font-bold text-gray-900">{title}</p>
+                        {subtitle && <p className="text-[11px] text-gray-500">{subtitle}</p>}
+                    </div>
+                </div>
+                {action}
+            </div>
+            <div className="p-5 space-y-4">{children}</div>
+        </div>
+    )
+}
+
+function EmailSettingsPanel({ values, onChange, onSave, colleges }) {
+    const { success, error } = useToast()
+    const [smtpSaving,   setSmtpSaving]   = useState(false)
+    const [fromSaving,   setFromSaving]   = useState(false)
+    const [testing,      setTesting]      = useState(false)
+    const [testResult,   setTestResult]   = useState(null)   // { ok, message, detail }
+    const [showPass,     setShowPass]     = useState(false)
+    const [broadcast,    setBroadcast]    = useState({ to: 'all', role: '', college_id: '', email: '', subject: '', message: '' })
+    const [sending,      setSending]      = useState(false)
+    const [sendResult,   setSendResult]   = useState(null)   // { sent, failed, total, message }
+    const [emailError,   setEmailError]   = useState('')     // inline error for specific email field
+    const [testEmail,    setTestEmail]    = useState('')
+
+    const driver = values.mail_driver || 'smtp'
+    const isSmtp = driver === 'smtp'
+    const configured = isSmtp ? !!(values.mail_host && values.mail_from_address) : driver === 'log'
+
+    const saveBulk = async (keys, setSaving) => {
+        setSaving(true)
+        try {
+            const settings = {}
+            keys.forEach(k => { settings[k] = values[k] ?? '' })
+            await api.put('/settings/app/bulk', { settings })
+            success('Settings saved.')
+        } catch {
+            error('Failed to save settings.')
+        }
+        setSaving(false)
+    }
+
+    const runTest = async () => {
+        setTesting(true)
+        setTestResult(null)
+        try {
+            const params = testEmail.trim() ? { to: testEmail.trim() } : {}
+            const r = await api.post('/settings/test-email', params)
+            setTestResult({ ok: true, message: r.message, detail: r.data })
+        } catch (e) {
+            setTestResult({ ok: false, message: e.response?.data?.message || 'Connection failed.' })
+        }
+        setTesting(false)
+    }
+
+    const sendBroadcast = async () => {
+        if (!broadcast.subject.trim() || !broadcast.message.trim()) {
+            error('Subject and message are required.')
+            return
+        }
+        setEmailError('')
+        setSendResult(null)
+        setSending(true)
+        try {
+            const r = await api.post('/settings/send-email', broadcast)
+            setSendResult({ ok: true, message: r.message, sent: r.data?.sent ?? 0, failed: r.data?.failed ?? 0 })
+            if ((r.data?.failed ?? 0) === 0) {
+                setBroadcast(b => ({ ...b, subject: '', message: '' }))
+            }
+        } catch (e) {
+            const msg = e.response?.data?.message ?? 'Failed to send emails.'
+            const fieldErr = e.response?.data?.errors?.email?.[0]
+            if (fieldErr) {
+                setEmailError(fieldErr)
+            } else {
+                setSendResult({ ok: false, message: msg })
+            }
+        }
+        setSending(false)
+    }
+
+    return (
+        <div className="space-y-4">
+
+            {/* ── Status banner ────────────────────────────────────────── */}
+            <div className={`flex items-center gap-3 px-5 py-3.5 rounded-2xl border ${
+                driver === 'log'
+                    ? 'bg-amber-50 border-amber-200'
+                    : configured
+                        ? 'bg-emerald-50 border-emerald-200'
+                        : 'bg-red-50 border-red-200'
+            }`}>
+                <div className={`h-2.5 w-2.5 rounded-full shrink-0 ${
+                    driver === 'log' ? 'bg-amber-400' : configured ? 'bg-emerald-500 animate-pulse' : 'bg-red-400'
+                }`} />
+                <div className="flex-1 min-w-0">
+                    <p className={`text-sm font-semibold ${
+                        driver === 'log' ? 'text-amber-800' : configured ? 'text-emerald-800' : 'text-red-800'
+                    }`}>
+                        {driver === 'log' ? 'Log Mode — emails written to storage/logs/laravel.log'
+                            : configured ? `SMTP configured — ${values.mail_host || '?'}`
+                            : 'SMTP not configured — fill in host and from address to enable email'}
+                    </p>
+                    {configured && driver !== 'log' && (
+                        <p className="text-xs text-emerald-600 mt-0.5">From: {values.mail_from_name || '—'} &lt;{values.mail_from_address || '—'}&gt;</p>
+                    )}
+                </div>
+            </div>
+
+            {/* ── SMTP Server ────────────────────────────────────────────── */}
+            <SectionCard icon={Server} color="bg-gray-50" title="Mail Driver & Server" subtitle="Transport method and SMTP connection details">
+                <Field label="Mail Driver">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {DRIVER_OPTIONS.map(d => (
+                            <button key={d.val}
+                                onClick={() => { onChange('mail_driver', d.val); onSave('mail_driver', d.val) }}
+                                className={`flex flex-col items-center gap-1 p-3 rounded-xl border text-center transition-all text-xs font-semibold ${
+                                    driver === d.val
+                                        ? 'bg-blue-600 text-white border-blue-600 shadow-md shadow-blue-200'
+                                        : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
+                                }`}
+                            >
+                                <span className="font-bold">{d.label}</span>
+                                <span className={`font-normal text-[10px] ${driver === d.val ? 'text-blue-100' : 'text-gray-400'}`}>{d.desc}</span>
+                            </button>
+                        ))}
+                    </div>
+                </Field>
+
+                {isSmtp && (
+                    <>
+                        <div className="grid sm:grid-cols-2 gap-4">
+                            <Field label="SMTP Host" hint="e.g. smtp.gmail.com or smtp.office365.com">
+                                <Input value={values.mail_host ?? ''} onChange={e => onChange('mail_host', e.target.value)} placeholder="smtp.gmail.com" />
+                            </Field>
+                            <div className="grid grid-cols-2 gap-3">
+                                <Field label="Port">
+                                    <Input type="number" value={values.mail_port ?? '587'} onChange={e => onChange('mail_port', e.target.value)} placeholder="587" />
+                                </Field>
+                                <Field label="Encryption">
+                                    <select value={values.mail_encryption ?? 'tls'} onChange={e => onChange('mail_encryption', e.target.value)}
+                                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-gray-50 focus:bg-white focus:border-blue-400 outline-none">
+                                        {ENCRYPTION_OPTIONS.map(e => <option key={e.val} value={e.val}>{e.label}</option>)}
+                                    </select>
+                                </Field>
+                            </div>
+                        </div>
+                        <div className="grid sm:grid-cols-2 gap-4">
+                            <Field label="Username / Email">
+                                <Input type="email" value={values.mail_username ?? ''} onChange={e => onChange('mail_username', e.target.value)} placeholder="you@domain.com" autoComplete="off" />
+                            </Field>
+                            <Field label="Password">
+                                <div className="relative">
+                                    <Input type={showPass ? 'text' : 'password'} value={values.mail_password ?? ''} onChange={e => onChange('mail_password', e.target.value)} placeholder="SMTP password" autoComplete="new-password" className="pr-10" />
+                                    <button type="button" onClick={() => setShowPass(v => !v)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                                        {showPass ? <EyeOff size={14} /> : <Eye size={14} />}
+                                    </button>
+                                </div>
+                            </Field>
+                        </div>
+                    </>
+                )}
+
+                <div className="flex justify-end pt-2">
+                    <button onClick={() => saveBulk(['mail_driver','mail_host','mail_port','mail_username','mail_password','mail_encryption'], setSmtpSaving)}
+                        disabled={smtpSaving}
+                        className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-60 transition-colors">
+                        {smtpSaving ? <RefreshCw size={13} className="animate-spin" /> : <Save size={13} />}
+                        {smtpSaving ? 'Saving…' : 'Save Server Settings'}
+                    </button>
+                </div>
+            </SectionCard>
+
+            {/* ── From Identity ───────────────────────────────────────────── */}
+            <SectionCard icon={Mail} color="bg-blue-50/50" title="From Identity" subtitle="Name and address shown to email recipients">
+                <div className="grid sm:grid-cols-2 gap-4">
+                    <Field label="From Name" hint="Display name recipients see">
+                        <Input value={values.mail_from_name ?? ''} onChange={e => onChange('mail_from_name', e.target.value)} placeholder="RTT Platform" />
+                    </Field>
+                    <Field label="From Address" hint="Must match your SMTP credentials">
+                        <Input type="email" value={values.mail_from_address ?? ''} onChange={e => onChange('mail_from_address', e.target.value)} placeholder="noreply@university.edu" />
+                    </Field>
+                </div>
+                <div className="flex justify-end pt-2">
+                    <button onClick={() => saveBulk(['mail_from_name','mail_from_address'], setFromSaving)}
+                        disabled={fromSaving}
+                        className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-60 transition-colors">
+                        {fromSaving ? <RefreshCw size={13} className="animate-spin" /> : <Save size={13} />}
+                        {fromSaving ? 'Saving…' : 'Save From Identity'}
+                    </button>
+                </div>
+            </SectionCard>
+
+            {/* ── Test Connection ─────────────────────────────────────────── */}
+            <SectionCard icon={Zap} color="bg-green-50/50" title="Test Connection" subtitle="Send a test email to verify your SMTP setup">
+                <div className="flex gap-3 items-end">
+                    <Field label="Send Test To" hint="Leave blank to send to your account">
+                        <Input type="email" value={testEmail} onChange={e => setTestEmail(e.target.value)} placeholder="your@email.com (optional)" className="flex-1" />
+                    </Field>
+                    <button onClick={runTest} disabled={testing}
+                        className="shrink-0 flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60 transition-colors mb-[1px]">
+                        {testing ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} />}
+                        {testing ? 'Sending…' : 'Send Test'}
+                    </button>
+                </div>
+
+                {testResult && (
+                    <div className={`flex items-start gap-3 rounded-xl p-4 border ${
+                        testResult.ok
+                            ? 'bg-emerald-50 border-emerald-200'
+                            : 'bg-red-50 border-red-200'
+                    }`}>
+                        <div className={`shrink-0 h-7 w-7 rounded-lg flex items-center justify-center ${testResult.ok ? 'bg-emerald-100' : 'bg-red-100'}`}>
+                            {testResult.ok
+                                ? <CheckCircle2 size={14} className="text-emerald-600" />
+                                : <AlertTriangle size={14} className="text-red-500" />
+                            }
+                        </div>
+                        <div className="min-w-0">
+                            <p className={`text-sm font-semibold ${testResult.ok ? 'text-emerald-800' : 'text-red-800'}`}>
+                                {testResult.ok ? 'Email delivered successfully!' : 'Delivery failed'}
+                            </p>
+                            <p className={`text-xs mt-0.5 ${testResult.ok ? 'text-emerald-600' : 'text-red-600'}`}>
+                                {testResult.message}
+                            </p>
+                            {testResult.ok && testResult.detail && (
+                                <p className="text-[11px] text-emerald-500 mt-1 font-mono">
+                                    Host: {testResult.detail.host} · Driver: {testResult.detail.driver}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                )}
+            </SectionCard>
+
+            {/* ── Broadcast Email ─────────────────────────────────────────── */}
+            <SectionCard icon={Send} color="bg-indigo-50/50" title="Send Broadcast Email" subtitle="Reach users by group, role, college, or individually">
+                <div>
+                    <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Send To</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {[
+                            { val: 'all',        label: 'All Users',     icon: '👥' },
+                            { val: 'by_role',    label: 'By Role',       icon: '🛡️' },
+                            { val: 'by_college', label: 'By College',    icon: '🏛️' },
+                            { val: 'specific',   label: 'Specific User', icon: '👤' },
+                        ].map(({ val, label: lbl, icon }) => (
+                            <button key={val}
+                                onClick={() => setBroadcast(b => ({ ...b, to: val }))}
+                                className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-semibold transition-all ${
+                                    broadcast.to === val
+                                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200'
+                                        : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'
+                                }`}
+                            >
+                                <span>{icon}</span> <span>{lbl}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {broadcast.to === 'by_role' && (
+                    <Field label="Role">
+                        <select value={broadcast.role} onChange={e => setBroadcast(b => ({ ...b, role: e.target.value }))}
+                            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-gray-50 focus:bg-white focus:border-blue-400 outline-none">
+                            <option value="">— Select role —</option>
+                            {ROLES_LIST.map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+                        </select>
+                    </Field>
+                )}
+                {broadcast.to === 'by_college' && (
+                    <Field label="College">
+                        <select value={broadcast.college_id} onChange={e => setBroadcast(b => ({ ...b, college_id: e.target.value }))}
+                            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-gray-50 focus:bg-white focus:border-blue-400 outline-none">
+                            <option value="">— Select college —</option>
+                            {colleges.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                    </Field>
+                )}
+                {broadcast.to === 'specific' && (
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">Recipient Email</label>
+                        <Input
+                            type="email"
+                            value={broadcast.email}
+                            onChange={e => { setBroadcast(b => ({ ...b, email: e.target.value })); setEmailError('') }}
+                            placeholder="user@university.edu"
+                            className={emailError ? '!border-red-400' : ''}
+                        />
+                        {emailError && (
+                            <p className="flex items-center gap-1.5 text-xs text-red-600 mt-1.5">
+                                <AlertTriangle size={11} /> {emailError}
+                            </p>
+                        )}
+                        <p className="text-[11px] text-gray-400 mt-1">The email must belong to a registered user.</p>
+                    </div>
+                )}
+
+                <Field label="Subject">
+                    <Input value={broadcast.subject} onChange={e => setBroadcast(b => ({ ...b, subject: e.target.value }))} placeholder="Subject line…" />
+                </Field>
+
+                <Field label="Message">
+                    <textarea rows={5} value={broadcast.message} onChange={e => setBroadcast(b => ({ ...b, message: e.target.value }))}
+                        placeholder="Write your message here…"
+                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-gray-50 focus:bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none resize-none transition-colors"
+                    />
+                </Field>
+
+                {sendResult && (
+                    <div className={`flex items-start gap-3 rounded-xl p-4 border ${
+                        sendResult.ok ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'
+                    }`}>
+                        <div className={`shrink-0 h-7 w-7 rounded-lg flex items-center justify-center ${sendResult.ok ? 'bg-emerald-100' : 'bg-red-100'}`}>
+                            {sendResult.ok
+                                ? <CheckCircle2 size={14} className="text-emerald-600" />
+                                : <AlertTriangle size={14} className="text-red-500" />
+                            }
+                        </div>
+                        <div>
+                            <p className={`text-sm font-semibold ${sendResult.ok ? 'text-emerald-800' : 'text-red-800'}`}>
+                                {sendResult.ok ? 'Emails sent!' : 'Send failed'}
+                            </p>
+                            <p className={`text-xs mt-0.5 ${sendResult.ok ? 'text-emerald-600' : 'text-red-600'}`}>
+                                {sendResult.message}
+                            </p>
+                            {sendResult.ok && sendResult.failed > 0 && (
+                                <p className="text-xs text-amber-600 mt-1">
+                                    {sendResult.failed} address(es) failed — check mail server logs for details.
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                <div className="flex justify-end">
+                    <button onClick={sendBroadcast} disabled={sending}
+                        className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60 shadow-sm shadow-indigo-200 transition-all">
+                        {sending ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} />}
+                        {sending ? 'Sending…' : 'Send Email'}
+                    </button>
+                </div>
+            </SectionCard>
+
+            {/* ── Notification Channels ───────────────────────────────────── */}
+            <SectionCard icon={Bell} color="bg-purple-50/50" title="Notification Channels" subtitle="Active delivery channels for system events">
+                <div className="grid sm:grid-cols-3 gap-3">
+                    {[
+                        {
+                            label: 'Email',
+                            status: configured ? 'active' : 'inactive',
+                            detail: configured ? values.mail_from_address : 'Not configured',
+                            color: configured ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-gray-50 border-gray-200 text-gray-500',
+                            dot: configured ? 'bg-emerald-500' : 'bg-gray-300',
+                        },
+                        {
+                            label: 'Telegram',
+                            status: values.telegram_bot_token ? 'active' : 'inactive',
+                            detail: values.telegram_bot_token ? 'Bot token configured' : 'Set Telegram Bot Token in Integrations',
+                            color: values.telegram_bot_token ? 'bg-sky-50 border-sky-200 text-sky-700' : 'bg-gray-50 border-gray-200 text-gray-500',
+                            dot: values.telegram_bot_token ? 'bg-sky-500' : 'bg-gray-300',
+                        },
+                        {
+                            label: 'In-App',
+                            status: 'active',
+                            detail: 'Always available — bell icon in header',
+                            color: 'bg-violet-50 border-violet-200 text-violet-700',
+                            dot: 'bg-violet-500',
+                        },
+                    ].map(ch => (
+                        <div key={ch.label} className={`rounded-xl border p-4 ${ch.color}`}>
+                            <div className="flex items-center gap-2 mb-2">
+                                <span className={`h-2 w-2 rounded-full shrink-0 ${ch.dot}`} />
+                                <span className="text-sm font-bold">{ch.label}</span>
+                            </div>
+                            <p className="text-xs leading-relaxed opacity-80">{ch.detail}</p>
+                        </div>
+                    ))}
+                </div>
+                <p className="text-xs text-gray-400 pt-1">
+                    Users control their own channel preferences from their profile notification settings.
+                </p>
+            </SectionCard>
+
+        </div>
+    )
+}
+
+// ── Extracted field components (must live outside PublicSitePanel so React
+//    doesn't unmount/remount the input on every parent re-render) ──────────────
+
+function PubTextField({ fieldKey, type, hint, value, saving, onChange, onSave }) {
+    const lbl = KEY_LABELS[fieldKey] ?? fieldKey
+    return (
+        <div className="py-3 border-b border-gray-100 last:border-0">
+            <p className="text-sm font-medium text-gray-900">{lbl}</p>
+            {hint && <p className="text-xs text-gray-400 mt-0.5 mb-2">{hint}</p>}
+            <div className="flex gap-2 mt-1.5">
+                {type === 'textarea' ? (
+                    <textarea
+                        value={value ?? ''}
+                        onChange={e => onChange(fieldKey, e.target.value)}
+                        rows={2}
+                        placeholder={`Enter ${lbl.toLowerCase()}…`}
+                        className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none
+                                   focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                ) : (
+                    <input
+                        type="text"
+                        value={value ?? ''}
+                        onChange={e => onChange(fieldKey, e.target.value)}
+                        placeholder={`Enter ${lbl.toLowerCase()}…`}
+                        className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm
+                                   focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                )}
+                <button
+                    onClick={() => onSave(fieldKey)}
+                    disabled={saving}
+                    className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-xl
+                               text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 shrink-0">
+                    {saving ? <RefreshCw size={12} className="animate-spin" /> : <Save size={12} />}
+                    {saving ? 'Saving…' : 'Save'}
+                </button>
+            </div>
+        </div>
+    )
+}
+
+function PubColorField({ fieldKey, hint, value, saving, onChange, onSave }) {
+    const lbl = KEY_LABELS[fieldKey] ?? fieldKey
+    return (
+        <div className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
+            <div>
+                <p className="text-sm font-medium text-gray-900">{lbl}</p>
+                {hint && <p className="text-xs text-gray-400 mt-0.5">{hint}</p>}
+            </div>
+            <div className="flex items-center gap-2">
+                <input
+                    type="color"
+                    value={value || '#0f172a'}
+                    onChange={e => onChange(fieldKey, e.target.value)}
+                    onBlur={e => onSave(fieldKey, e.target.value)}
+                    className="w-10 h-8 rounded cursor-pointer border border-gray-300"
+                />
+                <span className="text-xs font-mono text-gray-400 w-16">{value || '#0f172a'}</span>
+                <button
+                    onClick={() => onSave(fieldKey)}
+                    disabled={saving}
+                    className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-xl
+                               text-xs font-semibold hover:bg-blue-700 disabled:opacity-50">
+                    {saving ? <RefreshCw size={12} className="animate-spin" /> : <Save size={12} />}
+                    {saving ? 'Saving…' : 'Save'}
+                </button>
+            </div>
+        </div>
+    )
+}
+
+function PublicSitePanel({ values, onChange, onSave }) {
+    const [saving, setSaving] = useState({})
+    const { success, error }  = useToast()
+
+    const save = async (key, val) => {
+        const v = val ?? values[key] ?? ''
+        setSaving(p => ({ ...p, [key]: true }))
+        try {
+            await onSave(key, v)
+            success(`"${KEY_LABELS[key] ?? key}" saved.`)
+        } catch {
+            error('Failed to save.')
+        }
+        setSaving(p => ({ ...p, [key]: false }))
+    }
+
+    const toggle = (key) => {
+        const next = values[key] === 'false' ? 'true' : 'true'
+        // visibility keys default to visible (true) unless explicitly set to 'false'
+        const current = values[key]
+        const nextVal = current === 'false' ? 'true' : 'false'
+        onChange(key, nextVal)
+        save(key, nextVal)
+    }
+
+    const tf = (fieldKey, type = 'string', hint) => (
+        <PubTextField
+            key={fieldKey}
+            fieldKey={fieldKey}
+            type={type}
+            hint={hint}
+            value={values[fieldKey]}
+            saving={!!saving[fieldKey]}
+            onChange={onChange}
+            onSave={save}
+        />
+    )
+
+    const cf = (fieldKey, hint) => (
+        <PubColorField
+            key={fieldKey}
+            fieldKey={fieldKey}
+            hint={hint}
+            value={values[fieldKey]}
+            saving={!!saving[fieldKey]}
+            onChange={onChange}
+            onSave={save}
+        />
+    )
+
+    return (
+        <div className="space-y-4">
+            {/* Preview link */}
+            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-5 py-3
+                            flex items-center justify-between">
+                <p className="text-sm text-emerald-800 font-medium">
+                    Changes appear on the public homepage instantly after saving.
+                </p>
+                <a href="/" target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white
+                               rounded-lg text-xs font-semibold hover:bg-emerald-700 transition-colors">
+                    <Eye size={13} /> Preview
+                </a>
+            </div>
+
+            {/* ── Header & nav ── */}
+            <div className="bg-white border border-gray-200 rounded-2xl px-5 py-2">
+                <div className="flex items-center gap-2 py-3 border-b border-gray-100">
+                    <Layout size={15} className="text-emerald-600" />
+                    <h3 className="text-sm font-bold text-gray-800">Header Bar</h3>
+                    <p className="text-xs text-gray-400 ml-1">— top utility bar text</p>
+                </div>
+                {tf('public_header_tagline', 'string', 'Text shown in the thin bar above the main navigation (e.g. "WSU — Research & Technology Transfer Platform").')}
+            </div>
+
+            {/* ── Hero content ── */}
+            <div className="bg-white border border-gray-200 rounded-2xl px-5 py-2">
+                <div className="flex items-center gap-2 py-3 border-b border-gray-100">
+                    <Layout size={15} className="text-emerald-600" />
+                    <h3 className="text-sm font-bold text-gray-800">Hero Section — Text</h3>
+                </div>
+                {tf('public_hero_badge',        'string',   'Small chip above the headline.')}
+                {tf('public_hero_heading',       'string',   'First line of the headline (plain text).')}
+                {tf('public_hero_highlight',     'string',   'Second line shown in gradient colour (e.g. "From Idea to Impact").')}
+                {tf('public_hero_subtitle',      'textarea', 'Supporting paragraph below the headline.')}
+                {tf('public_hero_cta_primary',   'string',   'Primary action button label.')}
+                {tf('public_hero_cta_secondary', 'string',   'Secondary action button label.')}
+            </div>
+
+            {/* ── Navigation ── */}
+            <div className="bg-white border border-gray-200 rounded-2xl px-5 py-2">
+                <div className="flex items-center gap-2 py-3 border-b border-gray-100">
+                    <Layout size={15} className="text-emerald-600" />
+                    <h3 className="text-sm font-bold text-gray-800">Navigation Menu</h3>
+                    <p className="text-xs text-gray-400 ml-1">— customise labels, links, and visibility</p>
+                </div>
+                {[1, 2, 3, 4, 5].map(n => {
+                    const on = values[`public_nav_item_${n}_show`] !== 'false'
+                    return (
+                        <div key={n} className="py-3 border-b border-gray-100 last:border-0">
+                            <div className="flex items-center justify-between mb-2">
+                                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+                                    Item {n} <span className="font-normal text-gray-400 normal-case">
+                                        (default: {DEFAULT_NAV_LABELS[n - 1]})
+                                    </span>
+                                </p>
+                                <button
+                                    onClick={() => {
+                                        const nextVal = on ? 'false' : 'true'
+                                        onChange(`public_nav_item_${n}_show`, nextVal)
+                                        save(`public_nav_item_${n}_show`, nextVal)
+                                    }}
+                                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold ${
+                                        on ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'
+                                    }`}>
+                                    {on ? <><ToggleRight size={13} /> Visible</> : <><ToggleLeft size={13} /> Hidden</>}
+                                </button>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <PubTextField
+                                    fieldKey={`public_nav_item_${n}_label`}
+                                    type="string"
+                                    value={values[`public_nav_item_${n}_label`]}
+                                    saving={!!saving[`public_nav_item_${n}_label`]}
+                                    onChange={onChange}
+                                    onSave={save}
+                                />
+                                <PubTextField
+                                    fieldKey={`public_nav_item_${n}_href`}
+                                    type="string"
+                                    hint={DEFAULT_NAV_HREFS[n - 1]}
+                                    value={values[`public_nav_item_${n}_href`]}
+                                    saving={!!saving[`public_nav_item_${n}_href`]}
+                                    onChange={onChange}
+                                    onSave={save}
+                                />
+                            </div>
+                        </div>
+                    )
+                })}
+            </div>
+
+            {/* ── Colours ── */}
+            <div className="bg-white border border-gray-200 rounded-2xl px-5 py-2">
+                <div className="flex items-center gap-2 py-3 border-b border-gray-100">
+                    <Palette size={15} className="text-emerald-600" />
+                    <h3 className="text-sm font-bold text-gray-800">Colours</h3>
+                    <p className="text-xs text-gray-400 ml-1">— nav accent uses Appearance → Primary Color</p>
+                </div>
+                {cf('public_hero_bg',     'Hero section dark background colour.')}
+                {cf('public_cards_bg',    'Open Calls section background colour.')}
+                {cf('public_features_bg', 'Platform Features section background colour.')}
+                {cf('public_footer_bg',   'Footer background colour.')}
+            </div>
+
+            {/* ── Social Links ── */}
+            <div className="bg-white border border-gray-200 rounded-2xl px-5 py-2">
+                <div className="flex items-center gap-2 py-3 border-b border-gray-100">
+                    <Globe size={15} className="text-emerald-600" />
+                    <h3 className="text-sm font-bold text-gray-800">Social Links</h3>
+                    <p className="text-xs text-gray-400 ml-1">— shown as icons in the footer</p>
+                </div>
+                {SOCIAL_KEYS.map(({ key, placeholder }) => (
+                    <div key={key} className="py-3 border-b border-gray-100 last:border-0">
+                        <p className="text-sm font-medium text-gray-900 mb-1.5">{KEY_LABELS[key] ?? key}</p>
+                        <div className="flex gap-2">
+                            <input
+                                type="url"
+                                value={values[key] ?? ''}
+                                onChange={e => onChange(key, e.target.value)}
+                                placeholder={placeholder}
+                                className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm
+                                           focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                            <button
+                                onClick={() => save(key)}
+                                disabled={!!saving[key]}
+                                className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-xl
+                                           text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 shrink-0">
+                                {saving[key] ? <RefreshCw size={12} className="animate-spin" /> : <Save size={12} />}
+                                {saving[key] ? 'Saving…' : 'Save'}
+                            </button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* ── Downloads ── */}
+            <div className="bg-white border border-gray-200 rounded-2xl px-5 py-2">
+                <div className="flex items-center gap-2 py-3 border-b border-gray-100">
+                    <FileText size={15} className="text-emerald-600" />
+                    <h3 className="text-sm font-bold text-gray-800">Downloads Menu</h3>
+                    <p className="text-xs text-gray-400 ml-1">— appears as a dropdown in the public nav bar when at least one item is set</p>
+                </div>
+                {[1, 2, 3, 4, 5, 6, 7, 8].map(n => {
+                    const showKey = `public_download_${n}_show`
+                    const on = values[showKey] !== 'false'
+                    return (
+                        <div key={n} className="py-3 border-b border-gray-100 last:border-0">
+                            <div className="flex items-center justify-between mb-2">
+                                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Item {n}</p>
+                                <button
+                                    onClick={() => {
+                                        const nextVal = on ? 'false' : 'true'
+                                        onChange(showKey, nextVal)
+                                        save(showKey, nextVal)
+                                    }}
+                                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold ${
+                                        on ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'
+                                    }`}
+                                >
+                                    {on ? <><ToggleRight size={13} /> Visible</> : <><ToggleLeft size={13} /> Hidden</>}
+                                </button>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <PubTextField
+                                    fieldKey={`public_download_${n}_title`}
+                                    type="string"
+                                    hint="Display name (e.g. Proposal Template)"
+                                    value={values[`public_download_${n}_title`]}
+                                    saving={!!saving[`public_download_${n}_title`]}
+                                    onChange={onChange}
+                                    onSave={save}
+                                />
+                                <PubTextField
+                                    fieldKey={`public_download_${n}_url`}
+                                    type="string"
+                                    hint="Full URL to the file or page"
+                                    value={values[`public_download_${n}_url`]}
+                                    saving={!!saving[`public_download_${n}_url`]}
+                                    onChange={onChange}
+                                    onSave={save}
+                                />
+                            </div>
+                            <div className="mt-2">
+                                <PubTextField
+                                    fieldKey={`public_download_${n}_desc`}
+                                    type="string"
+                                    hint="Short description (optional)"
+                                    value={values[`public_download_${n}_desc`]}
+                                    saving={!!saving[`public_download_${n}_desc`]}
+                                    onChange={onChange}
+                                    onSave={save}
+                                />
+                            </div>
+                        </div>
+                    )
+                })}
+            </div>
+
+            {/* ── Section visibility ── */}
+            <div className="bg-white border border-gray-200 rounded-2xl px-5 py-2">
+                <div className="flex items-center gap-2 py-3 border-b border-gray-100">
+                    <Eye size={15} className="text-emerald-600" />
+                    <h3 className="text-sm font-bold text-gray-800">Section Visibility</h3>
+                </div>
+                {PUBLIC_VISIBILITY_KEYS.map(({ key, label: lbl }) => {
+                    const on = values[key] !== 'false'
+                    return (
+                        <div key={key}
+                            className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
+                            <p className="text-sm font-medium text-gray-900">{lbl}</p>
+                            <button
+                                onClick={() => toggle(key)}
+                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs
+                                            font-semibold transition-all ${
+                                    on ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                                       : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                }`}>
+                                {on ? <><ToggleRight size={15} /> Visible</>
+                                    : <><ToggleLeft size={15} /> Hidden</>}
+                            </button>
+                        </div>
+                    )
+                })}
+            </div>
+
+            {/* ── How It Works steps ── */}
+            <div className="bg-white border border-gray-200 rounded-2xl px-5 py-2">
+                <div className="flex items-center gap-2 py-3 border-b border-gray-100">
+                    <FileText size={15} className="text-emerald-600" />
+                    <h3 className="text-sm font-bold text-gray-800">How It Works Steps</h3>
+                </div>
+                {PUBLIC_STEPS.map(i => (
+                    <div key={i}>
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide pt-3 pb-0.5">
+                            Step {i}
+                        </p>
+                        {tf(`public_step_${i}_title`)}
+                        {tf(`public_step_${i}_desc`, 'textarea')}
+                    </div>
+                ))}
+            </div>
+
+            {/* ── CTA & features text ── */}
+            <div className="bg-white border border-gray-200 rounded-2xl px-5 py-2">
+                <div className="flex items-center gap-2 py-3 border-b border-gray-100">
+                    <Star size={15} className="text-emerald-600" />
+                    <h3 className="text-sm font-bold text-gray-800">CTA Banner &amp; Features Section</h3>
+                </div>
+                {tf('public_features_title')}
+                {tf('public_features_subtitle', 'textarea')}
+                {tf('public_cta_title')}
+                {tf('public_cta_subtitle', 'textarea')}
+                {tf('public_cta_primary')}
+                {tf('public_cta_secondary')}
+            </div>
+        </div>
+    )
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
@@ -489,6 +1391,7 @@ export default function SettingsPage() {
     const [values,        setValues]        = useState({})
     const [loading,       setLoading]       = useState(true)
     const [systemInfo,    setSystemInfo]    = useState(null)
+    const [colleges,      setColleges]      = useState([])
 
     const loadSettings = useCallback(async () => {
         setLoading(true)
@@ -515,6 +1418,12 @@ export default function SettingsPage() {
     }, [])
 
     useEffect(() => { loadSettings(); loadSystemInfo() }, [loadSettings, loadSystemInfo])
+
+    useEffect(() => {
+        if (activeSection === 'email' && colleges.length === 0) {
+            api.get('/colleges').then(r => setColleges(r.data?.data?.data ?? r.data?.data ?? [])).catch(() => {})
+        }
+    }, [activeSection]) // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleChange = (key, val) => setValues(prev => ({ ...prev, [key]: val }))
 
@@ -630,7 +1539,12 @@ export default function SettingsPage() {
                             <div>
                                 <h2 className="text-base font-bold text-gray-900">{section?.label}</h2>
                                 <p className="text-xs text-gray-400">
-                                    {Object.keys(groupData).filter(k => groupData[k]?.type !== 'file' && !HIDDEN_KEYS.has(k)).length} settings
+                                    {activeSection === 'public_site'
+                                        ? 'Hero, visibility, steps & CTA'
+                                        : activeSection === 'email'
+                                        ? 'SMTP, broadcast mail & notification channels'
+                                        : `${Object.keys(groupData).filter(k => groupData[k]?.type !== 'file' && !HIDDEN_KEYS.has(k)).length} settings`
+                                    }
                                 </p>
                             </div>
                         </div>
@@ -639,6 +1553,19 @@ export default function SettingsPage() {
                             <div className="bg-white border border-gray-200 rounded-2xl p-12 flex justify-center">
                                 <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
                             </div>
+                        ) : activeSection === 'public_site' ? (
+                            <PublicSitePanel
+                                values={values}
+                                onChange={handleChange}
+                                onSave={handleSave}
+                            />
+                        ) : activeSection === 'email' ? (
+                            <EmailSettingsPanel
+                                values={values}
+                                onChange={handleChange}
+                                onSave={handleSave}
+                                colleges={colleges}
+                            />
                         ) : (
                             <>
                                 {/* Settings fields */}
@@ -668,25 +1595,6 @@ export default function SettingsPage() {
                                     </div>
                                 )}
 
-                                {/* ── Email section extras ─────────────────────── */}
-                                {activeSection === 'email' && (
-                                    <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-3">
-                                        <h3 className="text-sm font-bold text-gray-800">Email Actions</h3>
-                                        <div className="flex flex-wrap gap-3">
-                                            <button onClick={handleTestEmail}
-                                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white
-                                                           rounded-xl text-sm font-semibold hover:bg-blue-700">
-                                                <Send size={14} /> Send Test Email
-                                            </button>
-                                        </div>
-                                        <p className="text-xs text-gray-400">
-                                            Sends a test email to your account ({' '}
-                                            <span className="font-medium text-gray-600">your current logged-in email</span>
-                                            ) using the SMTP settings above.
-                                        </p>
-                                    </div>
-                                )}
-
                                 {/* ── System section extras ─────────────────────── */}
                                 {activeSection === 'system' && (
                                     <div className="bg-white border border-gray-200 rounded-2xl p-5">
@@ -713,8 +1621,164 @@ export default function SettingsPage() {
                                     />
                                 )}
 
-                                {/* ── Logo/favicon — general group holds these files ── */}
-                                {(activeSection === 'appearance' || activeSection === 'general') && (
+                                {/* ── Sidebar tagline ───────────────────────────── */}
+                                {activeSection === 'appearance' && (
+                                    <div className="bg-white border border-gray-200 rounded-2xl p-5">
+                                        <h3 className="text-sm font-bold text-gray-800 mb-1">Sidebar Tagline</h3>
+                                        <p className="text-xs text-gray-400 mb-4">
+                                            Small text shown below the logo name in the sidebar.
+                                        </p>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                value={values.system_tagline ?? ''}
+                                                onChange={e => handleChange('system_tagline', e.target.value)}
+                                                placeholder="Research & Tech Transfer"
+                                                className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm
+                                                           focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            />
+                                            <button
+                                                onClick={() => handleSave('system_tagline', values.system_tagline ?? '')}
+                                                className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white
+                                                           rounded-xl text-xs font-semibold hover:bg-blue-700 shrink-0">
+                                                <Save size={13} /> Save
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* ── Login institution text ────────────────── */}
+                                {activeSection === 'appearance' && (
+                                    <div className="bg-white border border-gray-200 rounded-2xl p-5">
+                                        <h3 className="text-sm font-bold text-gray-800 mb-1">Login Panel Institution Text</h3>
+                                        <p className="text-xs text-gray-400 mb-4">
+                                            Footer text displayed at the bottom of the login/register panel.
+                                        </p>
+                                        <div className="flex gap-2">
+                                            <input
+                                                type="text"
+                                                value={values.login_institution_text ?? ''}
+                                                onChange={e => handleChange('login_institution_text', e.target.value)}
+                                                placeholder="Haramaya University — Research & Technology Transfer Office"
+                                                className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm
+                                                           focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            />
+                                            <button
+                                                onClick={() => handleSave('login_institution_text', values.login_institution_text ?? '')}
+                                                className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white
+                                                           rounded-xl text-xs font-semibold hover:bg-blue-700 shrink-0">
+                                                <Save size={13} /> Save
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* ── Auth panel colors ────────────────────── */}
+                                {activeSection === 'appearance' && (
+                                    <div className="bg-white border border-gray-200 rounded-2xl p-5">
+                                        <h3 className="text-sm font-bold text-gray-800 mb-1">Login / Register Panel Colors</h3>
+                                        <p className="text-xs text-gray-400 mb-4">
+                                            Gradient colors for the left branding panel on the login and register pages.
+                                        </p>
+                                        <div className="flex items-center gap-4">
+                                            <div className="flex-1">
+                                                <label className="text-xs text-gray-500 mb-1.5 block">Start Color</label>
+                                                <div className="flex items-center gap-2">
+                                                    <input type="color"
+                                                        value={values.auth_panel_from_color || '#047857'}
+                                                        onChange={e => handleChange('auth_panel_from_color', e.target.value)}
+                                                        onBlur={e => handleSave('auth_panel_from_color', e.target.value)}
+                                                        className="w-10 h-9 rounded cursor-pointer border border-gray-300"
+                                                    />
+                                                    <input type="text"
+                                                        value={values.auth_panel_from_color || '#047857'}
+                                                        onChange={e => handleChange('auth_panel_from_color', e.target.value)}
+                                                        className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="flex-1">
+                                                <label className="text-xs text-gray-500 mb-1.5 block">End Color</label>
+                                                <div className="flex items-center gap-2">
+                                                    <input type="color"
+                                                        value={values.auth_panel_to_color || '#0e7490'}
+                                                        onChange={e => handleChange('auth_panel_to_color', e.target.value)}
+                                                        onBlur={e => handleSave('auth_panel_to_color', e.target.value)}
+                                                        className="w-10 h-9 rounded cursor-pointer border border-gray-300"
+                                                    />
+                                                    <input type="text"
+                                                        value={values.auth_panel_to_color || '#0e7490'}
+                                                        onChange={e => handleChange('auth_panel_to_color', e.target.value)}
+                                                        className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="pt-5">
+                                                <button
+                                                    onClick={async () => {
+                                                        await handleSave('auth_panel_from_color', values.auth_panel_from_color || '#047857')
+                                                        await handleSave('auth_panel_to_color',   values.auth_panel_to_color   || '#0e7490')
+                                                    }}
+                                                    className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 text-white
+                                                               rounded-xl text-xs font-semibold hover:bg-blue-700 shrink-0">
+                                                    <Save size={13} /> Save
+                                                </button>
+                                            </div>
+                                        </div>
+                                        {/* Preview swatch */}
+                                        <div className="mt-3 h-8 rounded-xl"
+                                            style={{ background: `linear-gradient(135deg, ${values.auth_panel_from_color || '#047857'}, ${values.auth_panel_to_color || '#0e7490'})` }}
+                                        />
+                                    </div>
+                                )}
+
+                                {/* ── Logo size ─────────────────────────────── */}
+                                {activeSection === 'appearance' && (
+                                    <div className="bg-white border border-gray-200 rounded-2xl p-5">
+                                        <h3 className="text-sm font-bold text-gray-800 mb-1">Logo Size</h3>
+                                        <p className="text-xs text-gray-400 mb-4">
+                                            Width and height of the logo in the sidebar and login panel (pixels).
+                                        </p>
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex-1">
+                                                <label className="text-xs text-gray-500 mb-1 block">Width (px)</label>
+                                                <input
+                                                    type="number"
+                                                    min="16" max="96"
+                                                    value={values.logo_width ?? '32'}
+                                                    onChange={e => handleChange('logo_width', e.target.value)}
+                                                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm
+                                                               focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                />
+                                            </div>
+                                            <div className="flex-1">
+                                                <label className="text-xs text-gray-500 mb-1 block">Height (px)</label>
+                                                <input
+                                                    type="number"
+                                                    min="16" max="96"
+                                                    value={values.logo_height ?? '32'}
+                                                    onChange={e => handleChange('logo_height', e.target.value)}
+                                                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm
+                                                               focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                />
+                                            </div>
+                                            <div className="pt-5">
+                                                <button
+                                                    onClick={async () => {
+                                                        await handleSave('logo_width',  values.logo_width  ?? '32')
+                                                        await handleSave('logo_height', values.logo_height ?? '32')
+                                                    }}
+                                                    className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 text-white
+                                                               rounded-xl text-xs font-semibold hover:bg-blue-700 shrink-0">
+                                                    <Save size={13} /> Save
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* ── Logo/favicon ──────────────────────────── */}
+                                {activeSection === 'appearance' && (
                                     <div className="bg-white border border-gray-200 rounded-2xl p-5">
                                         <h3 className="text-sm font-bold text-gray-800 mb-4">Logo & Favicon</h3>
                                         <div className="grid grid-cols-2 gap-4">

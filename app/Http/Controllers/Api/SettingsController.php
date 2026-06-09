@@ -3,14 +3,17 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Jobs\SendBroadcastEmailJob;
 use App\Models\AppSetting;
 use App\Models\ThresholdSetting;
+use App\Models\User;
+use App\Services\MailConfigService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -96,8 +99,33 @@ class SettingsController extends Controller
         $userId = $request->user()->id;
 
         $appearanceKeys = ['primary_color', 'secondary_color', 'sidebar_color', 'footer_text', 'custom_css', 'homepage_banner', 'theme', 'system_logo', 'favicon'];
-        $defaultGroup = in_array($key, $appearanceKeys) ? 'appearance' : 'general';
-        $defaultType = in_array($key, ['primary_color', 'secondary_color', 'sidebar_color']) ? 'color' : 'string';
+        $publicSiteTypes = [
+            'public_hero_bg' => 'color',
+            'public_cards_bg' => 'color',
+            'public_features_bg' => 'color',
+            'public_footer_bg' => 'color',
+            'public_nav_item_1_show' => 'boolean',
+            'public_nav_item_2_show' => 'boolean',
+            'public_nav_item_3_show' => 'boolean',
+            'public_nav_item_4_show' => 'boolean',
+            'public_nav_item_5_show' => 'boolean',
+            'public_hero_subtitle' => 'textarea',
+            'public_step_1_desc' => 'textarea',
+            'public_step_2_desc' => 'textarea',
+            'public_step_3_desc' => 'textarea',
+            'public_step_4_desc' => 'textarea',
+            'public_features_subtitle' => 'textarea',
+            'public_cta_subtitle' => 'textarea',
+            'public_show_stats' => 'boolean',
+            'public_show_open_calls' => 'boolean',
+            'public_show_how_it_works' => 'boolean',
+            'public_show_features' => 'boolean',
+            'public_show_cta' => 'boolean',
+        ];
+        $isPublicSiteKey = str_starts_with($key, 'public_');
+        $defaultGroup = $isPublicSiteKey ? 'public_site' : (in_array($key, $appearanceKeys) ? 'appearance' : 'general');
+        $defaultType = $publicSiteTypes[$key]
+            ?? (in_array($key, ['primary_color', 'secondary_color', 'sidebar_color']) ? 'color' : 'string');
 
         $setting = AppSetting::firstOrCreate(
             ['key' => $key],
@@ -214,20 +242,36 @@ class SettingsController extends Controller
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
+        // Apply DB mail settings so the test uses admin-configured SMTP, not .env
+        app(MailConfigService::class)->applyFromDatabase();
+
+        $recipient = $request->input('to') ?? $request->user()->email;
+
         try {
-            Mail::raw('This is a test email from RTT Platform. If you received this, your mail configuration is working correctly.', function ($msg) use ($request) {
-                $msg->to($request->user()->email)
-                    ->subject('RTT Platform — Test Email');
-            });
+            Mail::html(
+                view('emails.test')->with([
+                    'senderName' => config('mail.from.name'),
+                    'senderEmail' => config('mail.from.address'),
+                    'smtpHost' => config('mail.mailers.smtp.host'),
+                ])->render(),
+                function ($msg) use ($recipient) {
+                    $msg->to($recipient)
+                        ->subject('RTT Platform — SMTP Connection Test');
+                }
+            );
 
             return response()->json([
-                'data' => null,
-                'message' => 'Test email sent to '.$request->user()->email,
+                'data' => [
+                    'recipient' => $recipient,
+                    'host' => config('mail.mailers.smtp.host'),
+                    'driver' => config('mail.default'),
+                ],
+                'message' => 'Test email sent to '.$recipient,
                 'errors' => [],
                 'meta' => [],
             ]);
         } catch (\Exception $e) {
-            return response()->json(['message' => 'Failed: '.$e->getMessage()], 422);
+            return response()->json(['message' => 'SMTP Error: '.$e->getMessage()], 422);
         }
     }
 
@@ -267,15 +311,83 @@ class SettingsController extends Controller
         }
 
         $request->validate([
-            'to' => 'required|in:all,by_role,specific',
-            'role' => 'required_if:to,by_role|string',
-            'email' => 'required_if:to,specific|email',
+            'to' => 'required|in:all,by_role,by_college,specific',
+            'role' => 'required_if:to,by_role|string|nullable',
+            'college_id' => 'required_if:to,by_college|uuid|nullable',
+            'email' => 'required_if:to,specific|email|nullable',
             'subject' => 'required|string|max:255',
             'message' => 'required|string',
         ]);
 
-        SendBroadcastEmailJob::dispatch($request->all(), $request->user()->id);
+        // Validate the specific recipient exists in the database
+        if ($request->to === 'specific') {
+            $exists = User::where('email', $request->email)->exists();
+            if (! $exists) {
+                return response()->json([
+                    'message' => "No user found with email \"{$request->email}\". Check the address and try again.",
+                    'errors' => ['email' => ['No user found with this email address.']],
+                ], 422);
+            }
+        }
 
-        return response()->json(['data' => null, 'message' => 'Emails queued for sending.', 'errors' => [], 'meta' => []]);
+        app(MailConfigService::class)->applyFromDatabase();
+
+        $recipients = $this->resolveBroadcastRecipients($request->all());
+
+        if ($recipients->isEmpty()) {
+            return response()->json([
+                'message' => 'No active recipients found for the selected target.',
+                'errors' => [],
+            ], 422);
+        }
+
+        $sent = 0;
+        $failed = 0;
+        $errors = [];
+
+        foreach ($recipients as $user) {
+            try {
+                Mail::html(
+                    view('emails.broadcast', [
+                        'recipientName' => $user->name,
+                        'subject' => $request->subject,
+                        'body' => $request->message,
+                        'senderName' => config('mail.from.name'),
+                    ])->render(),
+                    function ($msg) use ($user, $request) {
+                        $msg->to($user->email, $user->name)
+                            ->subject($request->subject);
+                    }
+                );
+                $sent++;
+            } catch (\Exception $e) {
+                Log::error("Broadcast email failed for {$user->email}: ".$e->getMessage());
+                $errors[] = $user->email;
+                $failed++;
+            }
+        }
+
+        $summary = "Delivered to {$sent} recipient".($sent !== 1 ? 's' : '').'.';
+        if ($failed > 0) {
+            $summary .= " {$failed} failed — check mail logs.";
+        }
+
+        return response()->json([
+            'data' => ['sent' => $sent, 'failed' => $failed, 'total' => $recipients->count()],
+            'message' => $summary,
+            'errors' => [],
+            'meta' => [],
+        ]);
+    }
+
+    private function resolveBroadcastRecipients(array $payload): Collection
+    {
+        return match ($payload['to']) {
+            'all' => User::whereNotNull('email')->where('status', 'active')->get(['id', 'name', 'email']),
+            'by_role' => User::role($payload['role'] ?? '')->where('status', 'active')->get(['id', 'name', 'email']),
+            'by_college' => User::where('college_id', $payload['college_id'])->where('status', 'active')->get(['id', 'name', 'email']),
+            'specific' => User::where('email', $payload['email'])->get(['id', 'name', 'email']),
+            default => collect(),
+        };
     }
 }

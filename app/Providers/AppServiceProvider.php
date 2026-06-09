@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Enums\Feature;
 use App\Events\ProposalTransitioned;
 use App\Listeners\GenerateAwardOnFunding;
+use App\Listeners\SendProposalWorkflowNotifications;
 use App\Models\User;
 use App\Services\FeatureService;
 use Illuminate\Support\Facades\Event;
@@ -18,6 +19,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Event::listen(ProposalTransitioned::class, GenerateAwardOnFunding::class);
+        Event::listen(ProposalTransitioned::class, SendProposalWorkflowNotifications::class);
 
         $this->registerFeatureGates();
     }

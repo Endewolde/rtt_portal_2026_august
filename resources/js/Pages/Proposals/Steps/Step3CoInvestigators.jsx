@@ -23,7 +23,7 @@ export default function Step3CoInvestigators({ proposalId, piUser, onComplete, i
         const timer = setTimeout(async () => {
             setSearching(true);
             try {
-                const res = await api.get('/users', { params: { search, role: 'pi,staff', per_page: 10 } });
+                const res = await api.get('/users', { params: { search, per_page: 10 } });
                 const users = res.data?.data?.data ?? res.data?.data ?? res.data ?? [];
                 const taken = new Set([piUser?.id, ...coIs.map((c) => c.user_id)]);
                 setResults(Array.isArray(users) ? users.filter((u) => !taken.has(u.id)) : []);
