@@ -92,8 +92,10 @@ const KEY_LABELS = {
     combined_threshold: 'Combined Threshold (pts)', similarity_threshold: 'Similarity Threshold (0–1)',
     audit_log_retention_days: 'Audit Log Retention (days)', activity_logging: 'Activity Logging',
     error_logging: 'Error Logging', login_history_enabled: 'Login History',
-    backup_schedule: 'Backup Schedule', backup_retention_days: 'Backup Retention (days)',
+    backup_schedule: 'Backup Schedule', backup_time: 'Backup Time', backup_retention_days: 'Backup Retention (days)',
     auto_backup_enabled: 'Auto Backup',
+    backup_notify_email: 'Notify via Email', backup_notify_telegram: 'Notify via Telegram',
+    backup_email_recipient: 'Backup Email Recipient', backup_telegram_chat_id: 'Telegram Chat ID',
     ldap_enabled: 'LDAP Enabled', ldap_host: 'LDAP Host',
     oauth_enabled: 'OAuth Enabled', google_client_id: 'Google Client ID',
     webhook_url: 'Webhook URL',
@@ -289,7 +291,7 @@ function SettingField({ settingKey, setting, value, onChange, onSave }) {
             <p className="text-sm font-medium text-gray-900 mb-1.5">{lbl}</p>
             <div className="flex gap-2">
                 <input
-                    type={type === 'number' ? 'number' : 'text'}
+                    type={type === 'number' ? 'number' : type === 'time' ? 'time' : 'text'}
                     value={value ?? ''}
                     onChange={e => onChange(settingKey, e.target.value)}
                     className="flex-1 border border-gray-300 rounded-xl px-3 py-2 text-sm
@@ -1476,6 +1478,25 @@ export default function SettingsPage() {
         }
     }
 
+    const [backingUp, setBackingUp] = useState(false)
+
+    const handleRunBackup = async () => {
+        const ok = await confirm({
+            title: 'Run Manual Backup?',
+            description: 'This will dump the database, compress it, and deliver it via the configured channels (email and/or Telegram). This may take a minute.',
+            confirmLabel: 'Run Backup',
+        })
+        if (!ok) return
+        setBackingUp(true)
+        try {
+            const res = await api.post('/settings/run-backup')
+            success(res.data?.message ?? 'Backup completed.')
+        } catch (e) {
+            error(e.response?.data?.message ?? 'Backup failed. Check server logs.')
+        }
+        setBackingUp(false)
+    }
+
     const section     = SECTIONS.find(s => s.key === activeSection)
     const groupData   = allSettings[activeSection] ?? {}
     const SectionIcon = section?.icon ?? Settings
@@ -1805,17 +1826,46 @@ export default function SettingsPage() {
 
                                 {/* ── Backup section extras ─────────────────────── */}
                                 {activeSection === 'backup' && (
-                                    <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-3">
+                                    <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-4">
                                         <h3 className="text-sm font-bold text-gray-800">Backup Actions</h3>
-                                        <button
-                                            onClick={() => warning('Database backup requires server configuration. Contact your system administrator.')}
-                                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white
-                                                       rounded-xl text-sm font-semibold hover:bg-blue-700">
-                                            <Database size={14} /> Run Manual Backup
-                                        </button>
-                                        <p className="text-xs text-gray-400">
-                                            Automated backups run according to the schedule configured above.
-                                        </p>
+                                        <div className="grid sm:grid-cols-2 gap-3">
+                                            <div className={`rounded-xl border p-4 ${values.backup_notify_email === 'true' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-gray-50 border-gray-200 text-gray-400'}`}>
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className={`h-2 w-2 rounded-full shrink-0 ${values.backup_notify_email === 'true' ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+                                                    <span className="text-sm font-bold">Email Delivery</span>
+                                                </div>
+                                                <p className="text-xs opacity-80">
+                                                    {values.backup_notify_email === 'true'
+                                                        ? (values.backup_email_recipient || 'Recipient not set')
+                                                        : 'Disabled — toggle "Notify via Email" above'}
+                                                </p>
+                                            </div>
+                                            <div className={`rounded-xl border p-4 ${values.backup_notify_telegram === 'true' ? 'bg-sky-50 border-sky-200 text-sky-700' : 'bg-gray-50 border-gray-200 text-gray-400'}`}>
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className={`h-2 w-2 rounded-full shrink-0 ${values.backup_notify_telegram === 'true' ? 'bg-sky-500' : 'bg-gray-300'}`} />
+                                                    <span className="text-sm font-bold">Telegram Delivery</span>
+                                                </div>
+                                                <p className="text-xs opacity-80">
+                                                    {values.backup_notify_telegram === 'true'
+                                                        ? (values.backup_telegram_chat_id ? `Chat ID: ${values.backup_telegram_chat_id}` : 'Chat ID not set')
+                                                        : 'Disabled — toggle "Notify via Telegram" above'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <button
+                                                onClick={handleRunBackup}
+                                                disabled={backingUp}
+                                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-60 transition-all">
+                                                {backingUp
+                                                    ? <><RefreshCw size={13} className="animate-spin" /> Running…</>
+                                                    : <><Database size={14} /> Run Manual Backup</>
+                                                }
+                                            </button>
+                                            <p className="text-xs text-gray-400">
+                                                Automated backups run daily at {values.backup_time || '02:00'} when auto backup is enabled.
+                                            </p>
+                                        </div>
                                     </div>
                                 )}
 

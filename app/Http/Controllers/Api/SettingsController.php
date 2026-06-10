@@ -302,6 +302,36 @@ class SettingsController extends Controller
         ]);
     }
 
+    // ── Manual backup ─────────────────────────────────────────────────────────
+
+    public function runBackup(Request $request): JsonResponse
+    {
+        if (! $request->user()?->hasRole('super_admin')) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        try {
+            $exitCode = Artisan::call('backup:run');
+
+            if ($exitCode !== 0) {
+                return response()->json(['message' => 'Backup command failed. Check server logs.'], 500);
+            }
+
+            $output = trim(Artisan::output());
+
+            return response()->json([
+                'data' => ['output' => $output],
+                'message' => 'Backup completed successfully.',
+                'errors' => [],
+                'meta' => [],
+            ]);
+        } catch (\Exception $e) {
+            Log::error('[Backup] Manual run failed: '.$e->getMessage());
+
+            return response()->json(['message' => 'Backup failed: '.$e->getMessage()], 500);
+        }
+    }
+
     // ── Broadcast email ───────────────────────────────────────────────────────
 
     public function sendBroadcastEmail(Request $request): JsonResponse

@@ -131,6 +131,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/settings/test-email', [SettingsController::class, 'testEmail']);
         Route::post('/settings/upload-asset', [SettingsController::class, 'uploadAsset']);
         Route::post('/settings/send-email', [SettingsController::class, 'sendBroadcastEmail']);
+        Route::post('/settings/run-backup', [SettingsController::class, 'runBackup']);
         Route::put('/settings/app/{key}', [SettingsController::class, 'updateAppSetting']);
 
         // Proposal Calls — admin actions
