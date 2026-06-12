@@ -9,8 +9,9 @@ import {
     Users, Building, Building2, Shield, Settings, Bell, Key,
     Globe, LogOut, FlaskConical, ChevronLeft, ChevronRight, X,
     FolderOpen, EyeOff, Presentation, ClipboardList,
-    BadgeDollarSign, Trophy, ListChecks, ShieldCheck,
+    BadgeDollarSign, Trophy, Archive, ListChecks, ShieldCheck,
     User, ChevronDown, ChevronUp, Lock, Clock, UserX,
+    CalendarDays, Banknote, Landmark,
 } from 'lucide-react'
 import NotificationBell from '../Components/NotificationBell'
 import { useAuth } from '../hooks/useAuth'
@@ -25,6 +26,7 @@ import { cn } from '../lib/utils'
 const _A  = ['super_admin', 'admin', 'central_officer']
 const _OR = ['research_officer', 'community_officer', 'technology_officer']
 const _AO = [..._OR, 'college_officer']
+const _FO = 'finance_officer'
 
 // Maps URL prefix → roles that may access it. Longer paths must come first.
 const ROUTE_PERMISSIONS = [
@@ -46,29 +48,58 @@ const ROUTE_PERMISSIONS = [
     ['/admin/funding',             [..._A, ..._OR]],
     ['/admin/blind-review',        [..._A, ..._AO]],
     ['/admin/open-defence',        [..._A, ..._AO]],
-    ['/admin/awarded',             [..._A, ..._AO, 'college_officer']],
+    ['/admin/awarded',             [..._A, ..._AO, _FO]],
+    ['/admin/completed-archive',   [..._A, ..._AO, _FO]],
     ['/admin/assign-reviewers',    _A],
     ['/admin/review-assignment',   _A],
-    ['/reviews',                   [..._A, 'staff']],
-    ['/budget-allocations',        [..._A, 'college_officer', ..._OR]],
-    ['/disbursements',             [..._A, 'support_officer']],
-    ['/settlements',               [..._A, 'college_officer', 'support_officer', 'staff']],
-    ['/budget-requests',           [..._A, ..._AO, 'support_officer', 'staff']],
-    ['/midterm-evaluations',       [..._A, ..._AO, 'staff']],
-    ['/completion-workshops',      [..._A, ..._AO, 'staff']],
-    ['/research-outputs',          [..._A, ..._AO, 'staff']],
-    ['/admin/repository',          _A],
-    ['/reports',                   [..._A, ..._AO, 'support_officer']],
-    ['/proposals/create',          ['super_admin', 'staff']],
-    ['/proposals',                 [..._A, ..._AO, 'college_officer']],
-    ['/my-proposals',              ['super_admin', 'staff']],
 ]
+
+// Permission-based route access — works for ANY role (including custom roles)
+// that has the corresponding Spatie permission assigned.
+// Longer paths must come before shorter ones so prefix matching works correctly.
+const ROUTE_PERM_REQUIRED = {
+    // Admin panel pages
+    '/admin/validation-queue':    'proposals.validate',
+    '/admin/central-evaluation':  'proposals.validate',
+    '/admin/blind-review':        'reviews.view_any',
+    '/admin/open-defence':        'defence_sessions.view_any',
+    '/admin/funding':             'proposals.validate',
+    '/admin/awarded':             'proposals.view_any',
+    '/admin/assign-reviewers':    'proposals.assign_reviewer',
+    '/admin/review-assignment':   'review_assignments.view_any',
+    '/admin/audit-logs':          'audit_logs.view_any',
+    '/admin/users':               'users.view_any',
+    '/admin/colleges':            'colleges.view_any',
+    '/admin/departments':         'departments.view_any',
+    '/admin/repository':          'repository.view_any',
+    // Content pages
+    '/proposals/create':          'proposals.create',
+    '/my-proposals':              'proposals.submit',
+    '/proposals':                 'proposals.view_any',
+    '/reviews':                   'review_assignments.view_any',
+    '/budget-allocations':        'budget_allocations.view_any',
+    '/budget-requests':           'budget_requests.view_any',
+    '/disbursements':             'disbursements.view_any',
+    '/settlements':               'settlements.view_any',
+    '/midterm-evaluations':       'midterm_evaluations.view_any',
+    '/completion-workshops':      'completion_workshops.view_any',
+    '/research-outputs':          'research_outputs.view_any',
+    '/reports':                   'reports.view_any',
+    '/complaints':                'complaints.view_any',
+}
 
 function getAllowedRoles(path) {
     const match = ROUTE_PERMISSIONS.find(([prefix]) =>
         path === prefix || path.startsWith(prefix + '/')
     )
     return match?.[1] ?? null // null = any authenticated user
+}
+
+function getRequiredPermission(path) {
+    const entry = Object.entries(ROUTE_PERM_REQUIRED).find(([prefix]) =>
+        path === prefix || path.startsWith(prefix + '/')
+    )
+    return entry?.[1] ?? null
 }
 
 // ─── Unauthorized view ────────────────────────────────────────────────────────
@@ -202,8 +233,8 @@ const ICONS = {
     BarChart, BarChart2, TrendingUp, TrendingDown,
     Users, Building, Building2, Shield, Settings, Bell, Key,
     FolderOpen, EyeOff, Presentation, ClipboardList,
-    BadgeDollarSign, Trophy, ListChecks, ShieldCheck,
-    Globe,
+    BadgeDollarSign, Trophy, Archive, ListChecks, ShieldCheck,
+    Globe, CalendarDays, Banknote, Landmark,
     BuildingOffice: Building2,
 }
 
@@ -215,6 +246,7 @@ const ROLE_LABELS = {
     community_officer:  'Community Officer',
     technology_officer: 'Technology Officer',
     college_officer:    'College Officer',
+    finance_officer:    'Finance Officer',
     support_officer:    'Support Officer',
     staff:              'Staff',
     guest:              'Guest',
@@ -228,9 +260,7 @@ const ROLE_COLORS = {
     community_officer:  'from-pink-500 to-rose-600',
     technology_officer: 'from-cyan-500 to-blue-600',
     college_officer:    'from-teal-500 to-green-600',
-    community_officer:  'from-pink-500 to-rose-600',
-    technology_officer: 'from-cyan-500 to-blue-600',
-    college_officer:    'from-teal-500 to-green-600',
+    finance_officer:    'from-amber-500 to-yellow-600',
     support_officer:    'from-yellow-500 to-amber-500',
     staff:              'from-emerald-500 to-teal-600',
     guest:              'from-gray-400 to-gray-500',
@@ -253,6 +283,7 @@ function UserMenu({ user, logout, unreadNotifications, isSuperAdmin, collapsed }
     const role     = roles[0] ?? 'guest'
     const initials = (user?.name ?? 'U').split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()
     const gradient = ROLE_COLORS[role] ?? ROLE_COLORS.default
+    const allRolesLabel = roles.map(r => ROLE_LABELS[r] ?? r.replace(/_/g, ' ')).join(', ')
 
     return (
         <div ref={ref} className="relative">
@@ -302,7 +333,7 @@ function UserMenu({ user, logout, unreadNotifications, isSuperAdmin, collapsed }
                                 <p className="text-sm font-bold text-white truncate">{user?.name}</p>
                                 <p className="text-xs text-white/70 truncate">{user?.email}</p>
                                 <span className="inline-block mt-0.5 text-[10px] text-white/80 capitalize">
-                                    {ROLE_LABELS[role] ?? role}
+                                    {allRolesLabel}
                                 </span>
                             </div>
                         </div>
@@ -396,21 +427,23 @@ function GuestBanner() {
 // ─── AppLayout ────────────────────────────────────────────────────────────────
 
 export default function AppLayout({ children, breadcrumb }) {
-    const { user, logout, hasRole, hasAnyRole, refreshUser } = useAuth()
-    const { hasFeature } = useFeature()
+    const { user, logout, hasRole, hasAnyRole, hasPermission, refreshUser } = useAuth()
+    const { hasFeature, hasSubFeature } = useFeature()
     const counts    = useActionCounts()
     const [collapsed, setCollapsed] = useState(false)
     const [unreadNotifications, setUnreadNotifications] = useState(0)
+    // authReady gates the route guard — prevents a stale-localStorage "Access Denied"
+    // flash while the fresh /auth/me call is in flight.
+    const [authReady, setAuthReady] = useState(false)
     const { url } = usePage()
 
     useEffect(() => {
         const token = localStorage.getItem('rtt_token')
         if (!token) { window.location.href = '/login'; return }
-        const lastRefresh = parseInt(localStorage.getItem('rtt_user_refreshed_at') ?? '0', 10)
-        if (Date.now() - lastRefresh > 5 * 60 * 1000) {
-            refreshUser()
-            localStorage.setItem('rtt_user_refreshed_at', String(Date.now()))
-        }
+        // Always fetch fresh user data (roles + permissions) on every page load
+        // so admin changes (role/permission assignment) are picked up immediately
+        // without requiring the affected user to log out and back in.
+        refreshUser().finally(() => setAuthReady(true))
     }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
     // All appearance / general settings come from the Inertia shared props
@@ -457,9 +490,11 @@ export default function AppLayout({ children, breadcrumb }) {
     }, [sessionWarning, handleSessionLogout])
 
     // ── Route permission guard ─────────────────────────────────────────────────
-    const currentPath   = url || window.location.pathname
-    const allowedRoles  = getAllowedRoles(currentPath)
-    const routeAllowed  = !user || !allowedRoles || hasAnyRole(allowedRoles)
+    const currentPath      = url || window.location.pathname
+    const allowedRoles     = getAllowedRoles(currentPath)
+    const requiredPerm     = getRequiredPermission(currentPath)
+    const routeAllowed     = !user || !allowedRoles || hasAnyRole(allowedRoles)
+        || (requiredPerm && hasPermission(requiredPerm))
 
     const isDark = isDarkColor(sidebarBg)
     const sc     = isDark ? DARK : LIGHT
@@ -478,6 +513,10 @@ export default function AppLayout({ children, breadcrumb }) {
     const OFFICER_ROLES  = ['research_officer', 'community_officer', 'technology_officer']
     const ALL_OFFICERS   = [...OFFICER_ROLES, 'college_officer']
     const ALL_ADMIN      = ['super_admin', 'admin', 'central_officer']
+    const FINANCE_OFF    = 'finance_officer'
+
+    // perm() = true if user has this Spatie permission (works for ANY role, including custom)
+    const perm = (p) => hasPermission(p)
 
     const navGroups = [
         {
@@ -491,28 +530,34 @@ export default function AppLayout({ children, breadcrumb }) {
             items: [
                 {
                     label: 'All Proposals', href: '/proposals', icon: 'FileText',
-                    show: hasAnyRole([...ALL_ADMIN, ...ALL_OFFICERS]),
+                    show: perm('proposals.view_any') && !hasRole('staff') && hasSubFeature('proposals.all'),
                 },
                 {
                     label: 'Proposal Calls', href: '/proposal-calls', icon: 'Megaphone',
-                    show: hasAnyRole([...ALL_ADMIN, ...ALL_OFFICERS, 'staff']),
+                    show: perm('proposal_calls.view_any') && hasSubFeature('proposals.calls'),
                     badge: c => c.proposal_calls_active,
                 },
                 {
                     label: 'New Application', href: '/proposals/create', icon: 'PlusCircle',
-                    show: hasAnyRole(['super_admin', 'staff']),
+                    show: perm('proposals.create') && hasSubFeature('proposals.new_application'),
                 },
-                { label: 'Track Proposal', href: '/tracker', icon: 'Search', show: true },
+                {
+                    label: 'Track Proposal', href: '/tracker', icon: 'Search',
+                    show: hasSubFeature('proposals.track'),
+                },
                 {
                     label: 'My Proposals', href: '/my-proposals', icon: 'FolderOpen',
-                    show: hasAnyRole(['super_admin', 'staff']),
-                    show: hasAnyRole(['super_admin', 'pi', 'staff']),
+                    show: perm('proposals.submit') && hasSubFeature('proposals.my_proposals'),
                     badge: c => c.my_proposals_draft,
                 },
                 {
                     label: 'Awarded Proposals', href: '/admin/awarded', icon: 'Trophy',
-                    show: hasAnyRole([...ALL_ADMIN, ...ALL_OFFICERS]),
+                    show: perm('proposals.view_any') && !hasRole('staff') && hasSubFeature('proposals.awarded'),
                     badge: c => c.awarded_without_allocation,
+                },
+                {
+                    label: 'Completed Archive', href: '/admin/completed-archive', icon: 'Archive',
+                    show: perm('proposals.view_any') && !hasRole('staff') && hasSubFeature('proposals.archive'),
                 },
             ],
         },
@@ -521,45 +566,45 @@ export default function AppLayout({ children, breadcrumb }) {
             items: [
                 {
                     label: 'Validation Queue', href: '/admin/validation-queue', icon: 'CheckSquare',
-                    show: hasAnyRole([...ALL_ADMIN, ...OFFICER_ROLES]) && hasFeature('evaluation'),
+                    show: perm('proposals.validate') && hasSubFeature('evaluation.validation'),
                     badge: c => c.validation_queue,
                 },
                 {
                     label: 'Blind Review', href: '/admin/blind-review', icon: 'EyeOff',
-                    show: hasAnyRole([...ALL_ADMIN, ...ALL_OFFICERS]) && hasFeature('evaluation'),
+                    show: perm('reviews.view_any') && hasAnyRole([...ALL_ADMIN, ...ALL_OFFICERS]) && hasSubFeature('evaluation.blind_review'),
                     badge: c => c.blind_review_queue,
                 },
                 {
                     label: 'Open Defence', href: '/admin/open-defence', icon: 'Presentation',
-                    show: hasAnyRole([...ALL_ADMIN, ...ALL_OFFICERS]) && hasFeature('evaluation'),
+                    show: perm('defence_sessions.view_any') && hasSubFeature('evaluation.open_defence'),
                     badge: c => c.open_defence_queue,
                 },
                 {
                     label: 'Central Evaluation', href: '/admin/central-evaluation', icon: 'ClipboardList',
-                    show: hasAnyRole([...ALL_ADMIN, ...OFFICER_ROLES]) && hasFeature('evaluation'),
+                    show: perm('proposals.validate') && hasAnyRole([...ALL_ADMIN, ...OFFICER_ROLES]) && hasSubFeature('evaluation.central'),
                     badge: c => c.central_eval_queue,
                 },
                 {
                     label: 'Assigned Reviews', href: '/reviews', icon: 'ClipboardCheck',
-                    show: hasAnyRole([...ALL_ADMIN, 'reviewer', 'staff']) && hasFeature('evaluation'),
+                    show: perm('review_assignments.view_any') && hasSubFeature('evaluation.assigned_reviews'),
                     badge: c => c.pending_reviews,
                 },
                 {
                     label: 'Evaluation Criteria', href: '/admin/evaluation-criteria', icon: 'ListChecks',
-                    show: hasAnyRole(ALL_ADMIN) && hasFeature('evaluation'),
+                    show: hasAnyRole(ALL_ADMIN) && hasSubFeature('evaluation.criteria'),
                 },
                 {
                     label: 'Reviewer Workload', href: '/admin/reviewer-workload', icon: 'Users',
-                    show: hasAnyRole(ALL_ADMIN) && hasFeature('evaluation'),
+                    show: hasAnyRole(ALL_ADMIN) && hasSubFeature('evaluation.reviewer_workload'),
                 },
                 {
                     label: 'Complaints', href: '/complaints', icon: 'AlertCircle',
-                    show: hasAnyRole([...ALL_ADMIN, ...ALL_OFFICERS, 'staff']) && hasFeature('complaints'),
+                    show: perm('complaints.view_any') && hasSubFeature('complaints.manage'),
                     badge: c => c.open_complaints,
                 },
                 {
                     label: 'Similarity Flags', href: '/admin/similarity-flags', icon: 'AlertTriangle',
-                    show: hasAnyRole(ALL_ADMIN) && hasFeature('similarity'),
+                    show: hasAnyRole(ALL_ADMIN) && hasSubFeature('similarity.flags'),
                     badge: c => c.similarity_flags_pending,
                 },
             ],
@@ -569,27 +614,27 @@ export default function AppLayout({ children, breadcrumb }) {
             items: [
                 {
                     label: 'Budget Allocations', href: '/budget-allocations', icon: 'PieChart',
-                    show: hasAnyRole([...ALL_ADMIN, 'college_officer', ...OFFICER_ROLES]) && hasFeature('finance'),
+                    show: perm('budget_allocations.view_any') && hasSubFeature('finance.allocations'),
                     badge: c => c.pending_allocations,
                 },
                 {
                     label: 'Budget Requests', href: '/budget-requests', icon: 'DollarSign',
-                    show: hasAnyRole([...ALL_ADMIN, ...ALL_OFFICERS, 'support_officer', 'staff']) && hasFeature('finance'),
+                    show: perm('budget_requests.view_any') && hasSubFeature('finance.requests'),
                     badge: c => (c.pending_signatures ?? 0) + (c.budget_requests_review ?? 0),
                 },
                 {
                     label: 'Proposal Funding', href: '/admin/funding', icon: 'BadgeDollarSign',
-                    show: hasAnyRole([...ALL_ADMIN, ...OFFICER_ROLES]) && hasFeature('finance'),
+                    show: perm('proposals.validate') && hasAnyRole([...ALL_ADMIN, ...OFFICER_ROLES]) && hasSubFeature('finance.funding'),
                     badge: c => c.proposal_funding_queue,
                 },
                 {
                     label: 'Disbursements', href: '/disbursements', icon: 'CreditCard',
-                    show: hasAnyRole([...ALL_ADMIN, 'support_officer']) && hasFeature('finance'),
+                    show: perm('disbursements.view_any') && hasSubFeature('finance.disbursements'),
                     badge: c => c.pending_disbursements,
                 },
                 {
                     label: 'Settlements', href: '/settlements', icon: 'CheckCircle',
-                    show: hasAnyRole([...ALL_ADMIN, 'college_officer', 'support_officer', 'staff']) && hasFeature('finance'),
+                    show: perm('settlements.view_any') && hasSubFeature('finance.settlements'),
                     badge: c => c.pending_settlements,
                 },
             ],
@@ -599,25 +644,25 @@ export default function AppLayout({ children, breadcrumb }) {
             items: [
                 {
                     label: 'Midterm Evaluations', href: '/midterm-evaluations', icon: 'Activity',
-                    show: hasAnyRole([...ALL_ADMIN, ...ALL_OFFICERS, 'staff']) && hasFeature('monitoring'),
+                    show: perm('midterm_evaluations.view_any') && hasSubFeature('monitoring.midterm'),
                     badge: c => c.midterm_pending,
                 },
                 {
                     label: 'Completion Workshops', href: '/completion-workshops', icon: 'Award',
-                    show: hasAnyRole([...ALL_ADMIN, ...ALL_OFFICERS, 'staff']) && hasFeature('monitoring'),
+                    show: perm('completion_workshops.view_any') && hasSubFeature('monitoring.completion'),
                     badge: c => c.completion_workshops_pending,
                 },
                 {
                     label: 'Research Outputs', href: '/research-outputs', icon: 'BookOpen',
-                    show: hasAnyRole([...ALL_ADMIN, ...ALL_OFFICERS, 'staff']) && hasFeature('monitoring'),
+                    show: perm('research_outputs.view_any') && hasSubFeature('monitoring.outputs'),
                 },
                 {
                     label: 'Repository', href: '/repository', icon: 'Database',
-                    show: hasFeature('repository'),
+                    show: perm('repository.view_any') && hasSubFeature('repository.view'),
                 },
                 {
                     label: 'Manage Repository', href: '/admin/repository', icon: 'Database',
-                    show: hasAnyRole([...ALL_ADMIN]) && hasFeature('repository'),
+                    show: hasAnyRole(ALL_ADMIN) && hasSubFeature('repository.manage'),
                 },
             ],
         },
@@ -626,19 +671,19 @@ export default function AppLayout({ children, breadcrumb }) {
             items: [
                 {
                     label: 'Generate Report', href: '/reports', icon: 'BarChart',
-                    show: hasAnyRole([...ALL_ADMIN, ...ALL_OFFICERS, 'support_officer']) && hasFeature('reports'),
+                    show: perm('reports.view_any') && hasSubFeature('reports.generate'),
                 },
                 {
                     label: 'Proposal Statistics', href: '/reports?type=proposal_count_by_category', icon: 'TrendingUp',
-                    show: hasAnyRole([...ALL_ADMIN, ...ALL_OFFICERS]) && hasFeature('reports'),
+                    show: perm('reports.view_any') && !hasRole('staff') && hasSubFeature('reports.statistics'),
                 },
                 {
                     label: 'College Performance', href: '/reports?type=college_performance', icon: 'BarChart2',
-                    show: hasAnyRole(ALL_ADMIN) && hasFeature('reports'),
+                    show: hasAnyRole(ALL_ADMIN) && hasSubFeature('reports.college'),
                 },
                 {
                     label: 'Budget Utilization', href: '/reports?type=budget_utilization', icon: 'TrendingDown',
-                    show: hasAnyRole([...ALL_ADMIN, 'support_officer', ...OFFICER_ROLES]) && hasFeature('reports'),
+                    show: perm('reports.view_any') && perm('budget_requests.view_any') && hasSubFeature('reports.budget'),
                 },
             ],
         },
@@ -653,21 +698,43 @@ export default function AppLayout({ children, breadcrumb }) {
             ],
         },
         {
+            group: 'Events',
+            items: [
+                {
+                    label: 'Conferences', href: '/admin/conferences', icon: 'CalendarDays',
+                    show: hasAnyRole([...ALL_ADMIN]) && hasSubFeature('events.conferences'),
+                },
+                {
+                    label: 'Abstracts', href: '/admin/abstracts', icon: 'FileText',
+                    show: (hasAnyRole([...ALL_ADMIN]) || perm('reviews.view_any')) && hasSubFeature('events.abstracts'),
+                },
+            ],
+        },
+        {
+            group: 'External Funds',
+            items: [
+                {
+                    label: 'External Funds', href: '/admin/external-funds', icon: 'Banknote',
+                    show: perm('external_funds.view_any') && hasSubFeature('external_funds.manage'),
+                },
+            ],
+        },
+        {
             group: 'Administration',
             items: [
                 {
                     label: 'Users', href: '/admin/users', icon: 'Users',
-                    show: hasAnyRole(ALL_ADMIN),
+                    show: perm('users.view_any'),
                 },
                 { label: 'Roles',       href: '/admin/roles',      icon: 'ShieldCheck', show: hasRole('super_admin') },
                 { label: 'Permissions', href: '/admin/permissions', icon: 'Key',         show: hasRole('super_admin') },
                 {
                     label: 'Colleges', href: '/admin/colleges', icon: 'Building',
-                    show: hasAnyRole(ALL_ADMIN),
+                    show: perm('colleges.view_any'),
                 },
                 {
                     label: 'Departments', href: '/admin/departments', icon: 'BuildingOffice',
-                    show: hasAnyRole(ALL_ADMIN),
+                    show: perm('departments.view_any'),
                 },
                 {
                     label: 'Resources', href: '/admin/resources', icon: 'FolderOpen',
@@ -675,7 +742,7 @@ export default function AppLayout({ children, breadcrumb }) {
                 },
                 {
                     label: 'Audit Logs', href: '/admin/audit-logs', icon: 'Shield',
-                    show: hasAnyRole(ALL_ADMIN),
+                    show: perm('audit_logs.view_any'),
                 },
                 {
                     label: 'Feature Management', href: '/admin/features', icon: 'Settings',
@@ -700,6 +767,9 @@ export default function AppLayout({ children, breadcrumb }) {
     const primaryRole = roles[0] ?? 'guest'
     const gradient    = ROLE_COLORS[primaryRole] ?? ROLE_COLORS.default
     const initials    = (user?.name ?? 'U').split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()
+    const roleLabel   = roles.length > 1
+        ? roles.map(r => ROLE_LABELS[r] ?? r.replace(/_/g, ' ')).join(' · ')
+        : (ROLE_LABELS[primaryRole] ?? primaryRole.replace(/_/g, ' '))
 
     return (
         <div className="flex h-screen bg-gray-50/50 overflow-hidden">
@@ -839,7 +909,7 @@ export default function AppLayout({ children, breadcrumb }) {
                                         {user?.name}
                                     </p>
                                     <p className={cn('text-[10px] truncate capitalize transition-colors', sc.userRole, sc.userRoleHover)}>
-                                        {ROLE_LABELS[primaryRole] ?? primaryRole}
+                                        {roleLabel}
                                     </p>
                                 </div>
                                 <User size={10} className={cn('shrink-0 transition-colors', sc.userIcon)} />
@@ -935,9 +1005,19 @@ export default function AppLayout({ children, breadcrumb }) {
                     </div>
                 )}
 
-                {/* Page content — guarded by role check */}
+                {/* Page content — guarded by role/permission check */}
                 <main className="flex-1 overflow-y-auto p-5 md:p-6">
-                    {routeAllowed ? children : <UnauthorizedView user={user} />}
+                    {!authReady
+                        ? (
+                            <div className="flex items-center justify-center h-full">
+                                <div className="flex flex-col items-center gap-3 text-gray-400">
+                                    <div className="w-8 h-8 border-[3px] border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                                    <p className="text-xs font-medium">Loading…</p>
+                                </div>
+                            </div>
+                        )
+                        : routeAllowed ? children : <UnauthorizedView user={user} />
+                    }
                 </main>
 
                 {/* Footer */}

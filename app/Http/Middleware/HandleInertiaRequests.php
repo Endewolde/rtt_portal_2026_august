@@ -41,7 +41,10 @@ class HandleInertiaRequests extends Middleware
                     'footer_text',
                     'current_academic_year',
                     'session_timeout_minutes',
+                    'sso_enabled',
                     // Public site content
+                    'public_header_tagline',
+                    'public_footer_tagline',
                     'public_hero_badge',
                     'public_hero_heading',
                     'public_hero_highlight',
@@ -94,6 +97,11 @@ class HandleInertiaRequests extends Middleware
                 }
 
                 return json_decode($stored, true) ?? [];
+            }),
+            'disabled_sub_features' => Cache::remember('inertia_disabled_sub_features', 300, function () {
+                $stored = AppSetting::where('key', 'disabled_sub_features')->value('value');
+
+                return $stored ? (json_decode($stored, true) ?? []) : [];
             }),
         ];
     }

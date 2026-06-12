@@ -176,6 +176,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/features', [FeatureController::class, 'index']);
         Route::post('/features/toggle', [FeatureController::class, 'toggle']);
         Route::put('/features', [FeatureController::class, 'update']);
+        Route::get('/features/sub', [FeatureController::class, 'getDisabledSubFeatures']);
+        Route::put('/features/sub', [FeatureController::class, 'updateDisabledSubFeatures']);
 
         // Settings — static segments must come before {key} wildcard
         Route::get('/settings', [SettingsController::class, 'index']);

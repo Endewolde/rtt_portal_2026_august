@@ -90,6 +90,20 @@ class ProposalController extends Controller
         if ($request->filled('search')) {
             $query->where('title', 'LIKE', '%'.$request->search.'%');
         }
+        if ($request->filled('pi_search')) {
+            $term = '%'.$request->pi_search.'%';
+            $query->whereHas('pi', fn ($q) => $q->where('name', 'like', $term)->orWhere('email', 'like', $term));
+        }
+        if ($request->filled('member_search')) {
+            $term = '%'.$request->member_search.'%';
+            $query->where(fn ($q) => $q
+                ->whereHas('pi', fn ($q2) => $q2->where('name', 'like', $term))
+                ->orWhereHas('members', fn ($q2) => $q2
+                    ->where('status', 'active')
+                    ->whereHas('user', fn ($q3) => $q3->where('name', 'like', $term))
+                )
+            );
+        }
 
         return response()->json(['data' => $query->orderByDesc('created_at')->paginate(20)]);
     }

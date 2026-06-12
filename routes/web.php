@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Auth\OAuthController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
@@ -9,8 +10,13 @@ use Inertia\Inertia;
 Route::get('/', fn () => Inertia::render('Public/Home'));
 Route::get('/download', fn () => Inertia::render('Public/Download'));
 Route::get('/explore', fn () => Inertia::render('Public/Explore'));
+Route::get('/funding-opportunities', fn () => Inertia::render('Public/FundingOpportunities'));
 Route::get('/repository', fn () => Inertia::render('Public/Repository'));
 Route::get('/tracker', fn () => Inertia::render('Public/Tracker'));
+Route::get('/conferences', fn () => Inertia::render('Public/Conferences'));
+Route::get('/conferences/{slug}', fn () => Inertia::render('Public/ConferenceDetail'));
+Route::get('/conferences/{slug}/submit-abstract', fn () => Inertia::render('Public/AbstractSubmit'));
+Route::get('/my-abstracts', fn () => Inertia::render('Public/MyAbstracts'));
 // Authenticated users get the admin/PI view; AppLayout redirects guests to /login.
 // Token-based auth (Sanctum) doesn't set a session, so server-side auth()->check()
 // would always be false — the client handles auth entirely via useAuth.
@@ -20,6 +26,8 @@ Route::get('/proposal-calls/public', fn () => Inertia::render('Public/ProposalCa
 // ── Auth ──────────────────────────────────────────────────────────────────────
 Route::get('/login', fn () => Inertia::render('Auth/Login'));
 Route::get('/register', fn () => Inertia::render('Auth/Register'));
+Route::get('/auth/oauth/{provider}', [OAuthController::class, 'redirect'])->name('oauth.redirect');
+Route::get('/auth/oauth/{provider}/callback', [OAuthController::class, 'callback'])->name('oauth.callback');
 Route::get('/forgot-password', fn () => Inertia::render('Auth/ForgotPassword'));
 Route::get('/reset-password', fn () => Inertia::render('Auth/ResetPassword'));
 Route::get('/verify-email', fn () => Inertia::render('Auth/VerifyEmail'));
@@ -48,9 +56,13 @@ Route::get('/admin/open-defence', fn () => Inertia::render('Admin/OpenDefence'))
 Route::get('/admin/central-evaluation', fn () => Inertia::render('Admin/CentralEvaluation'));
 Route::get('/admin/funding', fn () => Inertia::render('Admin/ProposalFunding'));
 Route::get('/admin/awarded', fn () => Inertia::render('Admin/AwardedProposals'));
+Route::get('/admin/completed-archive', fn () => Inertia::render('Admin/CompletedArchive'));
 Route::get('/admin/review-assignment/{id}', fn () => Inertia::render('Admin/ReviewAssignment'));
 Route::get('/reports', fn () => Inertia::render('Reports/Index'));
 Route::get('/complaints', fn () => Inertia::render('Complaints/Index'));
+Route::get('/admin/conferences', fn () => Inertia::render('Admin/Conferences'));
+Route::get('/admin/abstracts', fn () => Inertia::render('Admin/Abstracts'));
+Route::get('/admin/external-funds', fn () => Inertia::render('Admin/ExternalFunds'));
 Route::get('/admin/users', fn () => Inertia::render('Admin/Users'));
 Route::get('/admin/users/{id}', fn () => Inertia::render('Admin/UserShow'));
 Route::get('/admin/colleges', fn () => Inertia::render('Admin/Colleges'));

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from '@inertiajs/react';
-import { Trophy, RefreshCw } from 'lucide-react';
+import { Trophy, RefreshCw, Calendar } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import StatusBadge from '../../Components/StatusBadge';
 import ViewToggle from '../../Components/ViewToggle';
@@ -14,23 +14,23 @@ const FUNDED_STATUSES = ['funded', 'midterm_evaluation', 'completed', 'archived'
 
 export default function AwardedProposals() {
     const { error } = useToast();
-    const [view, setView] = useViewPreference('awarded_proposals', 'card');
-    const [proposals, setProposals] = useState([]);
-    const [loading, setLoading]     = useState(true);
-    const [filter, setFilter]       = useState('all');
+    const [view, setView]               = useViewPreference('awarded_proposals', 'card');
+    const [proposals, setProposals]     = useState([]);
+    const [loading, setLoading]         = useState(true);
+    const [statusFilter, setStatusFilter] = useState('all');
+    const [yearFilter, setYearFilter]   = useState('all');
 
     const load = async () => {
         setLoading(true);
         try {
             const results = await Promise.all(
                 FUNDED_STATUSES.map(s =>
-                    api.get('/proposals', { params: { status: s, per_page: 100 } })
+                    api.get('/proposals', { params: { status: s, per_page: 200 } })
                         .then(r => r.data?.data?.data ?? r.data?.data ?? [])
                         .catch(() => [])
                 )
             );
             const all = results.flat();
-            // Load awards in parallel (best-effort)
             const withAwards = await Promise.all(
                 all.map(async p => {
                     try {
@@ -46,12 +46,28 @@ export default function AwardedProposals() {
 
     useEffect(() => { load(); }, []);
 
-    const visible = filter === 'all' ? proposals : proposals.filter(p => p.status === filter);
+    const academicYears = ['all', ...Array.from(new Set(proposals.map(p => p.academic_year).filter(Boolean))).sort().reverse()];
+
+    const visible = proposals.filter(p =>
+        (statusFilter === 'all' || p.status === statusFilter) &&
+        (yearFilter === 'all' || p.academic_year === yearFilter)
+    );
+
+    // Summary per academic year for the year selector
+    const yearSummary = (year) => {
+        const group = year === 'all' ? proposals : proposals.filter(p => p.academic_year === year);
+        return {
+            count: group.length,
+            total: group.reduce((s, p) => s + parseFloat(p.award?.awarded_amount ?? 0), 0),
+        };
+    };
 
     return (
         <AppLayout breadcrumb="Awarded Proposals">
-            <div className="max-w-6xl mx-auto">
-                <div className="flex items-center justify-between mb-6">
+            <div className="max-w-6xl mx-auto space-y-5">
+
+                {/* Page header */}
+                <div className="flex items-center justify-between">
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                             <Trophy size={22} className="text-amber-500" /> Awarded Proposals
@@ -66,16 +82,58 @@ export default function AwardedProposals() {
                     </div>
                 </div>
 
-                {/* Filter tabs */}
-                <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1">
-                    {[['all', 'All'], ...FUNDED_STATUSES.map(s => [s, s.replace('_', ' ')])].map(([val, label]) => (
-                        <button key={val} onClick={() => setFilter(val)}
-                            className={`px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap transition-colors ${
-                                filter === val ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                            }`}>
-                            {label} {val !== 'all' ? `(${proposals.filter(p => p.status === val).length})` : `(${proposals.length})`}
-                        </button>
-                    ))}
+                {/* Academic year selector */}
+                {!loading && (
+                    <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-4">
+                        <div className="flex items-center gap-2 mb-3">
+                            <Calendar size={14} className="text-amber-500" />
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Academic Year</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            {academicYears.map(y => {
+                                const s = yearSummary(y);
+                                const active = yearFilter === y;
+                                return (
+                                    <button key={y} onClick={() => setYearFilter(y)}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium border transition-all ${
+                                            active
+                                                ? 'bg-amber-500 text-white border-amber-500 shadow-sm'
+                                                : 'bg-white text-gray-600 border-gray-200 hover:border-amber-300 hover:text-amber-700'
+                                        }`}>
+                                        <span>{y === 'all' ? 'All Years' : y}</span>
+                                        <span className={`text-xs px-1.5 py-0.5 rounded-md font-semibold ${
+                                            active ? 'bg-amber-400/50 text-white' : 'bg-gray-100 text-gray-500'
+                                        }`}>{s.count}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        {yearFilter !== 'all' && (
+                            <p className="text-xs text-gray-400 mt-2">
+                                {yearSummary(yearFilter).count} proposals · Total awarded:{' '}
+                                <span className="font-semibold text-emerald-600">{formatCurrency(yearSummary(yearFilter).total)}</span>
+                            </p>
+                        )}
+                    </div>
+                )}
+
+                {/* Status filter tabs */}
+                <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                    {[['all', 'All'], ...FUNDED_STATUSES.map(s => [s, s.replace('_', ' ')])].map(([val, label]) => {
+                        const cnt = val === 'all'
+                            ? proposals.filter(p => yearFilter === 'all' || p.academic_year === yearFilter).length
+                            : proposals.filter(p => p.status === val && (yearFilter === 'all' || p.academic_year === yearFilter)).length;
+                        return (
+                            <button key={val} onClick={() => setStatusFilter(val)}
+                                className={`px-3 py-1.5 text-xs font-medium rounded-full whitespace-nowrap capitalize transition-colors ${
+                                    statusFilter === val
+                                        ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                }`}>
+                                {label} ({cnt})
+                            </button>
+                        );
+                    })}
                 </div>
 
                 {loading ? (
@@ -85,7 +143,7 @@ export default function AwardedProposals() {
                 ) : visible.length === 0 ? (
                     <div className="bg-white border border-gray-200 rounded-xl p-12 text-center">
                         <Trophy size={36} className="mx-auto text-gray-300 mb-3" />
-                        <p className="text-gray-500">No awarded proposals found.</p>
+                        <p className="text-gray-500">No proposals found for the selected filters.</p>
                     </div>
                 ) : view === 'table' ? (
                     <ProposalTable
@@ -102,17 +160,21 @@ export default function AwardedProposals() {
                 ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {visible.map(p => (
-                            <div key={p.id} className="bg-white border border-gray-200 rounded-xl p-5 hover:shadow-md transition-shadow">
-                                {/* Grant reference badge */}
-                                {p.award?.grant_reference ? (
-                                    <div className="inline-flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold px-3 py-1 rounded-full mb-3">
-                                        <Trophy size={11} /> {p.award.grant_reference}
-                                    </div>
-                                ) : (
-                                    <div className="inline-flex items-center gap-1.5 bg-gray-100 text-gray-500 text-xs px-3 py-1 rounded-full mb-3">
-                                        No grant reference
-                                    </div>
-                                )}
+                            <div key={p.id} className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow">
+                                <div className="flex items-start justify-between gap-3 mb-3">
+                                    {p.award?.grant_reference ? (
+                                        <div className="inline-flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold px-3 py-1 rounded-full">
+                                            <Trophy size={11} /> {p.award.grant_reference}
+                                        </div>
+                                    ) : (
+                                        <div className="inline-flex items-center gap-1.5 bg-gray-100 text-gray-500 text-xs px-3 py-1 rounded-full">
+                                            No grant reference
+                                        </div>
+                                    )}
+                                    <span className="text-xs text-gray-400 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-lg font-medium shrink-0">
+                                        {p.academic_year}
+                                    </span>
+                                </div>
 
                                 <h3 className="text-sm font-semibold text-gray-900 line-clamp-2 mb-2">{p.title}</h3>
 
@@ -135,14 +197,11 @@ export default function AwardedProposals() {
                                 )}
 
                                 <div className="flex items-center gap-3 pt-3 border-t border-gray-100">
-                                    <Link href={`/proposals/${p.id}`}
-                                        className="text-xs text-blue-600 hover:underline">View Proposal</Link>
+                                    <Link href={`/proposals/${p.id}`} className="text-xs text-blue-600 hover:underline">View Proposal</Link>
                                     {p.award && (
-                                        <Link href={`/proposals/${p.id}/award`}
-                                            className="text-xs text-emerald-600 hover:underline">Award Details</Link>
+                                        <Link href={`/proposals/${p.id}/award`} className="text-xs text-emerald-600 hover:underline">Award Details</Link>
                                     )}
-                                    <Link href={`/budget-requests?proposal_id=${p.id}`}
-                                        className="text-xs text-gray-500 hover:underline">Budget Requests</Link>
+                                    <Link href={`/budget-requests?proposal_id=${p.id}`} className="text-xs text-gray-500 hover:underline">Budget Requests</Link>
                                 </div>
                             </div>
                         ))}

@@ -4,9 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Enums\Feature;
 use App\Http\Controllers\Controller;
+use App\Models\AppSetting;
 use App\Services\FeatureService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 class FeatureController extends Controller
 {
@@ -18,17 +20,17 @@ class FeatureController extends Controller
         $enabled = $this->featureService->getEnabledFeatures();
 
         $features = array_map(fn (Feature $f) => [
-            'slug'        => $f->value,
-            'label'       => $f->label(),
+            'slug' => $f->value,
+            'label' => $f->label(),
             'description' => $f->description(),
-            'enabled'     => in_array($f->value, $enabled),
+            'enabled' => in_array($f->value, $enabled),
         ], Feature::cases());
 
         return response()->json([
-            'data'    => $features,
+            'data' => $features,
             'message' => 'Features retrieved.',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ]);
     }
 
@@ -36,7 +38,7 @@ class FeatureController extends Controller
     public function toggle(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'slug'    => ['required', 'string', 'in:' . implode(',', array_column(Feature::cases(), 'value'))],
+            'slug' => ['required', 'string', 'in:'.implode(',', array_column(Feature::cases(), 'value'))],
             'enabled' => ['required', 'boolean'],
         ]);
 
@@ -51,10 +53,10 @@ class FeatureController extends Controller
         $this->featureService->setEnabledFeatures($updated);
 
         return response()->json([
-            'data'    => ['enabled_features' => array_values($updated)],
+            'data' => ['enabled_features' => array_values($updated)],
             'message' => 'Feature updated.',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ]);
     }
 
@@ -62,17 +64,56 @@ class FeatureController extends Controller
     public function update(Request $request): JsonResponse
     {
         $validated = $request->validate([
-            'features'   => ['required', 'array'],
-            'features.*' => ['string', 'in:' . implode(',', array_column(Feature::cases(), 'value'))],
+            'features' => ['present', 'array'],
+            'features.*' => ['string', 'in:'.implode(',', array_column(Feature::cases(), 'value'))],
         ]);
 
-        $this->featureService->setEnabledFeatures($validated['features']);
+        $this->featureService->setEnabledFeatures($validated['features'] ?? []);
 
         return response()->json([
-            'data'    => ['enabled_features' => array_values($validated['features'])],
+            'data' => ['enabled_features' => array_values($validated['features'])],
             'message' => 'Feature configuration saved.',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
+        ]);
+    }
+
+    /** Get the list of explicitly disabled sub-features. */
+    public function getDisabledSubFeatures(): JsonResponse
+    {
+        $stored = AppSetting::where('key', 'disabled_sub_features')->value('value');
+        $disabled = $stored ? (json_decode($stored, true) ?? []) : [];
+
+        return response()->json([
+            'data' => $disabled,
+            'message' => 'Sub-feature configuration retrieved.',
+            'errors' => [],
+            'meta' => [],
+        ]);
+    }
+
+    /** Replace the full list of disabled sub-features. */
+    public function updateDisabledSubFeatures(Request $request): JsonResponse
+    {
+        $request->validate([
+            'disabled' => ['present', 'array'],
+            'disabled.*' => ['string'],
+        ]);
+
+        $disabled = array_values($request->input('disabled', []));
+
+        AppSetting::updateOrCreate(
+            ['key' => 'disabled_sub_features'],
+            ['value' => json_encode($disabled)]
+        );
+
+        Cache::forget('inertia_disabled_sub_features');
+
+        return response()->json([
+            'data' => $disabled,
+            'message' => 'Sub-feature configuration saved.',
+            'errors' => [],
+            'meta' => [],
         ]);
     }
 }

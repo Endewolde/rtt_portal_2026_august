@@ -16,9 +16,9 @@ class ProposalCallService
     public function create(array $data, User $createdBy): ProposalCall
     {
         $data['created_by'] = $createdBy->id;
-        $data['slug']       = Str::slug($data['title']).'-'.time();
-        $data['status']     = 'draft';
-        $data['is_open']    = false;
+        $data['slug'] = Str::slug($data['title']).'-'.time();
+        $data['status'] = 'draft';
+        $data['is_open'] = false;
 
         return ProposalCall::create($data);
     }
@@ -81,11 +81,14 @@ class ProposalCallService
         // Always refresh so we see the deadline just saved by the caller.
         $call = $call->fresh();
 
-        if ($call->status === 'active') {
+        // Block only when the call is genuinely active (status=active AND deadline in the future).
+        // A call whose DB status is still 'active' but whose deadline has passed is effectively
+        // expired (ProposalCallResource returns 'expired' for it), so it should be reopenable.
+        if ($call->status === 'active' && ! $call->end_date->isPast()) {
             throw new \Exception('This call is already active.');
         }
 
-        // Block reopen only if the (freshly saved) deadline is still in the past.
+        // Block reopen if the (freshly saved) deadline is still in the past.
         if ($call->end_date->isPast()) {
             throw new \Exception(
                 'Cannot reopen: the deadline '.$call->end_date->format('d M Y H:i').
