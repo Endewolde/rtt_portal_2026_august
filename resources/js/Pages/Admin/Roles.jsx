@@ -1,30 +1,95 @@
-import { useState, useEffect } from 'react';
-import { ShieldCheck, Plus, Trash2, RefreshCw, Save } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import {
+    ShieldCheck, Plus, Trash2, RefreshCw, Save,
+    Pencil, Check, X, Users, Lock, Unlock, Search,
+} from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import api from '../../lib/api';
 import { useToast } from '../../Components/Toast';
+import ConfirmDialog from '../../Components/ConfirmDialog';
+import { cn } from '../../lib/utils';
+
+// Roles the backend protects from delete/rename
+const SYSTEM_ROLES = [
+    'admin', 'central_officer', 'research_officer', 'community_officer',
+    'technology_officer', 'college_officer', 'finance_officer', 'support_officer', 'staff',
+];
+
+const ROLE_DESCRIPTIONS = {
+    admin:              'High-level access to users, roles, settings, and all proposals.',
+    central_officer:    'Cross-college oversight for proposals, reviews, and budget.',
+    college_officer:    'Assigns reviewers and manages workflow for their assigned college.',
+    finance_officer:    'Approves and disburses budget requests scoped to their college.',
+    research_officer:   'Manages research proposals across all colleges.',
+    community_officer:  'Manages community engagement proposals.',
+    technology_officer: 'Manages technology transfer proposals.',
+    support_officer:    'Handles disbursements, settlements, and finance support tasks.',
+    staff:              'Creates and submits proposals, participates in reviews.',
+    guest:              'Read-only access to public content.',
+};
+
+const ROLE_GRADIENTS = {
+    admin:              'from-rose-500 to-pink-600',
+    central_officer:    'from-violet-500 to-purple-600',
+    college_officer:    'from-teal-500 to-emerald-600',
+    finance_officer:    'from-amber-500 to-yellow-500',
+    research_officer:   'from-indigo-500 to-blue-600',
+    community_officer:  'from-pink-500 to-fuchsia-600',
+    technology_officer: 'from-cyan-500 to-sky-600',
+    support_officer:    'from-orange-400 to-amber-500',
+    staff:              'from-emerald-500 to-teal-600',
+    guest:              'from-gray-400 to-gray-500',
+    default:            'from-slate-500 to-gray-600',
+};
+
+// Resources and the actions that exist for each
+const RESOURCE_ORDER = [
+    'proposals', 'proposal_calls', 'reviews', 'review_assignments', 'defence_sessions',
+    'budget_requests', 'budget_allocations', 'disbursements', 'settlements',
+    'midterm_evaluations', 'completion_workshops', 'research_outputs',
+    'repository', 'reports', 'complaints', 'users', 'roles', 'colleges',
+    'departments', 'settings', 'awards', 'audit_logs', 'features',
+];
 
 export default function Roles() {
     const { success, error } = useToast();
-    const [roles, setRoles]               = useState([]);
-    const [permissions, setPermissions]   = useState([]);
-    const [selectedRole, setSelectedRole] = useState(null);
-    const [selectedPerms, setSelectedPerms] = useState([]);
-    const [loading, setLoading]           = useState(true);
-    const [saving, setSaving]             = useState(false);
-    const [newRoleName, setNewRoleName]   = useState('');
-    const [creating, setCreating]         = useState(false);
+
+    const [roles, setRoles]         = useState([]);
+    const [permissions, setPerms]   = useState([]);
+    const [selectedRole, setSelected] = useState(null);
+    const [selectedPerms, setSelPerms] = useState([]);
+    const [loading, setLoading]     = useState(true);
+    const [saving, setSaving]       = useState(false);
+    const [search, setSearch]       = useState('');
+
+    // Create
+    const [newName, setNewName]     = useState('');
+    const [creating, setCreating]   = useState(false);
+
+    // Rename
+    const [editId, setEditId]       = useState(null);
+    const [editName, setEditName]   = useState('');
+    const renameRef                 = useRef(null);
+
+    // Delete
+    const [deleteTarget, setDeleteTarget] = useState(null);
+
+    useEffect(() => {
+        if (editId && renameRef.current) {
+            renameRef.current.focus();
+            renameRef.current.select();
+        }
+    }, [editId]);
 
     const load = async () => {
         setLoading(true);
         try {
-            const [rolesRes, permsRes] = await Promise.all([api.get('/roles'), api.get('/permissions')]);
-            const roles = rolesRes.data?.data ?? [];
-            const perms = permsRes.data?.data ?? [];
-            setRoles(Array.isArray(roles) ? roles : []);
-            setPermissions(Array.isArray(perms) ? perms : []);
+            const [rRes, pRes] = await Promise.all([api.get('/roles'), api.get('/permissions')]);
+            const loaded = (rRes.data?.data ?? []).filter(r => r.name !== 'super_admin');
+            setRoles(Array.isArray(loaded) ? loaded : []);
+            setPerms(Array.isArray(pRes.data?.data) ? pRes.data.data : []);
         } catch (e) {
-            error('Failed to load roles: ' + (e.response?.data?.message ?? e.message ?? 'Unknown error'));
+            error('Failed to load: ' + (e.response?.data?.message ?? e.message));
         }
         setLoading(false);
     };
@@ -32,206 +97,407 @@ export default function Roles() {
     useEffect(() => { load(); }, []);
 
     const selectRole = async (role) => {
-        setSelectedRole(role);
+        if (editId) return;
+        setSelected(role);
         try {
             const res = await api.get(`/roles/${role.id}/permissions`);
-            setSelectedPerms(res.data?.data ?? []);
+            setSelPerms(res.data?.data ?? []);
         } catch { error('Failed to load permissions.'); }
     };
 
-    const savePermissions = async () => {
+    const savePerms = async () => {
         if (!selectedRole) return;
         setSaving(true);
         try {
             await api.put(`/roles/${selectedRole.id}/permissions`, { permissions: selectedPerms });
-            success('Permissions updated.');
+            success('Permissions saved.');
             load();
         } catch (e) { error(e.response?.data?.message || 'Failed to save.'); }
         setSaving(false);
     };
 
     const createRole = async () => {
-        if (!newRoleName.trim()) return;
+        const name = newName.trim().toLowerCase().replace(/\s+/g, '_');
+        if (!name) return;
         setCreating(true);
         try {
-            await api.post('/roles', { name: newRoleName.trim() });
-            success('Role created.');
-            setNewRoleName('');
-            load();
+            const res = await api.post('/roles', { name });
+            success(`Role "${name}" created.`);
+            setNewName('');
+            await load();
+            // Auto-select the new role
+            if (res.data?.data) selectRole(res.data.data);
         } catch (e) { error(e.response?.data?.message || 'Failed to create role.'); }
         setCreating(false);
     };
 
-    const deleteRole = async (role) => {
-        try {
-            await api.delete(`/roles/${role.id}`);
-            success('Role deleted.');
-            if (selectedRole?.id === role.id) setSelectedRole(null);
-            load();
-        } catch (e) { error(e.response?.data?.message || 'Cannot delete role.'); }
+    const startRename = (e, role) => {
+        e.stopPropagation();
+        setEditId(role.id);
+        setEditName(role.name);
     };
 
-    const refreshPermissions = async () => {
+    const cancelRename = () => { setEditId(null); setEditName(''); };
+
+    const confirmRename = async (role) => {
+        const name = editName.trim().toLowerCase().replace(/\s+/g, '_');
+        if (!name || name === role.name) { cancelRename(); return; }
+        try {
+            await api.put(`/roles/${role.id}`, { name });
+            success(`Renamed to "${name}".`);
+            if (selectedRole?.id === role.id) setSelected(r => ({ ...r, name }));
+            load();
+        } catch (e) { error(e.response?.data?.message || 'Rename failed.'); }
+        setEditId(null);
+    };
+
+    const deleteRole = async () => {
+        try {
+            await api.delete(`/roles/${deleteTarget.id}`);
+            success('Role deleted.');
+            if (selectedRole?.id === deleteTarget.id) setSelected(null);
+            load();
+        } catch (e) { error(e.response?.data?.message || 'Cannot delete role.'); }
+        setDeleteTarget(null);
+    };
+
+    const refreshPerms = async () => {
         try {
             await api.post('/permissions/refresh');
             success('Permissions refreshed from seeder.');
             load();
-        } catch (e) { error(e.response?.data?.message || 'Failed to refresh.'); }
+        } catch (e) { error(e.response?.data?.message || 'Refresh failed.'); }
     };
 
-    const togglePerm = (name) => setSelectedPerms(p =>
-        p.includes(name) ? p.filter(x => x !== name) : [...p, name]
-    );
-
-    const toggleGroup = (perms, checked) => {
+    const togglePerm  = (name) => setSelPerms(p => p.includes(name) ? p.filter(x => x !== name) : [...p, name]);
+    const toggleGroup = (perms, on) => {
         const names = perms.map(p => p.name);
-        setSelectedPerms(prev =>
-            checked
-                ? [...new Set([...prev, ...names])]
-                : prev.filter(p => !names.includes(p))
-        );
+        setSelPerms(prev => on ? [...new Set([...prev, ...names])] : prev.filter(p => !names.includes(p)));
     };
 
-    // Group permissions by resource (e.g. "proposals.view" → "proposals")
-    const grouped = permissions.reduce((acc, perm) => {
-        const resource = perm.name.split('.')[0];
-        if (!acc[resource]) acc[resource] = [];
-        acc[resource].push(perm);
+    // Group permissions by resource in the defined order
+    const grouped = permissions.reduce((acc, p) => {
+        const res = p.name.split('.')[0];
+        if (!acc[res]) acc[res] = [];
+        acc[res].push(p);
         return acc;
     }, {});
 
-    const SYSTEM_ROLES = [
-        'super_admin', 'central_office', 'college_admin', 'reviewer',
-        'pi', 'finance', 'department_head', 'guest',
-        'staff', 'college_officer', 'research_officer', 'community_officer', 'technology_officer',
-    ];
+    const resourceOrder = [...RESOURCE_ORDER.filter(r => grouped[r]), ...Object.keys(grouped).filter(r => !RESOURCE_ORDER.includes(r)).sort()];
 
-    const ROLE_DESCRIPTIONS = {
-        super_admin:        'Full system access. Can manage all users, roles, settings.',
-        central_office:     'Manages all proposals across all colleges and categories.',
-        college_admin:      'Manages proposals within their assigned college only.',
-        department_head:    'Views proposals and reports for their department.',
-        finance:            'Manages disbursements and settlements.',
-        reviewer:           'Reviews assigned proposals and submits scores.',
-        pi:                 'Principal Investigator — creates and submits proposals.',
-        guest:              'Read-only access to public content.',
-        staff:              'Can apply for proposals and review assigned proposals.',
-        college_officer:    'Assigns reviewers and manages workflow for own college.',
-        research_officer:   'Manages research proposals across all colleges.',
-        community_officer:  'Manages community engagement proposals across all colleges.',
-        technology_officer: 'Manages technology transfer proposals across all colleges.',
-    };
+    const isSystem = (name) => SYSTEM_ROLES.includes(name);
+
+    const filteredRoles = roles.filter(r =>
+        !search || r.name.includes(search.toLowerCase()) || r.name.replace(/_/g, ' ').includes(search.toLowerCase())
+    );
+
+    const totalPermsSelected = selectedPerms.length;
+    const totalPermsAvailable = permissions.length;
 
     return (
         <AppLayout breadcrumb="Roles & Permissions">
-            <div className="max-w-6xl mx-auto">
-                <div className="flex items-center justify-between mb-6">
+            <div className="max-w-7xl mx-auto space-y-5">
+
+                {/* ── Header ──────────────────────────────────────────────── */}
+                <div className="flex items-center justify-between">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                            <ShieldCheck size={22} className="text-blue-600" /> Roles &amp; Permissions
+                        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2.5">
+                            <div className="h-9 w-9 rounded-xl bg-indigo-600 flex items-center justify-center shadow-sm shadow-indigo-200">
+                                <ShieldCheck size={18} className="text-white" />
+                            </div>
+                            Roles &amp; Permissions
                         </h1>
-                        <p className="text-sm text-gray-500 mt-1">Manage roles and their permissions</p>
+                        <p className="text-sm text-gray-500 mt-1">
+                            {roles.length} roles · {permissions.length} permissions
+                        </p>
                     </div>
-                    <button onClick={refreshPermissions}
-                        className="flex items-center gap-1.5 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">
+                    <button onClick={refreshPerms}
+                        className="flex items-center gap-1.5 px-3.5 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors shadow-sm">
                         <RefreshCw size={14} /> Refresh Permissions
                     </button>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    {/* Left: roles list */}
-                    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-                        <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
-                            <h2 className="text-sm font-semibold text-gray-700">Roles</h2>
+                <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-5 items-start">
+
+                    {/* ── Left: role list ──────────────────────────────────── */}
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+
+                        {/* Search */}
+                        <div className="px-4 pt-4 pb-3 border-b border-gray-100">
+                            <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2 focus-within:ring-2 focus-within:ring-indigo-500 transition-all">
+                                <Search size={13} className="text-gray-400 shrink-0" />
+                                <input
+                                    value={search}
+                                    onChange={e => setSearch(e.target.value)}
+                                    placeholder="Search roles…"
+                                    className="flex-1 text-sm outline-none bg-transparent text-gray-700 placeholder-gray-400"
+                                />
+                                {search && <button onClick={() => setSearch('')} className="text-gray-400 hover:text-gray-600"><X size={12} /></button>}
+                            </div>
                         </div>
 
+                        {/* List */}
                         {loading ? (
-                            <div className="p-4 text-center"><div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto" /></div>
-                        ) : (
-                            <div className="divide-y divide-gray-100">
-                                {roles.map(role => (
-                                    <div key={role.id}
-                                        onClick={() => selectRole(role)}
-                                        className={`flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-blue-50 transition-colors ${selectedRole?.id === role.id ? 'bg-blue-50 border-l-4 border-l-blue-600' : ''}`}>
-                                        <div>
-                                            <p className="text-sm font-medium text-gray-900 capitalize">{role.name.replace(/_/g, ' ')}</p>
-                                            <p className="text-xs text-gray-400">{role.permissions_count} perms · {role.users_count} users</p>
-                                            {ROLE_DESCRIPTIONS[role.name] && (
-                                                <p className="text-xs text-gray-500 mt-0.5 leading-snug">{ROLE_DESCRIPTIONS[role.name]}</p>
-                                            )}
+                            <div className="p-6 space-y-3">
+                                {[...Array(6)].map((_, i) => (
+                                    <div key={i} className="flex items-center gap-3 animate-pulse">
+                                        <div className="h-9 w-9 rounded-xl bg-gray-100 shrink-0" />
+                                        <div className="flex-1 space-y-1.5">
+                                            <div className="h-3 w-28 bg-gray-100 rounded" />
+                                            <div className="h-2.5 w-40 bg-gray-100 rounded" />
                                         </div>
-                                        {!SYSTEM_ROLES.includes(role.name) && (
-                                            <button onClick={e => { e.stopPropagation(); deleteRole(role); }}
-                                                className="p-1 text-gray-400 hover:text-red-600 rounded">
-                                                <Trash2 size={13} />
-                                            </button>
-                                        )}
                                     </div>
                                 ))}
                             </div>
+                        ) : (
+                            <div className="divide-y divide-gray-50 overflow-y-auto max-h-130">
+                                {filteredRoles.map(role => {
+                                    const isSelected = selectedRole?.id === role.id;
+                                    const gradient   = ROLE_GRADIENTS[role.name] ?? ROLE_GRADIENTS.default;
+                                    const system     = isSystem(role.name);
+
+                                    return (
+                                        <div
+                                            key={role.id}
+                                            onClick={() => selectRole(role)}
+                                            className={cn(
+                                                'group flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors',
+                                                isSelected ? 'bg-indigo-50 border-l-[3px] border-l-indigo-600' : 'hover:bg-gray-50 border-l-[3px] border-l-transparent'
+                                            )}
+                                        >
+                                            {/* Gradient avatar */}
+                                            <div className={cn(
+                                                `h-9 w-9 rounded-xl bg-linear-to-br ${gradient} shrink-0`,
+                                                'flex items-center justify-center text-white text-xs font-bold shadow-sm'
+                                            )}>
+                                                {role.name.slice(0, 2).toUpperCase()}
+                                            </div>
+
+                                            {/* Name / inline edit */}
+                                            <div className="flex-1 min-w-0">
+                                                {editId === role.id ? (
+                                                    <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                                                        <input
+                                                            ref={renameRef}
+                                                            value={editName}
+                                                            onChange={e => setEditName(e.target.value)}
+                                                            onKeyDown={e => {
+                                                                if (e.key === 'Enter') confirmRename(role);
+                                                                if (e.key === 'Escape') cancelRename();
+                                                            }}
+                                                            className="flex-1 border border-indigo-400 rounded-lg px-2 py-0.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white min-w-0"
+                                                        />
+                                                        <button onClick={() => confirmRename(role)} className="p-0.5 text-green-600 hover:text-green-700 shrink-0">
+                                                            <Check size={13} />
+                                                        </button>
+                                                        <button onClick={cancelRename} className="p-0.5 text-gray-400 hover:text-gray-600 shrink-0">
+                                                            <X size={13} />
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <p className={cn('text-sm font-semibold capitalize truncate', isSelected ? 'text-indigo-800' : 'text-gray-800')}>
+                                                        {role.name.replace(/_/g, ' ')}
+                                                    </p>
+                                                )}
+                                                <div className="flex items-center gap-2 mt-0.5">
+                                                    <span className="text-[10px] text-gray-400">
+                                                        {role.permissions_count ?? 0} perms
+                                                    </span>
+                                                    <span className="text-gray-200">·</span>
+                                                    <span className="flex items-center gap-0.5 text-[10px] text-gray-400">
+                                                        <Users size={9} /> {role.users_count ?? 0}
+                                                    </span>
+                                                    {system
+                                                        ? <span className="flex items-center gap-0.5 text-[10px] text-gray-300"><Lock size={9} /> system</span>
+                                                        : <span className="flex items-center gap-0.5 text-[10px] text-indigo-300"><Unlock size={9} /> custom</span>
+                                                    }
+                                                </div>
+                                            </div>
+
+                                            {/* Actions — only for non-system, non-editing */}
+                                            {!system && editId !== role.id && (
+                                                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                                                    <button
+                                                        onClick={e => startRename(e, role)}
+                                                        title="Rename"
+                                                        className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                                                    >
+                                                        <Pencil size={12} />
+                                                    </button>
+                                                    <button
+                                                        onClick={e => { e.stopPropagation(); setDeleteTarget(role); }}
+                                                        title="Delete"
+                                                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                                    >
+                                                        <Trash2 size={12} />
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+
+                                {filteredRoles.length === 0 && (
+                                    <p className="px-4 py-8 text-sm text-center text-gray-400">
+                                        {search ? 'No roles match your search.' : 'No roles found.'}
+                                    </p>
+                                )}
+                            </div>
                         )}
 
-                        {/* Create role */}
-                        <div className="px-4 py-3 border-t border-gray-100">
+                        {/* Create new role */}
+                        <div className="px-4 py-4 border-t border-gray-100 bg-gray-50/50 mt-auto">
+                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-2">
+                                Create Custom Role
+                            </p>
                             <div className="flex gap-2">
-                                <input value={newRoleName} onChange={e => setNewRoleName(e.target.value)}
-                                    placeholder="New role name…"
+                                <input
+                                    value={newName}
+                                    onChange={e => setNewName(e.target.value)}
                                     onKeyDown={e => e.key === 'Enter' && createRole()}
-                                    className="flex-1 border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                                <button onClick={createRole} disabled={creating || !newRoleName.trim()}
-                                    className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-60">
-                                    <Plus size={14} />
+                                    placeholder="e.g. data_analyst"
+                                    className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                                />
+                                <button
+                                    onClick={createRole}
+                                    disabled={creating || !newName.trim()}
+                                    className="px-3.5 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 transition-colors shadow-sm shadow-indigo-200"
+                                >
+                                    {creating ? <RefreshCw size={14} className="animate-spin" /> : <Plus size={14} />}
                                 </button>
                             </div>
+                            <p className="text-[10px] text-gray-400 mt-1.5">
+                                Spaces become underscores. Then assign permissions on the right.
+                            </p>
                         </div>
                     </div>
 
-                    {/* Right: permissions */}
-                    <div className="lg:col-span-2 bg-white border border-gray-200 rounded-xl overflow-hidden">
-                        <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
-                            <h2 className="text-sm font-semibold text-gray-700">
-                                {selectedRole ? `Permissions for: ${selectedRole.name.replace(/_/g, ' ')}` : 'Select a role'}
-                            </h2>
+                    {/* ── Right: permissions editor ────────────────────────── */}
+                    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+
+                        {/* Header */}
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                            {selectedRole ? (
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className={cn(
+                                        `h-8 w-8 rounded-xl bg-linear-to-br ${ROLE_GRADIENTS[selectedRole.name] ?? ROLE_GRADIENTS.default}`,
+                                        'flex items-center justify-center text-white text-xs font-bold shrink-0'
+                                    )}>
+                                        {selectedRole.name.slice(0, 2).toUpperCase()}
+                                    </div>
+                                    <div className="min-w-0">
+                                        <h2 className="text-sm font-bold text-gray-900 capitalize truncate">
+                                            {selectedRole.name.replace(/_/g, ' ')}
+                                        </h2>
+                                        <p className="text-[10px] text-gray-400">
+                                            {totalPermsSelected} / {totalPermsAvailable} permissions enabled
+                                        </p>
+                                    </div>
+                                </div>
+                            ) : (
+                                <p className="text-sm text-gray-400">← Select a role to manage its permissions</p>
+                            )}
                             {selectedRole && (
-                                <button onClick={savePermissions} disabled={saving}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-60">
-                                    <Save size={13} /> {saving ? 'Saving…' : 'Save Permissions'}
+                                <button
+                                    onClick={savePerms}
+                                    disabled={saving}
+                                    className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60 transition-colors shadow-sm shadow-indigo-200 shrink-0"
+                                >
+                                    <Save size={13} /> {saving ? 'Saving…' : 'Save'}
                                 </button>
                             )}
                         </div>
 
+                        {/* Permission progress bar */}
+                        {selectedRole && (
+                            <div className="px-5 py-2 border-b border-gray-50 bg-gray-50/50">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                        <div
+                                            className="h-full bg-indigo-500 rounded-full transition-all duration-300"
+                                            style={{ width: `${totalPermsAvailable ? (totalPermsSelected / totalPermsAvailable) * 100 : 0}%` }}
+                                        />
+                                    </div>
+                                    <span className="text-[10px] text-gray-400 shrink-0 tabular-nums">
+                                        {Math.round(totalPermsAvailable ? (totalPermsSelected / totalPermsAvailable) * 100 : 0)}%
+                                    </span>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Permissions grid */}
                         {!selectedRole ? (
-                            <div className="p-12 text-center text-gray-400 text-sm">← Select a role to manage its permissions</div>
+                            <div className="flex-1 flex flex-col items-center justify-center py-20 text-center px-6">
+                                <div className="h-16 w-16 rounded-2xl bg-indigo-50 flex items-center justify-center mb-4">
+                                    <ShieldCheck size={28} className="text-indigo-300" />
+                                </div>
+                                <p className="text-sm font-semibold text-gray-500">No role selected</p>
+                                <p className="text-xs text-gray-400 mt-1">Click a role on the left to view and edit its permissions.</p>
+                            </div>
                         ) : (
-                            <div className="p-4 overflow-y-auto max-h-150">
-                                {Object.keys(grouped).length === 0 ? (
-                                    <p className="text-sm text-gray-400 italic">No permissions found. Click Refresh to load from seeder.</p>
+                            <div className="p-5 overflow-y-auto max-h-[calc(100vh-240px)]">
+                                {resourceOrder.length === 0 ? (
+                                    <div className="text-center py-12">
+                                        <p className="text-sm text-gray-400">No permissions found.</p>
+                                        <button onClick={refreshPerms} className="mt-2 text-xs text-indigo-600 hover:underline">
+                                            Refresh from seeder
+                                        </button>
+                                    </div>
                                 ) : (
-                                    <div className="space-y-5">
-                                        {Object.entries(grouped).sort().map(([resource, perms]) => {
-                                            const allChecked = perms.every(p => selectedPerms.includes(p.name));
-                                            const someChecked = perms.some(p => selectedPerms.includes(p.name));
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        {resourceOrder.map(resource => {
+                                            const perms      = grouped[resource] ?? [];
+                                            const allOn      = perms.every(p => selectedPerms.includes(p.name));
+                                            const someOn     = perms.some(p => selectedPerms.includes(p.name));
+                                            const onCount    = perms.filter(p => selectedPerms.includes(p.name)).length;
+
                                             return (
-                                                <div key={resource}>
-                                                    <div className="flex items-center gap-2 mb-2">
-                                                        <input type="checkbox"
-                                                            checked={allChecked}
-                                                            ref={el => el && (el.indeterminate = !allChecked && someChecked)}
+                                                <div key={resource}
+                                                    className={cn(
+                                                        'rounded-xl border p-3.5 transition-colors',
+                                                        someOn ? 'border-indigo-100 bg-indigo-50/40' : 'border-gray-100 bg-gray-50/30'
+                                                    )}
+                                                >
+                                                    {/* Resource header */}
+                                                    <div className="flex items-center gap-2 mb-2.5">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={allOn}
+                                                            ref={el => el && (el.indeterminate = !allOn && someOn)}
                                                             onChange={e => toggleGroup(perms, e.target.checked)}
-                                                            className="w-4 h-4 text-blue-600 rounded" />
-                                                        <label className="text-sm font-semibold text-gray-800 capitalize">{resource}</label>
-                                                        <span className="text-xs text-gray-400">({perms.filter(p => selectedPerms.includes(p.name)).length}/{perms.length})</span>
+                                                            className="w-3.5 h-3.5 text-indigo-600 rounded border-gray-300 shrink-0"
+                                                        />
+                                                        <span className="text-xs font-bold text-gray-700 capitalize flex-1">
+                                                            {resource.replace(/_/g, ' ')}
+                                                        </span>
+                                                        <span className={cn(
+                                                            'text-[10px] font-semibold px-1.5 py-0.5 rounded-full',
+                                                            onCount > 0 ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-100 text-gray-400'
+                                                        )}>
+                                                            {onCount}/{perms.length}
+                                                        </span>
                                                     </div>
-                                                    <div className="ml-6 grid grid-cols-2 md:grid-cols-3 gap-1">
-                                                        {perms.map(perm => (
-                                                            <label key={perm.name} className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer hover:text-gray-900">
-                                                                <input type="checkbox"
-                                                                    checked={selectedPerms.includes(perm.name)}
-                                                                    onChange={() => togglePerm(perm.name)}
-                                                                    className="w-3.5 h-3.5 text-blue-600 rounded" />
-                                                                {perm.name.split('.').slice(1).join('.')}
-                                                            </label>
-                                                        ))}
+
+                                                    {/* Action checkboxes */}
+                                                    <div className="flex flex-wrap gap-1.5 pl-5">
+                                                        {perms.map(p => {
+                                                            const action = p.name.split('.').slice(1).join('.');
+                                                            const on     = selectedPerms.includes(p.name);
+                                                            return (
+                                                                <button
+                                                                    key={p.name}
+                                                                    onClick={() => togglePerm(p.name)}
+                                                                    className={cn(
+                                                                        'text-[10px] font-medium px-2 py-0.5 rounded-md border transition-colors capitalize',
+                                                                        on
+                                                                            ? 'bg-indigo-600 text-white border-indigo-600'
+                                                                            : 'bg-white text-gray-500 border-gray-200 hover:border-indigo-300 hover:text-indigo-600'
+                                                                    )}
+                                                                >
+                                                                    {action}
+                                                                </button>
+                                                            );
+                                                        })}
                                                     </div>
                                                 </div>
                                             );
@@ -243,6 +509,17 @@ export default function Roles() {
                     </div>
                 </div>
             </div>
+
+            {deleteTarget && (
+                <ConfirmDialog
+                    open
+                    title="Delete Role"
+                    description={`Permanently delete "${deleteTarget.name}"? Users assigned this role will lose it immediately.`}
+                    confirmLabel="Delete"
+                    onConfirm={deleteRole}
+                    onCancel={() => setDeleteTarget(null)}
+                />
+            )}
         </AppLayout>
     );
 }

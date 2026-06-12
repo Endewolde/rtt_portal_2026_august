@@ -182,6 +182,7 @@ class UserController extends Controller
 
         $request->validate([
             'name' => 'required|string|max:255',
+            'title' => 'nullable|string|max:50',
             'email' => 'required|email|unique:users,email',
             'password' => 'required|string|min:8',
             'role' => 'required|string|exists:roles,name',
@@ -190,10 +191,13 @@ class UserController extends Controller
             'employee_id' => 'nullable|string|max:50',
             'phone' => 'nullable|string|max:30',
             'gender' => 'nullable|in:male,female,other',
+            'expertise' => 'nullable|array',
+            'expertise.*' => 'string|max:100',
         ]);
 
         $user = User::create([
             'name' => $request->name,
+            'title' => $request->title,
             'email' => $request->email,
             'password' => Hash::make($request->password),
             'college_id' => $request->college_id,
@@ -201,6 +205,7 @@ class UserController extends Controller
             'employee_id' => $request->employee_id,
             'phone' => $request->phone,
             'gender' => $request->gender,
+            'expertise' => $request->expertise,
             'status' => 'active',
             'email_verified_at' => now(),
         ]);
@@ -239,16 +244,24 @@ class UserController extends Controller
         $user = User::findOrFail($id);
         $request->validate([
             'name' => 'sometimes|string|max:255',
+            'title' => 'nullable|string|max:50',
             'email' => 'sometimes|email|unique:users,email,'.$id,
+            'role' => 'nullable|string|exists:roles,name',
             'college_id' => 'nullable|uuid|exists:colleges,id',
             'department_id' => 'nullable|uuid|exists:departments,id',
             'employee_id' => 'nullable|string|max:50',
             'phone' => 'nullable|string|max:30',
             'gender' => 'nullable|in:male,female,other',
             'status' => 'sometimes|in:active,inactive,suspended',
+            'expertise' => 'nullable|array',
+            'expertise.*' => 'string|max:100',
         ]);
 
-        $user->update($request->only('name', 'email', 'college_id', 'department_id', 'employee_id', 'phone', 'gender', 'status'));
+        $user->update($request->only('name', 'title', 'email', 'college_id', 'department_id', 'employee_id', 'phone', 'gender', 'status', 'expertise'));
+
+        if ($request->filled('role')) {
+            $user->syncRoles([$request->role]);
+        }
 
         return response()->json(['data' => $user->fresh()->load('roles'), 'message' => 'User updated.', 'errors' => [], 'meta' => []]);
     }
@@ -488,7 +501,66 @@ class UserController extends Controller
             return response()->json(['message' => 'Cannot delete your own account.'], 422);
         }
 
-        $user->delete();
+        $uid = $user->id;
+
+        // Detect NOT NULL FK violations grouped into human-readable categories.
+        $blockers = array_filter([
+            'proposals or proposal documents' => DB::table('proposals')->where('pi_user_id', $uid)->orWhere('created_by', $uid)->exists()
+                || DB::table('proposal_calls')->where('created_by', $uid)->exists()
+                || DB::table('proposal_documents')->where('uploaded_by', $uid)->exists(),
+
+            'review or evaluation records' => DB::table('review_assignments')->where('reviewer_id', $uid)->orWhere('assigned_by', $uid)->exists()
+                || DB::table('defence_sessions')->where('scheduled_by', $uid)->exists()
+                || DB::table('midterm_evaluations')->where('scheduled_by', $uid)->exists()
+                || DB::table('completion_workshops')->where('scheduled_by', $uid)->exists(),
+
+            'finance records' => DB::table('budget_requests')->where('requested_by', $uid)->exists()
+                || DB::table('budget_allocations')->where('allocated_by', $uid)->exists()
+                || DB::table('budget_approvals')->where('approved_by', $uid)->exists()
+                || DB::table('budget_settlements')->where('submitted_by', $uid)->exists()
+                || DB::table('budget_transactions')->where('transacted_by', $uid)->exists()
+                || DB::table('disbursements')->where('disbursed_by', $uid)->exists()
+                || DB::table('payment_proofs')->where('uploaded_by', $uid)->exists()
+                || DB::table('awards')->where('approved_by', $uid)->exists(),
+
+            'complaints' => DB::table('complaints')->where('complainant_id', $uid)->exists(),
+
+            'activity logs or signed forms' => DB::table('workflow_logs')->where('actor_id', $uid)->exists()
+                || DB::table('form_signatures')->where('user_id', $uid)->exists()
+                || DB::table('form_templates')->where('created_by', $uid)->exists()
+                || DB::table('report_snapshots')->where('requested_by', $uid)->exists()
+                || DB::table('research_outputs')->where('recorded_by', $uid)->exists(),
+        ]);
+
+        if (! empty($blockers)) {
+            return response()->json([
+                'message' => 'Cannot delete this user — they have linked '.implode(', ', array_keys($blockers)).'. Remove or reassign this data first.',
+                'errors' => [],
+            ], 422);
+        }
+
+        DB::transaction(function () use ($user, $uid) {
+            // Delete user-owned records with NOT NULL FK
+            DB::table('notification_preferences')->where('user_id', $uid)->delete();
+            DB::table('proposal_members')->where('user_id', $uid)->delete();
+
+            // Revoke tokens
+            DB::table('personal_access_tokens')
+                ->where('tokenable_type', User::class)
+                ->where('tokenable_id', $uid)
+                ->delete();
+
+            // Nullify the two nullable FK columns
+            DB::table('budget_allocations')->where('approved_by', $uid)->update(['approved_by' => null]);
+            DB::table('midterm_evaluations')->where('scored_by', $uid)->update(['scored_by' => null]);
+            DB::table('resources')->where('created_by', $uid)->update(['created_by' => null]);
+
+            // Detach Spatie roles & permissions
+            $user->roles()->detach();
+            $user->permissions()->detach();
+
+            $user->forceDelete();
+        });
 
         return response()->json(['message' => 'User deleted.', 'errors' => [], 'meta' => []]);
     }

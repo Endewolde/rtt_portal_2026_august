@@ -4,10 +4,7 @@
 <body style="font-family:Arial,sans-serif;background:#f4f4f4;margin:0;padding:20px;">
 <div style="max-width:600px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;">
 
-  <div style="background:#1a365d;padding:24px;text-align:center;">
-    <h1 style="color:#fff;margin:0;font-size:20px;">Research &amp; Technology Transfer</h1>
-    <p style="color:#90cdf4;margin:4px 0 0;">Haramaya University</p>
-  </div>
+  @include('emails.partials.header')
 
   <div style="padding:32px;">
     <h2 style="color:#2d3748;">You Are a Co-Investigator</h2>
@@ -43,9 +40,7 @@
     </p>
   </div>
 
-  <div style="background:#f7fafc;padding:16px;text-align:center;">
-    <p style="color:#a0aec0;font-size:12px;margin:0;">RTT Platform — Haramaya University Research Office</p>
-  </div>
+  @include('emails.partials.footer')
 </div>
 </body>
 </html>

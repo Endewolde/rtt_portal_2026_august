@@ -96,11 +96,16 @@ const KEY_LABELS = {
     auto_backup_enabled: 'Auto Backup',
     backup_notify_email: 'Notify via Email', backup_notify_telegram: 'Notify via Telegram',
     backup_email_recipient: 'Backup Email Recipient', backup_telegram_chat_id: 'Telegram Chat ID',
+    sso_enabled: 'SSO Enabled',
+    google_client_id: 'Google Client ID', google_client_secret: 'Google Client Secret',
+    microsoft_client_id: 'Microsoft Client ID', microsoft_client_secret: 'Microsoft Client Secret',
+    microsoft_tenant_id: 'Azure Tenant ID',
     ldap_enabled: 'LDAP Enabled', ldap_host: 'LDAP Host',
-    oauth_enabled: 'OAuth Enabled', google_client_id: 'Google Client ID',
+    oauth_enabled: 'OAuth Enabled',
     webhook_url: 'Webhook URL',
     // Public site
     public_header_tagline:     'Header Tagline',
+    public_footer_tagline:     'Footer Tagline',
     public_hero_badge:         'Badge Text',
     public_hero_heading:       'Main Heading',
     public_hero_highlight:     'Highlighted Words',
@@ -132,6 +137,8 @@ const KEY_LABELS = {
     public_nav_item_3_label: 'Menu Item 3 Label', public_nav_item_3_href: 'Menu Item 3 URL', public_nav_item_3_show: 'Show Menu Item 3',
     public_nav_item_4_label: 'Menu Item 4 Label', public_nav_item_4_href: 'Menu Item 4 URL', public_nav_item_4_show: 'Show Menu Item 4',
     public_nav_item_5_label: 'Menu Item 5 Label', public_nav_item_5_href: 'Menu Item 5 URL', public_nav_item_5_show: 'Show Menu Item 5',
+    public_nav_item_6_label: 'Menu Item 6 Label', public_nav_item_6_href: 'Menu Item 6 URL', public_nav_item_6_show: 'Show Menu Item 6',
+    public_nav_item_7_label: 'Menu Item 7 Label', public_nav_item_7_href: 'Menu Item 7 URL', public_nav_item_7_show: 'Show Menu Item 7',
     // Downloads
     ...Object.fromEntries(
         Array.from({ length: 8 }, (_, i) => [
@@ -1144,6 +1151,7 @@ function PublicSitePanel({ values, onChange, onSave }) {
                     <p className="text-xs text-gray-400 ml-1">— top utility bar text</p>
                 </div>
                 {tf('public_header_tagline', 'string', 'Text shown in the thin bar above the main navigation (e.g. "WSU — Research & Technology Transfer Platform").')}
+                {tf('public_footer_tagline', 'string', 'Secondary text shown at the bottom-right of the footer (e.g. "Research & Technology Transfer Platform").')}
             </div>
 
             {/* ── Hero content ── */}
@@ -1167,7 +1175,7 @@ function PublicSitePanel({ values, onChange, onSave }) {
                     <h3 className="text-sm font-bold text-gray-800">Navigation Menu</h3>
                     <p className="text-xs text-gray-400 ml-1">— customise labels, links, and visibility</p>
                 </div>
-                {[1, 2, 3, 4, 5].map(n => {
+                {[1, 2, 3, 4, 5, 6, 7].map(n => {
                     const on = values[`public_nav_item_${n}_show`] !== 'false'
                     return (
                         <div key={n} className="py-3 border-b border-gray-100 last:border-0">
@@ -1382,6 +1390,174 @@ function PublicSitePanel({ values, onChange, onSave }) {
     )
 }
 
+// ─── Integration panel ────────────────────────────────────────────────────────
+
+function ProviderCard({ name, logo, enabledKey, credFields, values, onChange, onSave }) {
+    const [saving, setSaving] = useState({})
+    const { success, error }  = useToast()
+    const isEnabled = values[enabledKey] === 'true'
+
+    const toggleEnabled = async () => {
+        const next = isEnabled ? 'false' : 'true'
+        onChange(enabledKey, next)
+        try {
+            await onSave(enabledKey, next)
+            success(`${name} SSO ${next === 'true' ? 'enabled' : 'disabled'}.`)
+        } catch {
+            error('Failed to save.')
+        }
+    }
+
+    const saveField = async (key) => {
+        setSaving(p => ({ ...p, [key]: true }))
+        try {
+            await onSave(key, values[key] ?? '')
+            success(`"${KEY_LABELS[key] ?? key}" saved.`)
+        } catch {
+            error('Failed to save.')
+        }
+        setSaving(p => ({ ...p, [key]: false }))
+    }
+
+    return (
+        <div className={`bg-white border rounded-2xl overflow-hidden transition-all ${
+            isEnabled ? 'border-blue-300 shadow-sm shadow-blue-100' : 'border-gray-200'
+        }`}>
+            {/* Header */}
+            <div className={`flex items-center justify-between px-5 py-4 border-b ${
+                isEnabled ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-100'
+            }`}>
+                <div className="flex items-center gap-3">
+                    {logo}
+                    <div>
+                        <p className="text-sm font-bold text-gray-900">{name}</p>
+                        <p className={`text-xs ${isEnabled ? 'text-blue-600' : 'text-gray-400'}`}>
+                            {isEnabled ? 'SSO Enabled — login button visible' : 'Disabled — login button hidden'}
+                        </p>
+                    </div>
+                </div>
+                <button
+                    onClick={toggleEnabled}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                        isEnabled
+                            ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                    }`}
+                >
+                    {isEnabled ? <ToggleRight size={15} /> : <ToggleLeft size={15} />}
+                    {isEnabled ? 'Enabled' : 'Disabled'}
+                </button>
+            </div>
+
+            {/* Credential fields */}
+            <div className="px-5 py-2">
+                {credFields.map(({ key, type = 'string' }) => {
+                    const lbl = KEY_LABELS[key] ?? key
+                    const [show, setShow] = useState(false)
+                    return (
+                        <div key={key} className="py-3 border-b border-gray-100 last:border-0">
+                            <p className="text-sm font-medium text-gray-900 mb-1.5">{lbl}</p>
+                            <div className="flex gap-2">
+                                {type === 'password' ? (
+                                    <div className="relative flex-1">
+                                        <input
+                                            type={show ? 'text' : 'password'}
+                                            value={values[key] ?? ''}
+                                            onChange={e => onChange(key, e.target.value)}
+                                            placeholder={`Enter ${lbl.toLowerCase()}…`}
+                                            className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm
+                                                       focus:outline-none focus:ring-2 focus:ring-blue-500 pr-9"
+                                        />
+                                        <button onClick={() => setShow(s => !s)}
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                                            {show ? <EyeOff size={14} /> : <Eye size={14} />}
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <input
+                                        type="text"
+                                        value={values[key] ?? ''}
+                                        onChange={e => onChange(key, e.target.value)}
+                                        placeholder={`Enter ${lbl.toLowerCase()}…`}
+                                        className="flex-1 border border-gray-300 rounded-xl px-3 py-2 text-sm
+                                                   focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                    />
+                                )}
+                                <button
+                                    onClick={() => saveField(key)}
+                                    disabled={!!saving[key]}
+                                    className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-xl
+                                               text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 shrink-0">
+                                    {saving[key] ? <RefreshCw size={12} className="animate-spin" /> : <Save size={12} />}
+                                    {saving[key] ? 'Saving…' : 'Save'}
+                                </button>
+                            </div>
+                        </div>
+                    )
+                })}
+            </div>
+        </div>
+    )
+}
+
+const GOOGLE_LOGO = (
+    <svg viewBox="0 0 24 24" className="h-6 w-6 shrink-0">
+        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
+        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+    </svg>
+)
+
+const MICROSOFT_LOGO = (
+    <svg viewBox="0 0 24 24" className="h-6 w-6 shrink-0">
+        <path d="M11.4 2H2v9.4h9.4V2z" fill="#F25022"/>
+        <path d="M22 2h-9.4v9.4H22V2z" fill="#7FBA00"/>
+        <path d="M11.4 12.6H2V22h9.4v-9.4z" fill="#00A4EF"/>
+        <path d="M22 12.6h-9.4V22H22v-9.4z" fill="#FFB900"/>
+    </svg>
+)
+
+function IntegrationPanel({ values, onChange, onSave }) {
+    return (
+        <div className="space-y-4">
+            <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex gap-3">
+                <AlertTriangle size={15} className="text-amber-500 shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-700">
+                    <strong>Note:</strong> Enable a provider only after entering valid credentials. The login button appears immediately once enabled.
+                </p>
+            </div>
+
+            <ProviderCard
+                name="Google"
+                logo={GOOGLE_LOGO}
+                enabledKey="google_sso_enabled"
+                credFields={[
+                    { key: 'google_client_id',     type: 'string'   },
+                    { key: 'google_client_secret', type: 'password' },
+                ]}
+                values={values}
+                onChange={onChange}
+                onSave={onSave}
+            />
+
+            <ProviderCard
+                name="Microsoft"
+                logo={MICROSOFT_LOGO}
+                enabledKey="microsoft_sso_enabled"
+                credFields={[
+                    { key: 'microsoft_client_id',     type: 'string'   },
+                    { key: 'microsoft_client_secret', type: 'password' },
+                    { key: 'microsoft_tenant_id',     type: 'string'   },
+                ]}
+                values={values}
+                onChange={onChange}
+                onSave={onSave}
+            />
+        </div>
+    )
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
@@ -1586,6 +1762,12 @@ export default function SettingsPage() {
                                 onChange={handleChange}
                                 onSave={handleSave}
                                 colleges={colleges}
+                            />
+                        ) : activeSection === 'integration' ? (
+                            <IntegrationPanel
+                                values={values}
+                                onChange={handleChange}
+                                onSave={handleSave}
                             />
                         ) : (
                             <>
@@ -1869,16 +2051,6 @@ export default function SettingsPage() {
                                     </div>
                                 )}
 
-                                {/* ── Integration section notice ────────────────── */}
-                                {activeSection === 'integration' && (
-                                    <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex gap-3">
-                                        <AlertTriangle size={15} className="text-amber-500 shrink-0 mt-0.5" />
-                                        <p className="text-xs text-amber-700">
-                                            <strong>Note:</strong> Integration settings require additional server-side configuration.
-                                            Contact your system administrator before enabling LDAP or OAuth.
-                                        </p>
-                                    </div>
-                                )}
                             </>
                         )}
                     </div>

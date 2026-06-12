@@ -10,6 +10,7 @@ use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AwardController extends Controller
 {
@@ -121,6 +122,117 @@ class AwardController extends Controller
             'errors' => [],
             'meta' => [],
         ]);
+    }
+
+    public function exportAwarded(Request $request): StreamedResponse
+    {
+        $user = $request->user();
+
+        $roleCategories = [
+            'research_officer' => 'research',
+            'community_officer' => 'community_engagement',
+            'technology_officer' => 'technology_transfer',
+        ];
+
+        // Determine which categories this user may export
+        $allowedCategories = null; // null = all
+        foreach ($roleCategories as $role => $cat) {
+            if ($user->hasRole($role)) {
+                $allowedCategories = [$cat];
+                break;
+            }
+        }
+
+        // Admin/super_admin/central_officer can optionally filter by a specific category
+        $requestedCategory = $request->query('category');
+        if ($allowedCategories !== null && $requestedCategory && ! in_array($requestedCategory, $allowedCategories)) {
+            abort(403, 'You are not allowed to export this category.');
+        }
+
+        $fundedStatuses = ['funded', 'midterm_evaluation', 'completed', 'archived'];
+
+        $query = Proposal::with([
+            'pi:id,name,email',
+            'college:id,name',
+            'department:id,name',
+            'award',
+            'activeMembers.user:id,name,email',
+        ])
+            ->whereIn('status', $fundedStatuses)
+            ->orderBy('academic_year', 'desc')
+            ->orderBy('created_at', 'desc');
+
+        if ($allowedCategories !== null) {
+            $query->whereIn('category', $allowedCategories);
+        } elseif ($requestedCategory) {
+            $query->where('category', $requestedCategory);
+        }
+
+        if ($year = $request->query('year')) {
+            $query->where('academic_year', $year);
+        }
+
+        if ($status = $request->query('status')) {
+            $query->where('status', $status);
+        }
+
+        $proposals = $query->get();
+
+        $categoryLabels = [
+            'research' => 'Research',
+            'community_engagement' => 'Community Engagement',
+            'technology_transfer' => 'Technology Transfer',
+            'innovation' => 'Innovation',
+            'other' => 'Other',
+        ];
+
+        $categorySlug = $requestedCategory
+            ? ($categoryLabels[$requestedCategory] ?? $requestedCategory)
+            : ($allowedCategories ? ($categoryLabels[$allowedCategories[0]] ?? $allowedCategories[0]) : 'All');
+
+        $filename = 'awarded_proposals_'.strtolower(str_replace(' ', '_', $categorySlug)).'_'.date('Y-m-d').'.csv';
+
+        $headers = [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+            'Cache-Control' => 'no-cache',
+        ];
+
+        return response()->stream(function () use ($proposals, $categoryLabels) {
+            $handle = fopen('php://output', 'w');
+            fwrite($handle, "\xEF\xBB\xBF");
+
+            fputcsv($handle, [
+                'Grant Reference', 'Title', 'Category', 'Principal Investigator', 'PI Email',
+                'Co-Investigators', 'Co-Investigator Emails',
+                'College', 'Department', 'Academic Year', 'Status',
+                'Awarded Amount (ETB)', 'Award Date', 'Approval Notes',
+            ]);
+
+            foreach ($proposals as $p) {
+                $award = $p->award;
+                $coIs = $p->activeMembers->where('role', 'co_investigator');
+
+                fputcsv($handle, [
+                    $award?->grant_reference ?? '',
+                    $p->title,
+                    $categoryLabels[$p->category] ?? $p->category,
+                    $p->pi?->name ?? '',
+                    $p->pi?->email ?? '',
+                    $coIs->pluck('user.name')->filter()->implode('; '),
+                    $coIs->pluck('user.email')->filter()->implode('; '),
+                    $p->college?->name ?? '',
+                    $p->department?->name ?? '',
+                    $p->academic_year ?? '',
+                    ucfirst(str_replace('_', ' ', $p->status)),
+                    $award ? number_format((float) $award->awarded_amount, 2) : '',
+                    $award?->approved_at?->format('Y-m-d') ?? '',
+                    $award?->approval_notes ?? '',
+                ]);
+            }
+
+            fclose($handle);
+        }, 200, $headers);
     }
 
     public function downloadLetter(string $id): Response

@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Building2, Plus, Pencil, RefreshCw, Search, X, Users, CheckCircle, AlertCircle } from 'lucide-react';
+import { Building2, Plus, Pencil, Trash2, RefreshCw, Search, X, Users, CheckCircle, AlertCircle } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import api from '../../lib/api';
 import { useToast } from '../../Components/Toast';
+import ConfirmDialog from '../../Components/ConfirmDialog';
+import { useAuth } from '../../hooks/useAuth';
 
 function StatCard({ label, value, icon: Icon, color, sub }) {
     return (
@@ -137,13 +139,15 @@ function DeptModal({ dept, colleges, onSave, onClose }) {
 }
 
 export default function Departments() {
-    const { error } = useToast();
+    const { error, success } = useToast();
+    const { hasRole } = useAuth();
     const [departments, setDepartments] = useState([]);
     const [colleges, setColleges]       = useState([]);
     const [loading, setLoading]         = useState(true);
     const [filterCollege, setFilterCollege] = useState('');
     const [search, setSearch]           = useState('');
     const [modal, setModal]             = useState(null);
+    const [deleteConfirm, setDeleteConfirm] = useState(null);
 
     const load = async () => {
         setLoading(true);
@@ -163,6 +167,18 @@ export default function Departments() {
     useEffect(() => { load(); }, [filterCollege]);
 
     const afterSave = () => { setModal(null); load(); };
+
+    const handleDelete = async () => {
+        try {
+            await api.delete(`/departments/${deleteConfirm.id}`);
+            success('Department deleted.');
+            setDeleteConfirm(null);
+            load();
+        } catch (err) {
+            error(err.response?.data?.message || 'Failed to delete department.');
+            setDeleteConfirm(null);
+        }
+    };
 
     const filtered = departments.filter((d) =>
         !search || d.name.toLowerCase().includes(search.toLowerCase()) || d.code.toLowerCase().includes(search.toLowerCase())
@@ -303,12 +319,22 @@ export default function Departments() {
                                                     </span>
                                                 </td>
                                                 <td className="px-5 py-3 text-right">
-                                                    <button
-                                                        onClick={() => setModal({ dept: d })}
-                                                        className="p-1.5 text-gray-300 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition opacity-0 group-hover:opacity-100"
-                                                    >
-                                                        <Pencil size={13} />
-                                                    </button>
+                                                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition">
+                                                        <button
+                                                            onClick={() => setModal({ dept: d })}
+                                                            className="p-1.5 text-gray-300 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                                        >
+                                                            <Pencil size={13} />
+                                                        </button>
+                                                        {hasRole('super_admin') && (
+                                                            <button
+                                                                onClick={() => setDeleteConfirm(d)}
+                                                                className="p-1.5 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                                                            >
+                                                                <Trash2 size={13} />
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))}
@@ -326,6 +352,16 @@ export default function Departments() {
                     colleges={colleges}
                     onSave={afterSave}
                     onClose={() => setModal(null)}
+                />
+            )}
+            {deleteConfirm && (
+                <ConfirmDialog
+                    open
+                    title="Delete Department"
+                    description={`Permanently delete "${deleteConfirm.name}"? This cannot be undone.`}
+                    confirmLabel="Delete"
+                    onConfirm={handleDelete}
+                    onCancel={() => setDeleteConfirm(null)}
                 />
             )}
         </AppLayout>

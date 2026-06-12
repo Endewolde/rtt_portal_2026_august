@@ -16,9 +16,7 @@
     @if(!empty($deadline_date))<p style="color:#4a5568;"><strong>Deadline:</strong> {{ $deadline_date }}</p>@endif
     <p style="color:#4a5568;">Please ensure your proposal is submitted before the deadline.</p>
   </div>
-  <div style="background:#f7fafc;padding:16px;text-align:center;">
-    <p style="color:#a0aec0;font-size:12px;margin:0;">RTT Platform — Haramaya University Research Office</p>
-  </div>
+  @include('emails.partials.footer')
 </div>
 </body>
 </html>

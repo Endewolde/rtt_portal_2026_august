@@ -11,12 +11,12 @@ class EnsureCollegeScope
     {
         $user = $request->user();
 
-        if ($user && $user->hasAnyRole(['college_officer'])) {
+        if ($user && $user->hasAnyRole(['college_officer', 'finance_officer'])) {
             if (! $user->college_id) {
                 return response()->json([
-                    'data'    => null,
+                    'data' => null,
                     'message' => 'Your account has no college assigned.',
-                    'errors'  => [],
+                    'errors' => [],
                 ], 403);
             }
 

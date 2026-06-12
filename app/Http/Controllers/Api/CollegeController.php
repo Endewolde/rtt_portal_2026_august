@@ -133,4 +133,33 @@ class CollegeController extends Controller
 
         return response()->json(['data' => $dept->fresh()->load('college'), 'message' => 'Department updated.', 'errors' => [], 'meta' => []]);
     }
+
+    public function destroy(string $id, Request $request): JsonResponse
+    {
+        if (! $request->user()?->hasRole('super_admin')) {
+            return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
+        }
+
+        $college = College::withCount('departments')->findOrFail($id);
+
+        if ($college->departments_count > 0) {
+            return response()->json(['data' => null, 'message' => 'Cannot delete a college that has departments. Remove all departments first.', 'errors' => []], 422);
+        }
+
+        $college->forceDelete();
+
+        return response()->json(['data' => null, 'message' => 'College deleted.', 'errors' => [], 'meta' => []]);
+    }
+
+    public function destroyDepartment(string $id, Request $request): JsonResponse
+    {
+        if (! $request->user()?->hasRole('super_admin')) {
+            return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
+        }
+
+        $dept = Department::findOrFail($id);
+        $dept->forceDelete();
+
+        return response()->json(['data' => null, 'message' => 'Department deleted.', 'errors' => [], 'meta' => []]);
+    }
 }

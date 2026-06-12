@@ -26,48 +26,42 @@ class SettlementController extends Controller
             'financeVerifiedByUser:id,name',
         ])->orderByDesc('created_at');
 
-        if ($user->hasRole('college_officer') || $user->hasRole('college_officer') ||
+        if ($user->hasAnyRole(['college_officer', 'finance_officer']) ||
             ($user->hasRole('support_officer') && $user->college_id)) {
-            $query->whereHas('budgetRequest.proposal', fn ($q) =>
-                $q->where('college_id', $user->college_id)
+            $query->whereHas('budgetRequest.proposal', fn ($q) => $q->where('college_id', $user->college_id)
             );
-        } elseif (! $user->hasAnyRole(['super_admin', 'central_officer', 'support_officer',
+        } elseif (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'support_officer',
             'research_officer', 'community_officer', 'technology_officer'])) {
-            $query->whereHas('budgetRequest.proposal', fn ($q) =>
-                $q->where('pi_user_id', $user->id)
-                  ->orWhereHas('members', fn ($sq) =>
-                      $sq->where('user_id', $user->id)->where('status', 'active')
-                  )
+            $query->whereHas('budgetRequest.proposal', fn ($q) => $q->where('pi_user_id', $user->id)
+                ->orWhereHas('members', fn ($sq) => $sq->where('user_id', $user->id)->where('status', 'active')
+                )
             );
         }
 
         if ($user->hasRole('research_officer')) {
-            $query->whereHas('budgetRequest.proposal', fn ($q) =>
-                $q->where('category', 'research'));
+            $query->whereHas('budgetRequest.proposal', fn ($q) => $q->where('category', 'research'));
         }
         if ($user->hasRole('community_officer')) {
-            $query->whereHas('budgetRequest.proposal', fn ($q) =>
-                $q->where('category', 'community_engagement'));
+            $query->whereHas('budgetRequest.proposal', fn ($q) => $q->where('category', 'community_engagement'));
         }
         if ($user->hasRole('technology_officer')) {
-            $query->whereHas('budgetRequest.proposal', fn ($q) =>
-                $q->where('category', 'technology_transfer'));
+            $query->whereHas('budgetRequest.proposal', fn ($q) => $q->where('category', 'technology_transfer'));
         }
 
         return response()->json([
-            'data'    => $query->get(),
+            'data' => $query->get(),
             'message' => '',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ]);
     }
 
     public function store(Request $request): JsonResponse
     {
         $request->validate([
-            'budget_request_id'   => 'required|uuid|exists:budget_requests,id',
-            'total_spent'         => 'required|numeric|min:0',
-            'unspent_amount'      => 'nullable|numeric|min:0',
+            'budget_request_id' => 'required|uuid|exists:budget_requests,id',
+            'total_spent' => 'required|numeric|min:0',
+            'unspent_amount' => 'nullable|numeric|min:0',
             'expense_report_path' => 'nullable|string',
         ]);
 
@@ -81,20 +75,20 @@ class SettlementController extends Controller
             );
 
             return response()->json([
-                'data'    => $settlement->load([
+                'data' => $settlement->load([
                     'budgetRequest.proposal:id,tracker_number,title',
                     'submittedBy:id,name',
                 ]),
                 'message' => 'Settlement submitted successfully.',
-                'errors'  => [],
-                'meta'    => [],
+                'errors' => [],
+                'meta' => [],
             ], 201);
         } catch (\Exception $e) {
             return response()->json([
-                'data'    => null,
+                'data' => null,
                 'message' => $e->getMessage(),
-                'errors'  => [],
-                'meta'    => [],
+                'errors' => [],
+                'meta' => [],
             ], 422);
         }
     }
@@ -113,18 +107,28 @@ class SettlementController extends Controller
         ])->findOrFail($id);
 
         return response()->json([
-            'data'    => $settlement,
+            'data' => $settlement,
             'message' => '',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ]);
     }
 
     public function verify(Request $request, string $id): JsonResponse
     {
+        $user = $request->user();
+
+        if (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'finance_officer', 'college_officer', 'support_officer'])) {
+            return response()->json(['message' => 'You do not have permission to verify settlements.', 'errors' => []], 403);
+        }
+
         $request->validate(['notes' => 'nullable|string']);
 
-        $settlement = BudgetSettlement::findOrFail($id);
+        $settlement = BudgetSettlement::with('budgetRequest.proposal')->findOrFail($id);
+
+        if ($user->hasRole('finance_officer') && $settlement->budgetRequest?->proposal?->college_id !== $user->college_id) {
+            return response()->json(['message' => 'You can only verify settlements for proposals in your college.', 'errors' => []], 403);
+        }
 
         try {
             $updated = app(BudgetSettlementService::class)->verifySettlement(
@@ -134,26 +138,36 @@ class SettlementController extends Controller
             );
 
             return response()->json([
-                'data'    => $updated,
+                'data' => $updated,
                 'message' => 'Settlement verified by college.',
-                'errors'  => [],
-                'meta'    => [],
+                'errors' => [],
+                'meta' => [],
             ]);
         } catch (\Exception $e) {
             return response()->json([
-                'data'    => null,
+                'data' => null,
                 'message' => $e->getMessage(),
-                'errors'  => [],
-                'meta'    => [],
+                'errors' => [],
+                'meta' => [],
             ], 422);
         }
     }
 
     public function finalize(Request $request, string $id): JsonResponse
     {
+        $user = $request->user();
+
+        if (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'finance_officer', 'support_officer'])) {
+            return response()->json(['message' => 'You do not have permission to finalize settlements.', 'errors' => []], 403);
+        }
+
         $request->validate(['notes' => 'nullable|string']);
 
-        $settlement = BudgetSettlement::findOrFail($id);
+        $settlement = BudgetSettlement::with('budgetRequest.proposal')->findOrFail($id);
+
+        if ($user->hasRole('finance_officer') && $settlement->budgetRequest?->proposal?->college_id !== $user->college_id) {
+            return response()->json(['message' => 'You can only finalize settlements for proposals in your college.', 'errors' => []], 403);
+        }
 
         try {
             $updated = app(BudgetSettlementService::class)->finalizeSettlement(
@@ -163,17 +177,17 @@ class SettlementController extends Controller
             );
 
             return response()->json([
-                'data'    => $updated,
+                'data' => $updated,
                 'message' => 'Settlement finalized. PI is now eligible for the next funding round.',
-                'errors'  => [],
-                'meta'    => [],
+                'errors' => [],
+                'meta' => [],
             ]);
         } catch (\Exception $e) {
             return response()->json([
-                'data'    => null,
+                'data' => null,
                 'message' => $e->getMessage(),
-                'errors'  => [],
-                'meta'    => [],
+                'errors' => [],
+                'meta' => [],
             ], 422);
         }
     }
@@ -188,21 +202,18 @@ class SettlementController extends Controller
             'proposal.pi:id,name,email',
             'disbursements',
         ])
-        ->where('status', 'disbursed')
-        ->whereDoesntHave('settlement')
-        ->orderBy('updated_at');
+            ->where('status', 'disbursed')
+            ->whereDoesntHave('settlement')
+            ->orderBy('updated_at');
 
-        if ($user->hasRole('college_officer') || $user->hasRole('college_officer')) {
-            $query->whereHas('proposal', fn ($q) =>
-                $q->where('college_id', $user->college_id)
+        if ($user->hasAnyRole(['college_officer', 'finance_officer'])) {
+            $query->whereHas('proposal', fn ($q) => $q->where('college_id', $user->college_id)
             );
-        } elseif (! $user->hasAnyRole(['super_admin', 'central_officer', 'support_officer',
+        } elseif (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'support_officer',
             'research_officer', 'community_officer', 'technology_officer'])) {
-            $query->whereHas('proposal', fn ($q) =>
-                $q->where('pi_user_id', $user->id)
-                  ->orWhereHas('members', fn ($sq) =>
-                      $sq->where('user_id', $user->id)->where('status', 'active')
-                  )
+            $query->whereHas('proposal', fn ($q) => $q->where('pi_user_id', $user->id)
+                ->orWhereHas('members', fn ($sq) => $sq->where('user_id', $user->id)->where('status', 'active')
+                )
             );
         }
 
@@ -213,10 +224,10 @@ class SettlementController extends Controller
         });
 
         return response()->json([
-            'data'    => $requests,
+            'data' => $requests,
             'message' => '',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ]);
     }
 
@@ -236,10 +247,10 @@ class SettlementController extends Controller
         $settlement->update(['expense_report_path' => $path]);
 
         return response()->json([
-            'data'    => ['path' => $path, 'filename' => $request->file('file')->getClientOriginalName()],
+            'data' => ['path' => $path, 'filename' => $request->file('file')->getClientOriginalName()],
             'message' => 'Expense report uploaded.',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ]);
     }
 
@@ -265,14 +276,14 @@ class SettlementController extends Controller
     {
         return response()->json([
             'data' => [
-                'total'            => BudgetSettlement::count(),
-                'submitted'        => BudgetSettlement::where('status', 'submitted')->count(),
+                'total' => BudgetSettlement::count(),
+                'submitted' => BudgetSettlement::where('status', 'submitted')->count(),
                 'college_verified' => BudgetSettlement::where('status', 'college_verified')->count(),
                 'finance_verified' => BudgetSettlement::where('status', 'finance_verified')->count(),
             ],
             'message' => '',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ]);
     }
 }

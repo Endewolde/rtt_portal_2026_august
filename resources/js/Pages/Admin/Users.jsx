@@ -18,12 +18,13 @@ import { useToast } from '../../Components/Toast';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const ROLE_LABELS = {
-    super_admin:        'Super Admin',
+    admin:              'Admin',
     central_office:     'Central Office',
     college_admin:      'College Admin',
     department_head:    'Dept. Head',
     pi:                 'Principal Investigator',
     reviewer:           'Reviewer',
+    finance_officer:    'Finance Officer',
     finance:            'Finance Officer',
     guest:              'Guest',
     staff:              'Staff',
@@ -31,21 +32,26 @@ const ROLE_LABELS = {
     research_officer:   'Research Officer',
     community_officer:  'Community Officer',
     technology_officer: 'Technology Officer',
+    central_officer:    'Central Officer',
+    support_officer:    'Support Officer',
 };
 
 const ROLE_COLORS = {
-    super_admin:        'bg-red-50 text-red-700 border border-red-200',
+    admin:              'bg-rose-50 text-rose-700 border border-rose-200',
     central_office:     'bg-orange-50 text-orange-700 border border-orange-200',
     college_admin:      'bg-blue-50 text-blue-700 border border-blue-200',
     department_head:    'bg-slate-50 text-slate-700 border border-slate-200',
     reviewer:           'bg-purple-50 text-purple-700 border border-purple-200',
     pi:                 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+    finance_officer:    'bg-amber-50 text-amber-700 border border-amber-200',
     finance:            'bg-amber-50 text-amber-700 border border-amber-200',
     staff:              'bg-cyan-50 text-cyan-700 border border-cyan-200',
     college_officer:    'bg-teal-50 text-teal-700 border border-teal-200',
     research_officer:   'bg-indigo-50 text-indigo-700 border border-indigo-200',
     community_officer:  'bg-pink-50 text-pink-700 border border-pink-200',
     technology_officer: 'bg-violet-50 text-violet-700 border border-violet-200',
+    central_officer:    'bg-orange-50 text-orange-700 border border-orange-200',
+    support_officer:    'bg-sky-50 text-sky-700 border border-sky-200',
     guest:              'bg-gray-100 text-gray-600 border border-gray-200',
 };
 
@@ -56,9 +62,9 @@ const STATUS_CONFIG = {
 };
 
 const ROLE_GROUPS = [
-    { label: 'Administration', roles: ['super_admin', 'central_office', 'college_admin', 'department_head'] },
+    { label: 'Administration', roles: ['admin', 'central_office', 'central_officer', 'college_admin', 'department_head'] },
     { label: 'Research',       roles: ['pi', 'staff', 'research_officer', 'community_officer', 'technology_officer'] },
-    { label: 'Operations',     roles: ['reviewer', 'finance', 'college_officer', 'guest'] },
+    { label: 'Operations',     roles: ['reviewer', 'finance_officer', 'college_officer', 'support_officer', 'guest'] },
 ];
 
 const AVATAR_GRADIENTS = [
@@ -173,12 +179,15 @@ function Field({ label, required, children, hint }) {
 
 function UserFormModal({ title, initial, colleges, allRoles, onSave, onClose }) {
     const [form, setForm] = useState({
-        name: '', email: '', password: '', role: 'pi',
+        name: '', title: '', email: '', password: '', role: 'pi',
         college_id: '', department_id: '', employee_id: '', phone: '', gender: '',
+        expertise: [],
         ...initial,
+        expertise: Array.isArray(initial?.expertise) ? initial.expertise : [],
     });
-    const [departments, setDepartments] = useState([]);
-    const [saving, setSaving]           = useState(false);
+    const [departments, setDepartments]       = useState([]);
+    const [expertiseInput, setExpertiseInput] = useState('');
+    const [saving, setSaving]                 = useState(false);
     const { error } = useToast();
     const isEdit    = !!initial?.id;
 
@@ -193,7 +202,27 @@ function UserFormModal({ title, initial, colleges, allRoles, onSave, onClose }) 
         }
     }, [form.college_id]);
 
-    const set    = (k, v) => setForm(f => ({ ...f, [k]: v }));
+    const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+    const addExpertise = (raw) => {
+        const tag = raw.trim().replace(/,+$/, '').trim();
+        if (!tag) return;
+        const current = form.expertise ?? [];
+        if (!current.includes(tag)) set('expertise', [...current, tag]);
+        setExpertiseInput('');
+    };
+
+    const removeExpertise = (tag) =>
+        set('expertise', (form.expertise ?? []).filter(e => e !== tag));
+
+    const onExpertiseKey = (e) => {
+        if (e.key === 'Enter' || e.key === ',') {
+            e.preventDefault();
+            addExpertise(expertiseInput);
+        } else if (e.key === 'Backspace' && !expertiseInput && form.expertise?.length) {
+            set('expertise', form.expertise.slice(0, -1));
+        }
+    };
 
     const submit = async () => {
         if (!form.name.trim() || !form.email.trim()) { error('Name and email are required.'); return; }
@@ -237,6 +266,10 @@ function UserFormModal({ title, initial, colleges, allRoles, onSave, onClose }) 
                                 <input value={form.name} onChange={e => set('name', e.target.value)}
                                     placeholder="Full name" className={inputCls} />
                             </Field>
+                            <Field label="Academic Title" hint="e.g. Prof., Dr., Mr., Mrs.">
+                                <input value={form.title ?? ''} onChange={e => set('title', e.target.value)}
+                                    placeholder="Prof. / Dr. / Mr. …" className={inputCls} />
+                            </Field>
                             <Field label="Email" required>
                                 <input type="email" value={form.email} onChange={e => set('email', e.target.value)}
                                     placeholder="email@example.com" className={inputCls} />
@@ -272,14 +305,25 @@ function UserFormModal({ title, initial, colleges, allRoles, onSave, onClose }) 
                             <Field label="Role" required={!isEdit}>
                                 <select value={form.role ?? ''} onChange={e => set('role', e.target.value)} className={inputCls}>
                                     <option value="">Select a role…</option>
-                                    {ROLE_GROUPS.map(group => (
-                                        <optgroup key={group.label} label={group.label}>
-                                            {group.roles
-                                                .filter(r => allRoles.includes(r))
-                                                .map(r => <option key={r} value={r}>{ROLE_LABELS[r] ?? r}</option>)
-                                            }
-                                        </optgroup>
-                                    ))}
+                                    {ROLE_GROUPS.map(group => {
+                                        const groupRoles = group.roles.filter(r => allRoles.includes(r));
+                                        if (!groupRoles.length) return null;
+                                        return (
+                                            <optgroup key={group.label} label={group.label}>
+                                                {groupRoles.map(r => <option key={r} value={r}>{ROLE_LABELS[r] ?? r.replace(/_/g, ' ')}</option>)}
+                                            </optgroup>
+                                        );
+                                    })}
+                                    {(() => {
+                                        const allGroupedRoles = ROLE_GROUPS.flatMap(g => g.roles);
+                                        const custom = allRoles.filter(r => !allGroupedRoles.includes(r));
+                                        if (!custom.length) return null;
+                                        return (
+                                            <optgroup label="Custom">
+                                                {custom.map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+                                            </optgroup>
+                                        );
+                                    })()}
                                 </select>
                             </Field>
                             <Field label="College">
@@ -296,6 +340,36 @@ function UserFormModal({ title, initial, colleges, allRoles, onSave, onClose }) 
                                 </select>
                             </Field>
                         </div>
+                    </div>
+
+                    {/* Research expertise */}
+                    <div>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Research Expertise</p>
+                        <Field label="Expertise Areas" hint="Press Enter or comma to add each area. Used for reviewer matching.">
+                            <div className={cn(
+                                'flex flex-wrap gap-1.5 p-2 border border-gray-200 rounded-xl bg-white min-h-10.5',
+                                'focus-within:ring-2 focus-within:ring-indigo-500 focus-within:border-transparent'
+                            )}>
+                                {(form.expertise ?? []).map((tag, i) => (
+                                    <span key={i}
+                                        className="flex items-center gap-1 bg-indigo-50 text-indigo-700 border border-indigo-200 text-xs font-medium px-2 py-1 rounded-lg">
+                                        {tag}
+                                        <button type="button" onClick={() => removeExpertise(tag)}
+                                            className="text-indigo-400 hover:text-indigo-700 transition-colors">
+                                            <X size={11} />
+                                        </button>
+                                    </span>
+                                ))}
+                                <input
+                                    value={expertiseInput}
+                                    onChange={e => setExpertiseInput(e.target.value)}
+                                    onKeyDown={onExpertiseKey}
+                                    onBlur={() => addExpertise(expertiseInput)}
+                                    placeholder={(form.expertise?.length ?? 0) === 0 ? 'e.g. Machine Learning, Biomedical Engineering…' : ''}
+                                    className="flex-1 min-w-32 text-sm outline-none bg-transparent placeholder-gray-400 px-1 py-0.5"
+                                />
+                            </div>
+                        </Field>
                     </div>
                 </div>
 
@@ -352,45 +426,59 @@ function AssignRolesModal({ user, allRoles, onSave, onClose }) {
                 </div>
 
                 <div className="px-5 py-4 max-h-[60vh] overflow-y-auto space-y-5">
-                    {ROLE_GROUPS.map(group => {
-                        const groupRoles = group.roles.filter(r => allRoles.includes(r));
-                        if (!groupRoles.length) return null;
+                    {(() => {
+                        const allGroupedRoles = ROLE_GROUPS.flatMap(g => g.roles);
+                        const customRoles = allRoles.filter(r => !allGroupedRoles.includes(r));
+
+                        const RoleRow = ({ role }) => {
+                            const isOn = selected.includes(role);
+                            return (
+                                <label key={role}
+                                    className={cn(
+                                        'flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-colors',
+                                        isOn ? 'bg-indigo-50 border border-indigo-100' : 'hover:bg-gray-50 border border-transparent'
+                                    )}>
+                                    <input type="checkbox" checked={isOn} onChange={() => toggle(role)}
+                                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                        <span className={cn('text-sm font-medium', isOn ? 'text-indigo-700' : 'text-gray-700')}>
+                                            {ROLE_LABELS[role] ?? role.replace(/_/g, ' ')}
+                                        </span>
+                                    </div>
+                                    {isOn && (
+                                        <span className={cn('text-xs px-2 py-0.5 rounded-full', ROLE_COLORS[role] ?? ROLE_COLORS.guest)}>
+                                            Active
+                                        </span>
+                                    )}
+                                </label>
+                            );
+                        };
+
                         return (
-                            <div key={group.label}>
-                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">
-                                    {group.label}
-                                </p>
-                                <div className="space-y-1">
-                                    {groupRoles.map(role => {
-                                        const isOn = selected.includes(role);
-                                        return (
-                                            <label key={role}
-                                                className={cn(
-                                                    'flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-colors',
-                                                    isOn ? 'bg-indigo-50 border border-indigo-100' : 'hover:bg-gray-50 border border-transparent'
-                                                )}>
-                                                <input type="checkbox" checked={isOn} onChange={() => toggle(role)}
-                                                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 shrink-0" />
-                                                <div className="flex-1 min-w-0">
-                                                    <span className={cn(
-                                                        'text-sm font-medium',
-                                                        isOn ? 'text-indigo-700' : 'text-gray-700'
-                                                    )}>
-                                                        {ROLE_LABELS[role] ?? role}
-                                                    </span>
-                                                </div>
-                                                {isOn && (
-                                                    <span className={cn('text-xs px-2 py-0.5 rounded-full', ROLE_COLORS[role] ?? ROLE_COLORS.guest)}>
-                                                        Active
-                                                    </span>
-                                                )}
-                                            </label>
-                                        );
-                                    })}
-                                </div>
-                            </div>
+                            <>
+                                {ROLE_GROUPS.map(group => {
+                                    const groupRoles = group.roles.filter(r => allRoles.includes(r));
+                                    if (!groupRoles.length) return null;
+                                    return (
+                                        <div key={group.label}>
+                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">{group.label}</p>
+                                            <div className="space-y-1">
+                                                {groupRoles.map(role => <RoleRow key={role} role={role} />)}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                                {customRoles.length > 0 && (
+                                    <div>
+                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Custom</p>
+                                        <div className="space-y-1">
+                                            {customRoles.map(role => <RoleRow key={role} role={role} />)}
+                                        </div>
+                                    </div>
+                                )}
+                            </>
                         );
-                    })}
+                    })()}
                 </div>
 
                 <div className="px-5 py-4 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
@@ -427,11 +515,12 @@ async function downloadBlob(axiosPromise, filename) {
 const EXPECTED_COLS = ['name', 'email', 'password', 'role', 'college_code', 'employee_id', 'phone', 'gender'];
 
 const IMPORT_ROLE_LABELS = {
-    super_admin: 'super_admin', admin: 'admin',
+    admin: 'admin',
     staff: 'staff', reviewer: 'reviewer', pi: 'pi',
+    finance_officer: 'finance_officer',
     college_officer: 'college_officer', research_officer: 'research_officer',
     community_officer: 'community_officer', technology_officer: 'technology_officer',
-    central_officer: 'central_officer',
+    central_officer: 'central_officer', support_officer: 'support_officer',
 };
 
 function parseLocalCsv(text) {
@@ -800,10 +889,15 @@ export default function AdminUsers() {
     useEffect(() => {
         api.get('/colleges').then(r => setColleges(r.data?.data ?? [])).catch(() => {});
         api.get('/roles').then(r => {
-            const names = (r.data?.data ?? []).map(ro => ro.name);
+            const names = (r.data?.data ?? []).map(ro => ro.name).filter(n => n !== 'super_admin');
             if (names.length) setAllRoles(names);
         }).catch(() => {});
     }, []);
+
+    const visibleUsers = users.filter(u => {
+        const roles = (u.roles ?? []).map(r => typeof r === 'string' ? r : r.name);
+        return !roles.includes('super_admin');
+    });
 
     const handleSearchInput = (val) => {
         setSearchInput(val);
@@ -921,7 +1015,7 @@ export default function AdminUsers() {
                         <select value={roleFilter} onChange={e => { setRoleFilter(e.target.value); setPage(1); }}
                             className="py-2 px-3 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
                             <option value="">All Roles</option>
-                            {allRoles.map(r => <option key={r} value={r}>{ROLE_LABELS[r] ?? r}</option>)}
+                            {allRoles.filter(r => r !== 'super_admin').map(r => <option key={r} value={r}>{ROLE_LABELS[r] ?? r}</option>)}
                         </select>
 
                         <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
@@ -957,7 +1051,7 @@ export default function AdminUsers() {
                                 </div>
                             ))}
                         </div>
-                    ) : users.length === 0 ? (
+                    ) : visibleUsers.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-20">
                             <UsersIcon size={36} className="text-gray-200 mb-3" />
                             <p className="text-sm font-medium text-gray-500">No users found</p>
@@ -982,11 +1076,8 @@ export default function AdminUsers() {
 
                             {/* Rows */}
                             <div className="divide-y divide-gray-50">
-                                {users.map(u => {
-                                    const primaryRole = (u.roles ?? [])[0];
-                                    const roleName    = primaryRole
-                                        ? (typeof primaryRole === 'string' ? primaryRole : primaryRole.name)
-                                        : null;
+                                {visibleUsers.map(u => {
+                                    const allRoleNames = (u.roles ?? []).map(r => typeof r === 'string' ? r : r.name);
 
                                     return (
                                         <div key={u.id}
@@ -1006,8 +1097,17 @@ export default function AdminUsers() {
                                                 </div>
                                             </div>
 
-                                            {/* Role */}
-                                            <RoleBadge role={primaryRole} />
+                                            {/* Roles — show up to 2, then +N */}
+                                            <div className="flex flex-wrap gap-1">
+                                                {allRoleNames.slice(0, 2).map(r => (
+                                                    <RoleBadge key={r} role={r} />
+                                                ))}
+                                                {allRoleNames.length > 2 && (
+                                                    <span className="text-xs font-medium px-2 py-1 rounded-full bg-gray-100 text-gray-500">
+                                                        +{allRoleNames.length - 2}
+                                                    </span>
+                                                )}
+                                            </div>
 
                                             {/* College */}
                                             <div className="flex items-center gap-1.5 min-w-0">
@@ -1095,6 +1195,7 @@ export default function AdminUsers() {
                 <UserFormModal title="Edit User"
                     initial={{
                         name:          editModal.name,
+                        title:         editModal.title         ?? '',
                         email:         editModal.email,
                         role:          (() => { const r = (editModal.roles ?? [])[0]; return r ? (typeof r === 'string' ? r : r.name) : 'guest'; })(),
                         college_id:    editModal.college_id    ?? editModal.college?.id    ?? '',
@@ -1102,6 +1203,7 @@ export default function AdminUsers() {
                         employee_id:   editModal.employee_id   ?? '',
                         phone:         editModal.phone         ?? '',
                         gender:        editModal.gender        ?? '',
+                        expertise:     Array.isArray(editModal.expertise) ? editModal.expertise : [],
                         id:            editModal.id,
                     }}
                     colleges={colleges} allRoles={allRoles}

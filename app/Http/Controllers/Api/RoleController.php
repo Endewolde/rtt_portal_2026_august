@@ -49,7 +49,15 @@ class RoleController extends Controller
         }
 
         $role = Role::findOrFail($id);
-        $request->validate(['name' => 'required|string|unique:roles,name,'.$role->id]);
+
+        $system = ['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer',
+            'technology_officer', 'college_officer', 'finance_officer', 'support_officer', 'staff'];
+
+        if (in_array($role->name, $system)) {
+            return response()->json(['message' => 'Cannot rename system roles.', 'errors' => []], 422);
+        }
+
+        $request->validate(['name' => 'required|string|max:64|unique:roles,name,'.$role->id]);
         $role->update(['name' => $request->name]);
 
         return response()->json(['data' => $role->fresh(), 'message' => 'Role updated.', 'errors' => [], 'meta' => []]);

@@ -98,11 +98,17 @@ class AppSettingsSeeder extends Seeder
             ['key' => 'auto_backup_enabled',   'value' => 'true',  'type' => 'boolean', 'group' => 'backup'],
 
             // Integration
-            ['key' => 'ldap_enabled',    'value' => 'false', 'type' => 'boolean', 'group' => 'integration'],
-            ['key' => 'ldap_host',       'value' => '',      'type' => 'string',  'group' => 'integration'],
-            ['key' => 'oauth_enabled',   'value' => 'false', 'type' => 'boolean', 'group' => 'integration'],
-            ['key' => 'google_client_id', 'value' => '',      'type' => 'string',  'group' => 'integration'],
-            ['key' => 'webhook_url',     'value' => '',      'type' => 'string',  'group' => 'integration'],
+            ['key' => 'ldap_enabled',            'value' => 'false', 'type' => 'boolean', 'group' => 'integration'],
+            ['key' => 'ldap_host',               'value' => '',      'type' => 'string',  'group' => 'integration'],
+            ['key' => 'oauth_enabled',           'value' => 'false', 'type' => 'boolean', 'group' => 'integration'],
+            ['key' => 'google_sso_enabled',      'value' => 'false', 'type' => 'boolean', 'group' => 'integration'],
+            ['key' => 'google_client_id',        'value' => '',      'type' => 'string',  'group' => 'integration'],
+            ['key' => 'google_client_secret',    'value' => '',      'type' => 'password', 'group' => 'integration'],
+            ['key' => 'microsoft_sso_enabled',   'value' => 'false', 'type' => 'boolean', 'group' => 'integration'],
+            ['key' => 'microsoft_client_id',     'value' => '',      'type' => 'string',  'group' => 'integration'],
+            ['key' => 'microsoft_client_secret', 'value' => '',      'type' => 'password', 'group' => 'integration'],
+            ['key' => 'microsoft_tenant_id',     'value' => '',      'type' => 'string',  'group' => 'integration'],
+            ['key' => 'webhook_url',             'value' => '',      'type' => 'string',  'group' => 'integration'],
         ];
 
         foreach ($settings as $setting) {

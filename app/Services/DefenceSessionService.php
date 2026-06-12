@@ -40,13 +40,13 @@ class DefenceSessionService
 
         return DB::transaction(function () use ($proposal, $data, $date, $time, $scheduledBy) {
             $session = DefenceSession::create([
-                'proposal_id'    => $proposal->id,
+                'proposal_id' => $proposal->id,
                 'scheduled_date' => $date,
                 'scheduled_time' => $time,
-                'venue'          => $data['venue'],
-                'online_link'    => $data['online_link'] ?? null,
-                'status'         => 'scheduled',
-                'scheduled_by'   => $scheduledBy->id,
+                'venue' => $data['venue'],
+                'online_link' => $data['online_link'] ?? null,
+                'status' => 'scheduled',
+                'scheduled_by' => $scheduledBy->id,
             ]);
 
             if (! empty($data['reviewer_ids']) && ! empty($data['evaluation_type_id'])) {
@@ -54,7 +54,12 @@ class DefenceSessionService
                     $proposal,
                     $data['reviewer_ids'],
                     $data['evaluation_type_id'],
-                    $scheduledBy
+                    $scheduledBy,
+                    [
+                        'venue' => $data['venue'] ?? null,
+                        'scheduled_date' => $date,
+                        'scheduled_time' => $time,
+                    ]
                 );
             }
 

@@ -42,6 +42,8 @@ class HandleInertiaRequests extends Middleware
                     'current_academic_year',
                     'session_timeout_minutes',
                     'sso_enabled',
+                    'google_sso_enabled',
+                    'microsoft_sso_enabled',
                     // Public site content
                     'public_header_tagline',
                     'public_footer_tagline',

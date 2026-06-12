@@ -11,6 +11,8 @@ use App\Services\FeatureService;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
+use SocialiteProviders\Azure\AzureExtendSocialite;
+use SocialiteProviders\Manager\SocialiteWasCalled;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -20,6 +22,7 @@ class AppServiceProvider extends ServiceProvider
     {
         Event::listen(ProposalTransitioned::class, GenerateAwardOnFunding::class);
         Event::listen(ProposalTransitioned::class, SendProposalWorkflowNotifications::class);
+        Event::listen(SocialiteWasCalled::class, [AzureExtendSocialite::class, 'handle']);
 
         $this->registerFeatureGates();
     }

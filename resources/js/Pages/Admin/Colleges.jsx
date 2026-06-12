@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Building, Building2, ChevronDown, ChevronRight, Plus, Search, RefreshCw, Users, X, Pencil } from 'lucide-react';
+import { Building, Building2, ChevronDown, ChevronRight, Plus, Search, RefreshCw, Users, X, Pencil, Trash2 } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import { get, post, put } from '../../lib/api';
+import api from '../../lib/api';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../Components/Toast';
+import ConfirmDialog from '../../Components/ConfirmDialog';
 
 function StatCard({ label, value, icon: Icon, color }) {
     return (
@@ -53,6 +55,27 @@ function CollegeModal({ title, form, setForm, errors, saving, onSave, onClose })
                             {errors[key] && <p className="text-xs text-red-500 mt-1">{errors[key][0]}</p>}
                         </div>
                     ))}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">Status</label>
+                        <div className="flex gap-3">
+                            {['active', 'inactive'].map((s) => (
+                                <button
+                                    key={s}
+                                    type="button"
+                                    onClick={() => setForm({ ...form, status: s })}
+                                    className={`flex-1 py-2.5 rounded-xl text-sm font-medium border transition ${
+                                        form.status === s
+                                            ? s === 'active'
+                                                ? 'bg-emerald-50 border-emerald-400 text-emerald-700'
+                                                : 'bg-gray-100 border-gray-400 text-gray-700'
+                                            : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+                                    }`}
+                                >
+                                    {s.charAt(0).toUpperCase() + s.slice(1)}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
                 </div>
                 <div className="flex gap-3 px-6 pb-5">
                     <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-700 hover:bg-gray-50 font-medium transition">
@@ -78,7 +101,8 @@ export default function AdminColleges() {
     const [search, setSearch]             = useState('');
     const [showAdd, setShowAdd]           = useState(false);
     const [editCollege, setEditCollege]   = useState(null);
-    const [form, setForm]                 = useState({ name: '', code: '', dean_name: '', dean_email: '' });
+    const [deleteConfirm, setDeleteConfirm] = useState(null);
+    const [form, setForm]                 = useState({ name: '', code: '', dean_name: '', dean_email: '', status: 'active' });
     const [saving, setSaving]             = useState(false);
     const [errors, setErrors]             = useState({});
 
@@ -104,15 +128,27 @@ export default function AdminColleges() {
     };
 
     const openAdd = () => {
-        setForm({ name: '', code: '', dean_name: '', dean_email: '' });
+        setForm({ name: '', code: '', dean_name: '', dean_email: '', status: 'active' });
         setErrors({});
         setShowAdd(true);
     };
 
     const openEdit = (c) => {
-        setForm({ name: c.name, code: c.code, dean_name: c.dean_name ?? '', dean_email: c.dean_email ?? '' });
+        setForm({ name: c.name, code: c.code, dean_name: c.dean_name ?? '', dean_email: c.dean_email ?? '', status: c.status ?? 'active' });
         setErrors({});
         setEditCollege(c);
+    };
+
+    const handleDelete = async () => {
+        try {
+            await api.delete(`/colleges/${deleteConfirm.id}`);
+            success('College deleted.');
+            setDeleteConfirm(null);
+            load();
+        } catch (err) {
+            error(err.response?.data?.message || 'Failed to delete college.');
+            setDeleteConfirm(null);
+        }
     };
 
     const handleSave = async () => {
@@ -271,12 +307,20 @@ export default function AdminColleges() {
                                             </td>
                                             <td className="px-5 py-4 text-right">
                                                 {hasRole('super_admin') && (
-                                                    <button
-                                                        onClick={() => openEdit(college)}
-                                                        className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
-                                                    >
-                                                        <Pencil size={14} />
-                                                    </button>
+                                                    <div className="flex items-center justify-end gap-1">
+                                                        <button
+                                                            onClick={() => openEdit(college)}
+                                                            className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                                                        >
+                                                            <Pencil size={14} />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setDeleteConfirm(college)}
+                                                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                                                        >
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    </div>
                                                 )}
                                             </td>
                                         </tr>
@@ -342,6 +386,16 @@ export default function AdminColleges() {
                     saving={saving}
                     onSave={handleSave}
                     onClose={() => setEditCollege(null)}
+                />
+            )}
+            {deleteConfirm && (
+                <ConfirmDialog
+                    open
+                    title="Delete College"
+                    description={`Permanently delete "${deleteConfirm.name}"? This cannot be undone. All departments must be removed first.`}
+                    confirmLabel="Delete"
+                    onConfirm={handleDelete}
+                    onCancel={() => setDeleteConfirm(null)}
                 />
             )}
         </AppLayout>

@@ -14,10 +14,12 @@
         "inertiajs/inertia-laravel": "^3.1",
         "laravel/framework": "^13.8",
         "laravel/sanctum": "^4.3",
+        "laravel/socialite": "^5.27",
         "laravel/tinker": "^3.0",
         "league/csv": "^9.28",
         "maatwebsite/excel": "^3.1",
         "predis/predis": "^3.4",
+        "socialiteproviders/microsoft-azure": "^5.2",
         "spatie/laravel-permission": "^8.0"
     },
     "require-dev": {

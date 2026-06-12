@@ -6,7 +6,7 @@
 
   <div style="background:#276749;padding:24px;text-align:center;">
     <h1 style="color:#fff;margin:0;font-size:20px;">Budget Request Approved</h1>
-    <p style="color:#c6f6d5;margin:4px 0 0;">Research &amp; Technology Transfer — Haramaya University</p>
+    <p style="color:#c6f6d5;margin:4px 0 0;">Research &amp; Technology Transfer — {{ \App\Models\AppSetting::where('key', 'organization_name')->value('value') ?? 'Research Office' }}</p>
   </div>
 
   <div style="padding:32px;">
@@ -49,9 +49,7 @@
     </div>
   </div>
 
-  <div style="background:#f7fafc;padding:16px;text-align:center;">
-    <p style="color:#a0aec0;font-size:12px;margin:0;">RTT Platform — Haramaya University Research Office</p>
-  </div>
+  @include('emails.partials.footer')
 </div>
 </body>
 </html>

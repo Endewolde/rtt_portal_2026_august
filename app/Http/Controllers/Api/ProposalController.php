@@ -18,16 +18,28 @@ class ProposalController extends Controller
     {
         $PUBLIC_STATUSES = ['submitted', 'validated', 'under_blind_review', 'accepted', 'funded', 'midterm_evaluation', 'completed', 'archived'];
 
-        $query = Proposal::with(['pi:id,name', 'college:id,name'])
-            ->whereIn('status', $PUBLIC_STATUSES)
+        $query = Proposal::with(['pi:id,name', 'college:id,name', 'department:id,name'])
             ->whereNull('deleted_at');
+
+        // Allow callers to restrict to specific status(es); default to all public statuses
+        if ($request->filled('status')) {
+            $requested = array_filter(explode(',', $request->status));
+            $allowed = array_intersect($requested, $PUBLIC_STATUSES);
+            $query->whereIn('status', empty($allowed) ? $PUBLIC_STATUSES : $allowed);
+        } else {
+            $query->whereIn('status', $PUBLIC_STATUSES);
+        }
 
         if ($request->filled('search')) {
             $q = $request->search;
             $query->where(fn ($sq) => $sq
                 ->where('title', 'LIKE', "%{$q}%")
                 ->orWhere('abstract', 'LIKE', "%{$q}%")
+                ->orWhere('tracker_number', 'LIKE', "%{$q}%")
             );
+        }
+        if ($request->filled('pi_search')) {
+            $query->whereHas('pi', fn ($q) => $q->where('name', 'LIKE', "%{$request->pi_search}%"));
         }
         if ($request->filled('category')) {
             $query->where('category', $request->category);
@@ -45,6 +57,20 @@ class ProposalController extends Controller
         }
 
         return response()->json(['data' => $query->paginate(20)]);
+    }
+
+    public function publicArchiveYears(): JsonResponse
+    {
+        $years = Proposal::whereIn('status', ['completed', 'archived'])
+            ->whereNull('deleted_at')
+            ->whereNotNull('academic_year')
+            ->selectRaw('academic_year, COUNT(*) as count')
+            ->groupBy('academic_year')
+            ->orderByDesc('academic_year')
+            ->get()
+            ->map(fn ($r) => ['year' => $r->academic_year, 'count' => (int) $r->count]);
+
+        return response()->json(['data' => $years]);
     }
 
     public function index(Request $request): JsonResponse

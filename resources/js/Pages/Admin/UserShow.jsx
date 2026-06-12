@@ -1,16 +1,46 @@
 import { useState, useEffect } from 'react';
 import { Link } from '@inertiajs/react';
-import { ArrowLeft, User } from 'lucide-react';
+import {
+    ArrowLeft, Mail, Phone, CreditCard, Building2,
+    BookOpen, Calendar, ShieldCheck, CheckCircle2,
+    XCircle, AlertTriangle,
+} from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import { get } from '../../lib/api';
-import { formatDate } from '../../lib/utils';
+import { formatDate, cn } from '../../lib/utils';
 
 const ROLE_LABELS = {
-    super_admin: 'Super Admin', central_office: 'Central Office',
-    college_admin: 'College Admin', department_head: 'Dept. Head',
-    pi: 'Principal Investigator', reviewer: 'Reviewer',
-    finance: 'Finance Officer', guest: 'Guest',
+    admin: 'Admin', central_officer: 'Central Officer', college_officer: 'College Officer',
+    finance_officer: 'Finance Officer', research_officer: 'Research Officer',
+    community_officer: 'Community Officer', technology_officer: 'Technology Officer',
+    support_officer: 'Support Officer', staff: 'Staff', guest: 'Guest',
+    // legacy / custom fallback handled by replace(/_/g, ' ')
 };
+
+const ROLE_COLORS = {
+    admin:              'bg-rose-50 text-rose-700 border border-rose-200',
+    central_officer:    'bg-orange-50 text-orange-700 border border-orange-200',
+    college_officer:    'bg-teal-50 text-teal-700 border border-teal-200',
+    finance_officer:    'bg-amber-50 text-amber-700 border border-amber-200',
+    research_officer:   'bg-indigo-50 text-indigo-700 border border-indigo-200',
+    community_officer:  'bg-pink-50 text-pink-700 border border-pink-200',
+    technology_officer: 'bg-violet-50 text-violet-700 border border-violet-200',
+    support_officer:    'bg-sky-50 text-sky-700 border border-sky-200',
+    staff:              'bg-cyan-50 text-cyan-700 border border-cyan-200',
+    guest:              'bg-gray-100 text-gray-500 border border-gray-200',
+};
+
+const STATUS_CONFIG = {
+    active:    { label: 'Active',    icon: CheckCircle2,  cls: 'bg-green-50 text-green-700 border border-green-200' },
+    inactive:  { label: 'Inactive',  icon: XCircle,       cls: 'bg-gray-100 text-gray-500 border border-gray-200'  },
+    suspended: { label: 'Suspended', icon: AlertTriangle, cls: 'bg-red-50 text-red-600 border border-red-200'      },
+};
+
+const AVATAR_GRADIENTS = [
+    'from-blue-500 to-indigo-600', 'from-purple-500 to-violet-600',
+    'from-emerald-500 to-teal-600', 'from-orange-500 to-amber-600',
+    'from-pink-500 to-rose-600',   'from-cyan-500 to-sky-600',
+];
 
 export default function AdminUserShow() {
     const id = window.location.pathname.split('/').pop();
@@ -27,9 +57,12 @@ export default function AdminUserShow() {
     if (loading) {
         return (
             <AppLayout breadcrumb="User Details">
-                <div className="animate-pulse space-y-4">
-                    <div className="h-8 bg-gray-200 rounded w-48" />
-                    <div className="h-40 bg-gray-100 rounded-xl" />
+                <div className="max-w-3xl mx-auto space-y-4 animate-pulse">
+                    <div className="h-8 bg-gray-200 rounded w-32" />
+                    <div className="h-48 bg-gray-100 rounded-2xl" />
+                    <div className="grid grid-cols-2 gap-4">
+                        {[...Array(6)].map((_, i) => <div key={i} className="h-16 bg-gray-100 rounded-xl" />)}
+                    </div>
                 </div>
             </AppLayout>
         );
@@ -43,48 +76,110 @@ export default function AdminUserShow() {
         );
     }
 
-    const roles = user.roles ?? [];
-    const primaryRole = roles[0] ?? 'guest';
+    const roles     = (user.roles ?? []).map(r => typeof r === 'string' ? r : r.name);
+    const name      = user.name ?? '';
+    const initials  = name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase() || '?';
+    const gradient  = AVATAR_GRADIENTS[name.charCodeAt(0) % AVATAR_GRADIENTS.length];
+    const statusCfg = STATUS_CONFIG[user.status] ?? STATUS_CONFIG.active;
+    const StatusIcon = statusCfg.icon;
 
-    const fields = [
-        { label: 'Name', value: user.name },
-        { label: 'Email', value: user.email },
-        { label: 'Role', value: ROLE_LABELS[primaryRole] ?? primaryRole },
-        { label: 'Employee ID', value: user.employee_id ?? '—' },
-        { label: 'Phone', value: user.phone ?? '—' },
-        { label: 'College', value: user.college?.name ?? '—' },
-        { label: 'Department', value: user.department?.name ?? '—' },
-        { label: 'Status', value: user.status },
-        { label: 'Registered', value: formatDate(user.created_at) },
+    const infoCards = [
+        { icon: Mail,      label: 'Email',       value: user.email },
+        { icon: Phone,     label: 'Phone',        value: user.phone ?? '—' },
+        { icon: CreditCard, label: 'Employee ID', value: user.employee_id ?? '—' },
+        { icon: Building2, label: 'College',      value: user.college?.name ?? '—' },
+        { icon: BookOpen,  label: 'Department',   value: user.department?.name ?? '—' },
+        { icon: Calendar,  label: 'Registered',   value: formatDate(user.created_at) },
     ];
 
     return (
         <AppLayout breadcrumb="User Details">
-            <div className="mb-6">
-                <Link href="/admin/users" className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline">
+            <div className="max-w-3xl mx-auto space-y-5">
+
+                {/* Back */}
+                <Link href="/admin/users"
+                    className="inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-700 font-medium">
                     <ArrowLeft size={14} /> Back to Users
                 </Link>
-            </div>
 
-            <div className="bg-white rounded-xl border border-gray-200 p-6 max-w-2xl">
-                <div className="flex items-center gap-4 mb-6">
-                    <div className="h-14 w-14 rounded-full bg-blue-700 flex items-center justify-center text-white text-xl font-bold">
-                        {user.name?.charAt(0)}
-                    </div>
-                    <div>
-                        <h1 className="text-xl font-bold text-gray-900">{user.name}</h1>
-                        <p className="text-sm text-gray-500">{user.email}</p>
+                {/* Profile card */}
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                    {/* Gradient header band */}
+                    <div className={`h-24 bg-linear-to-r ${gradient} opacity-80`} />
+
+                    <div className="px-6 pb-6">
+                        {/* Avatar + identity */}
+                        <div className="flex items-end gap-4 -mt-10 mb-4">
+                            <div className={cn(
+                                `w-20 h-20 rounded-2xl bg-linear-to-br ${gradient}`,
+                                'flex items-center justify-center text-white text-2xl font-bold',
+                                'ring-4 ring-white shadow-lg shrink-0 overflow-hidden'
+                            )}>
+                                {user.avatar
+                                    ? <img src={user.avatar} alt={name} className="w-full h-full object-cover" />
+                                    : initials
+                                }
+                            </div>
+                            <div className="pb-1 min-w-0 flex-1">
+                                <h1 className="text-xl font-bold text-gray-900 truncate">
+                                    {user.title ? <span className="text-gray-500 font-medium mr-1">{user.title}</span> : null}
+                                    {name}
+                                </h1>
+                                <p className="text-sm text-gray-500 truncate">{user.email}</p>
+                            </div>
+                            {/* Status badge */}
+                            <span className={cn('flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full shrink-0', statusCfg.cls)}>
+                                <StatusIcon size={12} />
+                                {statusCfg.label}
+                            </span>
+                        </div>
+
+                        {/* Roles */}
+                        <div className="flex items-center gap-2 flex-wrap mb-5">
+                            <ShieldCheck size={14} className="text-gray-400 shrink-0" />
+                            {roles.length === 0
+                                ? <span className="text-xs text-gray-400 italic">No role assigned</span>
+                                : roles.map(r => (
+                                    <span key={r}
+                                        className={cn(
+                                            'text-xs font-semibold px-2.5 py-1 rounded-full capitalize',
+                                            ROLE_COLORS[r] ?? 'bg-gray-100 text-gray-600 border border-gray-200'
+                                        )}>
+                                        {ROLE_LABELS[r] ?? r.replace(/_/g, ' ')}
+                                    </span>
+                                ))
+                            }
+                        </div>
+
+                        {/* Info grid */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                            {infoCards.map(({ icon: Icon, label, value }) => (
+                                <div key={label} className="bg-gray-50 rounded-xl px-4 py-3">
+                                    <div className="flex items-center gap-1.5 mb-1">
+                                        <Icon size={12} className="text-gray-400 shrink-0" />
+                                        <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">{label}</p>
+                                    </div>
+                                    <p className="text-sm font-medium text-gray-800 truncate">{value}</p>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Expertise */}
+                        {(user.expertise?.length > 0) && (
+                            <div className="mt-4 pt-4 border-t border-gray-100">
+                                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Research Expertise</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {user.expertise.map((tag, i) => (
+                                        <span key={i}
+                                            className="text-xs font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 px-2.5 py-1 rounded-lg">
+                                            {tag}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
-
-                <dl className="grid grid-cols-2 gap-x-8 gap-y-4">
-                    {fields.map(({ label, value }) => (
-                        <div key={label}>
-                            <dt className="text-xs text-gray-500 uppercase tracking-wide">{label}</dt>
-                            <dd className="mt-0.5 text-sm font-medium text-gray-900">{value}</dd>
-                        </div>
-                    ))}
-                </dl>
             </div>
         </AppLayout>
     );

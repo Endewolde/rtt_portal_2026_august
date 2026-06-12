@@ -33,11 +33,13 @@ class User extends Authenticatable
 
     protected $fillable = [
         'name',
+        'title',
         'email',
         'password',
         'employee_id',
         'college_id',
         'department_id',
+        'expertise',
         'telegram_chat_id',
         'telegram_link_token',
         'telegram_link_token_expires_at',
@@ -45,6 +47,8 @@ class User extends Authenticatable
         'gender',
         'avatar',
         'status',
+        'oauth_provider',
+        'oauth_id',
         'email_verified_at',
         'email_verification_token',
         'email_verification_expires_at',
@@ -62,12 +66,18 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'telegram_link_token_expires_at' => 'datetime',
             'password' => 'hashed',
+            'expertise' => 'array',
         ];
     }
 
     public function assignedComplaints(): HasMany
     {
         return $this->hasMany(Complaint::class, 'assigned_to');
+    }
+
+    public function reviewAssignments(): HasMany
+    {
+        return $this->hasMany(ReviewAssignment::class, 'reviewer_id');
     }
 
     public function college(): BelongsTo

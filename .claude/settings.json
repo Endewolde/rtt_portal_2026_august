@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -v \"^--$\")",
+      "Bash(vendor/bin/pint app/Services/DashboardService.php app/Services/RepositoryService.php database/seeders/RolePermissionSeeder.php --format agent)",
+      "Bash(vendor/bin/pint app/Services/ComplaintService.php --format agent)",
+      "Bash(vendor/bin/pint app/Http/Controllers/Api/UserController.php --format agent)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"http://127.0.0.1:8000/proposals/019ebaa4-9b78-730f-80b6-6595815dd108/assign-reviewers\" -H \"Accept: text/html\")",
+      "mcp__laravel-boost__read-log-entries",
+      "Bash(vendor/bin/pint app/Http/Controllers/Api/ReviewController.php --format agent)",
+      "Bash(vendor/bin/pint app/Http/Controllers/Api/ReviewController.php app/Services/ReviewAssignmentService.php --format agent)",
+      "Bash(vendor/bin/pint app/Http/Controllers/Api/CentralEvaluationController.php --format agent)",
+      "Bash(vendor/bin/pint app/Http/Controllers/Api/AbstractController.php app/Http/Controllers/Api/AbstractAdminController.php app/Http/Controllers/Api/ConferenceController.php --format agent)",
+      "Bash(vendor/bin/pint app/Listeners/SendProposalWorkflowNotifications.php app/Jobs/SendRawMailJob.php --format agent)",
+      "Bash(mysql -u root real_rtt1 -e \"SHOW TABLES LIKE 'jobs';\")",
+      "Bash(vendor/bin/pint app/Services/ProposalCallService.php --format agent)",
+      "Bash(vendor/bin/pint app/Http/Controllers/Api/ProposalController.php --format agent)",
+      "Bash(vendor/bin/pint app/Http/Controllers/Api/FeatureController.php app/Http/Middleware/HandleInertiaRequests.php app/Enums/Feature.php --format agent)",
+      "Bash(vendor/bin/pint app/Http/Controllers/Api/FeatureController.php --format agent)",
+      "Bash(xargs -I{} sh -c 'echo \"=== {} ===\" && head -30 {}')"
+    ]
+  }
+}
