@@ -27,3 +27,7 @@ Homestead.yaml
 Thumbs.db
 /storage/app/private/
 /storage/logs/
+
+# Hide raw source from repo
+/resources/js/
+/tests/
