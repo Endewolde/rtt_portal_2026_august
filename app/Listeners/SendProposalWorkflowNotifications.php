@@ -3,12 +3,11 @@
 namespace App\Listeners;
 
 use App\Events\ProposalTransitioned;
+use App\Jobs\SendEmailNotificationJob;
 use App\Jobs\StoreInAppNotificationJob;
 use App\Models\Proposal;
 use App\Models\User;
-use App\Services\MailConfigService;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 
 class SendProposalWorkflowNotifications
 {
@@ -161,16 +160,10 @@ class SendProposalWorkflowNotifications
             return;
         }
 
-        app(MailConfigService::class)->applyFromDatabase();
-
         try {
-            Mail::html(
-                view("emails.notifications.{$template}", array_merge($data, ['recipient' => $user]))->render(),
-                fn ($msg) => $msg->to($user->email, $user->name)
-                    ->subject($this->resolveSubject($template, $data))
-            );
+            SendEmailNotificationJob::dispatch($user, $template, $data);
         } catch (\Exception $e) {
-            Log::error("Proposal notification email failed [{$template}] to {$user->email}: ".$e->getMessage());
+            Log::error("Failed to dispatch email notification [{$template}] to {$user->email}: ".$e->getMessage());
         }
     }
 

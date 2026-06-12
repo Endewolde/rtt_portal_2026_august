@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\StoreInAppNotificationJob;
 use App\Models\DefenceSession;
 use App\Models\EvaluationCategory;
 use App\Models\EvaluationQuestion;
@@ -11,23 +12,29 @@ use App\Models\Proposal;
 use App\Models\ProposalMember;
 use App\Models\ReviewAssignment;
 use App\Models\ReviewScore;
+use App\Models\User;
 use App\Services\DefenceSessionService;
+use App\Services\MailConfigService;
 use App\Services\ReviewAssignmentService;
 use App\Services\ReviewScoreService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 class ReviewController extends Controller
 {
     public function __construct(
         private ReviewAssignmentService $assignmentService,
         private ReviewScoreService $scoreService,
-        private DefenceSessionService $defenceService
+        private DefenceSessionService $defenceService,
+        private MailConfigService $mailConfig
     ) {}
 
-    public function availableReviewers(string $id): JsonResponse
+    public function availableReviewers(string $id, Request $request): JsonResponse
     {
-        $reviewers = $this->assignmentService->getAvailableReviewers($id);
+        $filters = $request->only(['search', 'expertise', 'department_id', 'college_id']);
+        $reviewers = $this->assignmentService->getAvailableReviewers($id, $filters);
 
         return response()->json(['data' => $reviewers]);
     }
@@ -37,6 +44,7 @@ class ReviewController extends Controller
         $request->validate([
             'reviewer_ids' => 'required|array|min:1',
             'evaluation_type_id' => 'required|string',
+            'due_date' => 'required|date|after:today',
         ]);
 
         $proposal = Proposal::findOrFail($id);
@@ -44,7 +52,9 @@ class ReviewController extends Controller
             $proposal,
             $request->reviewer_ids,
             $request->evaluation_type_id,
-            $request->user()
+            $request->user(),
+            [],
+            $request->due_date
         );
 
         return response()->json(['data' => $assignments], 201);
@@ -316,20 +326,23 @@ class ReviewController extends Controller
     {
         $request->validate([
             'new_reviewer_id' => 'required|uuid|exists:users,id',
-            'due_date' => 'nullable|date',
+            'due_date' => 'required|date|after:today',
         ]);
 
-        $assignment = ReviewAssignment::findOrFail($id);
+        $assignment = ReviewAssignment::with('evaluationType')->findOrFail($id);
+        $proposal = Proposal::findOrFail($assignment->proposal_id);
 
-        $isConflicted = ProposalMember::where('proposal_id', $assignment->proposal_id)
+        $isTeamMember = ProposalMember::where('proposal_id', $assignment->proposal_id)
             ->where('user_id', $request->new_reviewer_id)
             ->where('status', 'active')
             ->exists();
 
-        if ($isConflicted) {
+        $isPrincipalInvestigator = $proposal->pi_user_id === $request->new_reviewer_id;
+
+        if ($isTeamMember || $isPrincipalInvestigator) {
             return response()->json([
                 'data' => null,
-                'message' => 'This user is a team member and cannot review this proposal.',
+                'message' => 'This user is the Principal Investigator or a team member and cannot review this proposal.',
                 'errors' => [],
                 'meta' => [],
             ], 422);
@@ -338,15 +351,160 @@ class ReviewController extends Controller
         $assignment->update([
             'reviewer_id' => $request->new_reviewer_id,
             'status' => 'pending',
-            'due_date' => $request->due_date ?? $assignment->due_date,
+            'due_date' => $request->due_date,
             'submitted_at' => null,
         ]);
 
         ReviewScore::where('review_assignment_id', $assignment->id)->delete();
 
+        // Notify the newly assigned reviewer
+        $newReviewer = User::find($request->new_reviewer_id);
+        if ($newReviewer) {
+            $reviewType = str_contains($assignment->evaluationType?->name ?? '', 'open_defence')
+                ? 'Open Defence'
+                : 'Blind Review';
+
+            $data = [
+                'tracker_number' => $proposal->tracker_number,
+                'proposal_title' => $proposal->title,
+                'review_type' => $reviewType,
+                'due_date' => $assignment->due_date,
+                'reassigned' => true,
+            ];
+
+            if ($newReviewer->email) {
+                \App\Jobs\SendRawMailJob::dispatch(
+                    view('emails.notifications.review_assignment', array_merge($data, ['recipient' => $newReviewer]))->render(),
+                    $newReviewer->email,
+                    $newReviewer->name,
+                    "{$reviewType} Assignment (Reassigned) — {$proposal->tracker_number}"
+                );
+            }
+
+            try {
+                StoreInAppNotificationJob::dispatchSync($newReviewer->id, 'review_assignment', $data);
+            } catch (\Exception $e) {
+                Log::error("In-app reassignment notification failed for {$newReviewer->id}: ".$e->getMessage());
+            }
+        }
+
         return response()->json([
-            'data' => $assignment->fresh()->load('staff'),
+            'data' => $assignment->fresh()->load('reviewer'),
             'message' => 'Reviewer reassigned successfully.',
+            'errors' => [],
+            'meta' => [],
+        ]);
+    }
+
+    public function addReviewer(Request $request, string $id): JsonResponse
+    {
+        $request->validate([
+            'reviewer_id' => 'required|uuid|exists:users,id',
+            'due_date' => 'required|date|after:today',
+        ]);
+
+        $proposal = Proposal::findOrFail($id);
+
+        if (! in_array($proposal->status, ['under_blind_review', 'under_open_defence'])) {
+            return response()->json([
+                'data' => null,
+                'message' => 'Reviewers can only be added while the proposal is under blind review or open defence.',
+                'errors' => [],
+                'meta' => [],
+            ], 422);
+        }
+
+        $isTeamMember = ProposalMember::where('proposal_id', $id)
+            ->where('user_id', $request->reviewer_id)
+            ->where('status', 'active')
+            ->exists();
+
+        if ($isTeamMember || $proposal->pi_user_id === $request->reviewer_id) {
+            return response()->json([
+                'data' => null,
+                'message' => 'This user is the Principal Investigator or a team member and cannot review this proposal.',
+                'errors' => [],
+                'meta' => [],
+            ], 422);
+        }
+
+        $alreadyAssigned = ReviewAssignment::where('proposal_id', $id)
+            ->where('reviewer_id', $request->reviewer_id)
+            ->whereNotIn('status', ['declined'])
+            ->exists();
+
+        if ($alreadyAssigned) {
+            return response()->json([
+                'data' => null,
+                'message' => 'This reviewer is already assigned to this proposal.',
+                'errors' => [],
+                'meta' => [],
+            ], 422);
+        }
+
+        $evalType = ReviewAssignment::where('proposal_id', $id)->value('evaluation_type_id');
+
+        $assignment = ReviewAssignment::create([
+            'proposal_id' => $id,
+            'reviewer_id' => $request->reviewer_id,
+            'evaluation_type_id' => $evalType,
+            'assigned_by' => $request->user()->id,
+            'status' => 'pending',
+            'assigned_at' => now(),
+            'due_date' => $request->due_date ?? now()->addDays(14)->toDateString(),
+        ]);
+
+        $reviewer = User::find($request->reviewer_id);
+        if ($reviewer) {
+            $data = [
+                'tracker_number' => $proposal->tracker_number,
+                'proposal_title' => $proposal->title,
+                'review_type' => 'Blind Review',
+                'due_date' => $assignment->due_date,
+            ];
+
+            if ($reviewer->email) {
+                \App\Jobs\SendRawMailJob::dispatch(
+                    view('emails.notifications.review_assignment', array_merge($data, ['recipient' => $reviewer]))->render(),
+                    $reviewer->email,
+                    $reviewer->name,
+                    "Blind Review Assignment — {$proposal->tracker_number}"
+                );
+            }
+
+            try {
+                StoreInAppNotificationJob::dispatchSync($reviewer->id, 'review_assignment', $data);
+            } catch (\Exception $e) {
+                Log::error("Add reviewer notification failed for {$reviewer->id}: ".$e->getMessage());
+            }
+        }
+
+        return response()->json([
+            'data' => $assignment->fresh()->load('reviewer'),
+            'message' => 'Reviewer added successfully.',
+            'errors' => [],
+            'meta' => [],
+        ], 201);
+    }
+
+    public function removeReviewer(string $id): JsonResponse
+    {
+        $assignment = ReviewAssignment::with('proposal')->findOrFail($id);
+
+        if (in_array($assignment->status, ['submitted'])) {
+            return response()->json([
+                'data' => null,
+                'message' => 'Cannot remove a reviewer who has already submitted their review.',
+                'errors' => [],
+                'meta' => [],
+            ], 422);
+        }
+
+        $assignment->delete();
+
+        return response()->json([
+            'data' => null,
+            'message' => 'Reviewer removed successfully.',
             'errors' => [],
             'meta' => [],
         ]);

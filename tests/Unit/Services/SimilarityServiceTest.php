@@ -27,7 +27,7 @@ beforeEach(function () {
     $this->dept    = Department::create(['college_id' => $this->college->id, 'name' => 'D', 'code' => 'SD'.rand(10, 99)]);
 
     $this->central = User::factory()->create();
-    $this->central->assignRole('central_office');
+    $this->central->assignRole('central_officer');
     NotificationPreference::create([
         'user_id'          => $this->central->id,
         'email_enabled'    => true,

@@ -5,9 +5,13 @@ namespace App\Services;
 use App\Exceptions\IncompleteProposalException;
 use App\Exceptions\InvalidWizardStepException;
 use App\Exceptions\ProposalNotEditableException;
+use App\Jobs\CheckProposalSimilarityJob;
+use App\Models\College;
+use App\Models\Department;
 use App\Models\Proposal;
 use App\Models\ProposalBudget;
 use App\Models\ProposalCall;
+use App\Models\ProposalDocument;
 use App\Models\ProposalMember;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
@@ -27,13 +31,13 @@ class ProposalService
     {
         if (! $pi->college_id) {
             if ($pi->hasAnyRole(['super_admin', 'central_officer'])) {
-                $fallbackCollege = \App\Models\College::where('status', 'active')->first();
-                $fallbackDept    = $fallbackCollege
-                    ? \App\Models\Department::where('college_id', $fallbackCollege->id)->first()
+                $fallbackCollege = College::where('status', 'active')->first();
+                $fallbackDept = $fallbackCollege
+                    ? Department::where('college_id', $fallbackCollege->id)->first()
                     : null;
 
                 if ($fallbackCollege) {
-                    $pi->college_id    = $fallbackCollege->id;
+                    $pi->college_id = $fallbackCollege->id;
                     $pi->department_id = $fallbackDept?->id;
                 } else {
                     throw new \Exception(
@@ -48,31 +52,43 @@ class ProposalService
             }
         }
 
+        if (! $pi->department_id) {
+            $fallbackDept = Department::where('college_id', $pi->college_id)->first();
+            if ($fallbackDept) {
+                $pi->department_id = $fallbackDept->id;
+            } else {
+                throw new \RuntimeException(
+                    'Your college has no departments. '.
+                    'Please contact the administrator to add a department before submitting a proposal.'
+                );
+            }
+        }
+
         $call = ProposalCall::findOrFail($proposalCallId);
 
         return DB::transaction(function () use ($pi, $call) {
             $proposal = Proposal::create([
-                'tracker_number'         => 'DRAFT-'.Str::upper(Str::random(8)),
-                'proposal_call_id'       => $call->id,
-                'category'               => $call->category,
-                'title'                  => '',
-                'status'                 => 'draft',
-                'pi_user_id'             => $pi->id,
-                'college_id'             => $pi->college_id,
-                'department_id'          => $pi->department_id,
-                'academic_year'          => $call->academic_year,
-                'current_wizard_step'    => 1,
+                'tracker_number' => 'DRAFT-'.Str::upper(Str::random(8)),
+                'proposal_call_id' => $call->id,
+                'category' => $call->category,
+                'title' => '',
+                'status' => 'draft',
+                'pi_user_id' => $pi->id,
+                'college_id' => $pi->college_id,
+                'department_id' => $pi->department_id,
+                'academic_year' => $call->academic_year,
+                'current_wizard_step' => 1,
                 'wizard_completed_steps' => [],
-                'created_by'             => $pi->id,
+                'created_by' => $pi->id,
             ]);
 
             ProposalMember::create([
-                'proposal_id'             => $proposal->id,
-                'user_id'                 => $pi->id,
-                'role'                    => 'pi',
+                'proposal_id' => $proposal->id,
+                'user_id' => $pi->id,
+                'role' => 'pi',
                 'contribution_percentage' => 100,
-                'status'                  => 'active',
-                'joined_at'               => now(),
+                'status' => 'active',
+                'joined_at' => now(),
             ]);
 
             return $proposal;
@@ -84,7 +100,7 @@ class ProposalService
      * Persists step data even if incomplete — never loses user input.
      *
      * @throws ProposalNotEditableException if proposal is not in draft status
-     * @throws InvalidWizardStepException   if step is more than 1 ahead of current
+     * @throws InvalidWizardStepException if step is more than 1 ahead of current
      */
     public function saveStep(Proposal $proposal, int $step, array $data, User $actor): Proposal
     {
@@ -96,7 +112,7 @@ class ProposalService
 
         // Allow re-saving any already-completed step (edit), or advancing to the next step.
         $completedSteps = $proposal->wizard_completed_steps ?? [];
-        $maxAllowed     = ($proposal->current_wizard_step ?? 1) + 1;
+        $maxAllowed = ($proposal->current_wizard_step ?? 1) + 1;
 
         if ($step > $maxAllowed && ! in_array($step, $completedSteps)) {
             throw new InvalidWizardStepException(
@@ -105,7 +121,7 @@ class ProposalService
         }
 
         return DB::transaction(function () use ($proposal, $step, $data, $actor, $completedSteps) {
-            $draftData             = $proposal->draft_data ?? [];
+            $draftData = $proposal->draft_data ?? [];
             $draftData["step_{$step}"] = $data;
 
             if (! in_array($step, $completedSteps)) {
@@ -114,18 +130,18 @@ class ProposalService
             }
 
             $updates = [
-                'draft_data'             => $draftData,
+                'draft_data' => $draftData,
                 'wizard_completed_steps' => $completedSteps,
-                'current_wizard_step'    => max($proposal->current_wizard_step ?? 1, $step),
+                'current_wizard_step' => max($proposal->current_wizard_step ?? 1, $step),
             ];
 
             switch ($step) {
                 case 1:
-                    $updates['title']           = $data['title'] ?? $proposal->title;
-                    $updates['abstract']         = $data['abstract'] ?? null;
-                    $updates['keywords']         = $data['keywords'] ?? null;
-                    $updates['focus_area']       = $data['focus_area'] ?? null;
-                    $updates['duration_months']  = isset($data['duration_months']) && $data['duration_months'] !== ''
+                    $updates['title'] = $data['title'] ?? $proposal->title;
+                    $updates['abstract'] = $data['abstract'] ?? null;
+                    $updates['keywords'] = $data['keywords'] ?? null;
+                    $updates['focus_area'] = $data['focus_area'] ?? null;
+                    $updates['duration_months'] = isset($data['duration_months']) && $data['duration_months'] !== ''
                         ? (int) $data['duration_months']
                         : null;
                     // Only persist research_type for research proposals
@@ -171,7 +187,7 @@ class ProposalService
         }
 
         $draftData = $proposal->draft_data ?? [];
-        $abstract  = trim($draftData['step_1']['abstract'] ?? $proposal->abstract ?? '');
+        $abstract = trim($draftData['step_1']['abstract'] ?? $proposal->abstract ?? '');
         if (empty($abstract)) {
             throw new IncompleteProposalException('Proposal abstract is required.');
         }
@@ -183,7 +199,7 @@ class ProposalService
             );
         }
 
-        $docCount = \App\Models\ProposalDocument::where('proposal_id', $proposal->id)->count();
+        $docCount = ProposalDocument::where('proposal_id', $proposal->id)->count();
         if ($docCount === 0) {
             throw new IncompleteProposalException(
                 'Please upload the required documents before submitting.'
@@ -209,7 +225,7 @@ class ProposalService
 
             $proposal->update([
                 'tracker_number' => $trackerNumber,
-                'submitted_at'   => now(),
+                'submitted_at' => now(),
             ]);
 
             return $this->workflowService->transition(
@@ -220,7 +236,7 @@ class ProposalService
             );
         });
 
-        \App\Jobs\CheckProposalSimilarityJob::dispatch($submitted->id);
+        CheckProposalSimilarityJob::dispatch($submitted->id);
 
         return $submitted;
     }
@@ -231,13 +247,13 @@ class ProposalService
             ->where('role', '!=', 'pi')
             ->where('status', 'active')
             ->update([
-                'status'            => 'inactive',
-                'withdrawn_at'      => now(),
+                'status' => 'inactive',
+                'withdrawn_at' => now(),
                 'withdrawal_reason' => 'Replaced in wizard step 3',
             ]);
 
-        $count           = count($coInvestigators);
-        $totalContrib    = 0;
+        $count = count($coInvestigators);
+        $totalContrib = 0;
 
         foreach ($coInvestigators as $coI) {
             $coUser = User::findOrFail($coI['user_id']);
@@ -245,12 +261,12 @@ class ProposalService
             $contrib = $coI['contribution_percentage'] ?? ($count > 0 ? round(80 / $count, 2) : 0);
 
             ProposalMember::create([
-                'proposal_id'             => $proposal->id,
-                'user_id'                 => $coUser->id,
-                'role'                    => 'co_investigator',
+                'proposal_id' => $proposal->id,
+                'user_id' => $coUser->id,
+                'role' => 'co_investigator',
                 'contribution_percentage' => $contrib,
-                'status'                  => 'active',
-                'joined_at'               => now(),
+                'status' => 'active',
+                'joined_at' => now(),
             ]);
 
             $totalContrib += $contrib;
@@ -267,11 +283,11 @@ class ProposalService
 
         foreach ($items as $item) {
             ProposalBudget::create([
-                'proposal_id'      => $proposal->id,
-                'category'         => $item['category'],
+                'proposal_id' => $proposal->id,
+                'category' => $item['category'],
                 'item_description' => $item['description'],
-                'amount'           => $item['amount'],
-                'justification'    => $item['item_justification'] ?? null,
+                'amount' => $item['amount'],
+                'justification' => $item['item_justification'] ?? null,
             ]);
         }
     }

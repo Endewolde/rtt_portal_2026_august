@@ -27,7 +27,7 @@ function alloc_makeBase(): array
     $dept    = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'AD'.rand(10, 99)]);
 
     $central = User::factory()->create();
-    $central->assignRole('central_office');
+    $central->assignRole('central_officer');
 
     $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
     $pi->assignRole('pi');

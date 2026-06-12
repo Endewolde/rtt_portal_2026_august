@@ -76,20 +76,20 @@ class RepositoryService
             ->orderBy('created_at', 'asc')
             ->get();
 
-        $reviewerMap     = [];
+        $reviewerMap = [];
         $reviewerCounter = 'A';
 
         $anonymizedHistory = $history->map(function ($log) use (&$reviewerMap, &$reviewerCounter) {
-            $actor      = User::find($log->actor_id);
+            $actor = User::find($log->actor_id);
             $actorLabel = 'System';
 
             if ($actor) {
-                if ($actor->hasRole('staff')) {
+                if ($actor->hasRole('reviewer')) {
                     if (! isset($reviewerMap[$actor->id])) {
                         $reviewerMap[$actor->id] = 'Reviewer '.$reviewerCounter++;
                     }
                     $actorLabel = $reviewerMap[$actor->id];
-                } elseif ($actor->hasRole('staff')) {
+                } elseif ($actor->hasRole('pi')) {
                     $actorLabel = 'Principal Investigator';
                 } else {
                     $actorLabel = 'RTT Office';
@@ -97,25 +97,25 @@ class RepositoryService
             }
 
             return [
-                'from_stage'  => $log->from_stage,
-                'action'      => $log->action,
-                'to_stage'    => $log->to_stage,
-                'actor'       => $actorLabel,
-                'notes'       => $log->notes,
+                'from_stage' => $log->from_stage,
+                'action' => $log->action,
+                'to_stage' => $log->to_stage,
+                'actor' => $actorLabel,
+                'notes' => $log->notes,
                 'occurred_at' => $log->created_at,
             ];
         });
 
         return [
             'tracker_number' => $proposal->tracker_number,
-            'title'          => $proposal->title,
-            'category'       => $proposal->category,
+            'title' => $proposal->title,
+            'category' => $proposal->category,
             'current_status' => $proposal->status,
-            'submitted_at'   => $proposal->submitted_at,
-            'academic_year'  => $proposal->academic_year,
-            'college'        => $proposal->college?->name,
-            'history'        => $anonymizedHistory,
-            'is_terminal'    => in_array($proposal->status, ['archived', 'rejected']),
+            'submitted_at' => $proposal->submitted_at,
+            'academic_year' => $proposal->academic_year,
+            'college' => $proposal->college?->name,
+            'history' => $anonymizedHistory,
+            'is_terminal' => in_array($proposal->status, ['archived', 'rejected']),
             'final_decision' => in_array($proposal->status, ['accepted', 'funded', 'completed', 'archived'])
                 ? 'accepted'
                 : (in_array($proposal->status, ['rejected']) ? 'rejected' : null),

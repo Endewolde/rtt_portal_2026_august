@@ -27,7 +27,7 @@ function rpt_makeBase(): array
 {
     $college = College::create(['name' => 'Rpt College '.rand(), 'code' => 'RP'.rand(10, 99)]);
     $dept    = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'RD'.rand(10, 99)]);
-    $central = User::factory()->create(); $central->assignRole('central_office');
+    $central = User::factory()->create(); $central->assignRole('central_officer');
 
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research',
@@ -180,7 +180,7 @@ test('unknown report type throws InvalidArgumentException', function () {
 });
 
 test('report with date range over 3 months is queued not sync', function () {
-    $central = User::factory()->create(); $central->assignRole('central_office');
+    $central = User::factory()->create(); $central->assignRole('central_officer');
 
     $snapshot = app(ReportService::class)->generate('review_progress_pipeline', [
         'date_from' => now()->subMonths(5)->toDateString(),
@@ -192,7 +192,7 @@ test('report with date range over 3 months is queued not sync', function () {
 });
 
 test('report with date range under 3 months runs synchronously', function () {
-    $central = User::factory()->create(); $central->assignRole('central_office');
+    $central = User::factory()->create(); $central->assignRole('central_officer');
 
     $snapshot = app(ReportService::class)->generate('review_progress_pipeline', [
         'date_from' => now()->subMonths(2)->toDateString(),

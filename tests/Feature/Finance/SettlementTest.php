@@ -36,11 +36,11 @@ function sett_makeBase(): array
     $college = College::create(['name' => 'Sett College '.rand(), 'code' => 'ST'.rand(10, 99)]);
     $dept    = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'SD2'.rand(10, 99)]);
 
-    $central       = User::factory()->create(); $central->assignRole('central_office');
+    $central       = User::factory()->create(); $central->assignRole('central_officer');
     $pi            = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]); $pi->assignRole('pi');
     $coI           = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]); $coI->assignRole('pi');
-    $collegeAdmin  = User::factory()->create(); $collegeAdmin->assignRole('college_admin');
-    $finance       = User::factory()->create(); $finance->assignRole('finance');
+    $collegeAdmin  = User::factory()->create(); $collegeAdmin->assignRole('college_officer');
+    $finance       = User::factory()->create(); $finance->assignRole('finance_officer');
 
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research',

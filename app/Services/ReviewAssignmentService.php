@@ -3,14 +3,22 @@
 namespace App\Services;
 
 use App\Exceptions\ConflictingReviewerException;
+use App\Jobs\StoreInAppNotificationJob;
 use App\Models\Proposal;
 use App\Models\ReviewAssignment;
 use App\Models\User;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Spatie\Permission\Models\Permission;
 
 class ReviewAssignmentService
 {
-    public function __construct(private readonly WorkflowService $workflowService) {}
+    public function __construct(
+        private readonly WorkflowService $workflowService,
+        private readonly MailConfigService $mailConfig
+    ) {}
 
     /**
      * Assign reviewers to a proposal.
@@ -20,17 +28,22 @@ class ReviewAssignmentService
      * When $proposal->status is 'blind_review_passed', only creates assignment records
      * (DefenceSessionService handles its own workflow transition).
      *
-     * @param  array  $reviewerIds
      * @return ReviewAssignment[]
      *
      * @throws ConflictingReviewerException if any reviewer is an active proposal member
      * @throws \Exception if proposal is not in a valid state for assignment
      */
+    /**
+     * @param  array{venue?: string, scheduled_date?: string, scheduled_time?: string}  $sessionData
+     *                                                                                                Extra context for open-defence assignments (venue, date, time).
+     */
     public function assign(
         Proposal $proposal,
         array $reviewerIds,
         string $evaluationTypeId,
-        User $assignedBy
+        User $assignedBy,
+        array $sessionData = [],
+        ?string $dueDate = null
     ): array {
         $validStates = ['validated', 'blind_review_passed'];
 
@@ -44,6 +57,9 @@ class ReviewAssignmentService
             ->where('proposal_id', $proposal->id)
             ->where('status', 'active')
             ->pluck('user_id')
+            ->push($proposal->pi_user_id)
+            ->unique()
+            ->values()
             ->toArray();
 
         $conflicted = array_intersect($reviewerIds, $memberUserIds);
@@ -51,23 +67,25 @@ class ReviewAssignmentService
         if (! empty($conflicted)) {
             $names = User::whereIn('id', $conflicted)->pluck('name')->toArray();
             throw new ConflictingReviewerException(
-                'The following users cannot review this proposal as they are team members: '
+                'The following users are Principal Investigators or team members and cannot review this proposal: '
                 .implode(', ', $names)
             );
         }
 
         $assignments = [];
 
-        DB::transaction(function () use ($proposal, $reviewerIds, $evaluationTypeId, $assignedBy, &$assignments) {
+        $dueDate = $dueDate ?? now()->addDays(14)->toDateString();
+
+        DB::transaction(function () use ($proposal, $reviewerIds, $evaluationTypeId, $assignedBy, $dueDate, &$assignments) {
             foreach ($reviewerIds as $reviewerId) {
                 $assignments[] = ReviewAssignment::create([
-                    'proposal_id'        => $proposal->id,
-                    'reviewer_id'        => $reviewerId,
+                    'proposal_id' => $proposal->id,
+                    'reviewer_id' => $reviewerId,
                     'evaluation_type_id' => $evaluationTypeId,
-                    'assigned_by'        => $assignedBy->id,
-                    'status'             => 'pending',
-                    'assigned_at'        => now(),
-                    'due_date'           => now()->addDays(14)->toDateString(),
+                    'assigned_by' => $assignedBy->id,
+                    'status' => 'pending',
+                    'assigned_at' => now(),
+                    'due_date' => $dueDate,
                 ]);
             }
 
@@ -82,25 +100,115 @@ class ReviewAssignmentService
             }
         });
 
+        // Notify each reviewer after the transaction commits
+        $reviewType = $proposal->status === 'validated' ? 'Blind Review' : 'Open Defence';
+        $reviewers = User::whereIn('id', $reviewerIds)->get();
+
+        foreach ($reviewers as $reviewer) {
+            $this->notifyReviewer($reviewer, $proposal, $reviewType, $dueDate, $sessionData);
+        }
+
         return $assignments;
     }
 
     /**
-     * Get all active users (any role except guest) who are NOT members of this proposal.
-     * Any user with at least the staff role can be assigned as a reviewer,
-     * irrespective of college or department.
+     * Get eligible reviewers for a proposal, excluding the PI, co-investigators, and
+     * all active team members. Supports filtering by name/email/expertise, department,
+     * and college. Includes active assignment count for workload balancing.
+     *
+     * @param  array{search?: string, expertise?: string, department_id?: string, college_id?: string}  $filters
      */
-    public function getAvailableReviewers(string $proposalId): \Illuminate\Support\Collection
+    public function getAvailableReviewers(string $proposalId, array $filters = []): Collection
     {
-        $memberUserIds = DB::table('proposal_members')
+        $proposal = Proposal::findOrFail($proposalId);
+
+        // Exclude PI and all active proposal members (co-investigators included)
+        $excludedIds = DB::table('proposal_members')
             ->where('proposal_id', $proposalId)
             ->where('status', 'active')
-            ->pluck('user_id');
+            ->pluck('user_id')
+            ->push($proposal->pi_user_id)
+            ->unique()
+            ->values();
 
-        return User::whereHas('roles', fn ($q) => $q->where('name', '!=', 'staff'))
-            ->whereNotIn('id', $memberUserIds)
+        // Eligible reviewers: any active user whose role carries reviews.create,
+        // excluding super_admin and the proposal's own PI/team members.
+        $eligibleRoleIds = Permission::where('name', 'reviews.create')
+            ->first()
+            ?->roles
+            ->pluck('id') ?? collect();
+
+        $query = User::whereHas('roles', fn ($q) => $q->whereIn('id', $eligibleRoleIds))
+            ->whereDoesntHave('roles', fn ($q) => $q->where('name', 'super_admin'))
+            ->whereNotIn('id', $excludedIds)
             ->where('status', 'active')
-            ->with('roles:name')
-            ->get(['id', 'name', 'email', 'college_id', 'department_id']);
+            ->with(['roles:name', 'college:id,name', 'department:id,name'])
+            ->withCount([
+                'reviewAssignments as active_assignments' => fn ($q) => $q->whereIn('status', ['pending', 'accepted', 'in_progress']),
+            ]);
+
+        if (! empty($filters['search'])) {
+            $term = $filters['search'];
+            $query->where(fn ($q) => $q
+                ->where('name', 'like', "%{$term}%")
+                ->orWhere('email', 'like', "%{$term}%")
+                ->orWhereRaw("JSON_SEARCH(LOWER(expertise), 'one', ?) IS NOT NULL", ['%'.strtolower($term).'%'])
+            );
+        }
+
+        if (! empty($filters['expertise'])) {
+            $term = $filters['expertise'];
+            $query->whereRaw("JSON_SEARCH(LOWER(expertise), 'one', ?) IS NOT NULL", ['%'.strtolower($term).'%']);
+        }
+
+        if (! empty($filters['department_id'])) {
+            $query->where('department_id', $filters['department_id']);
+        }
+
+        if (! empty($filters['college_id'])) {
+            $query->where('college_id', $filters['college_id']);
+        }
+
+        return $query
+            ->orderBy('active_assignments')
+            ->orderBy('name')
+            ->get(['id', 'name', 'title', 'email', 'college_id', 'department_id', 'expertise']);
+    }
+
+    private function notifyReviewer(
+        User $reviewer,
+        Proposal $proposal,
+        string $reviewType,
+        string $dueDate,
+        array $sessionData = []
+    ): void {
+        $data = [
+            'tracker_number' => $proposal->tracker_number,
+            'proposal_title' => $proposal->title,
+            'review_type' => $reviewType,
+            'due_date' => $dueDate,
+            'venue' => $sessionData['venue'] ?? null,
+            'scheduled_date' => $sessionData['scheduled_date'] ?? null,
+            'scheduled_time' => $sessionData['scheduled_time'] ?? null,
+        ];
+
+        if ($reviewer->email) {
+            try {
+                $this->mailConfig->applyFromDatabase();
+                $subject = "{$reviewType} Assignment — {$proposal->tracker_number}";
+                Mail::html(
+                    view('emails.notifications.review_assignment', array_merge($data, ['recipient' => $reviewer]))->render(),
+                    fn ($msg) => $msg->to($reviewer->email, $reviewer->name)->subject($subject)
+                );
+            } catch (\Exception $e) {
+                Log::error("Review assignment email failed for {$reviewer->email}: ".$e->getMessage());
+            }
+        }
+
+        try {
+            StoreInAppNotificationJob::dispatchSync($reviewer->id, 'review_assignment', $data);
+        } catch (\Exception $e) {
+            Log::error("In-app review assignment notification failed for {$reviewer->id}: ".$e->getMessage());
+        }
     }
 }

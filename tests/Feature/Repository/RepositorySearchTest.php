@@ -31,7 +31,7 @@ function repo_makeCollege(string $suffix = ''): array
 
 function repo_makeProposal(College $college, Department $dept, array $attrs = []): Proposal
 {
-    $central = User::factory()->create(); $central->assignRole('central_office');
+    $central = User::factory()->create(); $central->assignRole('central_officer');
 
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research',
@@ -180,7 +180,7 @@ test('tracker lookup returns RTT Office for central office actions', function ()
     [$college, $dept] = repo_makeCollege();
     $proposal = repo_makeProposal($college, $dept, ['tracker_number' => 'RES-2026-CENT']);
 
-    $central = User::factory()->create(); $central->assignRole('central_office');
+    $central = User::factory()->create(); $central->assignRole('central_officer');
 
     WorkflowLog::create([
         'proposal_id' => $proposal->id,

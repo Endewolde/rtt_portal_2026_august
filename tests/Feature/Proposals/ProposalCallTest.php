@@ -20,7 +20,7 @@ beforeEach(function () {
 function makeAdmin(): User
 {
     $user = User::factory()->create();
-    $user->assignRole('central_office');
+    $user->assignRole('central_officer');
 
     return $user;
 }

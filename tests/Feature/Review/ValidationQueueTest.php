@@ -24,7 +24,7 @@ beforeEach(function () {
 function makeSubmittedProposal(): Proposal
 {
     $central = User::factory()->create();
-    $central->assignRole('central_office');
+    $central->assignRole('central_officer');
 
     $pi      = User::factory()->create();
     $pi->assignRole('pi');
@@ -63,7 +63,7 @@ function makeSubmittedProposal(): Proposal
 
 test('central office can approve submitted proposal and status becomes validated', function () {
     $validator = User::factory()->create();
-    $validator->assignRole('central_office');
+    $validator->assignRole('central_officer');
 
     $proposal = makeSubmittedProposal();
 
@@ -75,7 +75,7 @@ test('central office can approve submitted proposal and status becomes validated
 
 test('central office can return proposal for correction and status becomes draft', function () {
     $validator = User::factory()->create();
-    $validator->assignRole('central_office');
+    $validator->assignRole('central_officer');
 
     $proposal = makeSubmittedProposal();
 
@@ -86,7 +86,7 @@ test('central office can return proposal for correction and status becomes draft
 
 test('central office can reject proposal and status becomes rejected', function () {
     $validator = User::factory()->create();
-    $validator->assignRole('central_office');
+    $validator->assignRole('central_officer');
 
     $proposal = makeSubmittedProposal();
 
@@ -97,7 +97,7 @@ test('central office can reject proposal and status becomes rejected', function 
 
 test('rejected proposal has rejection_reason and rejected_at set', function () {
     $validator = User::factory()->create();
-    $validator->assignRole('central_office');
+    $validator->assignRole('central_officer');
 
     $proposal = makeSubmittedProposal();
 
@@ -110,7 +110,7 @@ test('rejected proposal has rejection_reason and rejected_at set', function () {
 
 test('returned proposal has rejection_reason set', function () {
     $validator = User::factory()->create();
-    $validator->assignRole('central_office');
+    $validator->assignRole('central_officer');
 
     $proposal = makeSubmittedProposal();
 

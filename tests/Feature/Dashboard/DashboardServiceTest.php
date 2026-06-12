@@ -67,14 +67,14 @@ test('PI gets my_proposals widget', function () {
 });
 
 test('finance gets budget_utilization_summary widget', function () {
-    $finance = dash_makeUser('finance');
+    $finance = dash_makeUser('finance_officer');
     $widgets = app(DashboardService::class)->getWidgets($finance);
 
     expect($widgets)->toHaveKey('budget_utilization_summary');
 });
 
 test('college admin does NOT get budget_utilization_summary widget', function () {
-    $admin   = dash_makeCollegeUser('college_admin');
+    $admin   = dash_makeCollegeUser('college_officer');
     $widgets = app(DashboardService::class)->getWidgets($admin);
 
     expect($widgets)->not->toHaveKey('budget_utilization_summary');

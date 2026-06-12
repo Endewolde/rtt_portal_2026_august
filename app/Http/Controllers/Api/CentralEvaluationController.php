@@ -42,42 +42,55 @@ class CentralEvaluationController extends Controller
 
         $proposals = $query->get()
             ->map(function (Proposal $p) {
-                $blind   = $p->reviewAssignments->filter(fn ($a) => str_starts_with($a->evaluation_type?->name ?? '', 'blind_review'));
-                $defence = $p->reviewAssignments->filter(fn ($a) => str_starts_with($a->evaluation_type?->name ?? '', 'open_defence'));
+                $blind = $p->reviewAssignments->filter(fn ($a) => str_starts_with($a->evaluationType?->name ?? '', 'blind_review'));
+                $defence = $p->reviewAssignments->filter(fn ($a) => str_starts_with($a->evaluationType?->name ?? '', 'open_defence'));
 
-                $blindScore   = $blind->isNotEmpty()
+                // Normalized percentage scores per type (0–100%), used for display
+                $blindScore = $blind->isNotEmpty()
                     ? round($blind->map(fn ($a) => $this->scoreService->calculateScore($a))->avg(), 2)
                     : null;
                 $defenceScore = $defence->isNotEmpty()
                     ? round($defence->map(fn ($a) => $this->scoreService->calculateScore($a))->avg(), 2)
                     : null;
-                $combined     = ($blindScore ?? 0) + ($defenceScore ?? 0);
-                $threshold    = (float) (DB::table('threshold_settings')->where('key', 'combined_threshold')->value('value') ?? 120);
-                $budgetTotal  = $p->budgets->sum('amount');
 
-                // Raw weighted scores for display (X / totalWeight)
-                $blindDisplayInfos   = $blind->map(fn ($a) => $this->scoreService->calculateWeightedDisplay($a));
+                // Raw weighted scores: each out of its evaluation type's total weight
+                // (e.g. blind review out of 80, open defence out of 20)
+                $blindDisplayInfos = $blind->map(fn ($a) => $this->scoreService->calculateWeightedDisplay($a));
                 $defenceDisplayInfos = $defence->map(fn ($a) => $this->scoreService->calculateWeightedDisplay($a));
 
-                $blindScoreRaw   = $blindDisplayInfos->isNotEmpty()
+                $blindScoreRaw = $blindDisplayInfos->isNotEmpty()
                     ? round($blindDisplayInfos->avg('score'), 2) : null;
-                $blindMax        = $blindDisplayInfos->isNotEmpty()
+                $blindMax = $blindDisplayInfos->isNotEmpty()
                     ? $blindDisplayInfos->first()['max'] : null;
                 $defenceScoreRaw = $defenceDisplayInfos->isNotEmpty()
                     ? round($defenceDisplayInfos->avg('score'), 2) : null;
-                $defenceMax      = $defenceDisplayInfos->isNotEmpty()
+                $defenceMax = $defenceDisplayInfos->isNotEmpty()
                     ? $defenceDisplayInfos->first()['max'] : null;
 
+                // Total weight from DB category weights (e.g. blind=80 + defence=20 = 100)
+                $totalMax = ($blindMax ?? 0) + ($defenceMax ?? 0);
+
+                // Combined uses raw weighted scores out of totalMax
+                $combined = ($blindScoreRaw ?? 0) + ($defenceScoreRaw ?? 0);
+
+                // Threshold is a percentage of totalMax (e.g. 70% of 100 = 70 minimum score)
+                $thresholdPct = (float) (DB::table('threshold_settings')->where('key', 'combined_threshold')->value('value') ?? 70);
+                $threshold = $totalMax > 0 ? round($thresholdPct / 100 * $totalMax, 2) : $thresholdPct;
+
+                $budgetTotal = $p->budgets->sum('amount');
+
                 return array_merge($p->toArray(), [
-                    'blind_score'       => $blindScore,
-                    'defence_score'     => $defenceScore,
-                    'blind_score_raw'   => $blindScoreRaw,
-                    'blind_max'         => $blindMax,
+                    'blind_score' => $blindScore,
+                    'defence_score' => $defenceScore,
+                    'blind_score_raw' => $blindScoreRaw,
+                    'blind_max' => $blindMax,
                     'defence_score_raw' => $defenceScoreRaw,
-                    'defence_max'       => $defenceMax,
-                    'combined_score'    => round($combined, 2),
-                    'threshold'         => $threshold,
-                    'budget_total'   => $budgetTotal,
+                    'defence_max' => $defenceMax,
+                    'combined_score' => round($combined, 2),
+                    'total_max' => $totalMax,
+                    'threshold_pct' => $thresholdPct,
+                    'threshold' => $threshold,
+                    'budget_total' => $budgetTotal,
                 ]);
             });
 
@@ -88,12 +101,33 @@ class CentralEvaluationController extends Controller
     {
         $request->validate([
             'awarded_amount' => 'required|numeric|min:1',
-            'remarks'        => 'nullable|string',
+            'remarks' => 'nullable|string',
         ]);
 
         $proposal = Proposal::findOrFail($id);
 
         try {
+            // Create or update the award BEFORE transitioning so that when the
+            // ProposalTransitioned event fires and sends the email, the correct
+            // awarded_amount is already persisted on the award record.
+            $existingAward = Award::where('proposal_id', $proposal->id)->first();
+            if ($existingAward) {
+                $existingAward->update([
+                    'awarded_amount' => (float) $request->awarded_amount,
+                    'approval_notes' => $request->remarks ?? $existingAward->approval_notes,
+                    'approved_by' => $request->user()->id,
+                    'approved_at' => now(),
+                ]);
+                $award = $existingAward->fresh();
+            } else {
+                $award = $this->awardService->createForFundedProposal(
+                    $proposal,
+                    $request->user(),
+                    (float) $request->awarded_amount,
+                    $request->remarks
+                );
+            }
+
             $updated = $this->workflowService->transition(
                 $proposal,
                 'central_approve',
@@ -101,33 +135,18 @@ class CentralEvaluationController extends Controller
                 $request->remarks ?? 'Approved by Central Office for funding'
             );
 
-            if (! Award::where('proposal_id', $updated->id)->exists()) {
-                $award = $this->awardService->createForFundedProposal(
-                    $updated,
-                    $request->user(),
-                    (float) $request->awarded_amount,
-                    $request->remarks
-                );
-            } else {
-                $award = Award::where('proposal_id', $updated->id)->first();
-                $award->update(['awarded_amount' => (float) $request->awarded_amount]);
-                if ($request->remarks) {
-                    $award->update(['approval_notes' => $request->remarks]);
-                }
-            }
-
             return response()->json([
-                'data'    => ['status' => $updated->status, 'grant_reference' => $award->grant_reference],
+                'data' => ['status' => $updated->status, 'grant_reference' => $award->grant_reference],
                 'message' => 'Proposal approved for funding. Grant: '.$award->grant_reference,
-                'errors'  => [],
-                'meta'    => [],
+                'errors' => [],
+                'meta' => [],
             ]);
         } catch (\Exception $e) {
             return response()->json([
-                'data'    => null,
+                'data' => null,
                 'message' => $e->getMessage(),
-                'errors'  => [],
-                'meta'    => [],
+                'errors' => [],
+                'meta' => [],
             ], 422);
         }
     }
@@ -150,17 +169,17 @@ class CentralEvaluationController extends Controller
             );
 
             return response()->json([
-                'data'    => ['status' => $updated->status],
+                'data' => ['status' => $updated->status],
                 'message' => 'Proposal rejected.',
-                'errors'  => [],
-                'meta'    => [],
+                'errors' => [],
+                'meta' => [],
             ]);
         } catch (\Exception $e) {
             return response()->json([
-                'data'    => null,
+                'data' => null,
                 'message' => $e->getMessage(),
-                'errors'  => [],
-                'meta'    => [],
+                'errors' => [],
+                'meta' => [],
             ], 422);
         }
     }

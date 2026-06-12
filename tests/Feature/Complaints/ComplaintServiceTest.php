@@ -30,8 +30,8 @@ function comp_makeBase(): array
     $college = College::create(['name' => 'Comp College '.rand(), 'code' => 'CP'.rand(10, 99)]);
     $dept    = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'CD'.rand(10, 99)]);
 
-    $central       = User::factory()->create(); $central->assignRole('central_office');
-    $collegeAdmin  = User::factory()->create(['college_id' => $college->id]); $collegeAdmin->assignRole('college_admin');
+    $central       = User::factory()->create(); $central->assignRole('central_officer');
+    $collegeAdmin  = User::factory()->create(['college_id' => $college->id]); $collegeAdmin->assignRole('college_officer');
     $pi            = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]); $pi->assignRole('pi');
 
     foreach ([$central, $collegeAdmin, $pi] as $u) {
@@ -149,6 +149,7 @@ test('College Admin CAN resolve blind_review complaint', function () {
         'proposal_id'    => $proposal->id,
         'complainant_id' => $pi->id,
         'stage'          => 'blind_review',
+        'level'          => 'college',
         'description'    => comp_description(),
         'status'         => 'open',
         'assigned_to'    => $collegeAdmin->id,
@@ -167,6 +168,7 @@ test('College Admin CAN resolve open_defence complaint', function () {
         'proposal_id'    => $proposal->id,
         'complainant_id' => $pi->id,
         'stage'          => 'open_defence',
+        'level'          => 'college',
         'description'    => comp_description(),
         'status'         => 'open',
         'assigned_to'    => $collegeAdmin->id,
@@ -185,6 +187,7 @@ test('complaint response dispatches notification to PI', function () {
         'proposal_id'    => $proposal->id,
         'complainant_id' => $pi->id,
         'stage'          => 'blind_review',
+        'level'          => 'college',
         'description'    => comp_description(),
         'status'         => 'open',
     ]);

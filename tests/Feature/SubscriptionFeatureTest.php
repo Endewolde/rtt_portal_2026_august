@@ -179,7 +179,7 @@ test('new roles exist in the database', function () {
 });
 
 test('old roles no longer exist', function () {
-    foreach (['central_office', 'college_admin', 'pi', 'reviewer', 'finance', 'department_head'] as $role) {
+    foreach (['central_officer', 'college_officer', 'pi', 'reviewer', 'finance', 'department_head'] as $role) {
         expect(Role::where('name', $role)->exists())->toBeFalse("Old role {$role} should be gone");
     }
 });

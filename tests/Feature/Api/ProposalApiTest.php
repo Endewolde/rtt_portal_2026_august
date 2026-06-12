@@ -25,8 +25,8 @@ function api_makeBase(): array
     $dept1    = Department::create(['college_id' => $college1->id, 'name' => 'D1', 'code' => 'D1'.rand(10, 99)]);
     $dept2    = Department::create(['college_id' => $college2->id, 'name' => 'D2', 'code' => 'D2'.rand(10, 99)]);
 
-    $central      = User::factory()->create(); $central->assignRole('central_office');
-    $collegeAdmin = User::factory()->create(['college_id' => $college1->id]); $collegeAdmin->assignRole('college_admin');
+    $central      = User::factory()->create(); $central->assignRole('central_officer');
+    $collegeAdmin = User::factory()->create(['college_id' => $college1->id]); $collegeAdmin->assignRole('college_officer');
     $pi1          = User::factory()->create(['college_id' => $college1->id, 'department_id' => $dept1->id]); $pi1->assignRole('pi');
     $pi2          = User::factory()->create(['college_id' => $college2->id, 'department_id' => $dept2->id]); $pi2->assignRole('pi');
 

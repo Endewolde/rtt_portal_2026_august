@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from '@inertiajs/react';
-import { ClipboardList, CheckCircle, XCircle, TrendingUp, TrendingDown, RefreshCw } from 'lucide-react';
+import { ClipboardList, CheckCircle, XCircle, TrendingUp, TrendingDown, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import WorkflowBreadcrumb from '../../Components/WorkflowBreadcrumb';
 import ViewToggle from '../../Components/ViewToggle';
@@ -105,31 +105,43 @@ export default function CentralEvaluation() {
         <AppLayout breadcrumb="Central Evaluation">
             <div className="max-w-5xl mx-auto">
                 <WorkflowBreadcrumb current="accepted" />
-                <div className="flex items-center justify-between mb-6">
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                            <ClipboardList size={22} className="text-blue-600" /> Central Office Evaluation
-                        </h1>
-                        <p className="text-sm text-gray-500 mt-1">Proposals that passed open defence — ready for final funding decision</p>
-                    </div>
+
+                {/* Page Header */}
+                <div className="flex items-start justify-between mb-6 gap-4">
                     <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 bg-teal-100 rounded-xl flex items-center justify-center shrink-0">
+                            <ClipboardList size={20} className="text-teal-600" />
+                        </div>
+                        <div>
+                            <h1 className="text-xl font-bold text-gray-900">Central Office Evaluation</h1>
+                            <p className="text-sm text-gray-500 mt-0.5">Proposals that passed open defence — ready for final funding decision</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                        {!loading && proposals.length > 0 && (
+                            <span className="flex items-center gap-1.5 text-xs font-semibold bg-teal-50 text-teal-700 border border-teal-200 px-2.5 py-1.5 rounded-lg">
+                                {proposals.length} Awaiting Decision
+                            </span>
+                        )}
                         <ViewToggle view={view} onChange={setView} />
-                        <button onClick={load} className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">
+                        <button onClick={load} className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors">
                             <RefreshCw size={14} /> Refresh
                         </button>
                     </div>
                 </div>
 
                 {loading ? (
-                    <div className="flex justify-center py-16">
-                        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                    <div className="flex justify-center py-20">
+                        <div className="w-8 h-8 border-4 border-teal-600 border-t-transparent rounded-full animate-spin" />
                     </div>
                 ) : proposals.length === 0 ? (
-                    <div className="bg-white border border-gray-200 rounded-xl p-12 text-center">
-                        <ClipboardList size={36} className="mx-auto text-gray-300 mb-3" />
-                        <h3 className="text-gray-600 font-medium mb-1">No proposals awaiting central evaluation</h3>
-                        <p className="text-sm text-gray-400">Proposals that pass open defence will appear here.</p>
-                        <Link href="/admin/open-defence" className="mt-3 inline-block text-sm text-blue-600 hover:underline">
+                    <div className="bg-white border border-gray-200 rounded-2xl p-16 text-center">
+                        <div className="h-14 w-14 bg-teal-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <ClipboardList size={28} className="text-teal-300" />
+                        </div>
+                        <h3 className="text-gray-700 font-semibold mb-1">No proposals awaiting central evaluation</h3>
+                        <p className="text-sm text-gray-400 mb-3">Proposals that pass open defence will appear here.</p>
+                        <Link href="/admin/open-defence" className="text-sm text-teal-600 hover:underline font-medium">
                             Go to Open Defence →
                         </Link>
                     </div>
@@ -154,43 +166,57 @@ export default function CentralEvaluation() {
                 ) : (
                     <div className="space-y-4">
                         {proposals.map(p => {
-                            const passesThreshold = (p.combined_score ?? 0) >= (p.threshold ?? 120);
+                            const totalMax        = (p.blind_max ?? 0) + (p.defence_max ?? 0);
+                            const passesThreshold = (p.combined_score ?? 0) >= (p.threshold ?? 0);
+                            const budgetExpanded  = expandedBudget === p.id;
 
                             return (
-                                <div key={p.id} className="bg-white border border-gray-200 rounded-xl p-5">
-                                    {/* Header */}
-                                    <div className="flex items-start justify-between gap-4 mb-4">
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <span className="font-mono text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">{p.tracker_number}</span>
-                                                <span className="text-xs text-gray-400">{getCategoryLabel(p.category)}</span>
+                                <div key={p.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-md transition-shadow">
+                                    {/* Top accent + header row */}
+                                    <div className="flex items-stretch">
+                                        <div className="w-0.5 bg-teal-600 shrink-0" />
+                                        <div className="flex items-start justify-between gap-4 flex-1 px-4 py-3.5">
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                                    <span className="font-mono text-xs font-bold text-teal-700 bg-teal-50 px-2.5 py-1 rounded-lg shrink-0">
+                                                        {p.tracker_number}
+                                                    </span>
+                                                    <span className="text-xs text-gray-400">{getCategoryLabel(p.category)}</span>
+                                                </div>
+                                                <h3 className="text-sm font-semibold text-gray-900 truncate mb-0.5">{p.title}</h3>
+                                                <p className="text-xs text-gray-500">{p.pi?.name} · {p.college?.name}</p>
                                             </div>
-                                            <h3 className="text-base font-semibold text-gray-900 line-clamp-1 mb-0.5">{p.title}</h3>
-                                            <p className="text-xs text-gray-500">{p.pi?.name} · {p.college?.name}</p>
-                                        </div>
-                                        <div className={`shrink-0 flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-lg ${passesThreshold ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-                                            {passesThreshold ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-                                            {p.combined_score} / {p.threshold}
+                                            <div className={`shrink-0 flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-xl ${passesThreshold ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                                                {passesThreshold ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                                                {p.combined_score} / {totalMax}
+                                                <span className="text-xs font-normal opacity-70">({p.threshold_pct}% min)</span>
+                                            </div>
                                         </div>
                                     </div>
 
-                                    {/* Score breakdown */}
-                                    <div className="grid grid-cols-3 gap-4 mb-4 p-3 bg-gray-50 rounded-lg">
-                                        <ScoreBar score={p.blind_score_raw ?? p.blind_score}   max={p.blind_max ?? 100}   label="Blind Review"  color="bg-blue-500" />
-                                        <ScoreBar score={p.defence_score_raw ?? p.defence_score} max={p.defence_max ?? 100} label="Open Defence"  color="bg-purple-500" />
-                                        <ScoreBar score={p.combined_score} max={p.threshold * 1.5} label="Combined" color={passesThreshold ? 'bg-green-500' : 'bg-red-500'} />
+                                    {/* Score breakdown panel */}
+                                    <div className="mx-4 mb-3 p-3.5 bg-gray-50 border border-gray-100 rounded-xl">
+                                        <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-3">Score Breakdown</p>
+                                        <div className="grid grid-cols-3 gap-4">
+                                            <ScoreBar score={p.blind_score_raw ?? p.blind_score}     max={p.blind_max ?? 0}    label="Blind Review" color="bg-indigo-500" />
+                                            <ScoreBar score={p.defence_score_raw ?? p.defence_score} max={p.defence_max ?? 0}  label="Open Defence" color="bg-purple-500" />
+                                            <ScoreBar score={p.combined_score}                        max={totalMax}            label="Total"        color={passesThreshold ? 'bg-green-500' : 'bg-red-500'} />
+                                        </div>
                                     </div>
 
-                                    {/* Budget breakdown toggle */}
-                                    <div className="mb-3">
-                                        <button onClick={() => toggleBudget(p.id)}
-                                            className="text-xs text-blue-600 hover:underline flex items-center gap-1">
-                                            {expandedBudget === p.id ? '▲ Hide' : '▼ Show'} Budget Details
-                                            <span className="ml-1 text-gray-500">({formatCurrency(p.budget_total)} requested)</span>
+                                    {/* Budget toggle */}
+                                    <div className="mx-4 mb-3">
+                                        <button
+                                            onClick={() => toggleBudget(p.id)}
+                                            className="flex items-center gap-1.5 text-xs text-teal-600 hover:text-teal-800 font-semibold transition-colors"
+                                        >
+                                            {budgetExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                                            {budgetExpanded ? 'Hide' : 'Show'} Budget Details
+                                            <span className="text-gray-400 font-normal ml-0.5">({formatCurrency(p.budget_total)} requested)</span>
                                         </button>
-                                        {expandedBudget === p.id && (
-                                            <div className="mt-2 bg-blue-50 border border-blue-200 rounded-lg p-3">
-                                                <p className="text-xs font-semibold text-blue-800 mb-2">Requested Budget</p>
+                                        {budgetExpanded && (
+                                            <div className="mt-2 bg-teal-50 border border-teal-200 rounded-xl p-3.5">
+                                                <p className="text-xs font-semibold text-teal-800 mb-2">Requested Budget</p>
                                                 {(budgetMap[p.id]?.items ?? []).length === 0 ? (
                                                     <p className="text-xs text-gray-400 italic">No budget items.</p>
                                                 ) : (
@@ -201,9 +227,9 @@ export default function CentralEvaluation() {
                                                                 <span className="font-medium text-gray-900">ETB {parseFloat(item.amount).toLocaleString()}</span>
                                                             </div>
                                                         ))}
-                                                        <div className="border-t border-blue-200 pt-1 flex justify-between text-sm font-bold">
-                                                            <span className="text-blue-800">Total Requested</span>
-                                                            <span className="text-blue-900">ETB {parseFloat(budgetMap[p.id]?.total ?? 0).toLocaleString()}</span>
+                                                        <div className="border-t border-teal-200 pt-1.5 flex justify-between text-sm font-bold">
+                                                            <span className="text-teal-800">Total Requested</span>
+                                                            <span className="text-teal-900">ETB {parseFloat(budgetMap[p.id]?.total ?? 0).toLocaleString()}</span>
                                                         </div>
                                                     </div>
                                                 )}
@@ -211,18 +237,18 @@ export default function CentralEvaluation() {
                                         )}
                                     </div>
 
-                                    {/* Budget + actions */}
-                                    <div className="flex items-center justify-between gap-4">
+                                    {/* Action footer */}
+                                    <div className="flex items-center justify-between gap-4 px-4 py-3.5 border-t border-gray-100">
                                         <p className="text-sm text-gray-600">
-                                            Requested budget: <span className="font-semibold text-gray-900">{formatCurrency(p.budget_total)}</span>
+                                            Requested: <span className="font-semibold text-gray-900">{formatCurrency(p.budget_total)}</span>
                                         </p>
                                         <div className="flex gap-2">
                                             <button onClick={() => openReject(p)}
-                                                className="flex items-center gap-1.5 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700">
+                                                className="flex items-center gap-1.5 px-4 py-2 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 transition-colors">
                                                 <XCircle size={14} /> Reject
                                             </button>
                                             <button onClick={() => openApprove(p)}
-                                                className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">
+                                                className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 transition-colors">
                                                 <CheckCircle size={14} /> Approve for Funding
                                             </button>
                                         </div>
@@ -236,7 +262,7 @@ export default function CentralEvaluation() {
 
             {dialog && (
                 <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
+                    <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
                         <h2 className="text-base font-semibold mb-2">
                             {dialog.type === 'approve' ? 'Approve for Funding' : 'Reject Proposal'}
                         </h2>

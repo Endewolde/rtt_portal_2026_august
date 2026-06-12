@@ -82,7 +82,7 @@ export default function ProposalTable({
                             {col('deadline') && <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Deadline</th>}
                             {col('blind_score') && <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Blind</th>}
                             {col('defence_score') && <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Defence</th>}
-                            {col('combined_score') && <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Combined</th>}
+                            {col('combined_score') && <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Total</th>}
                             {col('awarded_amount') && <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Awarded</th>}
                             {col('reviewers') && <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Reviews</th>}
                             {col('defence_date') && <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Defence Date</th>}
@@ -151,17 +151,17 @@ export default function ProposalTable({
                                 )}
                                 {col('blind_score') && (
                                     <td className="px-4 py-3 text-center">
-                                        <ScoreChip value={p.blind_score} max={100} />
+                                        <ScoreChip value={p.blind_score_raw ?? p.blind_score} max={p.blind_max ?? 100} />
                                     </td>
                                 )}
                                 {col('defence_score') && (
                                     <td className="px-4 py-3 text-center">
-                                        <ScoreChip value={p.defence_score} max={100} />
+                                        <ScoreChip value={p.defence_score_raw ?? p.defence_score} max={p.defence_max ?? 100} />
                                     </td>
                                 )}
                                 {col('combined_score') && (
                                     <td className="px-4 py-3 text-center">
-                                        <ScoreChip value={p.combined_score} max={p.threshold ?? 200} bold />
+                                        <ScoreChip value={p.combined_score} max={(p.blind_max ?? 0) + (p.defence_max ?? 0)} bold />
                                     </td>
                                 )}
                                 {col('awarded_amount') && (
@@ -203,8 +203,9 @@ function ScoreChip({ value, max, bold }) {
     const pct = max > 0 ? (value / max) * 100 : 0;
     const color = pct >= 60 ? 'text-green-600' : 'text-red-500';
     return (
-        <span className={`text-xs ${bold ? 'text-sm' : ''} font-${bold ? 'bold' : 'semibold'} tabular-nums ${color}`}>
+        <span className={`text-xs ${bold ? 'text-sm font-bold' : 'font-semibold'} tabular-nums ${color}`}>
             {value}
+            {max != null && <span className="text-gray-400 font-normal"> / {max}</span>}
         </span>
     );
 }

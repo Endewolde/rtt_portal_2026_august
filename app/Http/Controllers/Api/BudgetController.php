@@ -45,11 +45,11 @@ class BudgetController extends Controller
             'disbursements',
         ]);
 
-        $adminRoles = ['super_admin', 'central_officer', 'support_officer',
-            'college_officer', 'college_officer',
+        $adminRoles = ['super_admin', 'admin', 'central_officer', 'support_officer',
+            'college_officer', 'finance_officer',
             'research_officer', 'community_officer', 'technology_officer'];
 
-        if ($user->hasRole('college_officer') || $user->hasRole('college_officer') ||
+        if ($user->hasAnyRole(['college_officer', 'finance_officer']) ||
             ($user->hasRole('support_officer') && $user->college_id)) {
             $query->whereHas('proposal', fn ($q) => $q->where('college_id', $user->college_id));
         } elseif ($user->hasRole('research_officer')) {
@@ -361,10 +361,10 @@ class BudgetController extends Controller
             'allocatedBy:id,name',
         ])->orderByDesc('created_at');
 
-        if ($user->hasRole('college_officer') || $user->hasRole('college_officer') ||
+        if ($user->hasAnyRole(['college_officer', 'finance_officer']) ||
             ($user->hasRole('support_officer') && $user->college_id)) {
             $query->where('college_id', $user->college_id);
-        } elseif (! $user->hasAnyRole(['super_admin', 'central_officer', 'support_officer'])) {
+        } elseif (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'support_officer'])) {
             return response()->json(['data' => [], 'message' => '', 'errors' => [], 'meta' => []]);
         }
 
@@ -387,7 +387,7 @@ class BudgetController extends Controller
         $user = $request->user();
 
         $collegeScope = null;
-        if ($user->hasRole('college_officer') || $user->hasRole('college_officer') ||
+        if ($user->hasAnyRole(['college_officer', 'finance_officer']) ||
             ($user->hasRole('support_officer') && $user->college_id)) {
             $collegeScope = $user->college_id;
         }
@@ -437,7 +437,7 @@ class BudgetController extends Controller
         $user = $request->user();
 
         $collegeScope = null;
-        if ($user->hasRole('college_officer') || $user->hasRole('college_officer') ||
+        if ($user->hasAnyRole(['college_officer', 'finance_officer']) ||
             ($user->hasRole('support_officer') && $user->college_id)) {
             $collegeScope = $user->college_id;
         }
@@ -494,7 +494,7 @@ class BudgetController extends Controller
             ->orderBy('tracker_number');
 
         // Role-based scoping
-        if ($user->hasRole('college_officer') || $user->hasRole('college_officer') ||
+        if ($user->hasAnyRole(['college_officer', 'finance_officer']) ||
             ($user->hasRole('support_officer') && $user->college_id)) {
             $query->where('college_id', $user->college_id);
         } elseif ($user->hasRole('research_officer')) {
@@ -503,7 +503,7 @@ class BudgetController extends Controller
             $query->where('category', 'community_engagement');
         } elseif ($user->hasRole('technology_officer')) {
             $query->where('category', 'technology_transfer');
-        } elseif (! $user->hasAnyRole(['super_admin', 'central_officer', 'support_officer'])) {
+        } elseif (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'support_officer'])) {
             return response()->json(['data' => [], 'message' => '', 'errors' => [], 'meta' => []]);
         }
 
@@ -759,7 +759,18 @@ class BudgetController extends Controller
 
     public function approve(string $id, Request $request): JsonResponse
     {
-        $budgetRequest = BudgetRequest::with(['proposal.pi', 'proposal.members.user'])->findOrFail($id);
+        $user = $request->user();
+
+        if (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'finance_officer', 'support_officer'])) {
+            return response()->json(['message' => 'You do not have permission to approve budget requests.', 'errors' => []], 403);
+        }
+
+        $budgetRequest = BudgetRequest::with(['proposal', 'proposal.pi', 'proposal.members.user'])->findOrFail($id);
+
+        if ($user->hasRole('finance_officer') && $budgetRequest->proposal?->college_id !== $user->college_id) {
+            return response()->json(['message' => 'You can only approve budget requests for proposals in your college.', 'errors' => []], 403);
+        }
+
         $budgetRequest->update([
             'status' => 'approved',
             'approved_at' => now(),
@@ -777,8 +788,6 @@ class BudgetController extends Controller
         if (! $proposal) {
             return;
         }
-
-        app(MailConfigService::class)->applyFromDatabase();
 
         $data = [
             'tracker_number' => $proposal->tracker_number,
@@ -803,15 +812,12 @@ class BudgetController extends Controller
             if (! $user->email) {
                 continue;
             }
-            try {
-                Mail::html(
-                    view('emails.notifications.budget_request_approved', array_merge($data, ['recipient' => $user]))->render(),
-                    fn ($msg) => $msg->to($user->email, $user->name)
-                        ->subject("Budget Request Approved — {$proposal->tracker_number}")
-                );
-            } catch (\Exception $e) {
-                Log::error("Budget approval email failed for {$user->email}: ".$e->getMessage());
-            }
+            \App\Jobs\SendRawMailJob::dispatch(
+                view('emails.notifications.budget_request_approved', array_merge($data, ['recipient' => $user]))->render(),
+                $user->email,
+                $user->name,
+                "Budget Request Approved — {$proposal->tracker_number}"
+            );
 
             // Store in-app notification
             try {
@@ -824,9 +830,20 @@ class BudgetController extends Controller
 
     public function disburse(string $id, Request $request): JsonResponse
     {
+        $user = $request->user();
+
+        if (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'finance_officer', 'support_officer'])) {
+            return response()->json(['message' => 'You do not have permission to disburse funds.', 'errors' => []], 403);
+        }
+
         $request->validate(['amount' => 'required|numeric|min:0.01']);
 
-        $budgetRequest = BudgetRequest::findOrFail($id);
+        $budgetRequest = BudgetRequest::with('proposal')->findOrFail($id);
+
+        if ($user->hasRole('finance_officer') && $budgetRequest->proposal?->college_id !== $user->college_id) {
+            return response()->json(['message' => 'You can only disburse funds for proposals in your college.', 'errors' => []], 403);
+        }
+
         $disbursement = $this->disbursementService->disburse(
             $budgetRequest, (float) $request->amount, $request->only(['transaction_id', 'cheque_number', 'notes']), $request->user()
         );

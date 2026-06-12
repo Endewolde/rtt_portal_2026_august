@@ -63,7 +63,7 @@ class WorkflowStageSeeder extends Seeder
         foreach ($actions as $name) {
             $label = ucwords(str_replace('_', ' ', $name));
             WorkflowAction::updateOrCreate(['name' => $name], [
-                'name'  => $name,
+                'name' => $name,
                 'label' => $label,
             ]);
         }
@@ -71,21 +71,21 @@ class WorkflowStageSeeder extends Seeder
 
     private function seedTransitions(): void
     {
-        $officers      = ['research_officer', 'community_officer', 'technology_officer'];
-        $allOfficers   = [...$officers, 'college_officer'];
-        $adminCore     = ['central_office', 'super_admin'];
-        $adminFull     = [...$adminCore, ...$officers];
-        $adminWithCol  = [...$adminCore, 'college_admin', 'college_officer', ...$officers];
+        $officers = ['research_officer', 'community_officer', 'technology_officer'];
+        $allOfficers = [...$officers, 'college_officer'];
+        $adminCore = ['central_officer', 'super_admin'];
+        $adminFull = [...$adminCore, ...$officers];
+        $adminWithCol = [...$adminCore, 'college_officer', ...$officers];
 
         $transitions = [
-            ['from' => 'draft',              'action' => 'submit',                'to' => 'submitted',           'roles' => ['pi', 'super_admin', 'central_office', 'staff']],
+            ['from' => 'draft',              'action' => 'submit',                'to' => 'submitted',           'roles' => ['pi', 'super_admin', 'central_officer', 'staff']],
             ['from' => 'submitted',          'action' => 'validate',              'to' => 'validated',           'roles' => $adminFull],
             ['from' => 'submitted',          'action' => 'return_for_correction', 'to' => 'draft',               'roles' => $adminFull],
             ['from' => 'submitted',          'action' => 'reject',                'to' => 'rejected',            'roles' => $adminFull],
             ['from' => 'validated',          'action' => 'assign_for_review',     'to' => 'under_blind_review',  'roles' => $adminWithCol],
             ['from' => 'under_blind_review', 'action' => 'pass_blind_review',     'to' => 'blind_review_passed', 'roles' => $adminFull],
             ['from' => 'under_blind_review', 'action' => 'fail_blind_review',     'to' => 'rejected',            'roles' => $adminFull],
-            ['from' => 'blind_review_passed','action' => 'schedule_defence',      'to' => 'under_open_defence',  'roles' => $adminWithCol],
+            ['from' => 'blind_review_passed', 'action' => 'schedule_defence',      'to' => 'under_open_defence',  'roles' => $adminWithCol],
             ['from' => 'under_open_defence', 'action' => 'pass_defence',          'to' => 'accepted',            'roles' => $adminFull],
             ['from' => 'under_open_defence', 'action' => 'fail_defence',          'to' => 'rejected',            'roles' => $adminFull],
             ['from' => 'accepted',           'action' => 'central_approve',       'to' => 'funded',              'roles' => $adminFull],
@@ -98,13 +98,13 @@ class WorkflowStageSeeder extends Seeder
 
         foreach ($transitions as $t) {
             $fromStage = WorkflowStage::where('name', $t['from'])->firstOrFail();
-            $action    = WorkflowAction::where('name', $t['action'])->firstOrFail();
-            $toStage   = WorkflowStage::where('name', $t['to'])->firstOrFail();
+            $action = WorkflowAction::where('name', $t['action'])->firstOrFail();
+            $toStage = WorkflowStage::where('name', $t['to'])->firstOrFail();
 
             WorkflowTransition::updateOrCreate(
                 ['from_stage_id' => $fromStage->id, 'action_id' => $action->id],
                 [
-                    'to_stage_id'   => $toStage->id,
+                    'to_stage_id' => $toStage->id,
                     'allowed_roles' => $t['roles'],
                 ]
             );

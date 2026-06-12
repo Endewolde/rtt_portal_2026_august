@@ -55,7 +55,7 @@ test('PI cannot create proposal calls', function () {
 
 test('Finance user cannot validate proposals', function () {
     $central = User::factory()->create();
-    $central->assignRole('central_office');
+    $central->assignRole('central_officer');
 
     $college = College::create(['name' => 'C2', 'code' => 'C2']);
     $dept    = Department::create(['college_id' => $college->id, 'name' => 'D2', 'code' => 'D2']);
@@ -63,7 +63,7 @@ test('Finance user cannot validate proposals', function () {
     $pi->assignRole('pi');
 
     $finance = User::factory()->create();
-    $finance->assignRole('finance');
+    $finance->assignRole('finance_officer');
 
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research', 'title' => 'Call2',
@@ -83,10 +83,10 @@ test('Finance user cannot validate proposals', function () {
 
 test('finance user cannot activate proposal calls', function () {
     $central = User::factory()->create();
-    $central->assignRole('central_office');
+    $central->assignRole('central_officer');
 
     $finance = User::factory()->create();
-    $finance->assignRole('finance');
+    $finance->assignRole('finance_officer');
 
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research', 'title' => 'Draft Call',

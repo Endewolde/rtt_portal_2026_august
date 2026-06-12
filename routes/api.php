@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\Api\AbstractAdminController;
+use App\Http\Controllers\Api\AbstractController;
 use App\Http\Controllers\Api\ActionCountController;
 use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\AuthController;
@@ -9,8 +11,20 @@ use App\Http\Controllers\Api\CentralEvaluationController;
 use App\Http\Controllers\Api\CollegeController;
 use App\Http\Controllers\Api\ComplaintController;
 use App\Http\Controllers\Api\CompletionWorkshopController;
+use App\Http\Controllers\Api\ConferenceController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DisbursementController;
+use App\Http\Controllers\Api\ExternalFund\AgencyController as EFAgencyController;
+use App\Http\Controllers\Api\ExternalFund\ApplicationController as EFApplicationController;
+use App\Http\Controllers\Api\ExternalFund\AwardController as EFAwardController;
+use App\Http\Controllers\Api\ExternalFund\BudgetController as EFBudgetController;
+use App\Http\Controllers\Api\ExternalFund\DashboardController as EFDashboardController;
+use App\Http\Controllers\Api\ExternalFund\DocumentController as EFDocumentController;
+use App\Http\Controllers\Api\ExternalFund\ExpenditureController as EFExpenditureController;
+use App\Http\Controllers\Api\ExternalFund\MilestoneController as EFMilestoneController;
+use App\Http\Controllers\Api\ExternalFund\OpportunityController as EFOpportunityController;
+use App\Http\Controllers\Api\ExternalFund\ReviewController as EFReviewController;
+use App\Http\Controllers\Api\ExternalFund\TeamMemberController as EFTeamMemberController;
 use App\Http\Controllers\Api\FeatureController;
 use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\MidtermEvaluationController;
@@ -61,6 +75,16 @@ Route::prefix('v1')->group(function () {
     Route::middleware('auth:sanctum')->get('/proposal-calls/all', [ProposalCallController::class, 'allForAdmin']);
     Route::get('/proposal-calls', [ProposalCallController::class, 'index']);
     Route::get('/proposal-calls/{slug}', [ProposalCallController::class, 'show']);
+
+    // Conferences — public
+    Route::get('/conferences', [ConferenceController::class, 'publicIndex']);
+    Route::get('/conferences/{slug}', [ConferenceController::class, 'publicShow']);
+    Route::post('/conferences/{slug}/register', [ConferenceController::class, 'register']);
+    // Abstracts — public
+    Route::post('/conferences/{slug}/abstracts', [AbstractController::class, 'store']);
+    Route::get('/abstracts/mine', [AbstractController::class, 'mine']);
+    Route::get('/abstracts/track/{token}', [AbstractController::class, 'track']);
+    Route::post('/abstracts/withdraw/{token}', [AbstractController::class, 'withdraw']);
     Route::get('/repository', [RepositoryController::class, 'index']);
     Route::get('/repository/{id}', [RepositoryController::class, 'show']);
     Route::get('/tracker/{number}', [RepositoryController::class, 'tracker']);
@@ -68,6 +92,7 @@ Route::prefix('v1')->group(function () {
     Route::get('/resources', [ResourceController::class, 'publicIndex']);
     Route::get('/proposals/public', [ProposalController::class, 'publicIndex']);
     Route::get('/colleges/public', [CollegeController::class, 'publicList']);
+    Route::get('/external-funds/opportunities/public', [EFOpportunityController::class, 'publicIndex']);
 
     // ── Authenticated — 300 requests per minute per user ─────────────────────
     Route::middleware(['auth:sanctum', 'user.active', 'throttle:300,1', 'college.scope', 'category.scope'])->group(function () {
@@ -107,10 +132,42 @@ Route::prefix('v1')->group(function () {
         Route::get('/colleges', [CollegeController::class, 'index']);
         Route::post('/colleges', [CollegeController::class, 'store']);
         Route::put('/colleges/{id}', [CollegeController::class, 'update']);
+        Route::delete('/colleges/{id}', [CollegeController::class, 'destroy']);
         Route::get('/colleges/{id}/departments', [CollegeController::class, 'departments']);
         Route::get('/departments', [CollegeController::class, 'allDepartments']);
         Route::post('/departments', [CollegeController::class, 'storeDepartment']);
         Route::put('/departments/{id}', [CollegeController::class, 'updateDepartment']);
+        Route::delete('/departments/{id}', [CollegeController::class, 'destroyDepartment']);
+
+        // Conferences — admin CRUD
+        Route::get('/admin/conferences', [ConferenceController::class, 'index']);
+        Route::post('/admin/conferences', [ConferenceController::class, 'store']);
+        Route::get('/admin/conferences/{id}', [ConferenceController::class, 'show']);
+        Route::put('/admin/conferences/{id}', [ConferenceController::class, 'update']);
+        Route::delete('/admin/conferences/{id}', [ConferenceController::class, 'destroy']);
+        Route::post('/admin/conferences/{id}/banner', [ConferenceController::class, 'uploadBanner']);
+        // Speakers
+        Route::post('/admin/conferences/{id}/speakers', [ConferenceController::class, 'storeSpeaker']);
+        Route::put('/admin/conferences/{id}/speakers/{speakerId}', [ConferenceController::class, 'updateSpeaker']);
+        Route::delete('/admin/conferences/{id}/speakers/{speakerId}', [ConferenceController::class, 'destroySpeaker']);
+        Route::post('/admin/conferences/{id}/speakers/{speakerId}/photo', [ConferenceController::class, 'uploadSpeakerPhoto']);
+        // Sessions
+        Route::post('/admin/conferences/{id}/sessions', [ConferenceController::class, 'storeSession']);
+        Route::put('/admin/conferences/{id}/sessions/{sessionId}', [ConferenceController::class, 'updateSession']);
+        Route::delete('/admin/conferences/{id}/sessions/{sessionId}', [ConferenceController::class, 'destroySession']);
+        // Registrations
+        Route::get('/admin/conferences/{id}/registrations', [ConferenceController::class, 'registrations']);
+        Route::get('/admin/conferences/{id}/registrations/export', [ConferenceController::class, 'exportRegistrations']);
+        // Abstracts — admin
+        Route::get('/admin/abstracts', [AbstractAdminController::class, 'index']);
+        Route::get('/admin/abstracts/{id}', [AbstractAdminController::class, 'show']);
+        Route::patch('/admin/abstracts/{id}/status', [AbstractAdminController::class, 'updateStatus']);
+        Route::post('/admin/abstracts/{id}/assign-reviewer', [AbstractAdminController::class, 'assignReviewer']);
+        Route::get('/admin/abstracts/export', [AbstractAdminController::class, 'export']);
+        // Abstracts — reviewer
+        Route::post('/admin/abstracts/{id}/next-steps', [AbstractAdminController::class, 'sendNextSteps']);
+        Route::get('/reviewer/abstracts', [AbstractAdminController::class, 'reviewerIndex']);
+        Route::post('/reviewer/abstracts/{id}/review', [AbstractAdminController::class, 'submitReview']);
 
         // Audit logs
         Route::get('/audit-logs', [AuditLogController::class, 'index']);
@@ -198,6 +255,8 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/admin/review-management', [ReviewController::class, 'proposalReviewList']);
         Route::get('/admin/reviewer-workload', [ReviewController::class, 'reviewerWorkload']);
+        Route::post('/proposals/{id}/review/add-reviewer', [ReviewController::class, 'addReviewer']);
+        Route::delete('/review-assignments/{id}/remove', [ReviewController::class, 'removeReviewer']);
         Route::put('/review-assignments/{id}/reassign', [ReviewController::class, 'reassignReviewer']);
         Route::put('/review-assignments/{id}/extend', [ReviewController::class, 'extendDueDate']);
 
@@ -334,6 +393,42 @@ Route::prefix('v1')->group(function () {
         // ── Similarity module (feature: similarity) ────────────────────────────
         Route::middleware('feature:similarity')->group(function () {
             Route::get('/similarity-scores', [SimilarityController::class, 'index']);
+        });
+
+        // ── External Funds module (feature: external_funds) ────────────────────
+        Route::middleware('feature:external_funds')->prefix('external-funds')->group(function () {
+            Route::get('/dashboard', [EFDashboardController::class, 'metrics']);
+
+            Route::apiResource('agencies', EFAgencyController::class);
+
+            Route::apiResource('opportunities', EFOpportunityController::class);
+
+            Route::apiResource('applications', EFApplicationController::class);
+            Route::patch('applications/{id}/status', [EFApplicationController::class, 'updateStatus']);
+            Route::get('applications/{id}/reviews', [EFReviewController::class, 'index']);
+            Route::post('applications/{id}/reviews', [EFReviewController::class, 'store']);
+            Route::get('applications/{id}/documents', [EFDocumentController::class, 'index']);
+            Route::post('applications/{id}/documents', [EFDocumentController::class, 'store']);
+            Route::get('applications/{id}/budgets', [EFBudgetController::class, 'index']);
+            Route::post('applications/{id}/budgets', [EFBudgetController::class, 'store']);
+            Route::get('applications/{id}/team-members', [EFTeamMemberController::class, 'index']);
+            Route::post('applications/{id}/team-members', [EFTeamMemberController::class, 'store']);
+            Route::delete('team-members/{id}', [EFTeamMemberController::class, 'destroy']);
+
+            Route::apiResource('awards', EFAwardController::class);
+            Route::get('awards/{id}/expenditures', [EFExpenditureController::class, 'index']);
+            Route::post('awards/{id}/expenditures', [EFExpenditureController::class, 'store']);
+            Route::get('awards/{id}/milestones', [EFMilestoneController::class, 'index']);
+            Route::post('awards/{id}/milestones', [EFMilestoneController::class, 'store']);
+            Route::get('awards/{id}/documents', [EFDocumentController::class, 'index']);
+            Route::post('awards/{id}/documents', [EFDocumentController::class, 'store']);
+
+            Route::put('budgets/{id}', [EFBudgetController::class, 'update']);
+            Route::delete('budgets/{id}', [EFBudgetController::class, 'destroy']);
+            Route::put('milestones/{id}', [EFMilestoneController::class, 'update']);
+            Route::delete('milestones/{id}', [EFMilestoneController::class, 'destroy']);
+            Route::get('documents/{id}/download', [EFDocumentController::class, 'download']);
+            Route::delete('documents/{id}', [EFDocumentController::class, 'destroy']);
         });
 
         // Dashboard

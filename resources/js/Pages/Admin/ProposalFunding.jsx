@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from '@inertiajs/react';
-import { BadgeDollarSign, Pencil, Check, RefreshCw } from 'lucide-react';
+import { BadgeDollarSign, Pencil, RefreshCw, ExternalLink, FileText, ReceiptText, Hash } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import WorkflowBreadcrumb from '../../Components/WorkflowBreadcrumb';
 import ViewToggle from '../../Components/ViewToggle';
@@ -57,7 +57,6 @@ export default function ProposalFunding() {
         try {
             const res = await api.get('/proposals', { params: { status: 'funded', per_page: 50 } });
             const items = res.data?.data?.data ?? res.data?.data ?? [];
-            // Load award for each proposal
             const withAwards = await Promise.all(
                 items.map(async p => {
                     try {
@@ -77,29 +76,42 @@ export default function ProposalFunding() {
         <AppLayout breadcrumb="Proposal Funding">
             <div className="max-w-5xl mx-auto">
                 <WorkflowBreadcrumb current="funded" />
-                <div className="flex items-center justify-between mb-6">
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                            <BadgeDollarSign size={22} className="text-emerald-600" /> Proposal Funding
-                        </h1>
-                        <p className="text-sm text-gray-500 mt-1">All funded proposals with grant details</p>
-                    </div>
+
+                {/* Page Header */}
+                <div className="flex items-start justify-between mb-6 gap-4">
                     <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 bg-emerald-100 rounded-xl flex items-center justify-center shrink-0">
+                            <BadgeDollarSign size={20} className="text-emerald-600" />
+                        </div>
+                        <div>
+                            <h1 className="text-xl font-bold text-gray-900">Proposal Funding</h1>
+                            <p className="text-sm text-gray-500 mt-0.5">All funded proposals with grant details and award information</p>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                        {!loading && proposals.length > 0 && (
+                            <span className="flex items-center gap-1.5 text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1.5 rounded-lg">
+                                <BadgeDollarSign size={12} /> {proposals.length} Funded
+                            </span>
+                        )}
                         <ViewToggle view={view} onChange={setView} />
-                        <button onClick={load} className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50">
+                        <button onClick={load} className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors">
                             <RefreshCw size={14} /> Refresh
                         </button>
                     </div>
                 </div>
 
                 {loading ? (
-                    <div className="flex justify-center py-16">
+                    <div className="flex justify-center py-20">
                         <div className="w-8 h-8 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin" />
                     </div>
                 ) : proposals.length === 0 ? (
-                    <div className="bg-white border border-gray-200 rounded-xl p-12 text-center">
-                        <BadgeDollarSign size={36} className="mx-auto text-gray-300 mb-3" />
-                        <p className="text-gray-500">No funded proposals yet.</p>
+                    <div className="bg-white border border-gray-200 rounded-2xl p-16 text-center">
+                        <div className="h-14 w-14 bg-emerald-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <BadgeDollarSign size={28} className="text-emerald-300" />
+                        </div>
+                        <h3 className="text-gray-700 font-semibold mb-1">No funded proposals yet</h3>
+                        <p className="text-sm text-gray-400">Approved proposals will appear here once funded.</p>
                     </div>
                 ) : view === 'table' ? (
                     <ProposalTable
@@ -116,47 +128,64 @@ export default function ProposalFunding() {
                 ) : (
                     <div className="space-y-3">
                         {proposals.map(p => (
-                            <div key={p.id} className="bg-white border border-gray-200 rounded-xl p-5">
-                                <div className="flex items-start justify-between gap-4">
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex items-center gap-2 mb-1">
-                                            <span className="font-mono text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-                                                {p.tracker_number}
-                                            </span>
-                                            {p.award?.grant_reference && (
-                                                <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded">
-                                                    {p.award.grant_reference}
+                            <div key={p.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-md transition-shadow">
+                                {/* Top row */}
+                                <div className="flex items-stretch">
+                                    <div className="w-0.5 bg-emerald-600 shrink-0" />
+                                    <div className="flex items-start justify-between gap-4 flex-1 px-4 py-3.5">
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                                <span className="font-mono text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg shrink-0">
+                                                    {p.tracker_number}
                                                 </span>
-                                            )}
-                                            <span className="text-xs text-gray-400">{getCategoryLabel(p.category)}</span>
+                                                {p.award?.grant_reference && (
+                                                    <span className="flex items-center gap-1 font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg">
+                                                        <Hash size={10} />{p.award.grant_reference}
+                                                    </span>
+                                                )}
+                                                <span className="text-xs text-gray-400">{getCategoryLabel(p.category)}</span>
+                                            </div>
+                                            <h3 className="text-sm font-semibold text-gray-900 truncate mb-0.5">{p.title}</h3>
+                                            <p className="text-xs text-gray-500">{p.pi?.name} · {p.college?.name}</p>
                                         </div>
-                                        <h3 className="text-sm font-semibold text-gray-900 line-clamp-1 mb-0.5">{p.title}</h3>
-                                        <p className="text-xs text-gray-500">{p.pi?.name} · {p.college?.name}</p>
-                                    </div>
 
-                                    <div className="shrink-0 text-right">
-                                        <div className="flex items-center gap-1">
-                                            <span className="text-lg font-bold text-emerald-700">
-                                                {p.award ? formatCurrency(p.award.awarded_amount) : '—'}
-                                            </span>
-                                            <button onClick={() => setEditModal(p)}
-                                                className="p-1 text-gray-400 hover:text-emerald-600 rounded">
-                                                <Pencil size={13} />
-                                            </button>
+                                        {/* Awarded amount badge */}
+                                        <div className="shrink-0 text-right">
+                                            <div className="flex items-center gap-1.5 justify-end">
+                                                <span className="text-base font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-xl">
+                                                    {p.award ? formatCurrency(p.award.awarded_amount) : '—'}
+                                                </span>
+                                                <button
+                                                    onClick={() => setEditModal(p)}
+                                                    className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                                                    title="Edit amount"
+                                                >
+                                                    <Pencil size={13} />
+                                                </button>
+                                            </div>
+                                            {p.award?.approved_at && (
+                                                <p className="text-xs text-gray-400 mt-1">Awarded {formatDate(p.award.approved_at)}</p>
+                                            )}
                                         </div>
-                                        {p.award?.approved_at && (
-                                            <p className="text-xs text-gray-400 mt-0.5">{formatDate(p.award.approved_at)}</p>
-                                        )}
                                     </div>
                                 </div>
 
-                                <div className="flex items-center gap-3 mt-3 pt-3 border-t border-gray-100">
+                                {/* Footer links */}
+                                <div className="flex items-center gap-1 px-4 py-2.5 border-t border-gray-100 bg-gray-50/60">
                                     <Link href={`/proposals/${p.id}`}
-                                        className="text-xs text-blue-600 hover:underline">View Proposal</Link>
+                                        className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-blue-600 font-medium px-2.5 py-1 rounded-lg hover:bg-white transition-colors">
+                                        <FileText size={11} /> View Proposal
+                                    </Link>
+                                    <span className="text-gray-200">·</span>
                                     <Link href={`/proposals/${p.id}/award`}
-                                        className="text-xs text-emerald-600 hover:underline">Award Details</Link>
+                                        className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-emerald-600 font-medium px-2.5 py-1 rounded-lg hover:bg-white transition-colors">
+                                        <ExternalLink size={11} /> Award Details
+                                    </Link>
+                                    <span className="text-gray-200">·</span>
                                     <Link href={`/budget-requests?proposal_id=${p.id}`}
-                                        className="text-xs text-gray-500 hover:underline">Budget Requests</Link>
+                                        className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-900 font-medium px-2.5 py-1 rounded-lg hover:bg-white transition-colors">
+                                        <ReceiptText size={11} /> Budget Requests
+                                    </Link>
                                 </div>
                             </div>
                         ))}

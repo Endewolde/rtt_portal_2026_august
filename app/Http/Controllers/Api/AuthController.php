@@ -174,8 +174,6 @@ class AuthController extends Controller
 
         // Always respond the same way — never reveal whether the email exists
         if ($user) {
-            app(MailConfigService::class)->applyFromDatabase();
-
             $rawToken = Str::random(64);
             $hashedToken = hash('sha256', $rawToken);
 
@@ -188,19 +186,17 @@ class AuthController extends Controller
             $resetUrl = config('app.url').'/reset-password?token='.$rawToken.'&email='.urlencode($user->email);
             $expiresAt = now()->addMinutes(60)->format('d M Y, H:i');
 
-            try {
-                Mail::html(
-                    view('emails.password_reset', [
-                        'userName' => $user->name,
-                        'resetUrl' => $resetUrl,
-                        'expiresAt' => $expiresAt,
-                        'senderName' => config('mail.from.name'),
-                    ])->render(),
-                    fn ($msg) => $msg->to($user->email, $user->name)->subject('Reset Your Password — RTT Platform')
-                );
-            } catch (\Exception) {
-                // Silently absorb mail failures; never leak internals to the client
-            }
+            \App\Jobs\SendRawMailJob::dispatch(
+                view('emails.password_reset', [
+                    'userName'   => $user->name,
+                    'resetUrl'   => $resetUrl,
+                    'expiresAt'  => $expiresAt,
+                    'senderName' => config('mail.from.name'),
+                ])->render(),
+                $user->email,
+                $user->name,
+                'Reset Your Password — RTT Platform'
+            );
         }
 
         return response()->json([

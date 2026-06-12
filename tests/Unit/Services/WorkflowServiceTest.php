@@ -241,7 +241,7 @@ test('transition_throws_InvalidTransitionException_for_terminal_stage', function
 
 test('transition_throws_UnauthorizedTransitionException_for_wrong_role', function () {
     $pi           = makeUser('pi');
-    $wrongRoleUser = makeUser('college_admin'); // college_admin cannot 'submit'
+    $wrongRoleUser = makeUser('college_officer'); // college_admin cannot 'submit'
     $proposal     = makeProposal($pi, 'draft');
 
     expect(fn () => $this->service->transition($proposal, 'submit', $wrongRoleUser))
@@ -286,7 +286,7 @@ test('audit_log_throws_LogImmutableException_on_update', function () {
 
 test('full_lifecycle_draft_to_archived', function () {
     $pi      = makeUser('pi');
-    $central = makeUser('central_office');
+    $central = makeUser('central_officer');
     $admin   = makeUser('super_admin');
 
     $proposal = makeProposal($pi, 'draft');

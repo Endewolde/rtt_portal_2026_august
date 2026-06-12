@@ -27,7 +27,7 @@ function http_makeBase(): array
     $college = College::create(['name' => 'HTTP College '.rand(), 'code' => 'HT'.rand(10, 99)]);
     $dept    = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'HD'.rand(10, 99)]);
 
-    $central        = User::factory()->create(); $central->assignRole('central_office');
+    $central        = User::factory()->create(); $central->assignRole('central_officer');
     $collegeOfficer = User::factory()->create(['college_id' => $college->id]); $collegeOfficer->assignRole('college_officer');
     $pi             = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]); $pi->assignRole('pi');
 

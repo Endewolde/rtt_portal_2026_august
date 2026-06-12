@@ -70,7 +70,7 @@ test('college_admin_cannot_see_proposals_from_another_college', function () {
     $piB = makeUserWithRole('pi', $collegeB->id);
 
     // College admin belongs to College A
-    $adminA = makeUserWithRole('college_admin', $collegeA->id);
+    $adminA = makeUserWithRole('college_officer', $collegeA->id);
 
     $proposalA = makeProposalForCollege($piA, $collegeA->id);
     $proposalB = makeProposalForCollege($piB, $collegeB->id);

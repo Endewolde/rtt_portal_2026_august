@@ -32,13 +32,13 @@ function disb_makeApprovedRequest(float $total = 50000.00): array
     $dept    = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'DD'.rand(10, 99)]);
 
     $central = User::factory()->create();
-    $central->assignRole('central_office');
+    $central->assignRole('central_officer');
 
     $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
     $pi->assignRole('pi');
 
     $finance = User::factory()->create();
-    $finance->assignRole('finance');
+    $finance->assignRole('finance_officer');
 
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research',

@@ -52,6 +52,10 @@ class RolePermissionSeeder extends Seeder
             'awards' => ['view_any', 'view', 'create', 'update'],
             'audit_logs' => ['view_any', 'view'],
             'features' => ['view_any', 'manage'],
+            'external_funds' => [
+                'view_any', 'view', 'create', 'update', 'delete', 'export',
+                'manage_agencies', 'manage_opportunities', 'review', 'manage_awards',
+            ],
         ];
 
         foreach ($map as $resource => $actions) {
@@ -74,8 +78,11 @@ class RolePermissionSeeder extends Seeder
             'community_officer',
             'technology_officer',
             'college_officer',
+            'finance_officer',
             'support_officer',
             'staff',
+            'pi',
+            'reviewer',
             'guest',
         ];
 
@@ -120,6 +127,10 @@ class RolePermissionSeeder extends Seeder
             'settings.view_any', 'settings.view', 'settings.update', 'settings.manage',
             'audit_logs.view_any', 'audit_logs.view',
             'features.view_any', 'features.manage',
+            'external_funds.view_any', 'external_funds.view', 'external_funds.create',
+            'external_funds.update', 'external_funds.delete', 'external_funds.export',
+            'external_funds.manage_agencies', 'external_funds.manage_opportunities',
+            'external_funds.review', 'external_funds.manage_awards',
         ]);
 
         // ── central_officer: cross-college oversight ──────────────────────────
@@ -141,6 +152,10 @@ class RolePermissionSeeder extends Seeder
             'awards.view_any', 'awards.view', 'awards.create', 'awards.update',
             'users.view_any', 'users.view',
             'audit_logs.view_any', 'audit_logs.view',
+            'external_funds.view_any', 'external_funds.view', 'external_funds.create',
+            'external_funds.update', 'external_funds.export',
+            'external_funds.manage_agencies', 'external_funds.manage_opportunities',
+            'external_funds.review', 'external_funds.manage_awards',
         ]);
 
         // ── research_officer ─────────────────────────────────────────────────
@@ -161,6 +176,10 @@ class RolePermissionSeeder extends Seeder
             'reports.view_any', 'reports.view', 'reports.create', 'reports.export',
             'complaints.view_any', 'complaints.view', 'complaints.update',
             'users.view_any', 'users.view',
+            'external_funds.view_any', 'external_funds.view', 'external_funds.create',
+            'external_funds.update', 'external_funds.export',
+            'external_funds.manage_agencies', 'external_funds.manage_opportunities',
+            'external_funds.review', 'external_funds.manage_awards',
         ]);
 
         // ── community_officer ────────────────────────────────────────────────
@@ -225,6 +244,19 @@ class RolePermissionSeeder extends Seeder
             'users.view_any', 'users.view',
         ]);
 
+        // ── finance_officer: college-scoped budget approvals & disbursements ────
+        Role::findByName('finance_officer')->syncPermissions([
+            'proposals.view_any', 'proposals.view',
+            'budget_requests.view_any', 'budget_requests.view', 'budget_requests.update', 'budget_requests.export',
+            'disbursements.view_any', 'disbursements.view', 'disbursements.create', 'disbursements.update',
+            'settlements.view_any', 'settlements.view', 'settlements.update',
+            'budget_allocations.view_any', 'budget_allocations.view',
+            'reports.view_any', 'reports.view',
+            'complaints.view_any', 'complaints.view',
+            'external_funds.view_any', 'external_funds.view',
+            'external_funds.manage_awards', 'external_funds.export',
+        ]);
+
         // ── support_officer: finance & support tasks ─────────────────────────
         Role::findByName('support_officer')->syncPermissions([
             'budget_requests.view_any', 'budget_requests.view', 'budget_requests.export',
@@ -234,6 +266,29 @@ class RolePermissionSeeder extends Seeder
             'reports.view_any', 'reports.view',
             'proposals.view_any', 'proposals.view',
             'complaints.view_any', 'complaints.view',
+        ]);
+
+        // ── reviewer: scoped read access for assigned proposals & reviews ────
+        Role::findByName('reviewer')->syncPermissions([
+            'proposals.view',
+            'reviews.view', 'reviews.create', 'reviews.update',
+            'review_assignments.view', 'review_assignments.update',
+            'proposal_calls.view',
+        ]);
+
+        // ── pi: proposal submission & tracking ────────────────────────────────
+        Role::findByName('pi')->syncPermissions([
+            'proposals.view_any', 'proposals.view', 'proposals.create',
+            'proposals.update', 'proposals.submit', 'proposals.track',
+            'proposal_calls.view_any', 'proposal_calls.view',
+            'budget_requests.view_any', 'budget_requests.view',
+            'budget_requests.create', 'budget_requests.update',
+            'midterm_evaluations.view_any', 'midterm_evaluations.view',
+            'completion_workshops.view_any', 'completion_workshops.view',
+            'research_outputs.view_any', 'research_outputs.view',
+            'research_outputs.create', 'research_outputs.update',
+            'repository.view_any', 'repository.view',
+            'complaints.create', 'complaints.view',
         ]);
 
         // ── guest: login only, no permissions ────────────────────────────────

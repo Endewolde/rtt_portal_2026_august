@@ -21,19 +21,19 @@ class DashboardService
         return Cache::remember($cacheKey, self::TTL, function () use ($user) {
             $widgets = [];
 
-            $widgets['proposals_by_status']    = $this->proposalsByStatus($user);
-            $widgets['pending_tasks']          = $this->pendingTasks($user);
-            $widgets['recent_notifications']   = $this->recentNotifications($user);
+            $widgets['proposals_by_status'] = $this->proposalsByStatus($user);
+            $widgets['pending_tasks'] = $this->pendingTasks($user);
+            $widgets['recent_notifications'] = $this->recentNotifications($user);
 
-            if ($user->hasAnyRole(['super_admin', 'central_officer', 'support_officer'])) {
+            if ($user->hasAnyRole(['super_admin', 'central_officer', 'support_officer', 'finance_officer'])) {
                 $widgets['budget_utilization_summary'] = $this->budgetUtilizationSummary();
             }
 
-            if ($user->hasRole('staff')) {
+            if ($user->hasRole('reviewer')) {
                 $widgets['reviewer_queue'] = $this->reviewerQueue($user);
             }
 
-            if ($user->hasRole('staff')) {
+            if ($user->hasRole('pi')) {
                 $widgets['my_proposals'] = $this->myProposals($user);
             }
 
@@ -167,9 +167,9 @@ class DashboardService
             ->limit(5)
             ->get()
             ->map(fn ($n) => [
-                'id'         => $n->id,
-                'type'       => $n->type,
-                'data'       => json_decode($n->data, true),
+                'id' => $n->id,
+                'type' => $n->type,
+                'data' => json_decode($n->data, true),
                 'created_at' => $n->created_at,
             ])
             ->toArray();
@@ -180,7 +180,7 @@ class DashboardService
         $fiscalYear = now()->year.'/'.(now()->year + 1);
 
         return [
-            'fiscal_year'     => $fiscalYear,
+            'fiscal_year' => $fiscalYear,
             'total_allocated' => DB::table('budget_allocations')
                 ->where('allocation_type', 'college')
                 ->where('fiscal_year', $fiscalYear)
@@ -188,7 +188,7 @@ class DashboardService
             'total_disbursed' => DB::table('disbursements')
                 ->whereYear('disbursed_at', now()->year)
                 ->sum('amount'),
-            'total_settled'   => DB::table('budget_settlements')
+            'total_settled' => DB::table('budget_settlements')
                 ->where('status', 'finance_verified')
                 ->whereYear('finance_verified_at', now()->year)
                 ->sum('total_spent'),
@@ -251,11 +251,11 @@ class DashboardService
             $d = $counts->get($m['month'], collect());
 
             return [
-                'month'                => $m['label'],
-                'research'             => $d->where('category', 'research')->sum('count'),
+                'month' => $m['label'],
+                'research' => $d->where('category', 'research')->sum('count'),
                 'community_engagement' => $d->where('category', 'community_engagement')->sum('count'),
-                'technology_transfer'  => $d->where('category', 'technology_transfer')->sum('count'),
-                'total'                => $d->sum('count'),
+                'technology_transfer' => $d->where('category', 'technology_transfer')->sum('count'),
+                'total' => $d->sum('count'),
             ];
         })->values()->toArray();
     }

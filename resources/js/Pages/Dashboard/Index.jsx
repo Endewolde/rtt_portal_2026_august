@@ -120,7 +120,7 @@ function SectionCard({ title, action, children, className = '' }) {
         <div className={`bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden ${className}`}>
             {(title || action) && (
                 <div className="flex items-center justify-between px-5 py-4 border-b border-gray-50">
-                    {title && <h2 className="text-sm font-bold text-gray-900">{title}</h2>}
+                    {title && <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{title}</h2>}
                     {action}
                 </div>
             )}
@@ -414,7 +414,16 @@ function NotificationsPanel({ notifications, loading }) {
 
 // ─── Quick actions ────────────────────────────────────────────────────────────
 
-function QuickActions({ isAdmin, isPI, isReviewer, isFinance }) {
+const QUICK_ACTION_COLORS = [
+    { bg: 'bg-indigo-500 hover:bg-indigo-600', text: 'text-white' },
+    { bg: 'bg-emerald-500 hover:bg-emerald-600', text: 'text-white' },
+    { bg: 'bg-purple-500 hover:bg-purple-600', text: 'text-white' },
+    { bg: 'bg-amber-500 hover:bg-amber-600', text: 'text-white' },
+    { bg: 'bg-teal-500 hover:bg-teal-600', text: 'text-white' },
+]
+
+// Banner variant (small, white-on-gradient)
+function QuickActionsBanner({ isAdmin, isPI, isReviewer, isFinance }) {
     const actions = isAdmin ? [
         { label: 'Validation Queue', href: '/admin/validation-queue', icon: ClipboardCheck },
         { label: 'Reports',          href: '/reports',                icon: BarChart2 },
@@ -443,6 +452,52 @@ function QuickActions({ isAdmin, isPI, isReviewer, isFinance }) {
                                    transition-all duration-150 hover:scale-[1.02] active:scale-95">
                         <Icon size={12} />
                         {a.label}
+                    </Link>
+                )
+            })}
+        </div>
+    )
+}
+
+// Standalone card variant (prominent colored buttons)
+function QuickActions({ isAdmin, isPI, isReviewer, isFinance, isCollegeOfficer }) {
+    const actions = isAdmin ? [
+        { label: 'Validation Queue', href: '/admin/validation-queue', icon: ClipboardCheck },
+        { label: 'Proposal Calls',   href: '/proposal-calls',        icon: Megaphone },
+        { label: 'Reports',          href: '/reports',                icon: BarChart2 },
+        { label: 'Blind Review',     href: '/admin/blind-review',     icon: Search },
+        { label: 'Awarded',          href: '/admin/awarded',          icon: Award },
+    ] : isPI ? [
+        { label: 'New Application', href: '/proposals/create', icon: FileText },
+        { label: 'My Proposals',    href: '/my-proposals',     icon: Activity },
+        { label: 'Track Proposal',  href: '/tracker',          icon: Search },
+    ] : isReviewer ? [
+        { label: 'My Reviews',      href: '/reviews',          icon: ClipboardCheck },
+        { label: 'My Proposals',    href: '/my-proposals',     icon: FileText },
+    ] : isFinance ? [
+        { label: 'Disbursements',   href: '/disbursements',    icon: DollarSign },
+        { label: 'Settlements',     href: '/settlements',      icon: FileText },
+    ] : isCollegeOfficer ? [
+        { label: 'College Proposals', href: '/proposals',        icon: Building2 },
+        { label: 'Budget Requests',   href: '/budget-requests',  icon: DollarSign },
+    ] : []
+
+    if (!actions.length) return null
+
+    return (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 px-5 pb-5 pt-2">
+            {actions.map((a, i) => {
+                const Icon = a.icon
+                const col = QUICK_ACTION_COLORS[i % QUICK_ACTION_COLORS.length]
+                return (
+                    <Link key={a.href} href={a.href}
+                        className={cn(
+                            'flex flex-col items-center justify-center gap-2 rounded-xl py-4 px-3',
+                            'transition-all duration-150 hover:scale-[1.03] active:scale-95 shadow-sm',
+                            col.bg, col.text
+                        )}>
+                        <Icon size={18} />
+                        <span className="text-xs font-semibold text-center leading-tight">{a.label}</span>
                     </Link>
                 )
             })}
@@ -592,11 +647,12 @@ export default function Dashboard() {
         }).catch(() => {}).finally(() => setLoading(false))
     }, [])
 
-    const roles      = user?.roles?.map(r => typeof r === 'string' ? r : r.name) ?? []
-    const isAdmin    = hasAnyRole(['super_admin', 'central_office', 'research_officer', 'community_officer', 'technology_officer'])
-    const isPI       = hasRole('pi') || hasRole('staff')
-    const isReviewer = hasRole('reviewer')
-    const isFinance  = hasRole('finance')
+    const roles           = user?.roles?.map(r => typeof r === 'string' ? r : r.name) ?? []
+    const isAdmin         = hasAnyRole(['super_admin', 'central_office', 'research_officer', 'community_officer', 'technology_officer'])
+    const isPI            = hasRole('pi') || hasRole('staff')
+    const isReviewer      = hasRole('reviewer')
+    const isFinance       = hasRole('finance')
+    const isCollegeOfficer = hasRole('college_officer')
 
     const statusCounts  = widgets.proposals_by_status ?? {}
     const trendData     = widgets.proposal_trend_chart ?? []
@@ -678,6 +734,27 @@ export default function Dashboard() {
             subLabel: 'Pending verification',
             icon: FileText, colorKey: 'teal', href: '/settlements',
         },
+    ] : isCollegeOfficer ? [
+        {
+            label: 'College Proposals', value: myProposals.length,
+            subLabel: 'All time',
+            icon: Building2, colorKey: 'indigo', href: '/proposals',
+        },
+        {
+            label: 'Under Review', value: myProposals.filter(p => ['under_blind_review','under_open_defence'].includes(p.status)).length,
+            subLabel: 'In evaluation',
+            icon: Search, colorKey: 'purple', href: '/proposals',
+        },
+        {
+            label: 'Budget Requests', value: pendingTasks.budget_requests_pending ?? 0,
+            subLabel: 'Pending approval',
+            icon: DollarSign, colorKey: 'amber', href: '/budget-requests',
+        },
+        {
+            label: 'Funded', value: myProposals.filter(p => ['funded','midterm_evaluation','completed'].includes(p.status)).length,
+            subLabel: 'Active grants',
+            icon: Award, colorKey: 'emerald', href: '/proposals',
+        },
     ] : []
 
     // ─── Banner right-side mini stats ──────────────────────────────────────────
@@ -693,6 +770,10 @@ export default function Dashboard() {
         { label: 'Assigned', value: reviewerQueue.length },
         { label: 'Pending',  value: pendingTasks.reviews_pending ?? 0 },
         { label: 'Overdue',  value: pendingTasks.reviews_overdue ?? 0 },
+    ] : isCollegeOfficer && !loading ? [
+        { label: 'Proposals', value: myProposals.length },
+        { label: 'Funded',    value: myProposals.filter(p => ['funded','midterm_evaluation','completed'].includes(p.status)).length },
+        { label: 'Requests',  value: pendingTasks.budget_requests_pending ?? 0 },
     ] : []
 
     return (
@@ -734,7 +815,7 @@ export default function Dashboard() {
                                         </span>
                                     )}
                                 </div>
-                                <QuickActions isAdmin={isAdmin} isPI={isPI} isReviewer={isReviewer} isFinance={isFinance} />
+                                <QuickActionsBanner isAdmin={isAdmin} isPI={isPI} isReviewer={isReviewer} isFinance={isFinance} />
                             </div>
 
                             {/* Right: mini KPI strip (desktop only) */}
@@ -768,13 +849,18 @@ export default function Dashboard() {
                     </div>
                 )}
 
+                {/* ── Quick Actions card ──────────────────────────────────── */}
+                <SectionCard title="Quick Actions">
+                    <QuickActions isAdmin={isAdmin} isPI={isPI} isReviewer={isReviewer} isFinance={isFinance} isCollegeOfficer={isCollegeOfficer} />
+                </SectionCard>
+
                 {/* ── Main 2-column layout ────────────────────────────────── */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
                     {/* ── LEFT COLUMN (2/3) ─────────────────────────────── */}
                     <div className="lg:col-span-2 space-y-5">
 
-                        {/* Trend chart (admin) */}
+                        {/* Trend chart (admin / central_officer) */}
                         {isAdmin && (
                             <SectionCard
                                 title="Proposal Submissions"
@@ -784,12 +870,27 @@ export default function Dashboard() {
                             </SectionCard>
                         )}
 
-                        {/* My Proposals list (PI) */}
+                        {/* My Proposals list (PI / staff) */}
                         {isPI && (
                             <SectionCard
                                 title="My Proposals"
                                 action={
                                     <Link href="/my-proposals"
+                                        className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1">
+                                        View all <ChevronRight size={11} />
+                                    </Link>
+                                }
+                            >
+                                <MyProposalsList proposals={myProposals} loading={loading} />
+                            </SectionCard>
+                        )}
+
+                        {/* College proposals summary (college_officer) */}
+                        {isCollegeOfficer && !isAdmin && (
+                            <SectionCard
+                                title="College Proposals"
+                                action={
+                                    <Link href="/proposals"
                                         className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1">
                                         View all <ChevronRight size={11} />
                                     </Link>
@@ -811,6 +912,20 @@ export default function Dashboard() {
                                 }
                             >
                                 <ReviewQueue queue={reviewerQueue} loading={loading} />
+                            </SectionCard>
+                        )}
+
+                        {/* Budget utilization (finance) */}
+                        {isFinance && !isAdmin && (
+                            <SectionCard
+                                title="Budget Utilization"
+                                action={
+                                    <span className="text-xs text-gray-400 font-medium">
+                                        FY {budgetSummary.fiscal_year ?? settings.current_academic_year}
+                                    </span>
+                                }
+                            >
+                                <BudgetSummary data={budgetSummary} loading={loading} />
                             </SectionCard>
                         )}
 

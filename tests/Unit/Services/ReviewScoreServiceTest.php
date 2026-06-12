@@ -31,7 +31,7 @@ function buildAssignmentWithScores(int $score, int $maxScore = 5, int $qCount = 
 {
     $user  = User::factory()->create();
     $admin = User::factory()->create();
-    $admin->assignRole('central_office');
+    $admin->assignRole('central_officer');
 
     $college = College::create(['name' => 'C'.rand(), 'code' => 'C'.rand(10, 99)]);
     $dept    = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'D'.rand(10, 99)]);
@@ -116,7 +116,7 @@ test('calculateScore returns 0.0 when all scores are 0', function () {
 test('calculateScore returns 0.0 for assignment with no scores', function () {
     $user    = User::factory()->create();
     $admin   = User::factory()->create();
-    $admin->assignRole('central_office');
+    $admin->assignRole('central_officer');
     $reviewer = User::factory()->create();
     $reviewer->assignRole('reviewer');
 
@@ -157,7 +157,7 @@ test('calculateScore returns 0.0 for assignment with no scores', function () {
 test('processBlindReviewResult does nothing if not all reviewers submitted', function () {
     $user    = User::factory()->create();
     $admin   = User::factory()->create();
-    $admin->assignRole('central_office');
+    $admin->assignRole('central_officer');
     $r1      = User::factory()->create();
     $r1->assignRole('reviewer');
     $r2      = User::factory()->create();

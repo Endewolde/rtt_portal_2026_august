@@ -31,7 +31,7 @@ beforeEach(function () {
 function makeProposalAt(string $status): array
 {
     $central = User::factory()->create();
-    $central->assignRole('central_office');
+    $central->assignRole('central_officer');
 
     $pi = User::factory()->create();
     $pi->assignRole('pi');

@@ -32,7 +32,7 @@ beforeEach(function () {
     $this->scoreService      = app(ReviewScoreService::class);
 
     $this->centralUser = User::factory()->create();
-    $this->centralUser->assignRole('central_office');
+    $this->centralUser->assignRole('central_officer');
 });
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -46,7 +46,7 @@ function makeProposalInState(string $status = 'validated'): array
     $dept    = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'D'.rand(10, 99)]);
 
     $adminUser = User::factory()->create();
-    $adminUser->assignRole('central_office');
+    $adminUser->assignRole('central_officer');
 
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research',

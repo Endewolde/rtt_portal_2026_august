@@ -79,6 +79,19 @@ function makeActiveCall(User $createdBy): ProposalCall
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
+test('draft created when user has college but no department auto-assigns first department', function () {
+    $college = College::create(['name' => 'No-Dept College', 'code' => 'NDC-'.rand(10, 99)]);
+    $dept    = Department::create(['college_id' => $college->id, 'name' => 'Auto Dept', 'code' => 'AD-'.rand(10, 99)]);
+    $pi      = User::factory()->create(['college_id' => $college->id, 'department_id' => null]);
+    $pi->assignRole('pi');
+    $service = app(ProposalService::class);
+    $call    = makeActiveCall($pi);
+
+    $proposal = $service->createDraft($pi, $call->id);
+
+    expect($proposal->department_id)->toBe($dept->id);
+});
+
 test('draft created with status=draft and correct tracker prefix DRAFT-', function () {
     $pi      = makePI();
     $service = app(ProposalService::class);

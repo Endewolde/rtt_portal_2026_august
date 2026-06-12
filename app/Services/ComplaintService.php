@@ -15,9 +15,9 @@ class ComplaintService
 
     // Category → officer role mapping for Level 2 routing
     private const CATEGORY_OFFICER = [
-        'research'             => 'research_officer',
+        'research' => 'research_officer',
         'community_engagement' => 'community_officer',
-        'technology_transfer'  => 'technology_officer',
+        'technology_transfer' => 'technology_officer',
     ];
 
     public function __construct(
@@ -38,7 +38,11 @@ class ComplaintService
         string $description
     ): Complaint {
         if (! in_array($stage, ['blind_review', 'open_defence'])) {
-            throw new \InvalidArgumentException("Level 1 complaints only accept blind_review or open_defence stages.");
+            throw new \InvalidArgumentException('Level 1 complaints only accept blind_review or open_defence stages.');
+        }
+
+        if (strlen($description) < 50) {
+            throw new \InvalidArgumentException('Complaint description must be at least 50 characters.');
         }
 
         $this->guardDuplicate($proposal->id, $stage, 'college');
@@ -52,13 +56,13 @@ class ComplaintService
                 ->first();
 
         $complaint = Complaint::create([
-            'proposal_id'    => $proposal->id,
+            'proposal_id' => $proposal->id,
             'complainant_id' => $complainant->id,
-            'stage'          => $stage,
-            'level'          => 'college',
-            'description'    => $description,
-            'status'         => 'open',
-            'assigned_to'    => $assignedTo?->id,
+            'stage' => $stage,
+            'level' => 'college',
+            'description' => $description,
+            'status' => 'open',
+            'assigned_to' => $assignedTo?->id,
         ]);
 
         $this->notifyAssignee($assignedTo, $proposal, $complainant, $stage);
@@ -80,7 +84,7 @@ class ComplaintService
         string $description
     ): Complaint {
         if (! in_array($proposal->status, self::FUNDED_STATUSES)) {
-            throw new \InvalidArgumentException("Officer-level complaints can only be filed for funded proposals.");
+            throw new \InvalidArgumentException('Officer-level complaints can only be filed for funded proposals.');
         }
 
         if (! in_array($complaintType, ['budget', 'rejection', 'other'])) {
@@ -92,14 +96,14 @@ class ComplaintService
         $assignedTo = $this->routeToOfficer($proposal);
 
         $complaint = Complaint::create([
-            'proposal_id'    => $proposal->id,
+            'proposal_id' => $proposal->id,
             'complainant_id' => $complainant->id,
-            'stage'          => 'post_funding',
-            'level'          => 'officer',
+            'stage' => 'post_funding',
+            'level' => 'officer',
             'complaint_type' => $complaintType,
-            'description'    => $description,
-            'status'         => 'open',
-            'assigned_to'    => $assignedTo?->id,
+            'description' => $description,
+            'status' => 'open',
+            'assigned_to' => $assignedTo?->id,
         ]);
 
         $this->notifyAssignee($assignedTo, $proposal, $complainant, $complaintType);
@@ -117,26 +121,26 @@ class ComplaintService
         string $description
     ): Complaint {
         if ($original->level !== 'college') {
-            throw new \InvalidArgumentException("Only Level 1 (college) complaints can be escalated.");
+            throw new \InvalidArgumentException('Only Level 1 (college) complaints can be escalated.');
         }
 
         if ($original->complainant_id !== $complainant->id) {
-            throw new \InvalidArgumentException("Only the original complainant can escalate a complaint.");
+            throw new \InvalidArgumentException('Only the original complainant can escalate a complaint.');
         }
 
-        $proposal   = $original->proposal;
+        $proposal = $original->proposal;
         $assignedTo = $this->routeToOfficer($proposal);
 
         $escalated = Complaint::create([
-            'proposal_id'       => $proposal->id,
-            'complainant_id'    => $complainant->id,
-            'stage'             => $original->stage,
-            'level'             => 'officer',
-            'complaint_type'    => 'escalation',
+            'proposal_id' => $proposal->id,
+            'complainant_id' => $complainant->id,
+            'stage' => $original->stage,
+            'level' => 'officer',
+            'complaint_type' => 'escalation',
             'escalated_from_id' => $original->id,
-            'description'       => $description,
-            'status'            => 'open',
-            'assigned_to'       => $assignedTo?->id,
+            'description' => $description,
+            'status' => 'open',
+            'assigned_to' => $assignedTo?->id,
         ]);
 
         // Mark the original as escalated
@@ -162,7 +166,7 @@ class ComplaintService
         if ($responder->hasRole('college_officer')) {
             $proposal = $complaint->proposal ?? Proposal::find($complaint->proposal_id);
             if ($complaint->level !== 'college' || $proposal?->college_id !== $responder->college_id) {
-                throw new UnauthorizedResolutionException("You can only respond to college-level complaints for your own college.");
+                throw new UnauthorizedResolutionException('You can only respond to college-level complaints for your own college.');
             }
         }
 
@@ -170,13 +174,13 @@ class ComplaintService
         $categoryOfficers = ['research_officer', 'community_officer', 'technology_officer'];
         if ($responder->hasAnyRole($categoryOfficers)) {
             if ($complaint->level !== 'officer') {
-                throw new UnauthorizedResolutionException("You can only respond to officer-level complaints.");
+                throw new UnauthorizedResolutionException('You can only respond to officer-level complaints.');
             }
         }
 
         $complaint->update([
-            'status'      => $resolution,
-            'response'    => $response,
+            'status' => $resolution,
+            'response' => $response,
             'resolved_by' => $responder->id,
             'resolved_at' => now(),
         ]);
@@ -184,11 +188,11 @@ class ComplaintService
         $complainant = User::find($complaint->complainant_id);
         if ($complainant) {
             $this->notificationService->send('complaint_response', $complainant, [
-                'proposal_id'    => $complaint->proposal_id,
+                'proposal_id' => $complaint->proposal_id,
                 'tracker_number' => $complaint->proposal?->tracker_number,
-                'response'       => $response,
-                'resolved_by'    => $responder->name,
-                'resolution'     => $resolution,
+                'response' => $response,
+                'resolved_by' => $responder->name,
+                'resolution' => $resolution,
             ]);
         }
 
@@ -239,10 +243,10 @@ class ComplaintService
         }
 
         $this->notificationService->send('complaint_filed', $assignedTo, [
-            'proposal_id'    => $proposal->id,
+            'proposal_id' => $proposal->id,
             'tracker_number' => $proposal->tracker_number,
-            'stage'          => $stage,
-            'complainant'    => $complainant->name,
+            'stage' => $stage,
+            'complainant' => $complainant->name,
         ]);
     }
 
@@ -255,6 +259,39 @@ class ComplaintService
             return $this->fileCollegeComplaint($proposal, $complainant, $stage, $description);
         }
 
+        if ($stage === 'final_decision' || $stage === 'validation') {
+            return $this->fileCentralComplaint($proposal, $complainant, $stage, $description);
+        }
+
         return $this->fileOfficerComplaint($proposal, $complainant, $stage, $description);
+    }
+
+    public function fileCentralComplaint(
+        Proposal $proposal,
+        User $complainant,
+        string $stage,
+        string $description
+    ): Complaint {
+        if (strlen($description) < 50) {
+            throw new \InvalidArgumentException('Complaint description must be at least 50 characters.');
+        }
+
+        $this->guardDuplicate($proposal->id, $stage, 'central');
+
+        $assignedTo = User::role('central_officer')->first();
+
+        $complaint = Complaint::create([
+            'proposal_id' => $proposal->id,
+            'complainant_id' => $complainant->id,
+            'stage' => $stage,
+            'level' => 'central',
+            'description' => $description,
+            'status' => 'open',
+            'assigned_to' => $assignedTo?->id,
+        ]);
+
+        $this->notifyAssignee($assignedTo, $proposal, $complainant, $stage);
+
+        return $complaint->fresh();
     }
 }

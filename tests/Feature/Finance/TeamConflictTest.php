@@ -33,7 +33,7 @@ function conflict_makeProposalWithMembers(): array
     $college = College::create(['name' => 'Conflict College '.rand(), 'code' => 'CC'.rand(10, 99)]);
     $dept    = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'CF'.rand(10, 99)]);
 
-    $central = User::factory()->create(); $central->assignRole('central_office');
+    $central = User::factory()->create(); $central->assignRole('central_officer');
     $pi      = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]); $pi->assignRole('pi');
     $coI     = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]); $coI->assignRole('pi');
     $coI2    = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]); $coI2->assignRole('pi');
