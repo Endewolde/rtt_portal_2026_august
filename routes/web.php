@@ -66,6 +66,7 @@ Route::get('/admin/external-funds', fn () => Inertia::render('Admin/ExternalFund
 Route::get('/admin/users', fn () => Inertia::render('Admin/Users'));
 Route::get('/admin/users/{id}', fn () => Inertia::render('Admin/UserShow'));
 Route::get('/admin/colleges', fn () => Inertia::render('Admin/Colleges'));
+Route::get('/admin/thematic-areas', fn () => Inertia::render('Admin/ThematicAreas'));
 Route::get('/admin/audit-logs', fn () => Inertia::render('Admin/AuditLogs'));
 Route::get('/admin/settings', fn () => Inertia::render('Admin/Settings'));
 Route::get('/admin/similarity-flags', fn () => Inertia::render('Admin/SimilarityFlags'));

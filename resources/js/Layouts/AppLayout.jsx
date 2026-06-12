@@ -235,6 +235,7 @@ const ICONS = {
     FolderOpen, EyeOff, Presentation, ClipboardList,
     BadgeDollarSign, Trophy, Archive, ListChecks, ShieldCheck,
     Globe, CalendarDays, Banknote, Landmark,
+    FlaskConical,
     BuildingOffice: Building2,
 }
 
@@ -735,6 +736,10 @@ export default function AppLayout({ children, breadcrumb }) {
                 {
                     label: 'Departments', href: '/admin/departments', icon: 'BuildingOffice',
                     show: perm('departments.view_any'),
+                },
+                {
+                    label: 'Thematic Areas', href: '/admin/thematic-areas', icon: 'FlaskConical',
+                    show: hasRole('super_admin'),
                 },
                 {
                     label: 'Resources', href: '/admin/resources', icon: 'FolderOpen',

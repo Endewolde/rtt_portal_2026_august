@@ -345,8 +345,9 @@ function SectionHead({ eyebrow, title, action, actionHref, light = false }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function Home() {
-    const [calls, setCalls] = useState([]);
-    const [stats, setStats] = useState({});
+    const [calls, setCalls]               = useState([]);
+    const [stats, setStats]               = useState({});
+    const [thematicAreas, setThematicAreas] = useState([]);
 
     const s            = usePage().props.app_settings ?? {};
     const primaryColor = s.primary_color     || '#6366f1';
@@ -392,6 +393,9 @@ export default function Home() {
             .catch(() => {});
         get('/stats')
             .then(r => setStats(r?.data ?? r ?? {}))
+            .catch(() => {});
+        get('/thematic-areas/public')
+            .then(r => setThematicAreas(r?.data ?? []))
             .catch(() => {});
     }, []);
 
@@ -551,6 +555,49 @@ export default function Home() {
                                         </div>
                                         <h3 className="font-bold text-slate-900 mb-2 text-sm">{step.title}</h3>
                                         <p className="text-xs text-slate-500 leading-relaxed">{step.desc}</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </section>
+            )}
+
+            {/* ── Thematic Areas ────────────────────────────────────────────── */}
+            {thematicAreas.length > 0 && (
+                <section className="bg-white py-14 border-t border-gray-100">
+                    <div className="max-w-7xl mx-auto px-6">
+                        <SectionHead eyebrow="Research Focus" title="Thematic Areas" />
+
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                            {thematicAreas.map((area) => (
+                                <div
+                                    key={area.id}
+                                    className="group p-5 rounded-2xl border border-gray-100 hover:border-gray-200
+                                               hover:shadow-md transition-all duration-200 bg-gray-50/50 flex flex-col gap-3"
+                                >
+                                    <div
+                                        className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shrink-0"
+                                        style={{
+                                            backgroundColor: `${area.color}18`,
+                                            border: `1.5px solid ${area.color}30`,
+                                        }}
+                                    >
+                                        {area.icon}
+                                    </div>
+                                    <div>
+                                        <div
+                                            className="w-8 h-1 rounded-full mb-2"
+                                            style={{ backgroundColor: area.color }}
+                                        />
+                                        <h3 className="font-bold text-slate-900 text-sm leading-snug">
+                                            {area.name}
+                                        </h3>
+                                        {area.description && (
+                                            <p className="text-xs text-slate-500 mt-1.5 leading-relaxed line-clamp-2">
+                                                {area.description}
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
                             ))}

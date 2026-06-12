@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, usePage } from '@inertiajs/react';
-import { FlaskConical, Menu, X, Search, Download } from 'lucide-react';
+import { FlaskConical, Menu, X, Search, Download, ChevronDown, Clock, Calendar, ArrowRight, Flame, CalendarDays, MapPin, Video, Building2, Globe, Star } from 'lucide-react';
+import { get } from '../lib/api';
 
 // ─── Inline social SVG icons ──────────────────────────────────────────────────
 
@@ -48,14 +49,446 @@ const SOCIAL_META = {
     public_social_youtube:   { label: 'YouTube',   Icon: IconYouTube   },
 };
 
+// ─── Category config (shared with the dropdown) ───────────────────────────────
+
+const CAT = {
+    research:             { label: 'Research',      color: '#3b82f6', bg: '#eff6ff' },
+    community_engagement: { label: 'Community',     color: '#10b981', bg: '#f0fdf4' },
+    technology_transfer:  { label: 'Tech Transfer', color: '#8b5cf6', bg: '#f5f3ff' },
+    innovation:           { label: 'Innovation',    color: '#f59e0b', bg: '#fffbeb' },
+    other:                { label: 'Other',         color: '#64748b', bg: '#f8fafc' },
+};
+
+// ─── Deadline helper ──────────────────────────────────────────────────────────
+
+function calcDeadline(endDate) {
+    if (!endDate) return null;
+    const diff = new Date(endDate) - Date.now();
+    if (diff <= 0) return { label: 'Closing today', urgent: true, veryUrgent: true };
+    const days  = Math.floor(diff / 86_400_000);
+    const hours = Math.floor((diff % 86_400_000) / 3_600_000);
+    if (days === 0) return { label: `${hours}h left`, urgent: true, veryUrgent: true };
+    if (days <= 3)  return { label: `${days}d left`,  urgent: true,  veryUrgent: false };
+    if (days <= 14) return { label: `${days}d left`,  urgent: false, veryUrgent: false };
+    return { label: new Date(endDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }), urgent: false, veryUrgent: false };
+}
+
+// ─── Open Calls dropdown ──────────────────────────────────────────────────────
+
+function OpenCallsDropdown({ calls, loading, primaryColor, currentPath }) {
+    const [open,    setOpen]    = useState(false);
+    const [mounted, setMounted] = useState(false); // keeps DOM alive during fade-out
+    const [shown,   setShown]   = useState(false); // drives CSS opacity/transform
+    const timerRef              = useRef(null);
+    const count                 = calls.length;
+    const isActive              = currentPath.startsWith('/proposal-calls');
+
+    const show = () => {
+        clearTimeout(timerRef.current);
+        setOpen(true);
+        setMounted(true);
+        // one rAF delay so the DOM element exists before we flip the visible class
+        requestAnimationFrame(() => requestAnimationFrame(() => setShown(true)));
+    };
+
+    const hide = () => {
+        setShown(false);
+        timerRef.current = setTimeout(() => { setMounted(false); setOpen(false); }, 220);
+    };
+
+    useEffect(() => () => clearTimeout(timerRef.current), []);
+
+    const handleApply = (callId) => {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('rtt_token') : null;
+        if (!token) {
+            localStorage.setItem('redirect_after_login', `/proposals/create?call_id=${callId}`);
+            window.location.href = '/login';
+        } else {
+            window.location.href = `/proposals/create?call_id=${callId}`;
+        }
+    };
+
+    return (
+        <div
+            className="relative h-full flex items-center"
+            onMouseEnter={show}
+            onMouseLeave={hide}
+        >
+            {/* ── Trigger button ── */}
+            <button
+                className={`relative px-4 h-10 flex items-center gap-1.5 text-sm font-medium transition-colors ${
+                    isActive || open ? 'text-white bg-black/20' : 'text-white/85 hover:text-white hover:bg-black/10'
+                }`}
+            >
+                Open Calls
+
+                {/* Badge with ping ripple blink */}
+                {count > 0 && (
+                    <span className="relative inline-flex">
+                        {/* Ripple ring — blinks on/off continuously */}
+                        <span
+                            className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-60"
+                            style={{ backgroundColor: 'white' }}
+                        />
+                        {/* Solid badge */}
+                        <span
+                            className="relative inline-flex items-center justify-center h-4 min-w-4 px-1
+                                       rounded-full bg-white text-[10px] font-bold leading-none tabular-nums"
+                            style={{ color: primaryColor }}
+                        >
+                            {count}
+                        </span>
+                    </span>
+                )}
+
+                <ChevronDown
+                    size={12}
+                    className={`transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+                />
+            </button>
+
+            {/* ── Flyout panel — fade + slide ── */}
+            {mounted && (
+                <div
+                    className={`absolute left-0 top-full w-96 bg-white rounded-b-2xl
+                                shadow-2xl shadow-black/15 border border-gray-100 border-t-0
+                                overflow-hidden z-50 origin-top
+                                transition-all duration-200 ease-out
+                                ${shown
+                                    ? 'opacity-100 translate-y-0 scale-y-100'
+                                    : 'opacity-0 -translate-y-2 scale-y-95'
+                                }`}
+                >
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                        <div className="flex items-center gap-2">
+                            <Flame size={13} className="animate-pulse" style={{ color: primaryColor }} />
+                            <p className="text-xs font-bold text-gray-700 uppercase tracking-widest">
+                                {loading ? 'Loading…' : count === 0 ? 'No Active Calls' : `${count} Active Call${count !== 1 ? 's' : ''}`}
+                            </p>
+                        </div>
+                        <Link href="/proposal-calls/public"
+                            className="text-[11px] font-semibold hover:underline transition-opacity hover:opacity-70"
+                            style={{ color: primaryColor }}>
+                            View all
+                        </Link>
+                    </div>
+
+                    {/* Loading skeleton */}
+                    {loading && (
+                        <div className="p-4 space-y-3">
+                            {[...Array(3)].map((_, i) => (
+                                <div key={i} className="flex gap-3 animate-pulse">
+                                    <div className="w-1.5 rounded-full bg-gray-100 self-stretch" />
+                                    <div className="flex-1 space-y-1.5">
+                                        <div className="h-3 bg-gray-100 rounded w-3/4" />
+                                        <div className="h-2.5 bg-gray-100 rounded w-1/2" />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Empty state */}
+                    {!loading && count === 0 && (
+                        <div className="px-4 py-8 text-center">
+                            <p className="text-sm text-gray-500">No funding calls are open right now.</p>
+                            <p className="text-xs text-gray-400 mt-1">Check back soon for new opportunities.</p>
+                        </div>
+                    )}
+
+                    {/* Call list — each row fades in with a stagger */}
+                    {!loading && count > 0 && (
+                        <div className="divide-y divide-gray-50 max-h-80 overflow-y-auto">
+                            {calls.slice(0, 5).map((call, idx) => {
+                                const cat      = CAT[call.category] ?? CAT.other;
+                                const deadline = calcDeadline(call.end_date);
+                                return (
+                                    <div
+                                        key={call.id}
+                                        className={`flex items-start gap-3 px-4 py-3.5
+                                                    hover:bg-gray-50/70 transition-all duration-150
+                                                    group/item
+                                                    ${shown ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-2'}`}
+                                        style={{ transitionDelay: shown ? `${idx * 40}ms` : '0ms' }}
+                                    >
+                                        {/* Category accent bar */}
+                                        <div className="w-1 self-stretch rounded-full shrink-0 mt-0.5"
+                                            style={{ backgroundColor: cat.color }} />
+
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-semibold text-gray-900 leading-snug
+                                                           line-clamp-2 group-hover/item:text-gray-700 transition-colors">
+                                                {call.title}
+                                            </p>
+                                            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                                                    style={{ color: cat.color, backgroundColor: cat.bg }}>
+                                                    {cat.label}
+                                                </span>
+                                                <span className="flex items-center gap-1 text-[10px] text-gray-400 font-medium">
+                                                    <Calendar size={9} /> {call.academic_year}
+                                                </span>
+                                                {deadline && (
+                                                    <span className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                                                        deadline.veryUrgent
+                                                            ? 'bg-red-50 text-red-600'
+                                                            : deadline.urgent
+                                                            ? 'bg-orange-50 text-orange-600'
+                                                            : 'bg-gray-50 text-gray-500'
+                                                    }`}>
+                                                        <Clock size={8} className={deadline.veryUrgent ? 'animate-pulse' : ''} />
+                                                        {deadline.label}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Apply button — slides in on row hover */}
+                                        <button
+                                            onClick={() => handleApply(call.id)}
+                                            className="shrink-0 flex items-center gap-1 text-[11px] font-bold px-2.5 py-1.5
+                                                       rounded-lg text-white opacity-0 group-hover/item:opacity-100
+                                                       translate-x-1 group-hover/item:translate-x-0
+                                                       transition-all duration-150"
+                                            style={{ backgroundColor: primaryColor }}
+                                        >
+                                            Apply <ArrowRight size={9} />
+                                        </button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {/* Footer */}
+                    {!loading && count > 0 && (
+                        <div className="px-4 py-3 border-t border-gray-100 bg-gray-50/50">
+                            <Link href="/proposal-calls/public"
+                                className="flex items-center justify-between text-sm font-semibold
+                                           transition-all hover:gap-3 hover:opacity-80"
+                                style={{ color: primaryColor }}>
+                                <span>Browse all {count} open call{count !== 1 ? 's' : ''}</span>
+                                <ArrowRight size={14} />
+                            </Link>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ─── Conferences dropdown ─────────────────────────────────────────────────────
+
+const CONF_TYPE_CFG = {
+    physical: { label: 'In-Person', Icon: Building2, color: '#3b82f6' },
+    virtual:  { label: 'Virtual',   Icon: Video,     color: '#10b981' },
+    hybrid:   { label: 'Hybrid',    Icon: Globe,     color: '#8b5cf6' },
+};
+
+function fmtConfDate(d) {
+    if (!d) return '—';
+    return new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function calcDaysTo(startDate) {
+    if (!startDate) return null;
+    const diff = new Date(startDate) - Date.now();
+    if (diff <= 0) {
+        return { label: 'Ongoing', ongoing: true };
+    }
+    const days = Math.floor(diff / 86_400_000);
+    if (days === 0) return { label: 'Today!', urgent: true };
+    if (days <= 7)  return { label: `${days}d away`, urgent: true };
+    if (days <= 30) return { label: `${days}d away`, urgent: false };
+    return { label: fmtConfDate(startDate), urgent: false };
+}
+
+function ConferencesDropdown({ conferences, loading, primaryColor, currentPath }) {
+    const [open,    setOpen]    = useState(false);
+    const [mounted, setMounted] = useState(false);
+    const [shown,   setShown]   = useState(false);
+    const timerRef              = useRef(null);
+    const count                 = conferences.length;
+    const isActive              = currentPath.startsWith('/conferences');
+
+    const show = () => {
+        clearTimeout(timerRef.current);
+        setOpen(true);
+        setMounted(true);
+        requestAnimationFrame(() => requestAnimationFrame(() => setShown(true)));
+    };
+
+    const hide = () => {
+        setShown(false);
+        timerRef.current = setTimeout(() => { setMounted(false); setOpen(false); }, 220);
+    };
+
+    useEffect(() => () => clearTimeout(timerRef.current), []);
+
+    return (
+        <div className="relative h-full flex items-center" onMouseEnter={show} onMouseLeave={hide}>
+            {/* Trigger */}
+            <button className={`relative px-4 h-10 flex items-center gap-1.5 text-sm font-medium transition-colors ${
+                isActive || open ? 'text-white bg-black/20' : 'text-white/85 hover:text-white hover:bg-black/10'
+            }`}>
+                Conferences
+                {count > 0 && (
+                    <span className="relative inline-flex">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-50"
+                            style={{ backgroundColor: 'white' }} />
+                        <span className="relative inline-flex items-center justify-center h-4 min-w-4 px-1
+                                         rounded-full bg-white text-[10px] font-bold leading-none tabular-nums"
+                            style={{ color: primaryColor }}>
+                            {count}
+                        </span>
+                    </span>
+                )}
+                <ChevronDown size={12} className={`transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+            </button>
+
+            {/* Flyout */}
+            {mounted && (
+                <div className={`absolute left-0 top-full w-105 bg-white rounded-b-2xl
+                                 shadow-2xl shadow-black/15 border border-gray-100 border-t-0
+                                 overflow-hidden z-50 origin-top transition-all duration-200 ease-out
+                                 ${shown ? 'opacity-100 translate-y-0 scale-y-100' : 'opacity-0 -translate-y-2 scale-y-95'}`}>
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                        <div className="flex items-center gap-2">
+                            <CalendarDays size={13} className="animate-pulse" style={{ color: primaryColor }} />
+                            <p className="text-xs font-bold text-gray-700 uppercase tracking-widest">
+                                {loading ? 'Loading…' : count === 0 ? 'No Upcoming Events' : `${count} Upcoming Conference${count !== 1 ? 's' : ''}`}
+                            </p>
+                        </div>
+                        <Link href="/conferences"
+                            className="text-[11px] font-semibold hover:underline transition-opacity hover:opacity-70"
+                            style={{ color: primaryColor }}>
+                            View all
+                        </Link>
+                    </div>
+
+                    {/* Skeleton */}
+                    {loading && (
+                        <div className="p-4 space-y-4">
+                            {[...Array(3)].map((_, i) => (
+                                <div key={i} className="flex gap-3 animate-pulse">
+                                    <div className="w-14 h-14 rounded-xl bg-gray-100 shrink-0" />
+                                    <div className="flex-1 space-y-2 py-1">
+                                        <div className="h-3 bg-gray-100 rounded w-4/5" />
+                                        <div className="h-2.5 bg-gray-100 rounded w-1/2" />
+                                        <div className="h-2 bg-gray-100 rounded w-1/3" />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Empty state */}
+                    {!loading && count === 0 && (
+                        <div className="px-4 py-8 text-center">
+                            <CalendarDays size={32} className="mx-auto text-gray-200 mb-3" />
+                            <p className="text-sm text-gray-500">No upcoming conferences right now.</p>
+                            <p className="text-xs text-gray-400 mt-1">Check back soon for new events.</p>
+                        </div>
+                    )}
+
+                    {/* Conference list */}
+                    {!loading && count > 0 && (
+                        <div className="divide-y divide-gray-50 max-h-80 overflow-y-auto">
+                            {conferences.slice(0, 5).map((conf, idx) => {
+                                const type    = CONF_TYPE_CFG[conf.location_type] ?? CONF_TYPE_CFG.physical;
+                                const TypeIcon = type.Icon;
+                                const timing  = calcDaysTo(conf.start_date);
+                                return (
+                                    <Link
+                                        key={conf.id}
+                                        href={`/conferences/${conf.slug}`}
+                                        className={`flex items-start gap-3 px-4 py-3.5 hover:bg-gray-50/70
+                                                    transition-all duration-150 group/item
+                                                    ${shown ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-2'}`}
+                                        style={{ transitionDelay: shown ? `${idx * 40}ms` : '0ms' }}
+                                    >
+                                        {/* Date block */}
+                                        <div className="shrink-0 w-12 h-12 rounded-xl flex flex-col items-center justify-center text-white font-bold text-center"
+                                            style={{ background: `linear-gradient(135deg, ${type.color}, ${type.color}cc)` }}>
+                                            <span className="text-[10px] leading-none opacity-80 uppercase">
+                                                {conf.start_date ? new Date(conf.start_date).toLocaleDateString('en-GB', { month: 'short' }) : '—'}
+                                            </span>
+                                            <span className="text-lg leading-none">
+                                                {conf.start_date ? new Date(conf.start_date).getDate() : '—'}
+                                            </span>
+                                        </div>
+
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-1.5 mb-0.5">
+                                                <span className="flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full text-white"
+                                                    style={{ backgroundColor: type.color }}>
+                                                    <TypeIcon size={8} /> {type.label}
+                                                </span>
+                                                {conf.is_featured && (
+                                                    <Star size={9} className="text-amber-400 fill-amber-400" />
+                                                )}
+                                            </div>
+                                            <p className="text-sm font-semibold text-gray-900 leading-snug line-clamp-1
+                                                           group-hover/item:text-indigo-700 transition-colors">
+                                                {conf.title}
+                                            </p>
+                                            <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                                <span className="text-[10px] text-gray-400">
+                                                    {fmtConfDate(conf.start_date)}
+                                                </span>
+                                                {timing && (
+                                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                                                        timing.ongoing
+                                                            ? 'bg-green-50 text-green-600'
+                                                            : timing.urgent
+                                                            ? 'bg-orange-50 text-orange-600'
+                                                            : 'bg-gray-50 text-gray-500'
+                                                    }`}>
+                                                        {timing.label}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Arrow */}
+                                        <ArrowRight size={14} className="shrink-0 text-gray-300 group-hover/item:text-indigo-400
+                                                                           group-hover/item:translate-x-0.5 transition-all duration-150 mt-1" />
+                                    </Link>
+                                );
+                            })}
+                        </div>
+                    )}
+
+                    {/* Footer */}
+                    {!loading && count > 0 && (
+                        <div className="px-4 py-3 border-t border-gray-100 bg-gray-50/50">
+                            <Link href="/conferences"
+                                className="flex items-center justify-between text-sm font-semibold transition-all hover:gap-3 hover:opacity-80"
+                                style={{ color: primaryColor }}>
+                                <span>Browse all {count} upcoming conference{count !== 1 ? 's' : ''}</span>
+                                <ArrowRight size={14} />
+                            </Link>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ─── Default nav items ────────────────────────────────────────────────────────
 
 const DEFAULT_NAV = [
-    { href: '/',                      label: 'Home'           },
-    { href: '/proposal-calls/public', label: 'Open Calls'     },
-    { href: '/explore',               label: 'Explore'        },
-    { href: '/repository',            label: 'Repository'     },
-    { href: '/tracker',               label: 'Track Proposal' },
+    { href: '/',                       label: 'Home'                  },
+    { href: '/proposal-calls/public',  label: 'Open Calls'            },
+    { href: '/conferences',            label: 'Conferences'           },
+    { href: '/explore',                label: 'Explore'               },
+    { href: '/funding-opportunities',  label: 'Funding Opportunities' },
+    { href: '/repository',             label: 'Repository'            },
+    { href: '/tracker',                label: 'Track Proposal'        },
 ];
 
 // ─── Layout ───────────────────────────────────────────────────────────────────
@@ -64,19 +497,26 @@ export default function PublicLayout({ children }) {
     const [mobileOpen,      setMobileOpen]      = useState(false);
     const [bannerDismissed, setBannerDismissed] = useState(false);
     const [scrolled,        setScrolled]        = useState(false);
+    const [openCalls,          setOpenCalls]          = useState([]);
+    const [callsLoading,       setCallsLoading]       = useState(true);
+    const [upcomingConferences, setUpcomingConferences] = useState([]);
+    const [confsLoading,        setConfsLoading]        = useState(true);
 
     const token = typeof window !== 'undefined' ? localStorage.getItem('rtt_token') : null;
 
     const s             = usePage().props.app_settings ?? {};
     const systemName    = s.system_name        || 'RTT Platform';
     const systemLogo    = s.system_logo        || null;
+    const logoWidth     = s.logo_width         || null;
+    const logoHeight    = s.logo_height        || null;
     const orgName       = s.organization_name  || 'University';
     const primaryColor  = s.primary_color      || '#c0392b';
     const footerBg      = s.public_footer_bg   || '#0f172a';
     const footerText    = s.footer_text        || `© ${new Date().getFullYear()} All rights reserved.`;
     const annActive     = s.announcement_active === 'true';
     const annMsg        = s.announcement_message || '';
-    const headerTagline = s.public_header_tagline || `${orgName} — Research & Technology Transfer Platform`;
+    const headerTagline  = s.public_header_tagline  || `${orgName} — Research & Technology Transfer Platform`;
+    const footerTagline  = s.public_footer_tagline  || 'Research & Technology Transfer Platform';
 
     // Build dynamic nav from settings (falls back to defaults)
     const navItems = DEFAULT_NAV.map((d, i) => {
@@ -100,6 +540,28 @@ export default function PublicLayout({ children }) {
         const onScroll = () => setScrolled(window.scrollY > 40);
         window.addEventListener('scroll', onScroll, { passive: true });
         return () => window.removeEventListener('scroll', onScroll);
+    }, []);
+
+    useEffect(() => {
+        get('/proposal-calls')
+            .then(res => {
+                const raw = res.data;
+                const items = Array.isArray(raw) ? raw : (raw?.data ?? raw ?? []);
+                setOpenCalls(Array.isArray(items) ? items : []);
+            })
+            .catch(() => {})
+            .finally(() => setCallsLoading(false));
+    }, []);
+
+    useEffect(() => {
+        get('/conferences', { scope: 'upcoming', per_page: 5 })
+            .then(res => {
+                const raw = res.data?.data ?? res.data ?? [];
+                const items = Array.isArray(raw) ? raw : (raw?.data ?? []);
+                setUpcomingConferences(Array.isArray(items) ? items : []);
+            })
+            .catch(() => {})
+            .finally(() => setConfsLoading(false));
     }, []);
 
     return (
@@ -163,8 +625,18 @@ export default function PublicLayout({ children }) {
                         {/* Logo */}
                         <Link href="/" className="flex items-center gap-2.5 shrink-0">
                             {systemLogo ? (
-                                <img src={systemLogo} alt={systemName}
-                                    className={`w-auto object-contain transition-all duration-300 ${scrolled ? 'h-7' : 'h-11'}`} />
+                                <img
+                                    src={systemLogo}
+                                    alt={systemName}
+                                    className="object-contain transition-all duration-300"
+                                    style={logoWidth || logoHeight ? {
+                                        width:     logoWidth  ? `${logoWidth}px`  : 'auto',
+                                        height:    logoHeight ? `${logoHeight}px` : 'auto',
+                                    } : {
+                                        height: scrolled ? '28px' : '44px',
+                                        width:  'auto',
+                                    }}
+                                />
                             ) : (
                                 <div className="flex items-center gap-2">
                                     <div className={`rounded-xl flex items-center justify-center shadow-sm
@@ -223,6 +695,31 @@ export default function PublicLayout({ children }) {
                     <div className="max-w-7xl mx-auto px-6">
                         <div className="flex items-center h-10">
                             {navItems.map(l => {
+                                // "Open Calls" gets the rich mega-dropdown treatment
+                                if (l.href === '/proposal-calls/public') {
+                                    return (
+                                        <OpenCallsDropdown
+                                            key={l.href}
+                                            calls={openCalls}
+                                            loading={callsLoading}
+                                            primaryColor={primaryColor}
+                                            currentPath={currentPath}
+                                        />
+                                    );
+                                }
+                                // "Conferences" gets a dropdown showing upcoming events
+                                if (l.href === '/conferences') {
+                                    return (
+                                        <ConferencesDropdown
+                                            key={l.href}
+                                            conferences={upcomingConferences}
+                                            loading={confsLoading}
+                                            primaryColor={primaryColor}
+                                            currentPath={currentPath}
+                                        />
+                                    );
+                                }
+
                                 const active = currentPath === l.href
                                     || (l.href !== '/' && currentPath.startsWith(l.href));
                                 return (
@@ -252,9 +749,15 @@ export default function PublicLayout({ children }) {
                             {navItems.map(l => (
                                 <Link key={l.href} href={l.href}
                                     onClick={() => setMobileOpen(false)}
-                                    className="flex items-center px-3 py-2.5 rounded-lg text-sm font-medium
+                                    className="flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium
                                                text-gray-700 hover:bg-gray-50 transition-colors">
-                                    {l.label}
+                                    <span>{l.label}</span>
+                                    {l.href === '/proposal-calls/public' && openCalls.length > 0 && (
+                                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full text-white"
+                                            style={{ backgroundColor: primaryColor }}>
+                                            {openCalls.length}
+                                        </span>
+                                    )}
                                 </Link>
                             ))}
                             <Link href="/download"
@@ -300,7 +803,15 @@ export default function PublicLayout({ children }) {
                         <div className="md:col-span-1">
                             <div className="flex items-center gap-2.5 mb-3">
                                 {systemLogo ? (
-                                    <img src={systemLogo} alt={systemName} className="h-7 w-auto opacity-80 object-contain" />
+                                    <img
+                                        src={systemLogo}
+                                        alt={systemName}
+                                        className="opacity-80 object-contain"
+                                        style={logoWidth || logoHeight ? {
+                                            width:  logoWidth  ? `${logoWidth}px`  : 'auto',
+                                            height: logoHeight ? `${logoHeight}px` : 'auto',
+                                        } : { height: '28px', width: 'auto' }}
+                                    />
                                 ) : (
                                     <div className="h-7 w-7 rounded-lg flex items-center justify-center"
                                         style={{ backgroundColor: primaryColor }}>
@@ -361,7 +872,7 @@ export default function PublicLayout({ children }) {
 
                     <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
                         <p>{footerText}</p>
-                        <p className="text-slate-600">Research & Technology Transfer Platform</p>
+                        <p className="text-slate-600">{footerTagline}</p>
                     </div>
                 </div>
             </footer>

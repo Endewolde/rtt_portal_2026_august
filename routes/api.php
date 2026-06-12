@@ -43,6 +43,7 @@ use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\SettlementController;
 use App\Http\Controllers\Api\SimilarityController;
 use App\Http\Controllers\Api\StatsController;
+use App\Http\Controllers\Api\ThematicAreaController;
 use App\Http\Controllers\Api\UserController;
 use App\Models\FormTemplate;
 use Illuminate\Support\Facades\Route;
@@ -91,7 +92,9 @@ Route::prefix('v1')->group(function () {
     Route::get('/stats', [StatsController::class, 'index']);
     Route::get('/resources', [ResourceController::class, 'publicIndex']);
     Route::get('/proposals/public', [ProposalController::class, 'publicIndex']);
+    Route::get('/proposals/public/archive/years', [ProposalController::class, 'publicArchiveYears']);
     Route::get('/colleges/public', [CollegeController::class, 'publicList']);
+    Route::get('/thematic-areas/public', [ThematicAreaController::class, 'publicIndex']);
     Route::get('/external-funds/opportunities/public', [EFOpportunityController::class, 'publicIndex']);
 
     // ── Authenticated — 300 requests per minute per user ─────────────────────
@@ -127,6 +130,12 @@ Route::prefix('v1')->group(function () {
         Route::put('/roles/{id}/permissions', [RoleController::class, 'updatePermissions']);
         Route::get('/permissions', [RoleController::class, 'allPermissions']);
         Route::post('/permissions/refresh', [RoleController::class, 'refreshPermissions']);
+
+        // Thematic Areas
+        Route::get('/thematic-areas', [ThematicAreaController::class, 'index']);
+        Route::post('/thematic-areas', [ThematicAreaController::class, 'store']);
+        Route::put('/thematic-areas/{id}', [ThematicAreaController::class, 'update']);
+        Route::delete('/thematic-areas/{id}', [ThematicAreaController::class, 'destroy']);
 
         // Colleges
         Route::get('/colleges', [CollegeController::class, 'index']);
@@ -268,6 +277,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/proposals/{id}/central/reject', [CentralEvaluationController::class, 'centralReject']);
 
         // Awards
+        Route::get('/proposals/awarded/export', [AwardController::class, 'exportAwarded']);
         Route::post('/proposals/{id}/award', [AwardController::class, 'store']);
         Route::get('/proposals/{id}/award', [AwardController::class, 'show']);
         Route::patch('/proposals/{id}/award', [AwardController::class, 'update']);
