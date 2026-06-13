@@ -103,7 +103,8 @@ class RolePermissionSeeder extends Seeder
 
         // ── admin: site management (users, roles, settings, features) ─────────
         Role::findByName('admin')->syncPermissions([
-            'proposals.view_any', 'proposals.view', 'proposals.update', 'proposals.export',
+            'proposals.view_any', 'proposals.view', 'proposals.create', 'proposals.update',
+            'proposals.delete', 'proposals.export', 'proposals.submit',
             'proposals.validate', 'proposals.assign_reviewer',
             'proposal_calls.view_any', 'proposal_calls.view', 'proposal_calls.create',
             'proposal_calls.update', 'proposal_calls.delete',

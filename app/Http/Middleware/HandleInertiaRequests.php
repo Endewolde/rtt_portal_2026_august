@@ -72,6 +72,7 @@ class HandleInertiaRequests extends Middleware
                     'public_cta_subtitle',
                     'public_cta_primary',
                     'public_cta_secondary',
+                    'public_topbar_bg',
                     'public_hero_bg',
                     'public_cards_bg',
                     'public_features_bg',
@@ -89,6 +90,9 @@ class HandleInertiaRequests extends Middleware
                     'public_social_linkedin',
                     'public_social_instagram',
                     'public_social_youtube',
+                    'self_registration',
+                    'public_topbar_text',
+                    'developer_credits',
                 ])->get()->keyBy('key')->map(fn ($s) => $s->value)->toArray();
             }),
             'enabled_features' => Cache::remember('inertia_enabled_features', 300, function () {

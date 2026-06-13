@@ -838,9 +838,11 @@ function ImportModal({ onClose, onDone }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function AdminUsers() {
-    const { hasRole }       = useAuth();
+    const { hasRole, hasPermission } = useAuth();
     const { success, error } = useToast();
     const isSuperAdmin      = hasRole('super_admin');
+    const canCreateUser     = hasPermission('users.create');
+    const canImportUsers    = hasPermission('users.import');
 
     const [users, setUsers]           = useState([]);
     const [meta,  setMeta]            = useState(null);
@@ -953,7 +955,7 @@ export default function AdminUsers() {
                             </p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         <button onClick={load} disabled={loading}
                             className="p-2 rounded-xl border border-gray-200 text-gray-400 hover:text-gray-700 hover:border-gray-300 transition-colors"
                             title="Refresh">
@@ -971,25 +973,25 @@ export default function AdminUsers() {
                                 ? <RefreshCw size={14} className="animate-spin" />
                                 : <Download size={14} />
                             }
-                            Export
+                            <span className="hidden sm:inline">Export</span>
                             {hasFilters && <span className="text-[10px] bg-indigo-100 text-indigo-600 font-semibold px-1.5 py-0.5 rounded-full">filtered</span>}
                         </button>
 
                         {/* Import */}
-                        {isSuperAdmin && (
+                        {canImportUsers && (
                             <button
                                 onClick={() => setImportModal(true)}
                                 className="flex items-center gap-1.5 px-3 py-2 border border-indigo-200 bg-indigo-50 text-indigo-700 rounded-xl text-sm font-medium hover:bg-indigo-100 transition-colors"
                             >
-                                <Upload size={14} /> Import
+                                <Upload size={14} /> <span className="hidden sm:inline">Import</span>
                             </button>
                         )}
 
                         {/* Add user */}
-                        {isSuperAdmin && (
+                        {canCreateUser && (
                             <button onClick={() => setCreateModal(true)}
                                 className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm
-                                           font-semibold rounded-xl hover:bg-indigo-700 shadow-sm transition-colors">
+                                           font-semibold rounded-xl hover:bg-indigo-700 shadow-sm transition-colors whitespace-nowrap">
                                 <Plus size={15} /> Add User
                             </button>
                         )}

@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\AppSetting;
 use App\Models\AuditLog;
 use App\Models\NotificationPreference;
 use App\Models\User;
@@ -78,6 +79,30 @@ test('cannot register with duplicate email', function () {
         'password' => 'Password123!',
         'password_confirmation' => 'Password123!',
     ])->assertUnprocessable();
+});
+
+test('registration is blocked when self_registration setting is disabled', function () {
+    AppSetting::create(['key' => 'self_registration', 'value' => 'false', 'type' => 'boolean', 'group' => 'users']);
+
+    $this->postJson('/api/v1/auth/register', [
+        'name' => 'Jane Doe',
+        'email' => 'jane@example.com',
+        'password' => 'Password123!',
+        'password_confirmation' => 'Password123!',
+    ])->assertForbidden();
+
+    $this->assertDatabaseMissing('users', ['email' => 'jane@example.com']);
+});
+
+test('registration is allowed when self_registration setting is enabled', function () {
+    AppSetting::create(['key' => 'self_registration', 'value' => 'true', 'type' => 'boolean', 'group' => 'users']);
+
+    $this->postJson('/api/v1/auth/register', [
+        'name' => 'Jane Doe',
+        'email' => 'jane@example.com',
+        'password' => 'Password123!',
+        'password_confirmation' => 'Password123!',
+    ])->assertCreated();
 });
 
 test('cannot register with password shorter than 8 characters', function () {

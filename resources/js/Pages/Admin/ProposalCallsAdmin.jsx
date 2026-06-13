@@ -408,7 +408,7 @@ function input(err) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function ProposalCallsAdmin() {
-    const { hasAnyRole }         = useAuth();
+    const { hasAnyRole, hasPermission } = useAuth();
     const toast                  = useToast();
     const { confirm, Dialog }    = useConfirm();
 
@@ -418,7 +418,7 @@ export default function ProposalCallsAdmin() {
         'research_officer', 'community_officer', 'technology_officer', 'college_officer',
     ]);
     // Roles that can create, edit, activate, close, delete calls
-    const canCreate = hasAnyRole(['super_admin', 'central_office']);
+    const canCreate = hasPermission('proposal_calls.create');
     const canManage = canCreate;
 
     const [view, setView] = useViewPreference('proposal_calls_admin', 'table');
@@ -540,9 +540,9 @@ export default function ProposalCallsAdmin() {
     return (
         <AppLayout breadcrumb="Proposal Calls">
             {/* Header */}
-            <div className="flex items-center justify-between mb-5">
+            <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
                 <div className="flex items-center gap-3">
-                    <Megaphone size={24} className="text-blue-600" />
+                    <Megaphone size={22} className="text-blue-600 shrink-0" />
                     <div>
                         <h1 className="text-xl font-bold text-gray-900">Proposal Calls</h1>
                         <p className="text-xs text-gray-500 mt-0.5">
@@ -551,12 +551,12 @@ export default function ProposalCallsAdmin() {
                     </div>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                     {/* Category filter */}
                     <div className="relative">
                         <Filter size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                         <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}
-                            className="pl-8 pr-8 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white">
+                            className="pl-8 pr-8 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white max-w-36">
                             <option value="">All Categories</option>
                             {CATEGORIES.map((c) => (
                                 <option key={c.value} value={c.value}>{c.label}</option>
@@ -564,30 +564,38 @@ export default function ProposalCallsAdmin() {
                         </select>
                     </div>
 
-                    {/* Search */}
-                    <div className="relative">
+                    {/* Search — hidden on mobile to save space */}
+                    <div className="relative hidden sm:block">
                         <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                         <input value={search} onChange={(e) => setSearch(e.target.value)}
                             placeholder="Search calls…"
-                            className="pl-9 pr-4 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-48" />
+                            className="pl-9 pr-4 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-40" />
                     </div>
 
                     <ViewToggle view={view} onChange={setView} />
 
                     {canCreate && (
                         <button onClick={openNewModal}
-                            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-700 text-white text-sm font-semibold hover:bg-blue-800 shadow-sm">
+                            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-700 text-white text-sm font-semibold hover:bg-blue-800 shadow-sm whitespace-nowrap">
                             <Plus size={16} /> New Proposal Call
                         </button>
                     )}
                 </div>
             </div>
 
+            {/* Mobile search */}
+            <div className="relative sm:hidden mb-4">
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search calls…"
+                    className="w-full pl-9 pr-4 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+
             {/* Status tabs */}
-            <div className="flex gap-0.5 border-b border-gray-200 mb-5">
+            <div className="flex gap-0.5 border-b border-gray-200 mb-5 overflow-x-auto scrollbar-none">
                 {STATUS_TABS.map((tab) => (
                     <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-                        className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                        className={`shrink-0 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
                             activeTab === tab.key
                                 ? 'border-blue-600 text-blue-700'
                                 : 'border-transparent text-gray-500 hover:text-gray-700'

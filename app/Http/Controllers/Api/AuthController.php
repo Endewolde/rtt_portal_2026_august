@@ -5,15 +5,15 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\RegisterRequest;
+use App\Jobs\SendRawMailJob;
+use App\Models\AppSetting;
 use App\Models\User;
 use App\Services\AuthService;
-use App\Services\MailConfigService;
 use App\Services\SubscriptionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -27,6 +27,12 @@ class AuthController extends Controller
 
     public function register(RegisterRequest $request): JsonResponse
     {
+        abort_if(
+            AppSetting::where('key', 'self_registration')->value('value') === 'false',
+            403,
+            'Self-registration is currently disabled.'
+        );
+
         $result = $this->authService->register($request->validated());
 
         return response()->json([
@@ -186,11 +192,11 @@ class AuthController extends Controller
             $resetUrl = config('app.url').'/reset-password?token='.$rawToken.'&email='.urlencode($user->email);
             $expiresAt = now()->addMinutes(60)->format('d M Y, H:i');
 
-            \App\Jobs\SendRawMailJob::dispatch(
+            SendRawMailJob::dispatch(
                 view('emails.password_reset', [
-                    'userName'   => $user->name,
-                    'resetUrl'   => $resetUrl,
-                    'expiresAt'  => $expiresAt,
+                    'userName' => $user->name,
+                    'resetUrl' => $resetUrl,
+                    'expiresAt' => $expiresAt,
                     'senderName' => config('mail.from.name'),
                 ])->render(),
                 $user->email,

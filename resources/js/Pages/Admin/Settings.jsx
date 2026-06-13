@@ -6,14 +6,18 @@ import {
     Globe, Layout, FileText, Star, Bell,
     ChevronRight, Save, RefreshCw, AlertTriangle,
     Eye, EyeOff, Upload, Info, CheckCircle2,
-    ToggleLeft, ToggleRight, Zap, X, Send,
+    ToggleLeft, ToggleRight, Zap, X, Send, Plus,
 } from 'lucide-react'
 import AppLayout from '../../Layouts/AppLayout'
 import { useToast } from '../../Components/Toast'
 import { useConfirm } from '../../hooks/useConfirm'
+import { useAuth } from '../../hooks/useAuth'
 import api from '../../lib/api'
 
 // ─── Section metadata ─────────────────────────────────────────────────────────
+
+// Sections the admin role is allowed to view (super_admin always sees all)
+const ADMIN_SECTIONS = new Set(['appearance', 'public_site', 'thresholds'])
 
 const SECTIONS = [
     { key: 'general',     label: 'General',              icon: Settings,  bg: 'bg-blue-100',   text: 'text-blue-600'   },
@@ -127,6 +131,8 @@ const KEY_LABELS = {
     public_cta_subtitle:       'CTA Subtitle',
     public_cta_primary:        'CTA Primary Button',
     public_cta_secondary:      'CTA Secondary Button',
+    public_topbar_bg:          'Top Bar Background Colour',
+    public_topbar_text:        'Top Bar Text Colour',
     public_hero_bg:            'Hero Background Colour',
     public_cards_bg:           'Open Calls Section Background',
     public_features_bg:        'Features Section Background',
@@ -154,6 +160,7 @@ const KEY_LABELS = {
     public_social_linkedin:  'LinkedIn URL',
     public_social_instagram: 'Instagram URL',
     public_social_youtube:   'YouTube URL',
+    developer_credits:  'Developer Credits',
 }
 
 function label(key) {
@@ -1078,7 +1085,112 @@ function PubColorField({ fieldKey, hint, value, saving, onChange, onSave }) {
     )
 }
 
-function PublicSitePanel({ values, onChange, onSave }) {
+function DeveloperCreditsEditor({ currentValue, onSave, disabled = false }) {
+    const EMPTY = { name: '', website: '', tagline: '' }
+    const parse = (v) => { try { return JSON.parse(v || '[]'); } catch { return []; } }
+
+    const [devs,   setDevs]   = useState(() => parse(currentValue))
+    const [saving, setSaving] = useState(false)
+    const { success } = useToast()
+
+    useEffect(() => { setDevs(parse(currentValue)) }, [currentValue])
+
+    const persist = async (next) => {
+        setSaving(true)
+        await onSave(JSON.stringify(next))
+        success('Developer credits saved.')
+        setSaving(false)
+    }
+
+    const update = (i, field, val) => {
+        const next = devs.map((d, idx) => idx === i ? { ...d, [field]: val } : d)
+        setDevs(next)
+    }
+
+    const add    = () => setDevs(d => [...d, { ...EMPTY }])
+    const remove = (i) => { const next = devs.filter((_, idx) => idx !== i); setDevs(next); persist(next) }
+
+    return (
+        <div className={`bg-white border border-gray-200 rounded-2xl px-5 py-2 ${disabled ? 'opacity-60' : ''}`}>
+            <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                <div className="flex items-center gap-2">
+                    <Globe size={15} className="text-emerald-600" />
+                    <h3 className="text-sm font-bold text-gray-800">Developer Credits</h3>
+                    <p className="text-xs text-gray-400 ml-1">— shown as a popup in the public footer</p>
+                    {disabled && (
+                        <span className="ml-2 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 uppercase tracking-wide">
+                            Read-only
+                        </span>
+                    )}
+                </div>
+                {!disabled && (
+                    <button onClick={add}
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200
+                                   text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors">
+                        <Plus size={12} /> Add Developer
+                    </button>
+                )}
+            </div>
+
+            {devs.length === 0 && (
+                <p className="text-xs text-gray-400 py-4 text-center">
+                    {disabled ? 'No developer credits configured.' : 'No developers added yet. Click "Add Developer" to start.'}
+                </p>
+            )}
+
+            {devs.map((dev, i) => (
+                <div key={i} className="py-4 border-b border-gray-100 last:border-0 space-y-2">
+                    <div className="flex items-center justify-between mb-1">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Developer {i + 1}</p>
+                        {!disabled && (
+                            <button onClick={() => remove(i)}
+                                className="p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors">
+                                <X size={13} />
+                            </button>
+                        )}
+                    </div>
+                    <input
+                        type="text"
+                        value={dev.name}
+                        readOnly={disabled}
+                        onChange={disabled ? undefined : e => update(i, 'name', e.target.value)}
+                        placeholder="Name or company…"
+                        className={`w-full border border-gray-200 rounded-xl px-3 py-2 text-sm ${disabled ? 'bg-gray-50 cursor-default' : 'focus:outline-none focus:ring-2 focus:ring-emerald-500'}`}
+                    />
+                    <input
+                        type="url"
+                        value={dev.website}
+                        readOnly={disabled}
+                        onChange={disabled ? undefined : e => update(i, 'website', e.target.value)}
+                        placeholder="https://example.com (optional)"
+                        className={`w-full border border-gray-200 rounded-xl px-3 py-2 text-sm ${disabled ? 'bg-gray-50 cursor-default' : 'focus:outline-none focus:ring-2 focus:ring-emerald-500'}`}
+                    />
+                    <textarea
+                        value={dev.tagline}
+                        readOnly={disabled}
+                        onChange={disabled ? undefined : e => update(i, 'tagline', e.target.value)}
+                        placeholder="Short description (optional)…"
+                        rows={2}
+                        className={`w-full border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none ${disabled ? 'bg-gray-50 cursor-default' : 'focus:outline-none focus:ring-2 focus:ring-emerald-500'}`}
+                    />
+                </div>
+            ))}
+
+            {devs.length > 0 && !disabled && (
+                <div className="py-3">
+                    <button onClick={() => persist(devs)} disabled={saving}
+                        className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white rounded-xl
+                                   text-xs font-semibold hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+                        {saving ? <RefreshCw size={12} className="animate-spin" /> : <Save size={12} />}
+                        {saving ? 'Saving…' : 'Save All'}
+                    </button>
+                </div>
+            )}
+        </div>
+    )
+}
+
+function PublicSitePanel({ values, onChange, onSave, isAdmin = false }) {
     const [saving, setSaving] = useState({})
     const { success, error }  = useToast()
 
@@ -1228,6 +1340,8 @@ function PublicSitePanel({ values, onChange, onSave }) {
                     <h3 className="text-sm font-bold text-gray-800">Colours</h3>
                     <p className="text-xs text-gray-400 ml-1">— nav accent uses Appearance → Primary Color</p>
                 </div>
+                {cf('public_topbar_bg',   'Top utility bar background colour.')}
+                {cf('public_topbar_text', 'Top utility bar text and link colour.')}
                 {cf('public_hero_bg',     'Hero section dark background colour.')}
                 {cf('public_cards_bg',    'Open Calls section background colour.')}
                 {cf('public_features_bg', 'Platform Features section background colour.')}
@@ -1265,6 +1379,13 @@ function PublicSitePanel({ values, onChange, onSave }) {
                     </div>
                 ))}
             </div>
+
+            {/* ── Developer Credits ── */}
+            <DeveloperCreditsEditor
+                currentValue={values.developer_credits}
+                onSave={(val) => save('developer_credits', val)}
+                disabled={isAdmin}
+            />
 
             {/* ── Downloads ── */}
             <div className="bg-white border border-gray-200 rounded-2xl px-5 py-2">
@@ -1563,8 +1684,14 @@ function IntegrationPanel({ values, onChange, onSave }) {
 export default function SettingsPage() {
     const { success, error, warning } = useToast()
     const { confirm, Dialog }         = useConfirm()
+    const { hasRole }                 = useAuth()
 
-    const [activeSection, setActiveSection] = useState('general')
+    const isAdmin       = hasRole('admin') && !hasRole('super_admin')
+    const visibleSections = SECTIONS.filter(s => !isAdmin || ADMIN_SECTIONS.has(s.key))
+
+    const [activeSection, setActiveSection] = useState(
+        () => isAdmin ? 'appearance' : 'general'
+    )
     const [allSettings,   setAllSettings]   = useState({})
     const [values,        setValues]        = useState({})
     const [loading,       setLoading]       = useState(true)
@@ -1673,8 +1800,13 @@ export default function SettingsPage() {
         setBackingUp(false)
     }
 
-    const section     = SECTIONS.find(s => s.key === activeSection)
-    const groupData   = allSettings[activeSection] ?? {}
+    // If admin lands on a section they can't access, fall back to their first allowed section
+    const effectiveSection = (isAdmin && !ADMIN_SECTIONS.has(activeSection))
+        ? 'appearance'
+        : activeSection
+
+    const section     = SECTIONS.find(s => s.key === effectiveSection)
+    const groupData   = allSettings[effectiveSection] ?? {}
     const SectionIcon = section?.icon ?? Settings
 
     return (
@@ -1704,7 +1836,7 @@ export default function SettingsPage() {
                     {/* ── Sidebar ───────────────────────────────────────────────── */}
                     <div className="w-52 shrink-0 sticky top-4">
                         <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-                            {SECTIONS.map(s => {
+                            {visibleSections.map(s => {
                                 const Icon     = s.icon
                                 const isActive = activeSection === s.key
                                 return (
@@ -1755,6 +1887,7 @@ export default function SettingsPage() {
                                 values={values}
                                 onChange={handleChange}
                                 onSave={handleSave}
+                                isAdmin={isAdmin}
                             />
                         ) : activeSection === 'email' ? (
                             <EmailSettingsPanel

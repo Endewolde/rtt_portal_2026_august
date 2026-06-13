@@ -17,7 +17,14 @@
       "Bash(vendor/bin/pint app/Http/Controllers/Api/ProposalController.php --format agent)",
       "Bash(vendor/bin/pint app/Http/Controllers/Api/FeatureController.php app/Http/Middleware/HandleInertiaRequests.php app/Enums/Feature.php --format agent)",
       "Bash(vendor/bin/pint app/Http/Controllers/Api/FeatureController.php --format agent)",
-      "Bash(xargs -I{} sh -c 'echo \"=== {} ===\" && head -30 {}')"
+      "Bash(xargs -I{} sh -c 'echo \"=== {} ===\" && head -30 {}')",
+      "Bash(vendor/bin/pint --dirty --format agent app/Http/Controllers/Api/AuthController.php)",
+      "Bash(vendor/bin/pint --dirty --format agent app/Http/Middleware/HandleInertiaRequests.php routes/web.php)",
+      "Bash(vendor/bin/pint --dirty --format agent app/Http/Middleware/HandleInertiaRequests.php)",
+      "Bash(curl -s http://127.0.0.1:8000 -o /dev/null -w \"%{http_code}\")",
+      "Bash(curl -s http://127.0.0.1:5173/ -o /dev/null -w \"%{http_code}\")",
+      "Bash(node /tmp/mobile5.mjs)",
+      "Bash(node /tmp/mobile6.mjs)"
     ]
   }
 }

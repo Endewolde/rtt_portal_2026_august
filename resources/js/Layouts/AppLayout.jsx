@@ -7,7 +7,7 @@ import {
     Activity, Award, BookOpen, Database,
     BarChart, BarChart2, TrendingUp, TrendingDown,
     Users, Building, Building2, Shield, Settings, Bell, Key,
-    Globe, LogOut, FlaskConical, ChevronLeft, ChevronRight, X,
+    Globe, LogOut, FlaskConical, ChevronLeft, ChevronRight, X, Menu,
     FolderOpen, EyeOff, Presentation, ClipboardList,
     BadgeDollarSign, Trophy, Archive, ListChecks, ShieldCheck,
     User, ChevronDown, ChevronUp, Lock, Clock, UserX,
@@ -30,8 +30,8 @@ const _FO = 'finance_officer'
 
 // Maps URL prefix → roles that may access it. Longer paths must come first.
 const ROUTE_PERMISSIONS = [
-    ['/admin/settings',            ['super_admin']],
-    ['/admin/public-site',         ['super_admin']],
+    ['/admin/settings',            ['super_admin', 'admin']],
+    ['/admin/public-site',         ['super_admin', 'admin']],
     ['/admin/roles',               ['super_admin']],
     ['/admin/permissions',         ['super_admin']],
     ['/admin/features',            ['super_admin']],
@@ -432,6 +432,7 @@ export default function AppLayout({ children, breadcrumb }) {
     const { hasFeature, hasSubFeature } = useFeature()
     const counts    = useActionCounts()
     const [collapsed, setCollapsed] = useState(false)
+    const [mobileOpen, setMobileOpen] = useState(false)
     const [unreadNotifications, setUnreadNotifications] = useState(0)
     // authReady gates the route guard — prevents a stale-localStorage "Access Denied"
     // flash while the fresh /auth/me call is in flight.
@@ -758,8 +759,8 @@ export default function AppLayout({ children, breadcrumb }) {
         {
             group: 'Settings',
             items: [
-                { label: 'Settings',    href: '/admin/settings',   icon: 'Settings', show: hasRole('super_admin') },
-                { label: 'Public Site', href: '/admin/public-site', icon: 'Globe',    show: hasRole('super_admin') },
+                { label: 'Settings',    href: '/admin/settings',   icon: 'Settings', show: hasRole('super_admin') || hasRole('admin') },
+                { label: 'Public Site', href: '/admin/public-site', icon: 'Globe',    show: hasRole('super_admin') || hasRole('admin') },
             ],
         },
     ]
@@ -779,14 +780,26 @@ export default function AppLayout({ children, breadcrumb }) {
     return (
         <div className="flex h-screen bg-gray-50/50 overflow-hidden">
 
+            {/* ── Mobile sidebar backdrop ───────────────────────────────────── */}
+            {mobileOpen && (
+                <div
+                    className="fixed inset-0 z-40 bg-black/50 md:hidden"
+                    onClick={() => setMobileOpen(false)}
+                />
+            )}
+
             {/* ── Sidebar ──────────────────────────────────────────────────── */}
             <aside
                 style={{ backgroundColor: sidebarBg }}
                 className={cn(
-                    'relative flex flex-col shrink-0',
-                    'transition-[width] duration-200 ease-in-out',
-                    sc.border,
-                    collapsed ? 'w-15' : 'w-60'
+                    // Mobile: off-canvas drawer (fixed, full height, slides in from left)
+                    'fixed inset-y-0 left-0 z-50 flex flex-col w-72',
+                    'transition-transform duration-200 ease-in-out',
+                    mobileOpen ? 'translate-x-0' : '-translate-x-full',
+                    // Desktop: in-flow sidebar, controlled width
+                    'md:relative md:inset-auto md:z-auto md:translate-x-0 md:shrink-0',
+                    collapsed ? 'md:w-15' : 'md:w-60',
+                    sc.border
                 )}>
 
                 {/* Logo */}
@@ -816,10 +829,13 @@ export default function AppLayout({ children, breadcrumb }) {
                 </div>
 
                 {/* Nav scroll area */}
-                <nav className={cn(
-                    'flex-1 overflow-y-auto py-2 overflow-x-hidden scrollbar-thin scrollbar-track-transparent',
-                    sc.scrollbar
-                )}>
+                <nav
+                    className={cn(
+                        'flex-1 overflow-y-auto py-2 overflow-x-hidden scrollbar-thin scrollbar-track-transparent',
+                        sc.scrollbar
+                    )}
+                    onClick={() => setMobileOpen(false)}
+                >
                     {visibleGroups.map((group, gi) => {
                         const groupIsActive = isGroupActive(group)
                         return (
@@ -888,7 +904,7 @@ export default function AppLayout({ children, breadcrumb }) {
                 </nav>
 
                 {/* User footer */}
-                <div className={cn('p-2 shrink-0', sc.footerBorder)}>
+                <div className={cn('p-2 shrink-0', sc.footerBorder)} onClick={() => setMobileOpen(false)}>
                     {!collapsed ? (
                         <div className="flex items-center gap-1">
                             <Link
@@ -953,12 +969,12 @@ export default function AppLayout({ children, breadcrumb }) {
                     )}
                 </div>
 
-                {/* Collapse toggle */}
+                {/* Collapse toggle — desktop only */}
                 <button
                     onClick={() => setCollapsed(v => !v)}
                     className={cn(
-                        'absolute -right-3 top-13.5 z-20',
-                        'h-6 w-6 rounded-full border flex items-center justify-center',
+                        'hidden md:flex absolute -right-3 top-13.5 z-20',
+                        'h-6 w-6 rounded-full border items-center justify-center',
                         'transition-all duration-200',
                         sc.toggle
                     )}
@@ -975,8 +991,16 @@ export default function AppLayout({ children, breadcrumb }) {
 
                 {/* Top header */}
                 <header className="h-14 bg-white border-b border-gray-100 flex items-center
-                                   justify-between px-5 shrink-0 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-                    <div className="flex items-center gap-3 min-w-0">
+                                   justify-between px-4 shrink-0 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
+                    <div className="flex items-center gap-2 min-w-0">
+                        {/* Hamburger — mobile only */}
+                        <button
+                            className="md:hidden p-2 rounded-xl text-gray-500 hover:bg-gray-100 transition-colors shrink-0"
+                            onClick={() => setMobileOpen(v => !v)}
+                            aria-label="Open menu"
+                        >
+                            <Menu size={20} />
+                        </button>
                         <p className="text-sm font-semibold text-gray-700 truncate">
                             {breadcrumb ?? 'Dashboard'}
                         </p>

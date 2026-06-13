@@ -496,6 +496,7 @@ const DEFAULT_NAV = [
 export default function PublicLayout({ children }) {
     const [mobileOpen,      setMobileOpen]      = useState(false);
     const [bannerDismissed, setBannerDismissed] = useState(false);
+    const [developerModal,  setDeveloperModal]  = useState(false);
     const [scrolled,        setScrolled]        = useState(false);
     const [openCalls,          setOpenCalls]          = useState([]);
     const [callsLoading,       setCallsLoading]       = useState(true);
@@ -511,7 +512,12 @@ export default function PublicLayout({ children }) {
     const logoHeight    = s.logo_height        || null;
     const orgName       = s.organization_name  || 'University';
     const primaryColor  = s.primary_color      || '#c0392b';
+    const topbarBg      = s.public_topbar_bg   || '#0f172a';
+    const topbarText    = s.public_topbar_text || '#94a3b8';
     const footerBg      = s.public_footer_bg   || '#0f172a';
+    const developerCredits = (() => {
+        try { return JSON.parse(s.developer_credits || '[]'); } catch { return []; }
+    })();
     const footerText    = s.footer_text        || `© ${new Date().getFullYear()} All rights reserved.`;
     const annActive     = s.announcement_active === 'true';
     const annMsg        = s.announcement_message || '';
@@ -582,35 +588,31 @@ export default function PublicLayout({ children }) {
             <div className="sticky top-0 z-50 bg-white shadow-sm">
 
                 {/* ── Top utility bar (dark slim strip) — hidden after scroll ── */}
-                <div className={`bg-slate-900 text-slate-400 text-xs hidden md:block overflow-hidden
-                                 transition-all duration-300 ${scrolled ? 'max-h-0' : 'max-h-8'}`}>
+                <div className={`text-xs hidden md:block overflow-hidden transition-all duration-300 ${scrolled ? 'max-h-0' : 'max-h-8'}`}
+                     style={{ backgroundColor: topbarBg, color: topbarText }}>
                     <div className="max-w-7xl mx-auto px-6 flex items-center justify-between h-8">
-                        <span className="flex items-center gap-1 text-slate-500 font-medium">
+                        <span className="flex items-center gap-1 font-medium" style={{ color: topbarText }}>
                             {headerTagline}
                         </span>
                         <div className="flex items-center gap-4">
-                            {/* Downloads link — always shown */}
                             <Link
                                 href="/download"
-                                className={`flex items-center gap-1.5 transition-colors font-medium ${
-                                    currentPath === '/download'
-                                        ? 'text-white'
-                                        : 'text-slate-400 hover:text-white'
-                                }`}
+                                className="flex items-center gap-1.5 transition-opacity font-medium hover:opacity-75"
+                                style={{ color: topbarText }}
                             >
                                 <Download size={11} />
                                 Downloads
                             </Link>
-                            <span className="w-px h-3 bg-slate-700" />
+                            <span className="w-px h-3 opacity-30" style={{ backgroundColor: topbarText }} />
                             {token ? (
-                                <Link href="/dashboard" className="hover:text-white transition-colors">
+                                <Link href="/dashboard" className="transition-opacity hover:opacity-75" style={{ color: topbarText }}>
                                     Dashboard
                                 </Link>
                             ) : (
                                 <>
-                                    <Link href="/login"    className="hover:text-white transition-colors">Sign In</Link>
-                                    <span className="text-slate-700">|</span>
-                                    <Link href="/register" className="hover:text-white transition-colors">Register</Link>
+                                    <Link href="/login"    className="transition-opacity hover:opacity-75" style={{ color: topbarText }}>Sign In</Link>
+                                    <span className="opacity-30" style={{ color: topbarText }}>|</span>
+                                    <Link href="/register" className="transition-opacity hover:opacity-75" style={{ color: topbarText }}>Register</Link>
                                 </>
                             )}
                         </div>
@@ -872,10 +874,63 @@ export default function PublicLayout({ children }) {
 
                     <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
                         <p>{footerText}</p>
-                        <p className="text-slate-600">{footerTagline}</p>
+                        <div className="flex items-center gap-4">
+                            {developerCredits.length > 0 && (
+                                <button
+                                    onClick={() => setDeveloperModal(true)}
+                                    className="text-slate-500 hover:text-slate-300 transition-colors underline underline-offset-2"
+                                >
+                                    {developerCredits.length === 1
+                                        ? `Developed by ${developerCredits[0].name}`
+                                        : developerCredits.length === 2
+                                            ? `Developed by ${developerCredits[0].name} & ${developerCredits[1].name}`
+                                            : `Developed by ${developerCredits[0].name} & ${developerCredits.length - 1} others`
+                                    }
+                                </button>
+                            )}
+                            <p className="text-slate-600">{footerTagline}</p>
+                        </div>
                     </div>
                 </div>
             </footer>
+
+            {/* ── Developer credit modal ──────────────────────────────────── */}
+            {developerModal && (
+                <div className="fixed inset-0 z-200 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+                     onClick={() => setDeveloperModal(false)}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm relative overflow-hidden"
+                         onClick={e => e.stopPropagation()}>
+                        {/* Header */}
+                        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
+                            <h3 className="text-sm font-bold text-gray-900">Built by</h3>
+                            <button onClick={() => setDeveloperModal(false)}
+                                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                                <X size={16} />
+                            </button>
+                        </div>
+                        {/* Developer list */}
+                        <div className="divide-y divide-gray-100 max-h-80 overflow-y-auto">
+                            {developerCredits.map((dev, i) => (
+                                <div key={i} className="flex items-start gap-3 px-6 py-4">
+                                    <div className="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center shrink-0 mt-0.5">
+                                        <Globe size={16} className="text-indigo-600" />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-semibold text-gray-900">{dev.name}</p>
+                                        {dev.tagline && <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{dev.tagline}</p>}
+                                        {dev.website && (
+                                            <a href={dev.website} target="_blank" rel="noopener noreferrer"
+                                               className="inline-flex items-center gap-1 mt-1.5 text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors">
+                                                <Globe size={11} /> {dev.website.replace(/^https?:\/\//, '')}
+                                            </a>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
 
         </div>
     );

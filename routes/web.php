@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Auth\OAuthController;
+use App\Models\AppSetting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Storage;
@@ -25,7 +26,15 @@ Route::get('/proposal-calls/public', fn () => Inertia::render('Public/ProposalCa
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 Route::get('/login', fn () => Inertia::render('Auth/Login'));
-Route::get('/register', fn () => Inertia::render('Auth/Register'));
+Route::get('/register', function () {
+    abort_if(
+        AppSetting::where('key', 'self_registration')->value('value') === 'false',
+        403,
+        'Self-registration is currently disabled.'
+    );
+
+    return Inertia::render('Auth/Register');
+});
 Route::get('/auth/oauth/{provider}', [OAuthController::class, 'redirect'])->name('oauth.redirect');
 Route::get('/auth/oauth/{provider}/callback', [OAuthController::class, 'callback'])->name('oauth.callback');
 Route::get('/forgot-password', fn () => Inertia::render('Auth/ForgotPassword'));

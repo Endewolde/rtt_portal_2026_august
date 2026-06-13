@@ -48,6 +48,7 @@ export default function Login() {
     const googleSsoEnabled    = app_settings?.google_sso_enabled === 'true';
     const microsoftSsoEnabled = app_settings?.microsoft_sso_enabled === 'true';
     const ssoEnabled          = googleSsoEnabled || microsoftSsoEnabled;
+    const selfRegistration    = app_settings?.self_registration !== 'false';
     const ssoError   = new URLSearchParams(window.location.search).get('sso_error');
 
     const [serverError,       setServerError]       = useState(ssoError || '');
@@ -103,18 +104,20 @@ export default function Login() {
         <GuestLayout
             panelHeading="Welcome Back!"
             panelSubtext="Sign in with your institutional credentials to access research proposals, reviews, and platform tools."
-            panelLinkText="Create Account"
-            panelLinkHref="/register"
+            panelLinkText={selfRegistration ? 'Create Account' : null}
+            panelLinkHref={selfRegistration ? '/register' : null}
         >
             {/* Heading */}
             <div className="mb-8">
                 <h1 className="text-2xl font-extrabold text-gray-900">Sign in</h1>
-                <p className="mt-1 text-sm text-gray-500">
-                    Don't have an account?{' '}
-                    <Link href="/register" className="font-semibold text-teal-600 hover:text-teal-700">
-                        Create one
-                    </Link>
-                </p>
+                {selfRegistration && (
+                    <p className="mt-1 text-sm text-gray-500">
+                        Don't have an account?{' '}
+                        <Link href="/register" className="font-semibold text-teal-600 hover:text-teal-700">
+                            Create one
+                        </Link>
+                    </p>
+                )}
             </div>
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">

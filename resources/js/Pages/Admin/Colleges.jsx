@@ -9,13 +9,13 @@ import ConfirmDialog from '../../Components/ConfirmDialog';
 
 function StatCard({ label, value, icon: Icon, color }) {
     return (
-        <div className="bg-white rounded-2xl border border-gray-100 p-5 flex items-center gap-4 shadow-sm">
-            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${color}`}>
-                <Icon size={22} className="text-white" />
+        <div className="bg-white rounded-2xl border border-gray-100 p-3 sm:p-5 flex flex-col sm:flex-row items-center sm:items-start gap-2 sm:gap-4 shadow-sm text-center sm:text-left">
+            <div className={`w-9 h-9 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 ${color}`}>
+                <Icon size={18} className="text-white" />
             </div>
             <div>
-                <p className="text-2xl font-bold text-gray-900 leading-none">{value}</p>
-                <p className="text-xs text-gray-500 mt-1">{label}</p>
+                <p className="text-xl sm:text-2xl font-bold text-gray-900 leading-none">{value}</p>
+                <p className="text-[11px] sm:text-xs text-gray-500 mt-1">{label}</p>
             </div>
         </div>
     );
@@ -91,7 +91,7 @@ function CollegeModal({ title, form, setForm, errors, saving, onSave, onClose })
 }
 
 export default function AdminColleges() {
-    const { hasRole } = useAuth();
+    const { hasRole, hasPermission } = useAuth();
     const { success, error } = useToast();
     const [colleges, setColleges]         = useState([]);
     const [loading, setLoading]           = useState(true);
@@ -188,19 +188,19 @@ export default function AdminColleges() {
             <div className="max-w-6xl mx-auto space-y-6">
 
                 {/* Header */}
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2.5">
-                            <Building size={24} className="text-indigo-600" />
+                        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 flex items-center gap-2.5">
+                            <Building size={22} className="text-indigo-600 shrink-0" />
                             Colleges &amp; Departments
                         </h1>
                         <p className="text-sm text-gray-500 mt-1">Manage colleges and their departments</p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                         <button onClick={load} className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition">
-                            <RefreshCw size={14} /> Refresh
+                            <RefreshCw size={14} /> <span className="hidden sm:inline">Refresh</span>
                         </button>
-                        {hasRole('super_admin') && (
+                        {hasPermission('colleges.create') && (
                             <button onClick={openAdd} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition shadow-sm shadow-indigo-200">
                                 <Plus size={16} /> Add College
                             </button>
@@ -209,7 +209,7 @@ export default function AdminColleges() {
                 </div>
 
                 {/* Stats */}
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-3 gap-3">
                     <StatCard label="Total Colleges"   value={colleges.length} icon={Building}  color="bg-indigo-500" />
                     <StatCard label="Active Colleges"  value={activeCount}     icon={Building2} color="bg-emerald-500" />
                     <StatCard label="Total Departments" value={totalDepts}     icon={Users}     color="bg-blue-500" />
@@ -306,7 +306,7 @@ export default function AdminColleges() {
                                                 </span>
                                             </td>
                                             <td className="px-5 py-4 text-right">
-                                                {hasRole('super_admin') && (
+                                                {hasPermission('colleges.update') && (
                                                     <div className="flex items-center justify-end gap-1">
                                                         <button
                                                             onClick={() => openEdit(college)}
