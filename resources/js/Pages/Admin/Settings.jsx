@@ -17,7 +17,10 @@ import api from '../../lib/api'
 // ─── Section metadata ─────────────────────────────────────────────────────────
 
 // Sections the admin role is allowed to view (super_admin always sees all)
-const ADMIN_SECTIONS = new Set(['appearance', 'public_site', 'thresholds'])
+const ADMIN_SECTIONS = new Set(['appearance', 'public_site', 'thresholds', 'general', 'email'])
+
+// Keys hidden from admin in the General section
+const ADMIN_HIDDEN_GENERAL_KEYS = new Set(['developer_credits', 'disabled_sub_features'])
 
 const SECTIONS = [
     { key: 'general',     label: 'General',              icon: Settings,  bg: 'bg-blue-100',   text: 'text-blue-600'   },
@@ -637,7 +640,7 @@ function SectionCard({ icon: Icon, color, title, subtitle, children, action }) {
     )
 }
 
-function EmailSettingsPanel({ values, onChange, onSave, colleges }) {
+function EmailSettingsPanel({ values, onChange, onSave, colleges, isAdmin = false }) {
     const { success, error } = useToast()
     const [smtpSaving,   setSmtpSaving]   = useState(false)
     const [fromSaving,   setFromSaving]   = useState(false)
@@ -709,6 +712,7 @@ function EmailSettingsPanel({ values, onChange, onSave, colleges }) {
     return (
         <div className="space-y-4">
 
+            {!isAdmin && (<>
             {/* ── Status banner ────────────────────────────────────────── */}
             <div className={`flex items-center gap-3 px-5 py-3.5 rounded-2xl border ${
                 driver === 'log'
@@ -860,6 +864,7 @@ function EmailSettingsPanel({ values, onChange, onSave, colleges }) {
                     </div>
                 )}
             </SectionCard>
+            </>)}
 
             {/* ── Broadcast Email ─────────────────────────────────────────── */}
             <SectionCard icon={Send} color="bg-indigo-50/50" title="Send Broadcast Email" subtitle="Reach users by group, role, college, or individually">
@@ -969,7 +974,7 @@ function EmailSettingsPanel({ values, onChange, onSave, colleges }) {
                 </div>
             </SectionCard>
 
-            {/* ── Notification Channels ───────────────────────────────────── */}
+            {!isAdmin && (
             <SectionCard icon={Bell} color="bg-purple-50/50" title="Notification Channels" subtitle="Active delivery channels for system events">
                 <div className="grid sm:grid-cols-3 gap-3">
                     {[
@@ -1008,6 +1013,7 @@ function EmailSettingsPanel({ values, onChange, onSave, colleges }) {
                     Users control their own channel preferences from their profile notification settings.
                 </p>
             </SectionCard>
+            )}
 
         </div>
     )
@@ -1895,6 +1901,7 @@ export default function SettingsPage() {
                                 onChange={handleChange}
                                 onSave={handleSave}
                                 colleges={colleges}
+                                isAdmin={isAdmin}
                             />
                         ) : activeSection === 'integration' ? (
                             <IntegrationPanel
@@ -1908,7 +1915,7 @@ export default function SettingsPage() {
                                 {Object.keys(groupData).filter(k => groupData[k]?.type !== 'file').length > 0 && (
                                     <div className="bg-white border border-gray-200 rounded-2xl px-5 py-2">
                                         {Object.entries(groupData)
-                                            .filter(([k, s]) => s.type !== 'file' && !HIDDEN_KEYS.has(k))
+                                            .filter(([k, s]) => s.type !== 'file' && !HIDDEN_KEYS.has(k) && !(isAdmin && ADMIN_HIDDEN_GENERAL_KEYS.has(k)))
                                             .map(([key, setting]) => (
                                                 <SettingField
                                                     key={key}
