@@ -1,10 +1,13 @@
 @php
-    use App\Models\AppSetting;
-    $emailFooterSettings = AppSetting::whereIn('key', ['organization_name', 'system_name'])
-        ->pluck('value', 'key');
-    $emailFooterOrgName     = $emailFooterSettings->get('organization_name', 'Research Office');
-    $emailFooterSystemName  = $emailFooterSettings->get('system_name', 'RTT Platform');
+  use App\Models\AppSetting;
+  $emailFooterSettings = AppSetting::whereIn('key', ['organization_name','system_name'])
+      ->pluck('value', 'key');
+  $emailFooterOrgName    = $emailFooterSettings->get('organization_name', 'Research Office');
+  $emailFooterSystemName = $emailFooterSettings->get('system_name', 'RTT Platform');
 @endphp
-<div style="background:#f7fafc;padding:16px;text-align:center;border-top:1px solid #e2e8f0;">
-    <p style="color:#a0aec0;font-size:12px;margin:0;">{{ $emailFooterSystemName }} — {{ $emailFooterOrgName }} Research Office</p>
+<div style="background:#f8fafc;border-top:1px solid #e5e7eb;padding:18px 32px;text-align:center;">
+  <p style="color:#9ca3af;font-size:12px;margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+    &copy; {{ date('Y') }} <strong style="color:#6b7280;">{{ $emailFooterSystemName }}</strong>
+    &middot; {{ $emailFooterOrgName }} Research &amp; Technology Transfer
+  </p>
 </div>

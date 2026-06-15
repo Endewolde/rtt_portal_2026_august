@@ -22,7 +22,8 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="hero">
+  @include('emails.partials.logo_header')
+  <div class="hero" style="background-color:#7f1d1d;">
     <div class="hero-icon">
       <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
         <circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>

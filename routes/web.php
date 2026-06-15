@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\AnalyticsController;
 use App\Http\Controllers\Auth\OAuthController;
 use App\Models\AppSetting;
 use Illuminate\Http\Request;
@@ -30,7 +31,7 @@ Route::get('/register', function () {
     abort_if(
         AppSetting::where('key', 'self_registration')->value('value') === 'false',
         403,
-        'Self-registration is currently disabled.'
+        'Self-registration is currently disabled. Please contact the system administrator for more information or visit the administration office for assistance.'
     );
 
     return Inertia::render('Auth/Register');
@@ -68,6 +69,8 @@ Route::get('/admin/awarded', fn () => Inertia::render('Admin/AwardedProposals'))
 Route::get('/admin/completed-archive', fn () => Inertia::render('Admin/CompletedArchive'));
 Route::get('/admin/review-assignment/{id}', fn () => Inertia::render('Admin/ReviewAssignment'));
 Route::get('/reports', fn () => Inertia::render('Reports/Index'));
+Route::get('/admin/analytics', [AnalyticsController::class, 'index'])->name('admin.analytics');
+Route::get('/admin/login-notices', fn () => Inertia::render('Admin/LoginNotices'));
 Route::get('/complaints', fn () => Inertia::render('Complaints/Index'));
 Route::get('/admin/conferences', fn () => Inertia::render('Admin/Conferences'));
 Route::get('/admin/abstracts', fn () => Inertia::render('Admin/Abstracts'));

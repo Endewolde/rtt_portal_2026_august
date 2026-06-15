@@ -104,45 +104,61 @@ export default function AdminUserShow() {
 
                 {/* Profile card */}
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                    {/* Gradient header band */}
-                    <div className={`h-24 bg-linear-to-r ${gradient} opacity-80`} />
+
+                    {/* Hero banner */}
+                    <div className={`relative h-36 bg-linear-to-br ${gradient}`}>
+                        {/* Decorative shapes */}
+                        <span className="absolute -top-8 -right-8 w-40 h-40 rounded-full bg-white/10 pointer-events-none" />
+                        <span className="absolute bottom-0 right-20 w-24 h-24 rounded-full bg-white/8 pointer-events-none" />
+                        <span className="absolute top-5 right-36 w-8 h-8 rotate-45 rounded-lg border border-white/20 pointer-events-none" />
+                        <span className="absolute bottom-6 left-40 w-4 h-4 rotate-45 bg-white/15 rounded-sm pointer-events-none" />
+
+                        {/* Status badge — pinned top-right */}
+                        <span className={cn(
+                            'absolute top-4 right-4 flex items-center gap-1.5',
+                            'text-xs font-semibold px-3 py-1.5 rounded-full',
+                            statusCfg.cls,
+                        )}>
+                            <StatusIcon size={12} />
+                            {statusCfg.label}
+                        </span>
+                    </div>
 
                     <div className="px-6 pb-6">
-                        {/* Avatar + identity */}
-                        <div className="flex items-end gap-4 -mt-10 mb-4">
+                        {/* Avatar — large circle overlapping banner */}
+                        <div className="-mt-14 mb-4 relative z-10">
                             <div className={cn(
-                                `w-20 h-20 rounded-2xl bg-linear-to-br ${gradient}`,
-                                'flex items-center justify-center text-white text-2xl font-bold',
-                                'ring-4 ring-white shadow-lg shrink-0 overflow-hidden'
+                                `w-28 h-28 rounded-full bg-linear-to-br ${gradient}`,
+                                'flex items-center justify-center text-white text-3xl font-bold',
+                                'ring-4 ring-white shadow-xl shrink-0 overflow-hidden',
                             )}>
                                 {user.avatar
                                     ? <img src={user.avatar} alt={name} className="w-full h-full object-cover" />
                                     : initials
                                 }
                             </div>
-                            <div className="pb-1 min-w-0 flex-1">
-                                <h1 className="text-xl font-bold text-gray-900 truncate">
-                                    {user.title ? <span className="text-gray-500 font-medium mr-1">{user.title}</span> : null}
-                                    {name}
-                                </h1>
-                                <p className="text-sm text-gray-500 truncate">{user.email}</p>
-                            </div>
-                            {/* Status badge */}
-                            <span className={cn('flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-full shrink-0', statusCfg.cls)}>
-                                <StatusIcon size={12} />
-                                {statusCfg.label}
-                            </span>
+                        </div>
+
+                        {/* Identity */}
+                        <div className="mb-5">
+                            <h1 className="text-2xl font-bold text-gray-900 leading-tight">
+                                {user.title && (
+                                    <span className="text-gray-400 font-normal text-lg mr-2">{user.title}</span>
+                                )}
+                                {name}
+                            </h1>
+                            <p className="text-sm text-gray-400 mt-1">{user.email}</p>
                         </div>
 
                         {/* Roles */}
-                        <div className="flex items-center gap-2 flex-wrap mb-5">
+                        <div className="flex items-center gap-2 flex-wrap mb-6">
                             <ShieldCheck size={14} className="text-gray-400 shrink-0" />
                             {roles.length === 0
                                 ? <span className="text-xs text-gray-400 italic">No role assigned</span>
                                 : roles.map(r => (
                                     <span key={r}
                                         className={cn(
-                                            'text-xs font-semibold px-2.5 py-1 rounded-full capitalize',
+                                            'text-xs font-semibold px-3 py-1 rounded-full capitalize',
                                             ROLE_COLORS[r] ?? 'bg-gray-100 text-gray-600 border border-gray-200'
                                         )}>
                                         {ROLE_LABELS[r] ?? r.replace(/_/g, ' ')}

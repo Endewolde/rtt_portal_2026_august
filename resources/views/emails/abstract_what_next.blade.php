@@ -20,7 +20,8 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="hero">
+  @include('emails.partials.logo_header')
+  <div class="hero" style="background-color:#0f766e;">
     <div class="hero-icon">
       <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
         <circle cx="12" cy="12" r="10"/><polyline points="12 8 16 12 12 16"/><line x1="8" y1="12" x2="16" y2="12"/>

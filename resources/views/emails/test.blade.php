@@ -26,6 +26,7 @@
 </head>
 <body>
 <div class="wrap">
+  @include('emails.partials.logo_header')
   <div class="header">
     <h1>RTT Platform</h1>
     <p>Email Configuration Test</p>

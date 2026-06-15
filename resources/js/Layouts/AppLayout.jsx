@@ -7,7 +7,7 @@ import {
     Activity, Award, BookOpen, Database,
     BarChart, BarChart2, TrendingUp, TrendingDown,
     Users, Building, Building2, Shield, Settings, Bell, Key,
-    Globe, LogOut, FlaskConical, ChevronLeft, ChevronRight, X, Menu,
+    Globe, LogOut, FlaskConical, Brain, ChevronLeft, ChevronRight, X, Menu,
     FolderOpen, EyeOff, Presentation, ClipboardList,
     BadgeDollarSign, Trophy, Archive, ListChecks, ShieldCheck,
     User, ChevronDown, ChevronUp, Lock, Clock, UserX,
@@ -235,7 +235,7 @@ const ICONS = {
     FolderOpen, EyeOff, Presentation, ClipboardList,
     BadgeDollarSign, Trophy, Archive, ListChecks, ShieldCheck,
     Globe, CalendarDays, Banknote, Landmark,
-    FlaskConical,
+    FlaskConical, Brain,
     BuildingOffice: Building2,
 }
 
@@ -687,6 +687,10 @@ export default function AppLayout({ children, breadcrumb }) {
                     label: 'Budget Utilization', href: '/reports?type=budget_utilization', icon: 'TrendingDown',
                     show: perm('reports.view_any') && perm('budget_requests.view_any') && hasSubFeature('reports.budget'),
                 },
+                {
+                    label: 'Analytics Dashboard', href: '/admin/analytics', icon: 'Brain',
+                    show: hasAnyRole(ALL_ADMIN) && hasSubFeature('reports.analytics'),
+                },
             ],
         },
         {
@@ -759,8 +763,9 @@ export default function AppLayout({ children, breadcrumb }) {
         {
             group: 'Settings',
             items: [
-                { label: 'Settings',    href: '/admin/settings',   icon: 'Settings', show: hasRole('super_admin') || hasRole('admin') },
-                { label: 'Public Site', href: '/admin/public-site', icon: 'Globe',    show: hasRole('super_admin') || hasRole('admin') },
+                { label: 'Settings',       href: '/admin/settings',      icon: 'Settings',    show: hasRole('super_admin') || hasRole('admin') },
+                { label: 'Public Site',    href: '/admin/public-site',   icon: 'Globe',       show: hasRole('super_admin') || hasRole('admin') },
+                { label: 'Login Notices',  href: '/admin/login-notices', icon: 'Megaphone',   show: hasAnyRole(ALL_ADMIN) },
             ],
         },
     ]

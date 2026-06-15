@@ -1,26 +1,100 @@
 <!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>Complaint Response</title></head>
-<body style="font-family:Arial,sans-serif;background:#f4f4f4;margin:0;padding:20px;">
-<div style="max-width:600px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;">
-  @include('emails.partials.header')
-  <div style="padding:32px;">
-    <h2 style="color:#2d3748;">Complaint Response</h2>
-    <p style="color:#4a5568;">Dear {{ $recipient->name ?? 'Researcher' }},</p>
-    <p style="color:#4a5568;">Your complaint regarding proposal <strong>{{ $tracker_number ?? 'N/A' }}</strong> has been responded to.</p>
-    @if(!empty($resolution))
-    <div style="background:{{ $resolution === 'resolved' ? '#f0fff4' : '#fff5f5' }};border-left:4px solid {{ $resolution === 'resolved' ? '#38a169' : '#e53e3e' }};padding:16px;margin:24px 0;border-radius:4px;">
-      <p style="margin:0;font-weight:bold;color:{{ $resolution === 'resolved' ? '#276749' : '#c53030' }};">{{ ucfirst($resolution ?? '') }}</p>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Complaint Response</title>
+<style>
+  body{margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
+  .wrap{max-width:600px;margin:40px auto;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 4px 32px rgba(0,0,0,.10);}
+  .hero{padding:40px 32px;text-align:center;}
+  .hero-resolved{background:linear-gradient(135deg,#065f46,#059669);}
+  .hero-unresolved{background:linear-gradient(135deg,#7f1d1d,#dc2626);}
+  .hero-default{background:linear-gradient(135deg,#334155,#475569);}
+  .hero-icon{width:64px;height:64px;border-radius:16px;background:rgba(255,255,255,.2);display:inline-flex;align-items:center;justify-content:center;margin-bottom:20px;}
+  .hero h1{color:#fff;margin:0 0 8px;font-size:22px;font-weight:800;}
+  .hero p{color:rgba(255,255,255,.8);margin:0;font-size:14px;}
+  .badge{display:inline-block;background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.35);color:#fff;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:5px 14px;border-radius:999px;margin-top:14px;}
+  .body{padding:36px 32px;}
+  .tracker-row{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;margin:16px 0;}
+  .tracker-label{font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;}
+  .tracker-val{font-size:14px;font-family:monospace;color:#374151;font-weight:700;}
+  .response-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:14px;padding:22px;margin:20px 0;}
+  .response-from{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin:0 0 10px;}
+  .response-text{font-size:14px;color:#374151;line-height:1.75;margin:0;}
+  .divider{border:none;border-top:1px solid #e5e7eb;margin:24px 0;}
+  .footer{background:#f8fafc;padding:18px 32px;text-align:center;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af;}
+</style>
+</head>
+<body>
+@php
+  use App\Models\AppSetting;
+  $s = AppSetting::whereIn('key', ['organization_name','system_name'])->pluck('value','key');
+  $platformName = $s->get('system_name', 'RTT Platform');
+  $orgName      = $s->get('organization_name', 'Research Office');
+
+  $res = strtolower($resolution ?? '');
+  $isResolved   = $res === 'resolved';
+  $isUnresolved = $res === 'unresolved' || $res === 'rejected';
+  $heroClass    = $isResolved ? 'hero-resolved' : ($isUnresolved ? 'hero-unresolved' : 'hero-default');
+  $heroBg       = $isResolved ? '#065f46' : ($isUnresolved ? '#7f1d1d' : '#334155');
+  $badgeText    = $isResolved ? '✓ Resolved' : ($isUnresolved ? '✗ Not Resolved' : ucfirst($res ?: 'Responded'));
+@endphp
+<div class="wrap">
+  @include('emails.partials.logo_header')
+  <div class="hero {{ $heroClass }}" style="background-color:{{ $heroBg }};">
+    <div class="hero-icon">
+      @if($isResolved)
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+      </svg>
+      @else
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
+      @endif
     </div>
-    @endif
-    @if(!empty($response))
-    <div style="background:#f7fafc;padding:16px;border-radius:4px;">
-      <p style="margin:0 0 8px;color:#718096;font-size:14px;"><strong>Response from {{ $resolved_by ?? 'Officer' }}</strong></p>
-      <p style="color:#4a5568;margin:0;">{{ $response }}</p>
-    </div>
-    @endif
+    <h1>Complaint Response</h1>
+    <p>A response has been provided to your complaint</p>
+    <span class="badge">{{ $badgeText }}</span>
   </div>
-  @include('emails.partials.footer')
+
+  <div class="body">
+    <p style="font-size:15px;color:#374151;margin:0 0 16px;">Dear <strong>{{ $recipient->name ?? 'Researcher' }}</strong>,</p>
+    <p style="font-size:14px;color:#4b5563;line-height:1.75;margin:0 0 20px;">
+      Your complaint regarding the following proposal has been reviewed and a response has been provided.
+    </p>
+
+    @if(!empty($tracker_number))
+    <div class="tracker-row">
+      <span class="tracker-label">Proposal Tracker</span>
+      <span class="tracker-val">{{ $tracker_number }}</span>
+    </div>
+    @endif
+
+    @if(!empty($response))
+    <div class="response-box">
+      <p class="response-from">Response from {{ $resolved_by ?? 'Research Officer' }}</p>
+      <p class="response-text">{{ $response }}</p>
+    </div>
+    @endif
+
+    @if($isResolved)
+    <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:14px 18px;margin:20px 0;display:flex;gap:10px;align-items:flex-start;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5" style="flex-shrink:0;margin-top:1px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      <p style="font-size:13px;color:#166534;margin:0;line-height:1.6;">Your complaint has been <strong>resolved</strong>. No further action is needed on your part.</p>
+    </div>
+    @endif
+
+    <hr class="divider">
+    <p style="font-size:13px;color:#9ca3af;margin:0;">
+      Sent via <strong>{{ $platformName }}</strong>. If you have further questions, contact the {{ $orgName }} Research Office directly.
+    </p>
+  </div>
+
+  <div class="footer">
+    &copy; {{ date('Y') }} <strong>{{ $platformName }}</strong> &middot; {{ $orgName }} Research &amp; Technology Transfer
+  </div>
 </div>
 </body>
 </html>

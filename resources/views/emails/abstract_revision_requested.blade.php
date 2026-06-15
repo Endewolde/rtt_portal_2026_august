@@ -34,7 +34,8 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="hero">
+  @include('emails.partials.logo_header')
+  <div class="hero" style="background-color:#b45309;">
     <div class="hero-icon">
       <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
         <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>

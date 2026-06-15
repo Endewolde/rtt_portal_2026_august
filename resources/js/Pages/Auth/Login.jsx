@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, router, usePage } from '@inertiajs/react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Mail, Lock, Eye, EyeOff, AlertCircle, RefreshCw } from 'lucide-react';
 import GuestLayout from '../../Layouts/GuestLayout';
+import LoginNoticeBanner from '../../Components/LoginNoticeBanner';
 import { useAuth } from '../../hooks/useAuth';
-import { post } from '../../lib/api';
+import { post, get } from '../../lib/api';
 
 const schema = z.object({
     email:    z.string().email('Enter a valid email address'),
@@ -57,6 +58,11 @@ export default function Login() {
     const [unverifiedEmail,   setUnverifiedEmail]    = useState('');
     const [resending,         setResending]          = useState(false);
     const [resent,            setResent]             = useState(false);
+    const [notices,           setNotices]            = useState([]);
+
+    useEffect(() => {
+        get('/login-notices/active').then(res => setNotices(res.data ?? [])).catch(() => {});
+    }, []);
 
     const { register, handleSubmit, getValues, formState: { errors, isSubmitting } } = useForm({
         resolver: zodResolver(schema),
@@ -107,6 +113,9 @@ export default function Login() {
             panelLinkText={selfRegistration ? 'Create Account' : null}
             panelLinkHref={selfRegistration ? '/register' : null}
         >
+            {/* Login notices */}
+            <LoginNoticeBanner notices={notices} />
+
             {/* Heading */}
             <div className="mb-8">
                 <h1 className="text-2xl font-extrabold text-gray-900">Sign in</h1>

@@ -1,55 +1,113 @@
 <!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>Budget Request Approved</title></head>
-<body style="font-family:Arial,sans-serif;background:#f4f4f4;margin:0;padding:20px;">
-<div style="max-width:600px;margin:0 auto;background:#fff;border-radius:8px;overflow:hidden;">
-
-  <div style="background:#276749;padding:24px;text-align:center;">
-    <h1 style="color:#fff;margin:0;font-size:20px;">Budget Request Approved</h1>
-    <p style="color:#c6f6d5;margin:4px 0 0;">Research &amp; Technology Transfer — {{ \App\Models\AppSetting::where('key', 'organization_name')->value('value') ?? 'Research Office' }}</p>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Budget Request Approved</title>
+<style>
+  body{margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
+  .wrap{max-width:600px;margin:40px auto;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 4px 32px rgba(0,0,0,.10);}
+  .hero{background:linear-gradient(135deg,#065f46,#059669);padding:40px 32px;text-align:center;}
+  .hero-icon{width:64px;height:64px;border-radius:16px;background:rgba(255,255,255,.2);display:inline-flex;align-items:center;justify-content:center;margin-bottom:20px;}
+  .hero h1{color:#fff;margin:0 0 8px;font-size:22px;font-weight:800;}
+  .hero p{color:rgba(255,255,255,.8);margin:0;font-size:14px;}
+  .badge{display:inline-block;background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.35);color:#fff;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:5px 14px;border-radius:999px;margin-top:14px;}
+  .body{padding:36px 32px;}
+  .approval-card{background:#f0fdf4;border:1px solid #86efac;border-radius:16px;padding:24px;margin:20px 0;}
+  .tracker-label{font-size:11px;font-weight:700;color:#166534;letter-spacing:.08em;text-transform:uppercase;margin:0 0 6px;}
+  .tracker-val{font-size:22px;font-family:monospace;font-weight:800;color:#166534;letter-spacing:.05em;margin:0 0 14px;}
+  .row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #bbf7d0;font-size:13px;}
+  .row:last-child{border-bottom:none;}
+  .row label{color:#166534;font-weight:500;}
+  .amount-highlight{font-size:20px;font-weight:800;color:#065f46;}
+  .notes-box{background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:18px;margin:20px 0;}
+  .notes-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#92400e;margin:0 0 8px;}
+  .notes-text{font-size:14px;color:#78350f;line-height:1.7;margin:0;}
+  .steps{background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin:22px 0;}
+  .steps-title{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin:0 0 14px;}
+  .step{display:flex;gap:12px;margin-bottom:10px;align-items:flex-start;}
+  .step:last-child{margin-bottom:0;}
+  .step-num{width:22px;height:22px;border-radius:50%;background:#059669;color:#fff;font-size:11px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;}
+  .step-text{font-size:13px;color:#374151;line-height:1.55;}
+  .divider{border:none;border-top:1px solid #e5e7eb;margin:24px 0;}
+  .footer{background:#f8fafc;padding:18px 32px;text-align:center;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af;}
+</style>
+</head>
+<body>
+@php
+  use App\Models\AppSetting;
+  $s = AppSetting::whereIn('key', ['organization_name','system_name'])->pluck('value','key');
+  $platformName = $s->get('system_name', 'RTT Platform');
+  $orgName      = $s->get('organization_name', 'Research Office');
+@endphp
+<div class="wrap">
+  @include('emails.partials.logo_header')
+  <div class="hero" style="background-color:#065f46;">
+    <div class="hero-icon">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+      </svg>
+    </div>
+    <h1>Budget Approved!</h1>
+    <p>Your budget request has been approved by the college</p>
+    <span class="badge">✓ Approved</span>
   </div>
 
-  <div style="padding:32px;">
-    <p style="color:#4a5568;">Dear {{ $recipient->name ?? 'Researcher' }},</p>
-    <p style="color:#4a5568;">
-      We are pleased to inform you that the budget request for your research proposal
-      has been <strong style="color:#276749;">approved</strong> by the college.
+  <div class="body">
+    <p style="font-size:15px;color:#374151;margin:0 0 16px;">Dear <strong>{{ $recipient->name ?? 'Researcher' }}</strong>,</p>
+    <p style="font-size:14px;color:#4b5563;line-height:1.75;margin:0 0 20px;">
+      We are pleased to inform you that your budget request has been <strong>approved</strong> by the college.
+      The Finance Office will process the disbursement based on the approved budget.
     </p>
 
-    <div style="background:#f0fff4;border:1px solid #9ae6b4;padding:20px;margin:24px 0;border-radius:8px;">
+    <div class="approval-card">
       @if(!empty($tracker_number))
-      <p style="margin:0 0 8px;font-size:13px;color:#2b6cb0;font-weight:bold;">Tracker Number</p>
-      <p style="font-size:22px;font-family:monospace;color:#276749;font-weight:bold;margin:0 0 12px;">{{ $tracker_number }}</p>
+      <p class="tracker-label">Tracker Number</p>
+      <p class="tracker-val">{{ $tracker_number }}</p>
       @endif
       @if(!empty($title))
-      <p style="margin:0 0 6px;color:#4a5568;font-size:14px;"><strong>Proposal:</strong> {{ $title }}</p>
+      <div class="row"><label>Proposal</label><span style="font-weight:600;color:#14532d;text-align:right;max-width:60%;">{{ $title }}</span></div>
       @endif
       @if(!empty($round_number))
-      <p style="margin:0 0 6px;color:#4a5568;font-size:14px;"><strong>Funding Round:</strong> {{ $round_number }}</p>
+      <div class="row"><label>Funding Round</label><span style="font-weight:600;color:#14532d;">Round {{ $round_number }}</span></div>
       @endif
       @if(!empty($requested_amount))
-      <p style="margin:0;color:#4a5568;font-size:14px;"><strong>Approved Amount:</strong> ETB {{ number_format($requested_amount, 2) }}</p>
+      <div class="row"><label>Approved Amount</label><span class="amount-highlight">ETB {{ number_format($requested_amount, 2) }}</span></div>
       @endif
     </div>
 
     @if(!empty($notes))
-    <div style="background:#fffbeb;border-left:4px solid #d69e2e;padding:16px;margin-bottom:24px;border-radius:4px;">
-      <p style="margin:0 0 6px;font-size:13px;color:#744210;font-weight:bold;">College Review Notes</p>
-      <p style="margin:0;color:#4a5568;font-size:14px;">{{ $notes }}</p>
+    <div class="notes-box">
+      <p class="notes-label">College Review Notes</p>
+      <p class="notes-text">{{ $notes }}</p>
     </div>
     @endif
 
-    <div style="background:#f7fafc;padding:16px;border-radius:4px;">
-      <p style="margin:0 0 8px;color:#718096;font-size:14px;font-weight:bold;">Next Steps</p>
-      <ol style="color:#4a5568;font-size:14px;padding-left:20px;margin:0;">
-        <li>The Finance Office will process the disbursement based on the approved budget.</li>
-        <li>You will be notified once the funds are disbursed to your account.</li>
-        <li>Ensure all expenditures are properly documented for future settlement reporting.</li>
-      </ol>
+    <div class="steps">
+      <p class="steps-title">Next Steps</p>
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-text">The <strong>Finance Office</strong> will process the disbursement based on the approved budget.</div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-text">You will be <strong>notified once the funds</strong> are disbursed to your account.</div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-text">Ensure all expenditures are <strong>properly documented</strong> for future settlement reporting.</div>
+      </div>
     </div>
+
+    <hr class="divider">
+    <p style="font-size:13px;color:#9ca3af;margin:0;">
+      Sent via <strong>{{ $platformName }}</strong>. Contact the {{ $orgName }} Finance Office for disbursement queries.
+    </p>
   </div>
 
-  @include('emails.partials.footer')
+  <div class="footer">
+    &copy; {{ date('Y') }} <strong>{{ $platformName }}</strong> &middot; {{ $orgName }} Research &amp; Technology Transfer
+  </div>
 </div>
 </body>
 </html>

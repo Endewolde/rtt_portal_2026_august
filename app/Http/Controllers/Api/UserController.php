@@ -208,6 +208,7 @@ class UserController extends Controller
             'expertise' => $request->expertise,
             'status' => 'active',
             'email_verified_at' => now(),
+            'registration_method' => 'admin_created',
         ]);
 
         $user->assignRole($request->role);
@@ -273,6 +274,7 @@ class UserController extends Controller
         }
 
         $query = User::with(['roles:id,name', 'college:id,name,code', 'department:id,name'])
+            ->whereDoesntHave('roles', fn ($q) => $q->where('name', 'super_admin'))
             ->orderBy('name');
 
         if ($search = $request->query('search')) {
@@ -450,6 +452,7 @@ class UserController extends Controller
                 'gender' => $gender ?: null,
                 'status' => 'active',
                 'email_verified_at' => now(),
+                'registration_method' => 'imported',
             ]);
 
             $user->assignRole($role);
@@ -491,7 +494,7 @@ class UserController extends Controller
 
     public function destroy(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()->hasRole('super_admin')) {
+        if (! $request->user()->hasAnyRole(['super_admin', 'admin'])) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -504,11 +507,8 @@ class UserController extends Controller
         $uid = $user->id;
 
         // Detect NOT NULL FK violations grouped into human-readable categories.
+        // Proposals are cascade-deleted below, so they are excluded from blockers.
         $blockers = array_filter([
-            'proposals or proposal documents' => DB::table('proposals')->where('pi_user_id', $uid)->orWhere('created_by', $uid)->exists()
-                || DB::table('proposal_calls')->where('created_by', $uid)->exists()
-                || DB::table('proposal_documents')->where('uploaded_by', $uid)->exists(),
-
             'review or evaluation records' => DB::table('review_assignments')->where('reviewer_id', $uid)->orWhere('assigned_by', $uid)->exists()
                 || DB::table('defence_sessions')->where('scheduled_by', $uid)->exists()
                 || DB::table('midterm_evaluations')->where('scheduled_by', $uid)->exists()
@@ -540,6 +540,57 @@ class UserController extends Controller
         }
 
         DB::transaction(function () use ($user, $uid) {
+            // Cascade-delete all proposals owned by this user and everything related to them.
+            $proposalIds = DB::table('proposals')
+                ->where('pi_user_id', $uid)
+                ->orWhere('created_by', $uid)
+                ->pluck('id')
+                ->toArray();
+
+            foreach ($proposalIds as $pid) {
+                $brIds = DB::table('budget_requests')->where('proposal_id', $pid)->pluck('id')->toArray();
+
+                if (! empty($brIds)) {
+                    $disbIds = DB::table('disbursements')->whereIn('budget_request_id', $brIds)->pluck('id')->toArray();
+
+                    if (! empty($disbIds)) {
+                        DB::table('payment_proofs')->whereIn('disbursement_id', $disbIds)->delete();
+                    }
+                    DB::table('disbursements')->whereIn('budget_request_id', $brIds)->delete();
+                    DB::table('form_signatures')->whereIn('budget_request_id', $brIds)->delete();
+                    DB::table('budget_approvals')->whereIn('budget_request_id', $brIds)->delete();
+                    DB::table('budget_transactions')->whereIn('budget_request_id', $brIds)->delete();
+                    DB::table('budget_settlements')->whereIn('budget_request_id', $brIds)->delete();
+                    DB::table('budget_request_items')->whereIn('budget_request_id', $brIds)->delete();
+                }
+                DB::table('budget_requests')->where('proposal_id', $pid)->delete();
+
+                $raIds = DB::table('review_assignments')->where('proposal_id', $pid)->pluck('id')->toArray();
+                if (! empty($raIds)) {
+                    DB::table('review_scores')->whereIn('review_assignment_id', $raIds)->delete();
+                }
+                DB::table('review_assignments')->where('proposal_id', $pid)->delete();
+
+                DB::table('workflow_logs')->where('proposal_id', $pid)->delete();
+                DB::table('midterm_evaluations')->where('proposal_id', $pid)->delete();
+                DB::table('defence_sessions')->where('proposal_id', $pid)->delete();
+                DB::table('completion_workshops')->where('proposal_id', $pid)->delete();
+                DB::table('research_outputs')->where('proposal_id', $pid)->delete();
+                DB::table('repository_records')->where('proposal_id', $pid)->delete();
+                DB::table('awards')->where('proposal_id', $pid)->delete();
+                DB::table('budget_allocations')->where('proposal_id', $pid)->delete();
+                DB::table('proposal_documents')->where('proposal_id', $pid)->delete();
+                DB::table('proposal_budgets')->where('proposal_id', $pid)->delete();
+                DB::table('proposal_members')->where('proposal_id', $pid)->delete();
+                DB::table('proposals')->where('id', $pid)->delete();
+            }
+
+            // Nullify created_by on proposal_calls (keep the calls, just disown them).
+            DB::table('proposal_calls')->where('created_by', $uid)->update(['created_by' => null]);
+
+            // Delete any proposal documents the user uploaded outside the proposals above.
+            DB::table('proposal_documents')->where('uploaded_by', $uid)->delete();
+
             // Delete user-owned records with NOT NULL FK
             DB::table('notification_preferences')->where('user_id', $uid)->delete();
             DB::table('proposal_members')->where('user_id', $uid)->delete();
@@ -550,7 +601,7 @@ class UserController extends Controller
                 ->where('tokenable_id', $uid)
                 ->delete();
 
-            // Nullify the two nullable FK columns
+            // Nullify nullable FK columns
             DB::table('budget_allocations')->where('approved_by', $uid)->update(['approved_by' => null]);
             DB::table('midterm_evaluations')->where('scored_by', $uid)->update(['scored_by' => null]);
             DB::table('resources')->where('created_by', $uid)->update(['created_by' => null]);

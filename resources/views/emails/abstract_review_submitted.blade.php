@@ -34,7 +34,8 @@
 </head>
 <body>
 <div class="wrap">
-  <div class="hero">
+  @include('emails.partials.logo_header')
+  <div class="hero" style="background-color:#1e3a5f;">
     <div class="hero-icon">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
         <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>

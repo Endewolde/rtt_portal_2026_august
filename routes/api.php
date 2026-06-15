@@ -27,6 +27,7 @@ use App\Http\Controllers\Api\ExternalFund\ReviewController as EFReviewController
 use App\Http\Controllers\Api\ExternalFund\TeamMemberController as EFTeamMemberController;
 use App\Http\Controllers\Api\FeatureController;
 use App\Http\Controllers\Api\HealthController;
+use App\Http\Controllers\Api\LoginNoticeController;
 use App\Http\Controllers\Api\MidtermEvaluationController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\ProposalCallController;
@@ -52,6 +53,9 @@ Route::prefix('v1')->group(function () {
 
     // Health check — no auth, no rate limit
     Route::get('/health', [HealthController::class, 'check']);
+
+    // Login notices — public (shown before sign-in, no auth needed)
+    Route::get('/login-notices/active', [LoginNoticeController::class, 'active']);
 
     // ── Public auth — rate limited ────────────────────────────────────────────
     // 30 attempts per minute per IP
@@ -188,6 +192,12 @@ Route::prefix('v1')->group(function () {
         Route::get('/features/sub', [FeatureController::class, 'getDisabledSubFeatures']);
         Route::put('/features/sub', [FeatureController::class, 'updateDisabledSubFeatures']);
 
+        // Login notices — admin CRUD
+        Route::get('/login-notices', [LoginNoticeController::class, 'index']);
+        Route::post('/login-notices', [LoginNoticeController::class, 'store']);
+        Route::put('/login-notices/{loginNotice}', [LoginNoticeController::class, 'update']);
+        Route::delete('/login-notices/{loginNotice}', [LoginNoticeController::class, 'destroy']);
+
         // Settings — static segments must come before {key} wildcard
         Route::get('/settings', [SettingsController::class, 'index']);
         Route::put('/settings', [SettingsController::class, 'update']);
@@ -198,6 +208,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/settings/toggle-maintenance', [SettingsController::class, 'toggleMaintenance']);
         Route::post('/settings/test-email', [SettingsController::class, 'testEmail']);
         Route::post('/settings/upload-asset', [SettingsController::class, 'uploadAsset']);
+        Route::post('/settings/upload-editor-image', [SettingsController::class, 'uploadEditorImage']);
         Route::post('/settings/send-email', [SettingsController::class, 'sendBroadcastEmail']);
         Route::post('/settings/run-backup', [SettingsController::class, 'runBackup']);
         Route::put('/settings/app/{key}', [SettingsController::class, 'updateAppSetting']);

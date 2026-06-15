@@ -91,12 +91,20 @@ class SettingsController extends Controller
 
     public function updateAppSetting(Request $request, string $key): JsonResponse
     {
-        if (! $request->user()?->hasRole('super_admin')) {
+        $user = $request->user();
+
+        if (! $user?->hasAnyRole(['super_admin', 'admin'])) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        // Admin role cannot edit these keys (shown read-only or hidden in the UI)
+        $adminRestrictedKeys = ['developer_credits', 'disabled_sub_features'];
+        if ($user->hasRole('admin') && ! $user->hasRole('super_admin') && in_array($key, $adminRestrictedKeys)) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
         $value = $request->value;
-        $userId = $request->user()->id;
+        $userId = $user->id;
 
         $appearanceKeys = ['primary_color', 'secondary_color', 'sidebar_color', 'footer_text', 'custom_css', 'homepage_banner', 'theme', 'system_logo', 'favicon'];
         $publicSiteTypes = [
@@ -277,7 +285,7 @@ class SettingsController extends Controller
 
     public function uploadAsset(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasRole('super_admin')) {
+        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -299,6 +307,27 @@ class SettingsController extends Controller
             'message' => 'Asset uploaded.',
             'errors' => [],
             'meta' => [],
+        ]);
+    }
+
+    // ── Editor image upload ───────────────────────────────────────────────────
+
+    public function uploadEditorImage(Request $request): JsonResponse
+    {
+        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        $request->validate([
+            'image' => 'required|image|max:5120|mimes:jpeg,png,gif,webp',
+        ]);
+
+        $path = $request->file('image')->store('editor-images', 'public');
+
+        return response()->json([
+            'data' => ['url' => url(Storage::url($path))],
+            'message' => 'Image uploaded.',
+            'errors' => [],
         ]);
     }
 
@@ -336,7 +365,7 @@ class SettingsController extends Controller
 
     public function sendBroadcastEmail(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasRole('super_admin')) {
+        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
