@@ -71,6 +71,7 @@ Route::get('/admin/review-assignment/{id}', fn () => Inertia::render('Admin/Revi
 Route::get('/reports', fn () => Inertia::render('Reports/Index'));
 Route::get('/admin/analytics', [AnalyticsController::class, 'index'])->name('admin.analytics');
 Route::get('/admin/login-notices', fn () => Inertia::render('Admin/LoginNotices'));
+Route::get('/admin/feedback', fn () => Inertia::render('Admin/Feedback'));
 Route::get('/complaints', fn () => Inertia::render('Complaints/Index'));
 Route::get('/admin/conferences', fn () => Inertia::render('Admin/Conferences'));
 Route::get('/admin/abstracts', fn () => Inertia::render('Admin/Abstracts'));

@@ -2,16 +2,17 @@ import { useState, useEffect, useMemo } from 'react';
 import {
     Clock, AlertCircle, CheckCircle2, ChevronRight, FileText,
     Users, DollarSign, Upload, Eye, Send, Megaphone, ArrowLeft,
-    Building2, BookOpen, Info,
+    Building2, BookOpen, Info, Save, Calendar, Hash,
 } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import TrackerNumberDisplay from '../../Components/TrackerNumberDisplay';
 import Step3CoInvestigators from './Steps/Step3CoInvestigators';
-import Step5Documents from './Steps/Step5Documents';
+import Step5Documents, { DOC_TYPES } from './Steps/Step5Documents';
 import { post, get } from '../../lib/api';
 import api from '../../lib/api';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../Components/Toast';
+import RoleRestrictedModal from '../../Components/RoleRestrictedModal';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -433,24 +434,43 @@ const AVATAR_COLORS = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-orang
 const getInitials = name => (name ?? '?').split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
 const getAvatarColor = name => AVATAR_COLORS[(name?.charCodeAt(0) ?? 0) % AVATAR_COLORS.length];
 
-function PreviewSection({ title, icon: Icon, color, children }) {
+function PreviewSection({ index, title, icon: Icon, children }) {
     return (
-        <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-            <div className={`flex items-center gap-2.5 px-5 py-3.5 border-b border-gray-100 ${color}`}>
-                <Icon size={15} className="shrink-0" />
-                <p className="text-sm font-semibold">{title}</p>
+        <section className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+            <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100">
+                <div className="w-8 h-8 rounded-full bg-gray-900 text-white text-xs font-bold flex items-center justify-center shrink-0">
+                    {index}
+                </div>
+                <Icon size={16} className="text-gray-400 shrink-0" />
+                <h3 className="text-sm font-semibold text-gray-900 tracking-wide uppercase">{title}</h3>
             </div>
-            <div className="p-5">{children}</div>
+            <div className="p-6">{children}</div>
+        </section>
+    );
+}
+
+function SummaryRow({ label, value, complete }) {
+    return (
+        <div className="flex items-center justify-between py-2 text-sm">
+            <span className="text-gray-500">{label}</span>
+            <span className={`font-semibold flex items-center gap-1.5 ${complete === false ? 'text-red-500' : 'text-gray-900'}`}>
+                {complete === false && <AlertCircle size={13} />}
+                {complete === true && <CheckCircle2 size={13} className="text-green-500" />}
+                {value}
+            </span>
         </div>
     );
 }
 
-function Step6Preview({ stepData, budgetItems, user, category }) {
+function Step6Preview({ stepData, budgetItems, user, category, selectedCall }) {
     const d           = stepData[0] ?? {};
     const team        = stepData[2]?.co_investigators ?? [];
     const totalCo     = team.reduce((s, c) => s + (parseFloat(c.contribution_percentage) || 0), 0);
     const piContrib   = Math.max(0, 100 - totalCo);
     const budgetTotal = budgetItems.reduce((s, i) => s + Number(i.amount || 0), 0);
+    const documents   = stepData[4]?.documents ?? {};
+    const docsDone    = DOC_TYPES.filter(dt => documents[dt.key]?.status === 'done').length;
+    const docsRequired = DOC_TYPES.filter(dt => dt.required).length;
 
     const keywords    = (d.keywords ?? '').split(',').map(k => k.trim()).filter(Boolean);
     const durationLabel = d.duration_months
@@ -458,21 +478,45 @@ function Step6Preview({ stepData, budgetItems, user, category }) {
             ? `${d.duration_months} months`
             : `${d.duration_months / 12} year${d.duration_months > 12 ? 's' : ''} (${d.duration_months} months)`)
         : null;
+    const categoryLabel = (category ?? '').replace(/_/g, ' ');
 
     return (
-        <div className="space-y-4">
-            <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-4 py-2.5 text-sm text-green-700">
-                <CheckCircle2 size={15} className="shrink-0" />
-                Review your application carefully before submitting. You can go back to edit any section.
+        <div className="space-y-6">
+            <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5 text-sm text-blue-700">
+                <Eye size={15} className="shrink-0" />
+                This is exactly what reviewers will see. Check every section carefully — you can still go back and edit before submitting.
             </div>
 
-            {/* Basic Info */}
-            <PreviewSection title="Basic Information" icon={FileText} color="bg-blue-50 text-blue-700">
-                <h3 className="text-base font-bold text-gray-900 mb-2 leading-snug">{d.title || <span className="text-red-400 italic">No title provided</span>}</h3>
-                <p className="text-sm text-gray-600 leading-relaxed mb-3">{d.abstract || <span className="text-gray-400 italic">No abstract provided</span>}</p>
+            {/* Letterhead / document header */}
+            <div className="bg-white border border-gray-200 rounded-2xl px-7 py-6 relative overflow-hidden">
+                <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-500" />
+                <div className="flex flex-wrap items-center gap-2 mb-3">
+                    {category && (
+                        <span className="inline-flex items-center gap-1.5 bg-gray-900 text-white text-xs px-2.5 py-1 rounded-full font-medium capitalize">
+                            {categoryLabel}
+                        </span>
+                    )}
+                    {selectedCall?.academic_year && (
+                        <span className="inline-flex items-center gap-1.5 bg-gray-100 text-gray-600 text-xs px-2.5 py-1 rounded-full font-medium">
+                            <Calendar size={11} /> {selectedCall.academic_year}
+                        </span>
+                    )}
+                    {selectedCall?.title && (
+                        <span className="inline-flex items-center gap-1.5 bg-gray-100 text-gray-600 text-xs px-2.5 py-1 rounded-full font-medium">
+                            <Hash size={11} /> {selectedCall.title}
+                        </span>
+                    )}
+                </div>
 
-                {/* Category-specific detail pills */}
-                <div className="flex flex-wrap gap-2 mt-1">
+                <h2 className="text-2xl font-bold text-gray-900 leading-snug mb-3">
+                    {d.title || <span className="text-red-400 italic font-normal">No title provided</span>}
+                </h2>
+
+                <p className="text-sm text-gray-600 leading-relaxed mb-4">
+                    {d.abstract || <span className="text-gray-400 italic">No abstract provided</span>}
+                </p>
+
+                <div className="flex flex-wrap gap-2">
                     {d.focus_area && (
                         <span className="inline-flex items-center gap-1.5 bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs px-2.5 py-1 rounded-full font-medium">
                             Focus: {d.focus_area}
@@ -491,105 +535,156 @@ function Step6Preview({ stepData, budgetItems, user, category }) {
                 </div>
 
                 {keywords.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-1.5">
+                    <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-1.5">
                         {keywords.map(k => (
                             <span key={k} className="bg-blue-50 text-blue-600 text-xs px-2.5 py-1 rounded-full border border-blue-100 font-medium">{k}</span>
                         ))}
                     </div>
                 )}
-            </PreviewSection>
+            </div>
 
-            {/* Research Team */}
-            <PreviewSection title="Research Team" icon={Users} color="bg-purple-50 text-purple-700">
-                <div className="space-y-2">
-                    {/* PI row */}
-                    <div className="flex items-center justify-between bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
-                        <div className="flex items-center gap-3">
-                            <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
-                                {getInitials(user?.name)}
-                            </div>
-                            <div>
-                                <p className="text-sm font-semibold text-gray-900">{user?.name}</p>
-                                <p className="text-xs text-gray-500">{user?.email}</p>
-                            </div>
-                        </div>
-                        <div className="text-right shrink-0">
-                            <span className="inline-block text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold">PI</span>
-                            <p className="text-xs text-gray-500 mt-0.5">{piContrib.toFixed(1)}% contribution</p>
-                        </div>
-                    </div>
-                    {team.length === 0 && (
-                        <p className="text-sm text-red-500 italic px-1">No co-investigators added — required before submission.</p>
-                    )}
-                    {team.map(coI => (
-                        <div key={coI.user_id} className="flex items-center justify-between bg-gray-50 border border-gray-100 rounded-xl px-4 py-3">
-                            <div className="flex items-center gap-3">
-                                <div className={`w-9 h-9 rounded-xl ${getAvatarColor(coI.name)} flex items-center justify-center text-white text-xs font-bold shrink-0`}>
-                                    {getInitials(coI.name)}
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
+                {/* Main sections */}
+                <div className="space-y-6">
+                    <PreviewSection index={1} title="Research Team" icon={Users}>
+                        <div className="space-y-2">
+                            {/* PI row */}
+                            <div className="flex items-center justify-between bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                                        {getInitials(user?.name)}
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-semibold text-gray-900">{user?.name}</p>
+                                        <p className="text-xs text-gray-500">{user?.email}</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <p className="text-sm font-semibold text-gray-900">{coI.name}</p>
-                                    <p className="text-xs text-gray-500">{coI.email}</p>
-                                    {coI.college_name && <p className="text-xs text-gray-400">{coI.college_name}</p>}
+                                <div className="text-right shrink-0">
+                                    <span className="inline-block text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold">PI</span>
+                                    <p className="text-xs text-gray-500 mt-0.5">{piContrib.toFixed(1)}% contribution</p>
                                 </div>
                             </div>
-                            <div className="text-right shrink-0">
-                                <span className="inline-block text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-semibold">Co-PI</span>
-                                <p className="text-xs text-gray-500 mt-0.5">{coI.contribution_percentage}% contribution</p>
+                            {team.length === 0 && (
+                                <p className="text-sm text-red-500 italic px-1">No co-investigators added — required before submission.</p>
+                            )}
+                            {team.map(coI => (
+                                <div key={coI.user_id} className="flex items-center justify-between bg-gray-50 border border-gray-100 rounded-xl px-4 py-3">
+                                    <div className="flex items-center gap-3">
+                                        <div className={`w-9 h-9 rounded-xl ${getAvatarColor(coI.name)} flex items-center justify-center text-white text-xs font-bold shrink-0`}>
+                                            {getInitials(coI.name)}
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-semibold text-gray-900">{coI.name}</p>
+                                            <p className="text-xs text-gray-500">{coI.email}</p>
+                                            {coI.college_name && <p className="text-xs text-gray-400">{coI.college_name}</p>}
+                                        </div>
+                                    </div>
+                                    <div className="text-right shrink-0">
+                                        <span className="inline-block text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-semibold">Co-PI</span>
+                                        <p className="text-xs text-gray-500 mt-0.5">{coI.contribution_percentage}% contribution</p>
+                                    </div>
+                                </div>
+                            ))}
+                            <div className="flex items-center justify-between px-4 py-2 text-xs text-gray-500">
+                                <span>{team.length + 1} total member{team.length !== 0 ? 's' : ''}</span>
+                                <span>Total contribution: <strong className="text-gray-700">100%</strong></span>
                             </div>
                         </div>
-                    ))}
-                    <div className="flex items-center justify-between px-4 py-2 text-xs text-gray-500">
-                        <span>{team.length + 1} total member{team.length !== 0 ? 's' : ''}</span>
-                        <span>Total contribution: <strong className="text-gray-700">100%</strong></span>
-                    </div>
+                    </PreviewSection>
+
+                    <PreviewSection index={2} title={`Budget Plan — ETB ${budgetTotal.toLocaleString()}`} icon={DollarSign}>
+                        {budgetItems.length === 0 ? (
+                            <p className="text-sm text-red-400 italic">No budget items added.</p>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm">
+                                    <thead>
+                                        <tr className="border-b border-gray-100">
+                                            {['Category', 'Description', 'Amount (ETB)', 'Justification'].map(h => (
+                                                <th key={h} className="text-left py-2 pr-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">{h}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-50">
+                                        {budgetItems.map((item, i) => (
+                                            <tr key={i}>
+                                                <td className="py-2.5 pr-4 font-medium text-gray-700 capitalize">{item.category || '—'}</td>
+                                                <td className="py-2.5 pr-4 text-gray-600">{item.description || '—'}</td>
+                                                <td className="py-2.5 pr-4 font-semibold text-gray-900">{Number(item.amount || 0).toLocaleString()}</td>
+                                                <td className="py-2.5 text-gray-400 text-xs">{item.justification || '—'}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr className="border-t border-gray-200">
+                                            <td colSpan={2} className="py-2.5 pr-4 text-xs font-semibold text-gray-500 uppercase">Total</td>
+                                            <td className="py-2.5 pr-4 font-bold text-gray-900">{budgetTotal.toLocaleString()}</td>
+                                            <td />
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        )}
+                    </PreviewSection>
+
+                    <PreviewSection index={3} title="Documents" icon={Upload}>
+                        <div className="space-y-2">
+                            {DOC_TYPES.map(dt => {
+                                const doc = documents[dt.key];
+                                return (
+                                    <div key={dt.key}
+                                        className={`flex items-center gap-3 rounded-xl border px-4 py-2.5 ${
+                                            doc?.status === 'done' ? 'border-green-200 bg-green-50' : 'border-gray-100 bg-gray-50'
+                                        }`}>
+                                        {doc?.status === 'done'
+                                            ? <FileText size={15} className="text-green-600 shrink-0" />
+                                            : <AlertCircle size={15} className="text-gray-300 shrink-0" />
+                                        }
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium text-gray-800">
+                                                {dt.label}
+                                                {dt.required && <span className="text-red-500 ml-0.5">*</span>}
+                                            </p>
+                                            <p className="text-xs text-gray-500 truncate">
+                                                {doc?.filename ?? (dt.required
+                                                    ? <span className="text-red-400 italic">Not uploaded</span>
+                                                    : <span className="text-gray-400 italic">Not provided (optional)</span>
+                                                )}
+                                            </p>
+                                        </div>
+                                        {doc?.size && <span className="text-xs text-gray-400 shrink-0">{doc.size}</span>}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </PreviewSection>
                 </div>
-            </PreviewSection>
 
-            {/* Budget */}
-            <PreviewSection title={`Budget Plan — ETB ${budgetTotal.toLocaleString()} total`} icon={DollarSign} color="bg-amber-50 text-amber-700">
-                {budgetItems.length === 0 ? (
-                    <p className="text-sm text-red-400 italic">No budget items added.</p>
-                ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                            <thead>
-                                <tr className="border-b border-gray-100">
-                                    {['Category', 'Description', 'Amount (ETB)', 'Justification'].map(h => (
-                                        <th key={h} className="text-left py-2 pr-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">{h}</th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-50">
-                                {budgetItems.map((item, i) => (
-                                    <tr key={i}>
-                                        <td className="py-2.5 pr-4 font-medium text-gray-700 capitalize">{item.category || '—'}</td>
-                                        <td className="py-2.5 pr-4 text-gray-600">{item.description || '—'}</td>
-                                        <td className="py-2.5 pr-4 font-semibold text-gray-900">{Number(item.amount || 0).toLocaleString()}</td>
-                                        <td className="py-2.5 text-gray-400 text-xs">{item.justification || '—'}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                {/* Sticky summary sidebar */}
+                <aside className="lg:sticky lg:top-6 self-start">
+                    <div className="bg-white border border-gray-200 rounded-2xl p-5">
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Submission Summary</p>
+                        <div className="divide-y divide-gray-50">
+                            <SummaryRow label="Team size" value={`${team.length + 1}`} />
+                            <SummaryRow label="Co-investigators" value={team.length} complete={team.length >= 1} />
+                            <SummaryRow label="Budget total" value={`ETB ${budgetTotal.toLocaleString()}`} complete={budgetItems.length > 0} />
+                            <SummaryRow label="Documents" value={`${docsDone}/${DOC_TYPES.length}`} complete={docsDone >= docsRequired} />
+                        </div>
                     </div>
-                )}
-            </PreviewSection>
-
-            {/* Documents note */}
-            <PreviewSection title="Documents" icon={Upload} color="bg-gray-50 text-gray-600">
-                <p className="text-sm text-gray-500">Documents were uploaded in Step 5. They will be submitted with your proposal.</p>
-            </PreviewSection>
+                </aside>
+            </div>
         </div>
     );
 }
 
 // ─── Step 7 — Submit ──────────────────────────────────────────────────────────
 
-function Step7Submit({ proposalId, stepData, budgetItems, onSuccess, onGoToStep }) {
+function Step7Submit({ proposalId, stepData, budgetItems, onSuccess, onGoToStep, onSaveDraft, user }) {
     const toast = useToast();
     const [confirmed,  setConfirmed]  = useState(false);
     const [submitting, setSubmitting] = useState(false);
     const [tracker,    setTracker]    = useState('');
+    const [accessDenied, setAccessDenied] = useState(false);
 
     const checks = [
         { label: 'Title provided',          ok: !!(stepData[0]?.title?.trim()) },
@@ -599,18 +694,26 @@ function Step7Submit({ proposalId, stepData, budgetItems, onSuccess, onGoToStep 
     ];
     const allOk = checks.every(c => c.ok);
 
+    const roleNames = (user?.roles ?? []).map(r => typeof r === 'string' ? r : r.name);
+    const currentRole = roleNames[0] ? roleNames[0].replace(/_/g, ' ') : null;
+
     const submit = async () => {
         setSubmitting(true);
         try {
-            const res = await post(`/proposals/${proposalId}/submit`);
+            // Errors here get a dedicated modal (403) or inline toasts — skip the generic global toast.
+            const res = await post(`/proposals/${proposalId}/submit`, {}, { skipErrorToast: true });
             setTracker(res.data?.tracker_number ?? '');
             onSuccess();
         } catch (e) {
-            const msg = e.response?.data?.message ?? 'Submission failed. Please try again.';
-            if (msg.toLowerCase().includes('budget'))   toast.error('Go back to Step 4 and add budget items.',           { title: 'Budget Missing', action: { label: 'Go to Budget',      onClick: () => onGoToStep(3) } });
-            else if (msg.toLowerCase().includes('document')) toast.error('Go back to Step 5 and upload required files.',  { title: 'Documents Missing', action: { label: 'Go to Documents', onClick: () => onGoToStep(4) } });
-            else if (msg.toLowerCase().includes('abstract')) toast.error('Go back to Step 1 and complete the abstract.', { title: 'Abstract Missing', action: { label: 'Go to Basic Info', onClick: () => onGoToStep(0) } });
-            else toast.error(msg, { title: 'Submission Failed' });
+            if (e.response?.status === 403) {
+                setAccessDenied(true);
+            } else {
+                const msg = e.response?.data?.message ?? 'Submission failed. Please try again.';
+                if (msg.toLowerCase().includes('budget'))   toast.error('Go back to Step 4 and add budget items.',           { title: 'Budget Missing', action: { label: 'Go to Budget',      onClick: () => onGoToStep(3) } });
+                else if (msg.toLowerCase().includes('document')) toast.error('Go back to Step 5 and upload required files.',  { title: 'Documents Missing', action: { label: 'Go to Documents', onClick: () => onGoToStep(4) } });
+                else if (msg.toLowerCase().includes('abstract')) toast.error('Go back to Step 1 and complete the abstract.', { title: 'Abstract Missing', action: { label: 'Go to Basic Info', onClick: () => onGoToStep(0) } });
+                else toast.error(msg, { title: 'Submission Failed' });
+            }
         }
         setSubmitting(false);
     };
@@ -633,6 +736,13 @@ function Step7Submit({ proposalId, stepData, budgetItems, onSuccess, onGoToStep 
 
     return (
         <div className="space-y-5">
+            <RoleRestrictedModal
+                open={accessDenied}
+                onClose={() => setAccessDenied(false)}
+                currentRole={currentRole}
+                requiredRole="Staff"
+            />
+
             {/* Checklist */}
             <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5">
                 <p className="text-sm font-semibold text-gray-700 mb-3">Submission Checklist</p>
@@ -670,22 +780,30 @@ function Step7Submit({ proposalId, stepData, budgetItems, onSuccess, onGoToStep 
                 </span>
             </label>
 
-            <button
-                onClick={submit}
-                disabled={!confirmed || !allOk || submitting}
-                className="w-full py-3.5 rounded-xl font-semibold text-sm transition-all bg-blue-700 text-white hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
-            >
-                {submitting ? (
-                    <span className="flex items-center justify-center gap-2">
-                        <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                        Submitting Proposal…
-                    </span>
-                ) : (
-                    <span className="flex items-center justify-center gap-2">
-                        <Send size={15} /> Submit Proposal
-                    </span>
-                )}
-            </button>
+            <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                    onClick={onSaveDraft}
+                    className="flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl font-semibold text-sm border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
+                >
+                    <Save size={15} /> Save as Draft
+                </button>
+                <button
+                    onClick={submit}
+                    disabled={!confirmed || !allOk || submitting}
+                    className="flex-1 py-3.5 rounded-xl font-semibold text-sm transition-all bg-blue-700 text-white hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                >
+                    {submitting ? (
+                        <span className="flex items-center justify-center gap-2">
+                            <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                            Submitting Proposal…
+                        </span>
+                    ) : (
+                        <span className="flex items-center justify-center gap-2">
+                            <Send size={15} /> Submit Proposal
+                        </span>
+                    )}
+                </button>
+            </div>
         </div>
     );
 }
@@ -729,7 +847,7 @@ export default function ProposalCreate() {
             .finally(() => setCallsLoading(false));
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Resume from ?resume= param
+    // Resume from ?resume= param — restore every step's data, not just Step 1.
     useEffect(() => {
         const resumeId = new URLSearchParams(window.location.search).get('resume');
         if (!resumeId) return;
@@ -738,18 +856,65 @@ export default function ProposalCreate() {
             .then(res => {
                 const p = res.data?.data ?? res.data;
                 if (!p) return;
-                setStepData(prev => prev.map((d, i) => i === 0 ? {
-                    title:           p.title           ?? '',
-                    abstract:        p.abstract        ?? '',
-                    keywords:        p.keywords        ?? '',
-                    focus_area:      p.focus_area      ?? '',
-                    duration_months: p.duration_months ?? '',
-                    research_type:   p.research_type   ?? '',
-                    ...(p.draft_data?.step_1 ?? {}),
-                } : d));
+
+                const coInvestigators = (p.members ?? [])
+                    .filter(m => m.role === 'co_investigator' && m.status === 'active')
+                    .map(m => ({
+                        user_id:                 m.user_id,
+                        name:                    m.user?.name ?? '',
+                        email:                   m.user?.email ?? '',
+                        college_name:            m.user?.college?.name ?? '',
+                        department_name:         m.user?.department?.name ?? '',
+                        contribution_percentage: Number(m.contribution_percentage) || 0,
+                    }));
+
+                const restoredBudgetItems = (p.budgets ?? []).map(b => ({
+                    category:      b.category ?? '',
+                    description:   b.item_description ?? '',
+                    amount:        b.amount ?? '',
+                    justification: b.justification ?? '',
+                }));
+
+                const documentsByType = {};
+                (p.documents ?? []).forEach(doc => {
+                    documentsByType[doc.document_type] = {
+                        filename:   doc.original_filename,
+                        size:       doc.file_size ? (doc.file_size / 1024 / 1024).toFixed(2) + ' MB' : '',
+                        status:     'done',
+                        documentId: doc.id,
+                    };
+                });
+
+                setStepData(prev => prev.map((d, i) => {
+                    if (i === 0) {
+                        return {
+                            title:           p.title           ?? '',
+                            abstract:        p.abstract        ?? '',
+                            keywords:        p.keywords        ?? '',
+                            focus_area:      p.focus_area      ?? '',
+                            duration_months: p.duration_months ?? '',
+                            research_type:   p.research_type   ?? '',
+                            ...(p.draft_data?.step_1 ?? {}),
+                        };
+                    }
+                    if (i === 2) return { co_investigators: coInvestigators };
+                    if (i === 4) return { documents: documentsByType };
+                    return d;
+                }));
+
+                if (restoredBudgetItems.length > 0) setBudgetItems(restoredBudgetItems);
+
+                // wizard_completed_steps is DB step numbers (1-5) → frontend indices (0-4)
+                const dbCompleted   = p.wizard_completed_steps ?? [];
+                const feCompleted   = new Set(dbCompleted.map(s => s - 1));
+                setCompletedSteps(feCompleted);
+
+                if (p.proposal_call) setSelectedCall(p.proposal_call);
                 if (p.rejection_reason) setReturnReason(p.rejection_reason);
+
+                const nextStep = [0, 1, 2, 3, 4].find(i => !feCompleted.has(i));
+                setStep(nextStep ?? 5);
                 setPhase('wizard');
-                setStep(0);
             })
             .catch(() => toast.warning('Could not load proposal data.'));
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -895,8 +1060,8 @@ export default function ProposalCreate() {
                 />
             );
             case 3: return <Step4 items={budgetItems} onChange={handleBudgetChange} rowErrors={budgetRowErrors} />;
-            case 4: return <Step5Documents proposalId={proposalId} onComplete={handleStepComplete} />;
-            case 5: return <Step6Preview stepData={stepData} budgetItems={budgetItems} user={user} category={category} />;
+            case 4: return <Step5Documents proposalId={proposalId} onComplete={handleStepComplete} initialUploads={stepData[4]?.documents} />;
+            case 5: return <Step6Preview stepData={stepData} budgetItems={budgetItems} user={user} category={category} selectedCall={selectedCall} />;
             case 6: return (
                 <Step7Submit
                     proposalId={proposalId}
@@ -904,6 +1069,8 @@ export default function ProposalCreate() {
                     budgetItems={budgetItems}
                     onSuccess={() => setSubmitted(true)}
                     onGoToStep={setStep}
+                    onSaveDraft={() => { window.location.href = '/my-proposals'; }}
+                    user={user}
                 />
             );
             default: return null;
@@ -1104,14 +1271,23 @@ export default function ProposalCreate() {
                         {/* Navigation */}
                         {!submitted && step < 6 && !selfNavigating && (
                             <div className="flex items-center justify-between mt-4">
-                                <button
-                                    type="button"
-                                    onClick={() => setStep(Math.max(0, step - 1))}
-                                    disabled={step === 0}
-                                    className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 disabled:opacity-40 transition-colors"
-                                >
-                                    <ArrowLeft size={15} /> Back
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setStep(Math.max(0, step - 1))}
+                                        disabled={step === 0}
+                                        className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 disabled:opacity-40 transition-colors"
+                                    >
+                                        <ArrowLeft size={15} /> Back
+                                    </button>
+                                    <a
+                                        href="/my-proposals"
+                                        className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium border border-gray-300 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
+                                        title="Your progress is saved automatically"
+                                    >
+                                        <Save size={14} /> Save as Draft
+                                    </a>
+                                </div>
                                 <button
                                     type="button"
                                     onClick={next}

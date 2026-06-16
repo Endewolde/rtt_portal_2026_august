@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\AppSetting;
 use App\Models\NotificationPreference;
 use App\Models\User;
 use Illuminate\Auth\Events\Registered;
@@ -30,6 +31,7 @@ class AuthService
                 'department_id' => $data['department_id'] ?? null,
                 'phone' => $data['phone'] ?? null,
                 'status' => 'active',
+                'registration_method' => 'self_registered',
             ]);
 
             $user->assignRole('guest');
@@ -66,9 +68,11 @@ class AuthService
     }
 
     /**
-     * Authenticate a user and return token.
+     * Authenticate a user and return token. If the concurrent session limit has
+     * been reached, the oldest session is evicted to make room and `evicted_session`
+     * is set so the caller can let the user know their other device was logged out.
      *
-     * @return array{ user: User, token: string }
+     * @return array{ user: User, token: string, evicted_session: bool }
      *
      * @throws ValidationException
      */
@@ -94,6 +98,8 @@ class AuthService
             ]);
         }
 
+        $user->update(['last_login_at' => now()]);
+
         DB::table('audit_logs')->insert([
             'id' => Str::uuid()->toString(),
             'auditable_type' => User::class,
@@ -107,9 +113,53 @@ class AuthService
             'created_at' => now(),
         ]);
 
+        $evictedSession = $this->enforceConcurrentSessionLimit($user);
+
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        return ['user' => $user->load('roles'), 'token' => $token];
+        return ['user' => $user->load('roles'), 'token' => $token, 'evicted_session' => $evictedSession];
+    }
+
+    /**
+     * Revoke the oldest active sessions if the user is at/over the configured concurrent session limit.
+     * A limit of 0 (or unset) means unlimited concurrent sessions.
+     *
+     * @return bool whether any session was evicted
+     */
+    protected function enforceConcurrentSessionLimit(User $user): bool
+    {
+        $limit = (int) (AppSetting::where('key', 'max_concurrent_sessions')->value('value') ?? 0);
+
+        if ($limit <= 0) {
+            return false;
+        }
+
+        $excess = $user->tokens()->count() - $limit + 1;
+
+        if ($excess <= 0) {
+            return false;
+        }
+
+        $evicted = $user->tokens()->oldest()->take($excess)->get();
+
+        foreach ($evicted as $token) {
+            DB::table('audit_logs')->insert([
+                'id' => Str::uuid()->toString(),
+                'auditable_type' => User::class,
+                'auditable_id' => $user->id,
+                'event' => 'user.session_evicted',
+                'actor_id' => $user->id,
+                'old_values' => null,
+                'new_values' => json_encode(['reason' => 'concurrent_session_limit', 'token_name' => $token->name]),
+                'ip_address' => request()->ip() ?? '127.0.0.1',
+                'user_agent' => request()->userAgent() ?? '',
+                'created_at' => now(),
+            ]);
+
+            $token->delete();
+        }
+
+        return true;
     }
 
     /**

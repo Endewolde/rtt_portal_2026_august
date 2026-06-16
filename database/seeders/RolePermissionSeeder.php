@@ -44,7 +44,7 @@ class RolePermissionSeeder extends Seeder
             'research_outputs' => ['view_any', 'view', 'create', 'update', 'delete'],
             'repository' => ['view_any', 'view', 'export'],
             'reports' => ['view_any', 'view', 'create', 'export'],
-            'users' => ['view_any', 'view', 'create', 'update', 'delete', 'import'],
+            'users' => ['view_any', 'view', 'create', 'update', 'delete', 'import', 'impersonate'],
             'roles' => ['view_any', 'view', 'create', 'update', 'delete', 'assign'],
             'colleges' => ['view_any', 'view', 'create', 'update', 'delete'],
             'departments' => ['view_any', 'view', 'create', 'update', 'delete'],

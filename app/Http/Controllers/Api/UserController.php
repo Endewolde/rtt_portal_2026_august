@@ -492,6 +492,53 @@ class UserController extends Controller
         ]);
     }
 
+    /** Admin — sign in as another user, to check or debug their account. */
+    public function impersonate(Request $request, string $id): JsonResponse
+    {
+        $actor = $request->user();
+
+        if (! $actor->can('users.impersonate')) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        $target = User::with('roles')->findOrFail($id);
+
+        if ($target->id === $actor->id) {
+            return response()->json(['message' => 'You cannot impersonate your own account.'], 422);
+        }
+
+        if ($target->hasAnyRole(['super_admin', 'admin'])) {
+            return response()->json(['message' => 'Cannot impersonate an admin account.'], 422);
+        }
+
+        $token = $target->createToken('impersonation_token')->plainTextToken;
+
+        DB::table('audit_logs')->insert([
+            'id' => Str::uuid()->toString(),
+            'auditable_type' => User::class,
+            'auditable_id' => $target->id,
+            'event' => 'user.impersonation_started',
+            'actor_id' => $actor->id,
+            'old_values' => null,
+            'new_values' => json_encode(['impersonated_by' => $actor->id, 'impersonated_by_email' => $actor->email]),
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent() ?? '',
+            'created_at' => now(),
+        ]);
+
+        return response()->json([
+            'data' => [
+                'token' => $token,
+                'user' => array_merge($target->toArray(), [
+                    'roles' => $target->getRoleNames()->values()->toArray(),
+                    'permissions' => $target->getAllPermissions()->pluck('name')->values()->toArray(),
+                ]),
+            ],
+            'message' => "You are now viewing as {$target->name}.",
+            'errors' => [],
+        ]);
+    }
+
     public function destroy(Request $request, string $id): JsonResponse
     {
         if (! $request->user()->hasAnyRole(['super_admin', 'admin'])) {

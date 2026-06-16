@@ -34,22 +34,29 @@ export default function Step3CoInvestigators({ proposalId, piUser, onComplete, i
         return () => clearTimeout(timer);
     }, [search, coIs, piUser?.id]);
 
+    // Equal-effort split: PI + all co-investigators share contribution evenly.
+    // PI's share is implicit (100 - sum of co-investigator shares), so only the
+    // co-investigator rows need an explicit equal percentage here.
+    const equalSplit = (list) => {
+        const totalMembers = list.length + 1; // +1 for the PI
+        const share = Math.round((100 / totalMembers) * 100) / 100;
+        return list.map((c) => ({ ...c, contribution_percentage: share }));
+    };
+
     const add = (u) => {
-        const used = coIs.reduce((s, c) => s + (parseFloat(c.contribution_percentage) || 0), 0);
-        const suggestion = Math.min(Math.max(0, 80 - used), 20);
-        setCoIs((prev) => [...prev, {
+        setCoIs((prev) => equalSplit([...prev, {
             user_id:                u.id,
             name:                   u.name,
             email:                  u.email,
             college_name:           u.college?.name ?? u.college_name ?? '',
             department_name:        u.department?.name ?? u.department_name ?? '',
-            contribution_percentage: suggestion,
-        }]);
+            contribution_percentage: 0,
+        }]));
         setSearch('');
         setResults([]);
     };
 
-    const remove = (id) => setCoIs((prev) => prev.filter((c) => c.user_id !== id));
+    const remove = (id) => setCoIs((prev) => equalSplit(prev.filter((c) => c.user_id !== id)));
 
     const setContrib = (id, val) =>
         setCoIs((prev) => prev.map((c) => c.user_id === id ? { ...c, contribution_percentage: parseFloat(val) || 0 } : c));
@@ -94,6 +101,10 @@ export default function Step3CoInvestigators({ proposalId, piUser, onComplete, i
                     <p className="text-sm text-blue-700 mt-0.5">
                         Your proposal must have <strong>at least one Co-Investigator</strong>.
                         The PI cannot submit alone. Search and add your team members below.
+                    </p>
+                    <p className="text-sm text-blue-700 mt-1.5">
+                        Only individuals with the <strong>Staff</strong> role can be added as Co-Investigators —
+                        search results are limited to eligible staff accounts.
                     </p>
                 </div>
             </div>

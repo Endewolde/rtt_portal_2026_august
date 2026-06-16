@@ -652,12 +652,17 @@ export default function ProposalCallsAdmin() {
                                     </button>
                                 )}
                                 {canManage && c.status === 'draft' && (
-                                    <button onClick={() => setConfirmAction({ type: 'activate', call: c })} className="p-1.5 text-gray-400 hover:text-green-600 rounded" title="Activate">
-                                        <CheckCircle size={13} />
-                                    </button>
+                                    <>
+                                        <button onClick={(e) => { e.stopPropagation(); setConfirmAction({ type: 'activate', call: c }); }} className="p-1.5 text-gray-400 hover:text-green-600 rounded" title="Activate">
+                                            <CheckCircle size={13} />
+                                        </button>
+                                        <button onClick={(e) => { e.stopPropagation(); handleDelete(c.id); }} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors" title="Delete">
+                                            <Trash2 size={13} />
+                                        </button>
+                                    </>
                                 )}
                                 {canManage && c.status === 'active' && (
-                                    <button onClick={() => setConfirmAction({ type: 'close', call: c })} className="p-1.5 text-gray-400 hover:text-red-500 rounded" title="Close">
+                                    <button onClick={(e) => { e.stopPropagation(); setConfirmAction({ type: 'close', call: c }); }} className="p-1.5 text-gray-400 hover:text-red-500 rounded" title="Close">
                                         <XCircle size={13} />
                                     </button>
                                 )}

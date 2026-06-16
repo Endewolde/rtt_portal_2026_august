@@ -86,12 +86,8 @@ class ProposalController extends Controller
             // Category-scoped: middleware already sets _category_scope
         } elseif ($user->hasRole('college_officer')) {
             $query->where('college_id', $user->college_id);
-        } elseif ($user->hasRole('college_officer')) {
-            $query->where('college_id', $user->college_id);
-        } elseif ($user->hasRole('staff')) {
+        } elseif ($user->hasAnyRole(['staff', 'pi'])) {
             $query->where('pi_user_id', $user->id);
-        } elseif ($user->hasRole('college_officer')) {
-            $query->where('department_id', $user->department_id);
         }
 
         // Category scope injected by EnsureCategoryScope middleware
@@ -201,7 +197,7 @@ class ProposalController extends Controller
     {
         $proposal = Proposal::with([
             'pi', 'college', 'proposalCall',
-            'members.user', 'workflowLogs',
+            'members.user.college', 'members.user.department', 'workflowLogs',
             'documents.uploadedBy:id,name', 'budgets',
             'award.approvedBy:id,name',
         ])->findOrFail($id);
@@ -229,7 +225,20 @@ class ProposalController extends Controller
 
     public function destroy(string $id): JsonResponse
     {
-        return response()->json(['data' => null, 'message' => 'Not implemented.'], 422);
+        $proposal = Proposal::findOrFail($id);
+        $user = request()->user();
+
+        if ($proposal->pi_user_id !== $user->id) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
+        }
+
+        if ($proposal->status !== 'draft') {
+            return response()->json(['data' => null, 'message' => 'Only draft proposals can be deleted.', 'errors' => []], 422);
+        }
+
+        $proposal->delete();
+
+        return response()->json(['data' => null, 'message' => 'Proposal deleted.', 'errors' => []]);
     }
 
     public function statistics(Request $request): JsonResponse

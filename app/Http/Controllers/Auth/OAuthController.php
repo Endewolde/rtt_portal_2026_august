@@ -26,6 +26,7 @@ class OAuthController extends Controller
 
         return Socialite::driver($this->driverName($provider))
             ->scopes($this->scopes($provider))
+            ->with(['prompt' => 'select_account'])
             ->redirect();
     }
 
@@ -51,6 +52,8 @@ class OAuthController extends Controller
         }
 
         $user = $this->findOrCreateUser($provider, $socialUser);
+
+        $user->update(['last_login_at' => now()]);
 
         $token = $user->createToken('sso_token')->plainTextToken;
 
@@ -84,7 +87,11 @@ class OAuthController extends Controller
             return $user;
         }
 
-        // 3. Create new account
+        // 3. Block new account creation if self-registration is disabled
+        if (AppSetting::where('key', 'self_registration')->value('value') === 'false') {
+            abort(403, 'Self-registration is currently disabled. Please contact the system administrator for more information or visit the administration office for assistance.');
+        }
+
         $user = User::create([
             'name' => $socialUser->getName() ?? $email,
             'email' => $email,
@@ -94,6 +101,7 @@ class OAuthController extends Controller
             'oauth_provider' => $provider,
             'oauth_id' => $oauthId,
             'avatar' => $socialUser->getAvatar(),
+            'registration_method' => 'oauth_'.$provider,
         ]);
 
         $defaultRole = Role::where('name', 'guest')->first();

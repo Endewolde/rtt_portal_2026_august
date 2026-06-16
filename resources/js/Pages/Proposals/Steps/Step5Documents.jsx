@@ -3,7 +3,7 @@ import { Upload, CheckCircle, XCircle, FileText, X, AlertCircle } from 'lucide-r
 import api from '../../../lib/api';
 import { useToast } from '../../../Components/Toast';
 
-const DOC_TYPES = [
+export const DOC_TYPES = [
     {
         key:         'proposal_document',
         label:       'Proposal Document',
@@ -38,9 +38,9 @@ const DOC_TYPES = [
     },
 ];
 
-export default function Step5Documents({ proposalId, onComplete }) {
+export default function Step5Documents({ proposalId, onComplete, initialUploads }) {
     const toast = useToast();
-    const [uploads, setUploads] = useState({});
+    const [uploads, setUploads] = useState(initialUploads ?? {});
     const [saving, setSaving]   = useState(false);
     const inputRefs             = useRef({});
 

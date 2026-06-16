@@ -93,6 +93,7 @@ class HandleInertiaRequests extends Middleware
                     'self_registration',
                     'public_topbar_text',
                     'developer_credits',
+                    'feedback_popup_enabled',
                 ])->get()->keyBy('key')->map(fn ($s) => $s->value)->toArray();
             }),
             'enabled_features' => Cache::remember('inertia_enabled_features', 300, function () {

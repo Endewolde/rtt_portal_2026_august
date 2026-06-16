@@ -11,9 +11,13 @@ import {
     FolderOpen, EyeOff, Presentation, ClipboardList,
     BadgeDollarSign, Trophy, Archive, ListChecks, ShieldCheck,
     User, ChevronDown, ChevronUp, Lock, Clock, UserX,
-    CalendarDays, Banknote, Landmark,
+    CalendarDays, Banknote, Landmark, MessageSquareHeart, LogIn,
 } from 'lucide-react'
 import NotificationBell from '../Components/NotificationBell'
+import FeedbackPopup from '../Components/FeedbackPopup'
+import SwitchLoginModal from '../Components/SwitchLoginModal'
+import ConfirmDialog from '../Components/ConfirmDialog'
+import { useToast } from '../Components/Toast'
 import { useAuth } from '../hooks/useAuth'
 import { useFeature } from '../hooks/useFeature'
 import { useActionCounts } from '../hooks/useActionCounts'
@@ -235,7 +239,7 @@ const ICONS = {
     FolderOpen, EyeOff, Presentation, ClipboardList,
     BadgeDollarSign, Trophy, Archive, ListChecks, ShieldCheck,
     Globe, CalendarDays, Banknote, Landmark,
-    FlaskConical, Brain,
+    FlaskConical, Brain, MessageSquareHeart,
     BuildingOffice: Building2,
 }
 
@@ -270,7 +274,7 @@ const ROLE_COLORS = {
 
 // ─── User Menu dropdown ───────────────────────────────────────────────────────
 
-function UserMenu({ user, logout, unreadNotifications, isSuperAdmin, collapsed }) {
+function UserMenu({ user, logout, unreadNotifications, isSuperAdmin, collapsed, canImpersonate, onSwitchLogin }) {
     const [open, setOpen] = useState(false)
     const ref = useRef(null)
 
@@ -367,6 +371,13 @@ function UserMenu({ user, logout, unreadNotifications, isSuperAdmin, collapsed }
                                 <span>Settings</span>
                             </Link>
                         )}
+                        {canImpersonate && (
+                            <button onClick={() => { setOpen(false); onSwitchLogin?.() }}
+                                className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
+                                <LogIn size={14} className="text-emerald-500" />
+                                <span>Switch Login</span>
+                            </button>
+                        )}
 
                         <div className="mx-4 my-1 border-t border-gray-100" />
 
@@ -428,7 +439,29 @@ function GuestBanner() {
 // ─── AppLayout ────────────────────────────────────────────────────────────────
 
 export default function AppLayout({ children, breadcrumb }) {
-    const { user, logout, hasRole, hasAnyRole, hasPermission, refreshUser } = useAuth()
+    const { user, logout, hasRole, hasAnyRole, hasPermission, refreshUser, isImpersonating, stopImpersonating, impersonate } = useAuth()
+    const toast = useToast()
+    const canImpersonate = hasPermission('users.impersonate') && !isImpersonating
+    const [switchLoginOpen, setSwitchLoginOpen] = useState(false)
+    const [switchTarget, setSwitchTarget] = useState(null)
+    const [switching, setSwitching] = useState(false)
+
+    const handleSwitchSelect = (target) => {
+        setSwitchLoginOpen(false)
+        setSwitchTarget(target)
+    }
+
+    const confirmSwitchLogin = async () => {
+        if (!switchTarget) return
+        setSwitching(true)
+        try {
+            await impersonate(switchTarget.id)
+        } catch (e) {
+            toast.error(e?.response?.data?.message ?? 'Could not log in as this user.')
+            setSwitching(false)
+            setSwitchTarget(null)
+        }
+    }
     const { hasFeature, hasSubFeature } = useFeature()
     const counts    = useActionCounts()
     const [collapsed, setCollapsed] = useState(false)
@@ -448,6 +481,13 @@ export default function AppLayout({ children, breadcrumb }) {
         refreshUser().finally(() => setAuthReady(true))
     }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+    useEffect(() => {
+        if (localStorage.getItem('rtt_session_evicted_notice')) {
+            localStorage.removeItem('rtt_session_evicted_notice')
+            toast.info('Your previous session on another device has been logged out.')
+        }
+    }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
     // All appearance / general settings come from the Inertia shared props
     const appSettings = usePage().props.app_settings ?? {}
     const sidebarBg          = appSettings.sidebar_color      || '#ffffff'
@@ -462,6 +502,12 @@ export default function AppLayout({ children, breadcrumb }) {
     const sessionTimeoutMins = parseInt(appSettings.session_timeout_minutes ?? '0', 10)
 
     const [announcementDismissed, setAnnouncementDismissed] = useState(false)
+
+    // ── Feedback popup ──────────────────────────────────────────────────────────
+    const feedbackPopupEnabled = appSettings.feedback_popup_enabled === 'true'
+    const feedbackSubmitted    = user?.feedback_submitted ?? true
+    const [feedbackDismissed, setFeedbackDismissed] = useState(false)
+    const showFeedbackPopup = feedbackPopupEnabled && !feedbackSubmitted && !feedbackDismissed
 
     // ── Session timeout ────────────────────────────────────────────────────────
     const [sessionWarning, setSessionWarning] = useState(null) // { secondsLeft }
@@ -766,6 +812,7 @@ export default function AppLayout({ children, breadcrumb }) {
                 { label: 'Settings',       href: '/admin/settings',      icon: 'Settings',    show: hasRole('super_admin') || hasRole('admin') },
                 { label: 'Public Site',    href: '/admin/public-site',   icon: 'Globe',       show: hasRole('super_admin') || hasRole('admin') },
                 { label: 'Login Notices',  href: '/admin/login-notices', icon: 'Megaphone',   show: hasAnyRole(ALL_ADMIN) },
+                { label: 'Feedback',       href: '/admin/feedback',      icon: 'MessageSquareHeart', show: hasAnyRole(ALL_ADMIN) },
             ],
         },
     ]
@@ -1019,10 +1066,26 @@ export default function AppLayout({ children, breadcrumb }) {
                                 unreadNotifications={unreadNotifications}
                                 isSuperAdmin={hasRole('super_admin')}
                                 collapsed={collapsed}
+                                canImpersonate={canImpersonate}
+                                onSwitchLogin={() => setSwitchLoginOpen(true)}
                             />
                         )}
                     </div>
                 </header>
+
+                {/* Impersonation banner */}
+                {isImpersonating && (
+                    <div className="flex items-center justify-between gap-3 px-5 py-2.5
+                                    bg-indigo-600 text-white shrink-0">
+                        <p className="text-xs font-medium flex-1 min-w-0 truncate">
+                            Viewing as {user?.name} — actions you take affect this account.
+                        </p>
+                        <button onClick={stopImpersonating}
+                            className="shrink-0 text-xs font-semibold bg-white/15 hover:bg-white/25 px-3 py-1 rounded-lg transition-colors">
+                            Return to Admin
+                        </button>
+                    </div>
+                )}
 
                 {/* Guest access banner */}
                 {primaryRole === 'guest' && <GuestBanner />}
@@ -1068,6 +1131,31 @@ export default function AppLayout({ children, breadcrumb }) {
                     secondsLeft={sessionWarning.secondsLeft}
                     onContinue={() => { resetActivity(); setSessionWarning(null) }}
                     onLogout={handleSessionLogout}
+                />
+            )}
+
+            {showFeedbackPopup && (
+                <FeedbackPopup
+                    open
+                    onClose={() => setFeedbackDismissed(true)}
+                    onSubmitted={() => setFeedbackDismissed(true)}
+                />
+            )}
+
+            <SwitchLoginModal
+                open={switchLoginOpen}
+                onClose={() => setSwitchLoginOpen(false)}
+                onSelect={handleSwitchSelect}
+            />
+
+            {switchTarget && (
+                <ConfirmDialog
+                    open
+                    title="Login as this user?"
+                    description={`You will be signed in as "${switchTarget.name}" (${switchTarget.email}). Use "Return to Admin" in the banner to come back to your own account.`}
+                    confirmLabel={switching ? 'Logging in…' : 'Login as User'}
+                    onConfirm={confirmSwitchLogin}
+                    onCancel={() => setSwitchTarget(null)}
                 />
             )}
         </div>

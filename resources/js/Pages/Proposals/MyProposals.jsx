@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from '@inertiajs/react';
 import {
     FolderOpen, Pencil, Search, Trophy, AlertCircle,
-    Download, Users, DollarSign, FileSignature,
+    Download, Users, DollarSign, FileSignature, Trash2,
 } from 'lucide-react';
 import { downloadFile } from '../../lib/download';
 import AppLayout from '../../Layouts/AppLayout';
@@ -11,8 +11,9 @@ import ViewToggle from '../../Components/ViewToggle';
 import ProposalTable from '../../Components/ProposalTable';
 import { useViewPreference } from '../../hooks/useViewPreference';
 import { useAuth } from '../../hooks/useAuth';
-import api from '../../lib/api';
+import api, { del } from '../../lib/api';
 import { useToast } from '../../Components/Toast';
+import { useConfirm } from '../../hooks/useConfirm';
 import { formatDate, formatCurrency, getCategoryLabel } from '../../lib/utils';
 
 const REVIEW_STATUSES  = ['submitted', 'validated', 'under_blind_review', 'blind_review_passed', 'under_open_defence', 'accepted'];
@@ -20,7 +21,7 @@ const AWARDED_STATUSES = ['funded', 'midterm_evaluation', 'completed', 'archived
 
 // ─── Proposal card ────────────────────────────────────────────────────────────
 
-function ProposalCard({ proposal, isCoPI, userId, pendingBudgetIds, onViewReason }) {
+function ProposalCard({ proposal, isCoPI, userId, pendingBudgetIds, onViewReason, onDelete }) {
     const isDraft    = proposal.status === 'draft';
     const isReview   = REVIEW_STATUSES.includes(proposal.status);
     const isAwarded  = AWARDED_STATUSES.includes(proposal.status);
@@ -106,7 +107,7 @@ function ProposalCard({ proposal, isCoPI, userId, pendingBudgetIds, onViewReason
 
                 {/* Actions */}
                 <div className="flex flex-wrap gap-2">
-                    {/* Draft — only PI can continue */}
+                    {/* Draft — only PI can continue or delete */}
                     {!isCoPI && isDraft && !proposal.rejection_reason && (
                         <Link href={`/proposals/create?resume=${proposal.id}`}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700">
@@ -118,6 +119,12 @@ function ProposalCard({ proposal, isCoPI, userId, pendingBudgetIds, onViewReason
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-medium hover:bg-amber-600">
                             <Pencil size={12} /> Fix &amp; Resubmit
                         </Link>
+                    )}
+                    {!isCoPI && isDraft && (
+                        <button onClick={() => onDelete(proposal)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-medium hover:bg-red-100">
+                            <Trash2 size={12} /> Delete
+                        </button>
                     )}
 
                     {/* Track */}
@@ -185,7 +192,8 @@ function ProposalCard({ proposal, isCoPI, userId, pendingBudgetIds, onViewReason
 
 export default function MyProposals() {
     const { user }   = useAuth();
-    const { error }  = useToast();
+    const { error, success }  = useToast();
+    const { confirm, Dialog } = useConfirm();
     const [view, setView] = useViewPreference('my_proposals', 'card');
 
     const [myProposals,  setMyProposals]  = useState([]);
@@ -220,6 +228,23 @@ export default function MyProposals() {
             .catch(() => error('Failed to load your proposals.'))
             .finally(() => setLoading(false));
     }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const handleDeleteProposal = async (proposal) => {
+        const ok = await confirm({
+            title:        'Delete this proposal?',
+            description:  `"${proposal.title || 'Untitled Draft'}" will be permanently deleted and cannot be recovered.`,
+            confirmLabel: 'Delete',
+            variant:      'danger',
+        });
+        if (!ok) return;
+        try {
+            await del(`/proposals/${proposal.id}`);
+            setMyProposals(prev => prev.filter(p => p.id !== proposal.id));
+            success('Proposal deleted.');
+        } catch (err) {
+            error(err.response?.data?.message ?? 'Failed to delete proposal.');
+        }
+    };
 
     const allProposals = [...myProposals, ...coProposals];
     const coProposalIds = new Set(coProposals.map(p => p.id));
@@ -337,7 +362,7 @@ export default function MyProposals() {
                             showColumns={['tracker', 'title', 'category', 'status', 'date']}
                             actions={(p) => (
                                 <div className="flex items-center gap-1.5 justify-end">
-                                    {p.status === 'draft' && (
+                                    {p.status === 'draft' && !coProposalIds.has(p.id) && (
                                         <Link href={`/proposals/create?resume=${p.id}`}
                                             className="px-2.5 py-1 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700">
                                             {p.rejection_reason ? 'Fix & Resubmit' : 'Continue'}
@@ -345,6 +370,13 @@ export default function MyProposals() {
                                     )}
                                     {coProposalIds.has(p.id) && (
                                         <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">Co-PI</span>
+                                    )}
+                                    {p.status === 'draft' && !coProposalIds.has(p.id) && (
+                                        <button onClick={() => handleDeleteProposal(p)}
+                                            className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                            title="Delete draft">
+                                            <Trash2 size={13} />
+                                        </button>
                                     )}
                                     <Link href={`/proposals/${p.id}`}
                                         className="px-2.5 py-1 border border-gray-300 text-gray-700 rounded-lg text-xs font-medium hover:bg-gray-50">
@@ -365,11 +397,14 @@ export default function MyProposals() {
                                 userId={user?.id}
                                 pendingBudgetIds={pendingBudgetProposalIds}
                                 onViewReason={setReasonModal}
+                                onDelete={handleDeleteProposal}
                             />
                         ))}
                     </div>
                 )}
             </div>
+
+            <Dialog />
 
             {/* Rejection reason modal */}
             {reasonModal && (

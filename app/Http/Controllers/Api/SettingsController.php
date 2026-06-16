@@ -158,7 +158,57 @@ class SettingsController extends Controller
                 ->update(['value' => $value, 'updated_by' => $userId]);
         }
 
+        // Lowering the concurrent session cap should take effect immediately,
+        // not just on each user's next login.
+        if ($key === 'max_concurrent_sessions') {
+            $this->enforceConcurrentSessionLimitGlobally((int) $value);
+        }
+
         return response()->json(['data' => $setting, 'message' => 'Setting updated.', 'errors' => [], 'meta' => []]);
+    }
+
+    /**
+     * Trim every user's active sessions down to the given limit, evicting the
+     * oldest tokens first. A limit of 0 (or below) means unlimited — no action.
+     */
+    private function enforceConcurrentSessionLimitGlobally(int $limit): void
+    {
+        if ($limit <= 0) {
+            return;
+        }
+
+        $userIds = DB::table('personal_access_tokens')
+            ->select('tokenable_id')
+            ->groupBy('tokenable_id')
+            ->havingRaw('COUNT(*) > ?', [$limit])
+            ->pluck('tokenable_id');
+
+        foreach ($userIds as $userId) {
+            $excess = DB::table('personal_access_tokens')->where('tokenable_id', $userId)->count() - $limit;
+
+            $evicted = DB::table('personal_access_tokens')
+                ->where('tokenable_id', $userId)
+                ->oldest('created_at')
+                ->limit($excess)
+                ->get(['id', 'name']);
+
+            DB::table('personal_access_tokens')->whereIn('id', $evicted->pluck('id'))->delete();
+
+            foreach ($evicted as $token) {
+                DB::table('audit_logs')->insert([
+                    'id' => Str::uuid()->toString(),
+                    'auditable_type' => User::class,
+                    'auditable_id' => $userId,
+                    'event' => 'user.session_evicted',
+                    'actor_id' => $userId,
+                    'old_values' => null,
+                    'new_values' => json_encode(['reason' => 'concurrent_session_limit_lowered', 'token_name' => $token->name]),
+                    'ip_address' => request()->ip() ?? '127.0.0.1',
+                    'user_agent' => request()->userAgent() ?? '',
+                    'created_at' => now(),
+                ]);
+            }
+        }
     }
 
     public function updateBulk(Request $request): JsonResponse
@@ -173,6 +223,10 @@ class SettingsController extends Controller
         foreach ($settings as $key => $value) {
             AppSetting::where('key', $key)
                 ->update(['value' => $value, 'updated_by' => $userId, 'updated_at' => now()]);
+        }
+
+        if (array_key_exists('max_concurrent_sessions', $settings)) {
+            $this->enforceConcurrentSessionLimitGlobally((int) $settings['max_concurrent_sessions']);
         }
 
         Cache::forget('inertia_app_settings');

@@ -9,10 +9,13 @@ export function useAuth() {
 
     const login = useCallback(async (credentials) => {
         const res = await post('/auth/login', credentials);
-        // res is the full response body: { data: { token, user }, message, errors, meta }
-        const { token: t, user: u } = res.data ?? res;
+        // res is the full response body: { data: { token, user, evicted_session }, message, errors, meta }
+        const { token: t, user: u, evicted_session: evictedSession } = res.data ?? res;
         localStorage.setItem('rtt_token', t);
         localStorage.setItem('rtt_user', JSON.stringify(u));
+        if (evictedSession) {
+            localStorage.setItem('rtt_session_evicted_notice', '1');
+        }
         setToken(t);
         setUser(u);
         return u;
@@ -44,9 +47,39 @@ export function useAuth() {
         try { await post('/auth/logout'); } catch {}
         localStorage.removeItem('rtt_token');
         localStorage.removeItem('rtt_user');
+        localStorage.removeItem('rtt_admin_token');
+        localStorage.removeItem('rtt_admin_user');
         setToken(null);
         setUser(null);
         window.location.href = '/login';
+    }, []);
+
+    // Admin "login as" a target user — stash the admin's own session so it can be restored later.
+    const impersonate = useCallback(async (userId) => {
+        const res = await post(`/users/${userId}/impersonate`);
+        const { token: t, user: u } = res.data ?? res;
+
+        localStorage.setItem('rtt_admin_token', localStorage.getItem('rtt_token'));
+        localStorage.setItem('rtt_admin_user', localStorage.getItem('rtt_user'));
+        localStorage.setItem('rtt_token', t);
+        localStorage.setItem('rtt_user', JSON.stringify(u));
+        setToken(t);
+        setUser(u);
+        window.location.href = '/dashboard';
+    }, []);
+
+    const isImpersonating = !!localStorage.getItem('rtt_admin_token');
+
+    const stopImpersonating = useCallback(() => {
+        const adminToken = localStorage.getItem('rtt_admin_token');
+        const adminUser = localStorage.getItem('rtt_admin_user');
+        if (!adminToken) return;
+
+        localStorage.setItem('rtt_token', adminToken);
+        localStorage.setItem('rtt_user', adminUser);
+        localStorage.removeItem('rtt_admin_token');
+        localStorage.removeItem('rtt_admin_user');
+        window.location.href = '/admin/users';
     }, []);
 
     // Roles may arrive as plain strings ['super_admin'] or as Spatie objects [{name: 'super_admin', ...}]
@@ -64,5 +97,8 @@ export function useAuth() {
 
     const isAuthenticated = !!token && !!user;
 
-    return { user, setUser, token, login, logout, refreshUser, isAuthenticated, hasRole, hasAnyRole, hasPermission };
+    return {
+        user, setUser, token, login, logout, refreshUser, isAuthenticated, hasRole, hasAnyRole, hasPermission,
+        impersonate, isImpersonating, stopImpersonating,
+    };
 }

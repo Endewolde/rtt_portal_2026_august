@@ -26,6 +26,7 @@ use App\Http\Controllers\Api\ExternalFund\OpportunityController as EFOpportunity
 use App\Http\Controllers\Api\ExternalFund\ReviewController as EFReviewController;
 use App\Http\Controllers\Api\ExternalFund\TeamMemberController as EFTeamMemberController;
 use App\Http\Controllers\Api\FeatureController;
+use App\Http\Controllers\Api\FeedbackController;
 use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\LoginNoticeController;
 use App\Http\Controllers\Api\MidtermEvaluationController;
@@ -123,6 +124,7 @@ Route::prefix('v1')->group(function () {
         Route::put('/users/{id}/roles', [UserController::class, 'updateUserRoles']);
         Route::get('/users/{id}/roles', [UserController::class, 'userRoles']);
         Route::put('/users/{id}/status', [UserController::class, 'updateStatus']);
+        Route::post('/users/{id}/impersonate', [UserController::class, 'impersonate']);
         Route::get('/users/{id}/academic-info', [UserController::class, 'academicInfo']);
 
         // Roles and permissions
@@ -197,6 +199,12 @@ Route::prefix('v1')->group(function () {
         Route::post('/login-notices', [LoginNoticeController::class, 'store']);
         Route::put('/login-notices/{loginNotice}', [LoginNoticeController::class, 'update']);
         Route::delete('/login-notices/{loginNotice}', [LoginNoticeController::class, 'destroy']);
+
+        // Feedback popup — submit (any authenticated user) + admin listing/deletion
+        Route::post('/feedback', [FeedbackController::class, 'store']);
+        Route::get('/feedback', [FeedbackController::class, 'index']);
+        Route::delete('/feedback/{feedback}', [FeedbackController::class, 'destroy']);
+        Route::post('/feedback/new-round', [FeedbackController::class, 'newRound']);
 
         // Settings — static segments must come before {key} wildcard
         Route::get('/settings', [SettingsController::class, 'index']);

@@ -32,6 +32,7 @@ class AppSettingsSeeder extends Seeder
             ['key' => 'mfa_enabled',                   'value' => 'false',  'type' => 'boolean',  'group' => 'security'],
             ['key' => 'session_timeout_minutes',       'value' => '60',     'type' => 'number',   'group' => 'security'],
             ['key' => 'max_login_attempts',            'value' => '5',      'type' => 'number',   'group' => 'security'],
+            ['key' => 'max_concurrent_sessions',       'value' => '1',      'type' => 'number',   'group' => 'security'],
             ['key' => 'account_lockout_minutes',       'value' => '30',     'type' => 'number',   'group' => 'security'],
             ['key' => 'force_password_on_first_login', 'value' => 'true',   'type' => 'boolean',  'group' => 'security'],
             ['key' => 'captcha_enabled',               'value' => 'false',  'type' => 'boolean',  'group' => 'security'],

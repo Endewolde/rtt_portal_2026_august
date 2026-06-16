@@ -7,6 +7,7 @@ use App\Http\Requests\Auth\LoginRequest;
 use App\Http\Requests\Auth\RegisterRequest;
 use App\Jobs\SendRawMailJob;
 use App\Models\AppSetting;
+use App\Models\FeedbackSubmission;
 use App\Models\User;
 use App\Services\AuthService;
 use App\Services\SubscriptionService;
@@ -30,7 +31,7 @@ class AuthController extends Controller
         abort_if(
             AppSetting::where('key', 'self_registration')->value('value') === 'false',
             403,
-            'Self-registration is currently disabled.'
+            'Self-registration is currently disabled. Please contact the system administrator for more information or visit the administration office for assistance.'
         );
 
         $result = $this->authService->register($request->validated());
@@ -60,8 +61,11 @@ class AuthController extends Controller
             'data' => [
                 'token' => $result['token'],
                 'user' => $this->buildUserPayload($user),
+                'evicted_session' => $result['evicted_session'],
             ],
-            'message' => 'Login successful.',
+            'message' => $result['evicted_session']
+                ? 'Login successful. Your previous session on another device has been logged out.'
+                : 'Login successful.',
             'errors' => [],
             'meta' => [],
         ]);
@@ -104,6 +108,7 @@ class AuthController extends Controller
             'roles' => $user->getRoleNames()->values()->toArray(),
             'permissions' => $user->getAllPermissions()->pluck('name')->values()->toArray(),
             'subscription' => $subscription,
+            'feedback_submitted' => FeedbackSubmission::hasSubmittedCurrentRound($user->id),
         ]);
     }
 

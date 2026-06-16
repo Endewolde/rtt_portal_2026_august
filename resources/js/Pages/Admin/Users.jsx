@@ -3,9 +3,9 @@ import {
     Users as UsersIcon, Search, Plus, Pencil, Trash2, ShieldCheck,
     UserCheck, UserX, Building2, Calendar, ChevronLeft, ChevronRight,
     X, Eye, Filter, RefreshCw, Mail, Phone, CreditCard,
-    CheckCircle2, XCircle, AlertTriangle, User,
+    CheckCircle2, XCircle, AlertTriangle, User, Clock,
     Upload, Download, FileDown, FileUp, AlertCircle, CheckCircle,
-    FileText, ChevronDown,
+    FileText, ChevronDown, LogIn,
 } from 'lucide-react';
 import { Link } from '@inertiajs/react';
 import AppLayout from '../../Layouts/AppLayout';
@@ -76,6 +76,33 @@ const AVATAR_GRADIENTS = [
     'from-cyan-500 to-sky-600',
 ];
 
+// ─── Relative time ────────────────────────────────────────────────────────────
+
+function timeAgo(dateStr) {
+    if (!dateStr) return '—';
+    const seconds = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+    if (seconds < 10) return 'just now';
+    if (seconds < 60) return `${seconds} second${seconds !== 1 ? 's' : ''} ago`;
+    const mins = Math.floor(seconds / 60);
+    if (mins < 60) return `${mins} minute${mins !== 1 ? 's' : ''} ago`;
+    const hours = Math.floor(seconds / 3600);
+    if (hours < 24) return `${hours} hour${hours !== 1 ? 's' : ''} ago`;
+    const days = Math.floor(seconds / 86400);
+    if (days < 7) {
+        const remHours = Math.floor((seconds % 86400) / 3600);
+        if (remHours > 0) return `${days} day${days !== 1 ? 's' : ''} ${remHours} hour${remHours !== 1 ? 's' : ''} ago`;
+        return `${days} day${days !== 1 ? 's' : ''} ago`;
+    }
+    const weeks = Math.floor(days / 7);
+    if (weeks < 5) return `${weeks} week${weeks !== 1 ? 's' : ''} ago`;
+    const months = Math.floor(days / 30);
+    if (months < 12) return `${months} month${months !== 1 ? 's' : ''} ago`;
+    const years = Math.floor(days / 365);
+    const remDays = days - years * 365;
+    if (remDays > 0) return `${years} year${years !== 1 ? 's' : ''} ${remDays} day${remDays !== 1 ? 's' : ''} ago`;
+    return `${years} year${years !== 1 ? 's' : ''} ago`;
+}
+
 // ─── Avatar ───────────────────────────────────────────────────────────────────
 
 function Avatar({ user, size = 'md' }) {
@@ -124,6 +151,26 @@ function StatusBadge({ status }) {
             {cfg.label}
         </span>
     );
+}
+
+// ─── Registration method badge ────────────────────────────────────────────────
+
+const REG_METHOD_CONFIG = {
+    self_registered:  { label: 'Self Registered', cls: 'bg-purple-50 text-purple-700 border border-purple-200' },
+    admin_created:    { label: 'Admin Created',   cls: 'bg-blue-50 text-blue-700 border border-blue-200'   },
+    imported:         { label: 'Imported',         cls: 'bg-orange-50 text-orange-700 border border-orange-200' },
+    oauth_google:     { label: 'Google',           cls: 'bg-red-50 text-red-700 border border-red-200'     },
+    oauth_microsoft:  { label: 'Microsoft',        cls: 'bg-sky-50 text-sky-700 border border-sky-200'     },
+}
+
+function RegistrationBadge({ method }) {
+    if (!method) return <span className="text-xs text-gray-300">—</span>
+    const cfg = REG_METHOD_CONFIG[method] ?? { label: method.replace(/_/g, ' '), cls: 'bg-gray-50 text-gray-500 border border-gray-200' }
+    return (
+        <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap', cfg.cls)}>
+            {cfg.label}
+        </span>
+    )
 }
 
 // ─── Pagination ───────────────────────────────────────────────────────────────
@@ -838,11 +885,27 @@ function ImportModal({ onClose, onDone }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function AdminUsers() {
-    const { hasRole, hasPermission } = useAuth();
+    const { user: currentUser, hasRole, hasPermission, impersonate } = useAuth();
     const { success, error } = useToast();
     const isSuperAdmin      = hasRole('super_admin');
+    const isAdminRole       = hasRole('admin');
+    const canManageUsers    = isSuperAdmin || isAdminRole;
     const canCreateUser     = hasPermission('users.create');
     const canImportUsers    = hasPermission('users.import');
+    const canImpersonate    = hasPermission('users.impersonate');
+    const [impersonateTarget, setImpersonateTarget] = useState(null);
+    const [impersonating, setImpersonating] = useState(false);
+
+    const doImpersonate = async () => {
+        if (!impersonateTarget) return;
+        setImpersonating(true);
+        try {
+            await impersonate(impersonateTarget.id);
+        } catch {
+            error('Could not log in as this user.');
+            setImpersonating(false);
+        }
+    };
 
     const [users, setUsers]           = useState([]);
     const [meta,  setMeta]            = useState(null);
@@ -1064,117 +1127,137 @@ export default function AdminUsers() {
                         </div>
                     ) : (
                         <>
-                            {/* Table header */}
-                            <div className="grid grid-cols-[2.5fr_1.5fr_1.5fr_1fr_1fr_auto] items-center
-                                            gap-4 px-5 py-3 bg-gray-50/80 border-b border-gray-100
-                                            text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-                                <span>User</span>
-                                <span>Role</span>
-                                <span>College</span>
-                                <span>Status</span>
-                                <span>Joined</span>
-                                <span />
-                            </div>
+                            <div className="overflow-x-auto">
+                                {/* Table header */}
+                                <div className="grid grid-cols-[2.5fr_1.5fr_1.5fr_1fr_1fr_1fr_1.5fr_156px] items-center
+                                                gap-4 px-5 py-3 bg-gray-50/80 border-b border-gray-100
+                                                text-[11px] font-semibold text-gray-400 uppercase tracking-wider
+                                                min-w-262.5">
+                                    <span>User</span>
+                                    <span>Role</span>
+                                    <span>College</span>
+                                    <span>Status</span>
+                                    <span>Joined</span>
+                                    <span>Source</span>
+                                    <span>Last Access</span>
+                                    <span />
+                                </div>
 
-                            {/* Rows */}
-                            <div className="divide-y divide-gray-50">
-                                {visibleUsers.map(u => {
-                                    const allRoleNames = (u.roles ?? []).map(r => typeof r === 'string' ? r : r.name);
+                                {/* Rows */}
+                                <div className="divide-y divide-gray-50">
+                                    {visibleUsers.map(u => {
+                                        const allRoleNames = (u.roles ?? []).map(r => typeof r === 'string' ? r : r.name);
 
-                                    return (
-                                        <div key={u.id}
-                                            className="grid grid-cols-[2.5fr_1.5fr_1.5fr_1fr_1fr_auto] items-center
-                                                       gap-4 px-5 py-3.5 hover:bg-gray-50/60 transition-colors group">
-                                            {/* User */}
-                                            <div className="flex items-center gap-3 min-w-0">
-                                                <Avatar user={u} />
-                                                <div className="min-w-0">
-                                                    <p className="text-sm font-semibold text-gray-900 truncate leading-snug">
-                                                        {u.name}
-                                                    </p>
-                                                    <p className="text-xs text-gray-400 truncate">{u.email}</p>
-                                                    {u.employee_id && (
-                                                        <p className="text-[10px] text-gray-300 font-mono mt-0.5">{u.employee_id}</p>
+                                        return (
+                                            <div key={u.id}
+                                                className="group grid grid-cols-[2.5fr_1.5fr_1.5fr_1fr_1fr_1fr_1.5fr_156px] items-center
+                                                           gap-4 px-5 py-3.5 hover:bg-gray-50/60 transition-colors min-w-262.5">
+                                                {/* User */}
+                                                <div className="flex items-center gap-3 min-w-0">
+                                                    <Avatar user={u} />
+                                                    <div className="min-w-0">
+                                                        <p className="text-sm font-semibold text-gray-900 truncate leading-snug">
+                                                            {u.name}
+                                                        </p>
+                                                        <p className="text-xs text-gray-400 truncate">{u.email}</p>
+                                                    </div>
+                                                </div>
+
+                                                {/* Roles — show up to 2, then +N */}
+                                                <div className="flex flex-wrap gap-1">
+                                                    {allRoleNames.slice(0, 2).map(r => (
+                                                        <RoleBadge key={r} role={r} />
+                                                    ))}
+                                                    {allRoleNames.length > 2 && (
+                                                        <span className="text-xs font-medium px-2 py-1 rounded-full bg-gray-100 text-gray-500">
+                                                            +{allRoleNames.length - 2}
+                                                        </span>
                                                     )}
                                                 </div>
-                                            </div>
 
-                                            {/* Roles — show up to 2, then +N */}
-                                            <div className="flex flex-wrap gap-1">
-                                                {allRoleNames.slice(0, 2).map(r => (
-                                                    <RoleBadge key={r} role={r} />
-                                                ))}
-                                                {allRoleNames.length > 2 && (
-                                                    <span className="text-xs font-medium px-2 py-1 rounded-full bg-gray-100 text-gray-500">
-                                                        +{allRoleNames.length - 2}
-                                                    </span>
-                                                )}
-                                            </div>
+                                                {/* College */}
+                                                <div className="flex items-center gap-1.5 min-w-0">
+                                                    {u.college ? (
+                                                        <>
+                                                            <Building2 size={12} className="text-gray-300 shrink-0" />
+                                                            <span className="text-xs text-gray-600 truncate">{u.college.name}</span>
+                                                        </>
+                                                    ) : (
+                                                        <span className="text-xs text-gray-300">—</span>
+                                                    )}
+                                                </div>
 
-                                            {/* College */}
-                                            <div className="flex items-center gap-1.5 min-w-0">
-                                                {u.college ? (
-                                                    <>
-                                                        <Building2 size={12} className="text-gray-300 shrink-0" />
-                                                        <span className="text-xs text-gray-600 truncate">{u.college.name}</span>
-                                                    </>
-                                                ) : (
-                                                    <span className="text-xs text-gray-300">—</span>
-                                                )}
-                                            </div>
+                                                {/* Status */}
+                                                <StatusBadge status={u.status ?? 'active'} />
 
-                                            {/* Status */}
-                                            <StatusBadge status={u.status ?? 'active'} />
+                                                {/* Joined */}
+                                                <div className="flex items-center gap-1 text-xs text-gray-400">
+                                                    <Calendar size={11} className="text-gray-300" />
+                                                    {u.created_at ? formatDate(u.created_at) : '—'}
+                                                </div>
 
-                                            {/* Joined */}
-                                            <div className="flex items-center gap-1 text-xs text-gray-400">
-                                                <Calendar size={11} className="text-gray-300" />
-                                                {u.created_at ? formatDate(u.created_at) : '—'}
-                                            </div>
+                                                {/* Source */}
+                                                <RegistrationBadge method={u.registration_method} />
 
-                                            {/* Actions */}
-                                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <Link href={`/admin/users/${u.id}`}
-                                                    className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                                                    title="View profile">
-                                                    <Eye size={13} />
-                                                </Link>
-                                                <button onClick={() => setEditModal(u)}
-                                                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                                    title="Edit user">
-                                                    <Pencil size={13} />
-                                                </button>
-                                                {isSuperAdmin && (
-                                                    <>
+                                                {/* Last Access */}
+                                                <div className="flex items-center gap-1 text-xs text-gray-400">
+                                                    <Clock size={11} className="text-gray-300 shrink-0" />
+                                                    <span className="truncate">{timeAgo(u.last_login_at)}</span>
+                                                </div>
+
+                                                {/* Actions */}
+                                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <Link href={`/admin/users/${u.id}`}
+                                                        className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                                                        title="View profile">
+                                                        <Eye size={13} />
+                                                    </Link>
+                                                    <button onClick={() => setEditModal(u)}
+                                                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                                        title="Edit user">
+                                                        <Pencil size={13} />
+                                                    </button>
+                                                    {isSuperAdmin && (
                                                         <button onClick={() => setAssignModal(u)}
                                                             className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
                                                             title="Assign roles">
                                                             <ShieldCheck size={13} />
                                                         </button>
-                                                        {(u.status ?? 'active') === 'active' ? (
-                                                            <button onClick={() => setStatusConfirm({ user: u, newStatus: 'inactive' })}
-                                                                className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-                                                                title="Deactivate">
-                                                                <UserX size={13} />
-                                                            </button>
-                                                        ) : (
-                                                            <button onClick={() => setStatusConfirm({ user: u, newStatus: 'active' })}
-                                                                className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                                                                title="Activate">
-                                                                <UserCheck size={13} />
-                                                            </button>
-                                                        )}
-                                                        <button onClick={() => setDeleteConfirm(u)}
-                                                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                            title="Delete user">
-                                                            <Trash2 size={13} />
+                                                    )}
+                                                    {canImpersonate && u.id !== currentUser?.id && !allRoleNames.includes('super_admin') && !allRoleNames.includes('admin') && (
+                                                        <button onClick={() => setImpersonateTarget(u)}
+                                                            className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
+                                                            title="Login as this user">
+                                                            <LogIn size={13} />
                                                         </button>
-                                                    </>
-                                                )}
+                                                    )}
+                                                    {canManageUsers && (
+                                                        <>
+                                                            {(u.status ?? 'active') === 'active' ? (
+                                                                <button onClick={() => setStatusConfirm({ user: u, newStatus: 'inactive' })}
+                                                                    className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                                                                    title="Deactivate">
+                                                                    <UserX size={13} />
+                                                                </button>
+                                                            ) : (
+                                                                <button onClick={() => setStatusConfirm({ user: u, newStatus: 'active' })}
+                                                                    className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
+                                                                    title="Activate">
+                                                                    <UserCheck size={13} />
+                                                                </button>
+                                                            )}
+                                                            <button onClick={() => setDeleteConfirm(u)}
+                                                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                                title="Delete user">
+                                                                <Trash2 size={13} />
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </div>
                                             </div>
-                                        </div>
-                                    );
-                                })}
+                                        );
+                                    })}
+                                </div>
                             </div>
 
                             {/* Pagination */}
@@ -1232,6 +1315,14 @@ export default function AdminUsers() {
                     confirmLabel={statusConfirm.newStatus === 'active' ? 'Activate' : 'Deactivate'}
                     confirmVariant={statusConfirm.newStatus === 'active' ? 'default' : 'danger'}
                     onConfirm={handleStatus} onCancel={() => setStatusConfirm(null)} />
+            )}
+
+            {impersonateTarget && (
+                <ConfirmDialog open
+                    title="Login as this user?"
+                    description={`You will be signed in as "${impersonateTarget.name}" (${impersonateTarget.email}). Use "Return to Admin" in the banner to come back to your own account.`}
+                    confirmLabel={impersonating ? 'Logging in…' : 'Login as User'}
+                    onConfirm={doImpersonate} onCancel={() => setImpersonateTarget(null)} />
             )}
 
             {importModal && (

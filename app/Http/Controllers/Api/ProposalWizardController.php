@@ -3,15 +3,22 @@
 namespace App\Http\Controllers\Api;
 
 use App\Exceptions\IncompleteProposalException;
+use App\Exceptions\InvalidTransitionException;
 use App\Exceptions\InvalidWizardStepException;
 use App\Exceptions\ProposalNotEditableException;
+use App\Exceptions\UnauthorizedTransitionException;
+use App\Exceptions\WorkflowGuardException;
 use App\Http\Controllers\Controller;
 use App\Models\Proposal;
 use App\Models\ProposalCall;
 use App\Models\ProposalDocument;
 use App\Services\ProposalService;
+use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Support\Facades\Storage;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ProposalWizardController extends Controller
 {
@@ -27,29 +34,29 @@ class ProposalWizardController extends Controller
 
         if ($call->status !== 'active') {
             return response()->json([
-                'data'    => null,
+                'data' => null,
                 'message' => 'This proposal call is no longer accepting applications.',
-                'errors'  => [],
-                'meta'    => [],
+                'errors' => [],
+                'meta' => [],
             ], 422);
         }
 
         if ($call->end_date && $call->end_date->isPast()) {
             return response()->json([
-                'data'    => null,
+                'data' => null,
                 'message' => 'The deadline for this proposal call has passed.',
-                'errors'  => [],
-                'meta'    => [],
+                'errors' => [],
+                'meta' => [],
             ], 422);
         }
 
         $proposal = $this->service->createDraft($request->user(), $validated['proposal_call_id']);
 
         return response()->json([
-            'data'    => $proposal,
+            'data' => $proposal,
             'message' => 'Draft proposal created.',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ], 201);
     }
 
@@ -64,66 +71,66 @@ class ProposalWizardController extends Controller
         }
 
         return response()->json([
-            'data'    => $proposal,
+            'data' => $proposal,
             'message' => "Step {$step} saved.",
-            'errors'  => [],
+            'errors' => [],
         ]);
     }
 
     public function getStep(string $id, int $step): JsonResponse
     {
-        $proposal  = Proposal::findOrFail($id);
+        $proposal = Proposal::findOrFail($id);
         $draftData = $proposal->draft_data ?? [];
-        $stepData  = $draftData["step_{$step}"] ?? null;
+        $stepData = $draftData["step_{$step}"] ?? null;
 
         return response()->json([
-            'data'    => ['step' => $step, 'data' => $stepData],
+            'data' => ['step' => $step, 'data' => $stepData],
             'message' => 'Step data retrieved.',
-            'errors'  => [],
+            'errors' => [],
         ]);
     }
 
     public function uploadDocument(Request $request, string $id): JsonResponse
     {
         $request->validate([
-            'file'          => ['required', 'file', 'max:10240'],
+            'file' => ['required', 'file', 'max:10240'],
             'document_type' => ['required', 'string', 'in:proposal_document,budget_spreadsheet,pi_cv,supporting_document,shared_document'],
         ]);
 
         $proposal = Proposal::findOrFail($id);
-        $file     = $request->file('file');
-        $path     = $file->store("proposals/{$id}/documents", 'private');
+        $file = $request->file('file');
+        $path = $file->store("proposals/{$id}/documents", 'private');
 
         $document = ProposalDocument::create([
-            'proposal_id'       => $proposal->id,
-            'document_type'     => $request->document_type,
+            'proposal_id' => $proposal->id,
+            'document_type' => $request->document_type,
             'original_filename' => $file->getClientOriginalName(),
-            'stored_path'       => $path,
-            'file_size'         => $file->getSize(),
-            'mime_type'         => $file->getMimeType(),
-            'uploaded_by'       => $request->user()->id,
+            'stored_path' => $path,
+            'file_size' => $file->getSize(),
+            'mime_type' => $file->getMimeType(),
+            'uploaded_by' => $request->user()->id,
         ]);
 
         return response()->json([
-            'data'    => ['id' => $document->id, 'filename' => $file->getClientOriginalName()],
+            'data' => ['id' => $document->id, 'filename' => $file->getClientOriginalName()],
             'message' => 'Document uploaded successfully.',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ], 201);
     }
 
-    public function downloadDocument(string $proposalId, string $docId): \Symfony\Component\HttpFoundation\StreamedResponse|\Illuminate\Http\Response
+    public function downloadDocument(string $proposalId, string $docId): StreamedResponse|Response
     {
         $doc = ProposalDocument::where('proposal_id', $proposalId)
             ->where('id', $docId)
             ->firstOrFail();
 
-        if (! \Illuminate\Support\Facades\Storage::disk('private')->exists($doc->stored_path)) {
+        if (! Storage::disk('private')->exists($doc->stored_path)) {
             abort(404, 'Document not found.');
         }
 
-        /** @var \Illuminate\Filesystem\FilesystemAdapter $disk */
-        $disk = \Illuminate\Support\Facades\Storage::disk('private');
+        /** @var FilesystemAdapter $disk */
+        $disk = Storage::disk('private');
 
         return $disk->download($doc->stored_path, $doc->original_filename);
     }
@@ -136,21 +143,21 @@ class ProposalWizardController extends Controller
 
         if ($doc->uploaded_by !== $request->user()->id) {
             return response()->json([
-                'data'    => null,
+                'data' => null,
                 'message' => 'You can only delete documents you uploaded.',
-                'errors'  => [],
-                'meta'    => [],
+                'errors' => [],
+                'meta' => [],
             ], 403);
         }
 
-        \Illuminate\Support\Facades\Storage::disk('private')->delete($doc->stored_path);
+        Storage::disk('private')->delete($doc->stored_path);
         $doc->delete();
 
         return response()->json([
-            'data'    => null,
+            'data' => null,
             'message' => 'Document deleted.',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ]);
     }
 
@@ -160,14 +167,16 @@ class ProposalWizardController extends Controller
 
         try {
             $proposal = $this->service->submit($proposal, $request->user());
-        } catch (IncompleteProposalException $e) {
+        } catch (IncompleteProposalException|InvalidTransitionException|WorkflowGuardException $e) {
             return response()->json(['data' => null, 'message' => $e->getMessage(), 'errors' => []], 422);
+        } catch (UnauthorizedTransitionException $e) {
+            return response()->json(['data' => null, 'message' => 'Your account does not have permission to submit proposals. Please contact your administrator.', 'errors' => []], 403);
         }
 
         return response()->json([
-            'data'    => $proposal,
+            'data' => $proposal,
             'message' => 'Proposal submitted successfully.',
-            'errors'  => [],
+            'errors' => [],
         ]);
     }
 }

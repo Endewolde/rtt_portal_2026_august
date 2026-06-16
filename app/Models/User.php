@@ -47,6 +47,8 @@ class User extends Authenticatable
         'gender',
         'avatar',
         'status',
+        'registration_method',
+        'last_login_at',
         'oauth_provider',
         'oauth_id',
         'email_verified_at',
@@ -65,6 +67,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'telegram_link_token_expires_at' => 'datetime',
+            'last_login_at' => 'datetime',
             'password' => 'hashed',
             'expertise' => 'array',
         ];

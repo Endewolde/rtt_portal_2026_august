@@ -37,7 +37,8 @@ api.interceptors.response.use(
         }
 
         // Dispatch for the ToastProvider listener; 401 already redirects so skip it.
-        if (status !== 401) {
+        // Callers that show their own dedicated error UI can pass { skipErrorToast: true }.
+        if (status !== 401 && !error.config?.skipErrorToast) {
             window.dispatchEvent(new CustomEvent('api-error', { detail: { status, message, error } }));
         }
 
@@ -45,10 +46,10 @@ api.interceptors.response.use(
     }
 );
 
-export const get  = (url, params = {}) => api.get(url, { params }).then((r) => r.data);
-export const post = (url, data = {})   => api.post(url, data).then((r) => r.data);
-export const put  = (url, data = {})   => api.put(url, data).then((r) => r.data);
-export const patch = (url, data = {})  => api.patch(url, data).then((r) => r.data);
-export const del  = (url)              => api.delete(url).then((r) => r.data);
+export const get  = (url, params = {}, config = {})  => api.get(url, { params, ...config }).then((r) => r.data);
+export const post = (url, data = {}, config = {})    => api.post(url, data, config).then((r) => r.data);
+export const put  = (url, data = {}, config = {})    => api.put(url, data, config).then((r) => r.data);
+export const patch = (url, data = {}, config = {})   => api.patch(url, data, config).then((r) => r.data);
+export const del  = (url, config = {})               => api.delete(url, config).then((r) => r.data);
 
 export default api;

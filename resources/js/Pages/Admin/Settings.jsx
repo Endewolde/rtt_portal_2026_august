@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { cn } from '../../lib/utils'
+import RichTextEditor from '../../Components/RichTextEditor'
 import {
     Settings, Shield, Users, Mail, HardDrive, Server,
     Palette, BookOpen, Activity, Database, Puzzle,
@@ -70,6 +71,7 @@ const KEY_LABELS = {
     password_require_numbers: 'Require Numbers', password_require_symbols: 'Require Symbols',
     password_expiration_days: 'Password Expires (days)', mfa_enabled: 'MFA Enabled',
     session_timeout_minutes: 'Session Timeout (min)', max_login_attempts: 'Max Login Attempts',
+    max_concurrent_sessions: 'Max Concurrent Sessions',
     account_lockout_minutes: 'Lockout Duration (min)', force_password_on_first_login: 'Force Password Change on First Login',
     captcha_enabled: 'CAPTCHA Enabled', allowed_ips: 'Allowed IP Addresses',
     default_user_role: 'Default User Role', self_registration: 'Self-Registration',
@@ -599,7 +601,7 @@ const ENCRYPTION_OPTIONS = [
     { val: 'ssl', label: 'SSL (port 465)' },
     { val: '',    label: 'None'           },
 ]
-const ROLES_LIST = ['super_admin','admin','central_officer','research_officer','community_officer','technology_officer','college_officer','support_officer','staff','guest']
+const ROLES_LIST = ['admin','central_officer','research_officer','community_officer','technology_officer','college_officer','support_officer','staff','guest']
 
 function Field({ label: lbl, hint, children }) {
     return (
@@ -653,6 +655,57 @@ function EmailSettingsPanel({ values, onChange, onSave, colleges, isAdmin = fals
     const [emailError,   setEmailError]   = useState('')     // inline error for specific email field
     const [testEmail,    setTestEmail]    = useState('')
 
+    // User search for specific-recipient mode
+    const [userSearch,       setUserSearch]       = useState('')
+    const [userResults,      setUserResults]      = useState([])
+    const [userSearching,    setUserSearching]    = useState(false)
+    const [selectedUser,     setSelectedUser]     = useState(null)
+    const [userDropdownOpen, setUserDropdownOpen] = useState(false)
+    const userSearchRef  = useRef(null)
+    const userSearchTimer = useRef(null)
+
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (userSearchRef.current && !userSearchRef.current.contains(e.target)) {
+                setUserDropdownOpen(false)
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [])
+
+    const searchUsers = (q) => {
+        setUserSearch(q)
+        clearTimeout(userSearchTimer.current)
+        if (!q.trim()) { setUserResults([]); setUserDropdownOpen(false); return }
+        userSearchTimer.current = setTimeout(async () => {
+            setUserSearching(true)
+            try {
+                const r = await api.get(`/users?search=${encodeURIComponent(q)}&per_page=10`)
+                const users = r.data?.data?.data ?? []
+                setUserResults(users.filter(u => !u.roles?.some(r => r.name === 'super_admin')))
+                setUserDropdownOpen(true)
+            } catch { setUserResults([]) }
+            setUserSearching(false)
+        }, 300)
+    }
+
+    const selectUser = (u) => {
+        setSelectedUser(u)
+        setBroadcast(b => ({ ...b, email: u.email }))
+        setEmailError('')
+        setUserDropdownOpen(false)
+        setUserSearch('')
+        setUserResults([])
+    }
+
+    const clearSelectedUser = () => {
+        setSelectedUser(null)
+        setBroadcast(b => ({ ...b, email: '' }))
+        setUserSearch('')
+        setUserResults([])
+    }
+
     const driver = values.mail_driver || 'smtp'
     const isSmtp = driver === 'smtp'
     const configured = isSmtp ? !!(values.mail_host && values.mail_from_address) : driver === 'log'
@@ -684,7 +737,8 @@ function EmailSettingsPanel({ values, onChange, onSave, colleges, isAdmin = fals
     }
 
     const sendBroadcast = async () => {
-        if (!broadcast.subject.trim() || !broadcast.message.trim()) {
+        const messageText = broadcast.message.replace(/<[^>]*>/g, '').trim()
+        if (!broadcast.subject.trim() || !messageText) {
             error('Subject and message are required.')
             return
         }
@@ -878,7 +932,10 @@ function EmailSettingsPanel({ values, onChange, onSave, colleges, isAdmin = fals
                             { val: 'specific',   label: 'Specific User', icon: '👤' },
                         ].map(({ val, label: lbl, icon }) => (
                             <button key={val}
-                                onClick={() => setBroadcast(b => ({ ...b, to: val }))}
+                                onClick={() => {
+                                    setBroadcast(b => ({ ...b, to: val, email: '' }))
+                                    if (val !== 'specific') { setSelectedUser(null); setUserSearch(''); setUserResults([]) }
+                                }}
                                 className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-semibold transition-all ${
                                     broadcast.to === val
                                         ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200'
@@ -910,21 +967,63 @@ function EmailSettingsPanel({ values, onChange, onSave, colleges, isAdmin = fals
                     </Field>
                 )}
                 {broadcast.to === 'specific' && (
-                    <div>
-                        <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">Recipient Email</label>
-                        <Input
-                            type="email"
-                            value={broadcast.email}
-                            onChange={e => { setBroadcast(b => ({ ...b, email: e.target.value })); setEmailError('') }}
-                            placeholder="user@university.edu"
-                            className={emailError ? '!border-red-400' : ''}
-                        />
+                    <div ref={userSearchRef} className="relative">
+                        <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">Recipient</label>
+
+                        {selectedUser ? (
+                            <div className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border ${emailError ? 'border-red-400 bg-red-50' : 'border-indigo-300 bg-indigo-50'}`}>
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-semibold text-gray-800 truncate">{selectedUser.name}</p>
+                                    <p className="text-xs text-gray-500 truncate">{selectedUser.email}</p>
+                                </div>
+                                <button type="button" onClick={clearSelectedUser}
+                                    className="shrink-0 p-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-white transition-colors">
+                                    <X size={14} />
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    value={userSearch}
+                                    onChange={e => searchUsers(e.target.value)}
+                                    onFocus={() => userResults.length > 0 && setUserDropdownOpen(true)}
+                                    placeholder="Search by name or email…"
+                                    className={`w-full border rounded-xl px-3 py-2.5 text-sm bg-gray-50 focus:bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-colors ${emailError ? 'border-red-400' : 'border-gray-200'}`}
+                                />
+                                {userSearching && (
+                                    <RefreshCw size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 animate-spin" />
+                                )}
+                                {userDropdownOpen && userResults.length > 0 && (
+                                    <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden max-h-56 overflow-y-auto">
+                                        {userResults.map(u => (
+                                            <button key={u.id} type="button"
+                                                onMouseDown={() => selectUser(u)}
+                                                className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-indigo-50 text-left transition-colors">
+                                                <div className="h-8 w-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold shrink-0">
+                                                    {u.name?.charAt(0).toUpperCase()}
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <p className="text-sm font-semibold text-gray-800 truncate">{u.name}</p>
+                                                    <p className="text-xs text-gray-400 truncate">{u.email}</p>
+                                                </div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                                {userDropdownOpen && !userSearching && userResults.length === 0 && userSearch.trim() && (
+                                    <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg px-4 py-3 text-sm text-gray-400">
+                                        No users found for "{userSearch}"
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         {emailError && (
                             <p className="flex items-center gap-1.5 text-xs text-red-600 mt-1.5">
                                 <AlertTriangle size={11} /> {emailError}
                             </p>
                         )}
-                        <p className="text-[11px] text-gray-400 mt-1">The email must belong to a registered user.</p>
                     </div>
                 )}
 
@@ -933,9 +1032,10 @@ function EmailSettingsPanel({ values, onChange, onSave, colleges, isAdmin = fals
                 </Field>
 
                 <Field label="Message">
-                    <textarea rows={5} value={broadcast.message} onChange={e => setBroadcast(b => ({ ...b, message: e.target.value }))}
+                    <RichTextEditor
+                        value={broadcast.message}
+                        onChange={html => setBroadcast(b => ({ ...b, message: html }))}
                         placeholder="Write your message here…"
-                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-gray-50 focus:bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none resize-none transition-colors"
                     />
                 </Field>
 

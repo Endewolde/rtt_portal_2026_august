@@ -356,7 +356,7 @@ export default function Home() {
     const cardsBg      = s.public_cards_bg    || '#f9fafb';
     const featuresBg   = s.public_features_bg || '#0f172a';
 
-    const badge        = s.public_hero_badge        || `${orgName} · Research Management`;
+    const badge        = s.public_hero_badge        || `${orgName} · RTT Management`;
     const heading      = s.public_hero_heading      || 'Accelerate Your Research';
     const highlight    = s.public_hero_highlight    || 'From Idea to Impact';
     const subtitle     = s.public_hero_subtitle     || 'Submit proposals, track progress, and manage grants — all in one platform built for academic excellence.';
@@ -368,7 +368,7 @@ export default function Home() {
     const showFeatures = s.public_show_features     !== 'false';
     const showCTA      = s.public_show_cta          !== 'false';
 
-    const featTitle = s.public_features_title    || 'Everything You Need to Manage Research';
+    const featTitle = s.public_features_title    || 'Everything You Need to Manage RTT';
     const featSub   = s.public_features_subtitle || 'A complete platform for the full research lifecycle.';
     const ctaTitle  = s.public_cta_title         || 'Ready to Start Your Research Journey?';
     const ctaSub    = s.public_cta_subtitle      || `Join researchers from ${orgName} and transform your ideas into impactful funded work.`;
