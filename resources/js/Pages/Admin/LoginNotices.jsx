@@ -99,7 +99,7 @@ function PreviewCard({ form }) {
 // ── Modal ─────────────────────────────────────────────────────────────────────
 
 function NoticeModal({ notice, onClose, onSaved }) {
-    const { toast } = useToast()
+    const { success, error: toastError } = useToast()
     const [form, setForm] = useState(notice
         ? { ...notice, starts_at: notice.starts_at?.slice(0, 10) ?? '', ends_at: notice.ends_at?.slice(0, 10) ?? '' }
         : { ...BLANK }
@@ -125,11 +125,11 @@ function NoticeModal({ notice, onClose, onSaved }) {
             if (notice) {
                 const res = await put(`/login-notices/${notice.id}`, payload)
                 saved = res.data
-                toast('Notice updated.', 'success')
+                success('Notice updated.')
             } else {
                 const res = await post('/login-notices', payload)
                 saved = res.data
-                toast('Notice created.', 'success')
+                success('Notice created.')
             }
             onSaved(saved)
         } catch (e) {
@@ -137,7 +137,7 @@ function NoticeModal({ notice, onClose, onSaved }) {
             if (Object.keys(ve).length) {
                 setErrors(ve)
             } else {
-                toast(e.response?.data?.message ?? 'Could not save notice.', 'error')
+                toastError(e.response?.data?.message ?? 'Could not save notice.')
             }
         }
         setSaving(false)
@@ -277,7 +277,7 @@ function NoticeModal({ notice, onClose, onSaved }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function LoginNotices() {
-    const { toast } = useToast()
+    const { success, error: toastError } = useToast()
     const [notices, setNotices]     = useState([])
     const [loading, setLoading]     = useState(true)
     const [modal, setModal]         = useState(null)   // null | 'create' | notice object
@@ -290,7 +290,7 @@ export default function LoginNotices() {
             const res = await get('/login-notices')
             setNotices(res.data ?? [])
         } catch {
-            toast('Could not load notices.', 'error')
+            toastError('Could not load notices.')
         }
         setLoading(false)
     }
@@ -302,11 +302,11 @@ export default function LoginNotices() {
         setDeleting(true)
         try {
             await del(`/login-notices/${delTarget.id}`)
-            toast('Notice deleted.', 'success')
+            success('Notice deleted.')
             setDelTarget(null)
             load()
         } catch {
-            toast('Could not delete notice.', 'error')
+            toastError('Could not delete notice.')
         }
         setDeleting(false)
     }
