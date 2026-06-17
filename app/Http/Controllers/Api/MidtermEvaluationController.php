@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\MidtermEvaluation;
 use App\Models\Proposal;
 use App\Services\MidtermEvaluationService;
+use App\Support\AuditLogger;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -16,7 +17,7 @@ class MidtermEvaluationController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $query = MidtermEvaluation::with([
             'proposal:id,tracker_number,title,pi_user_id,college_id,category',
             'proposal.college:id,name',
@@ -35,19 +36,17 @@ class MidtermEvaluationController extends Controller
         } elseif ($user->hasRole('technology_officer')) {
             $query->whereHas('proposal', fn ($q) => $q->where('category', 'technology_transfer'));
         } elseif (! $user->hasAnyRole(['super_admin', 'central_officer', 'support_officer'])) {
-            $query->whereHas('proposal', fn ($q) =>
-                $q->where('pi_user_id', $user->id)
-                  ->orWhereHas('members', fn ($sq) =>
-                      $sq->where('user_id', $user->id)->where('status', 'active')
-                  )
+            $query->whereHas('proposal', fn ($q) => $q->where('pi_user_id', $user->id)
+                ->orWhereHas('members', fn ($sq) => $sq->where('user_id', $user->id)->where('status', 'active')
+                )
             );
         }
 
         return response()->json([
-            'data'    => $query->get(),
+            'data' => $query->get(),
             'message' => '',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ]);
     }
 
@@ -74,11 +73,10 @@ class MidtermEvaluationController extends Controller
         $user = $request->user();
 
         $query = Proposal::where('status', 'funded')
-            ->whereExists(fn ($q) =>
-                $q->from('budget_settlements')
-                  ->join('budget_requests', 'budget_settlements.budget_request_id', '=', 'budget_requests.id')
-                  ->whereColumn('budget_requests.proposal_id', 'proposals.id')
-                  ->where('budget_settlements.status', 'finance_verified')
+            ->whereExists(fn ($q) => $q->from('budget_settlements')
+                ->join('budget_requests', 'budget_settlements.budget_request_id', '=', 'budget_requests.id')
+                ->whereColumn('budget_requests.proposal_id', 'proposals.id')
+                ->where('budget_settlements.status', 'finance_verified')
             )
             ->with(['pi:id,name,email', 'college:id,name'])
             ->orderBy('tracker_number');
@@ -94,20 +92,20 @@ class MidtermEvaluationController extends Controller
         }
 
         return response()->json([
-            'data'    => $query->get(['id', 'tracker_number', 'title', 'pi_user_id', 'college_id', 'category']),
+            'data' => $query->get(['id', 'tracker_number', 'title', 'pi_user_id', 'college_id', 'category']),
             'message' => '',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ]);
     }
 
     public function schedule(Request $request): JsonResponse
     {
         $request->validate([
-            'proposal_id'     => 'required|uuid|exists:proposals,id',
+            'proposal_id' => 'required|uuid|exists:proposals,id',
             'evaluation_date' => 'required|date|after_or_equal:today',
             'evaluation_time' => 'nullable|date_format:H:i',
-            'venue'           => 'nullable|string|max:300',
+            'venue' => 'nullable|string|max:300',
         ]);
 
         $proposal = Proposal::findOrFail($request->proposal_id);
@@ -121,11 +119,20 @@ class MidtermEvaluationController extends Controller
                 $request->input('venue')
             );
 
+            AuditLogger::log(
+                'evaluation.midterm_scheduled',
+                Proposal::class,
+                $proposal->id,
+                $request->user()->id,
+                null,
+                ['evaluation_date' => $request->evaluation_date, 'venue' => $request->venue, 'tracker' => $proposal->tracker_number],
+            );
+
             return response()->json([
-                'data'    => $evaluation->load(['proposal:id,tracker_number,title', 'scheduledBy:id,name']),
+                'data' => $evaluation->load(['proposal:id,tracker_number,title', 'scheduledBy:id,name']),
                 'message' => 'Midterm evaluation scheduled.',
-                'errors'  => [],
-                'meta'    => [],
+                'errors' => [],
+                'meta' => [],
             ], 201);
         } catch (\Exception $e) {
             return response()->json(['data' => null, 'message' => $e->getMessage(), 'errors' => [], 'meta' => []], 422);
@@ -140,20 +147,19 @@ class MidtermEvaluationController extends Controller
         $request->validate([
             'evaluation_date' => 'required|date|after_or_equal:today',
             'evaluation_time' => 'nullable|date_format:H:i',
-            'venue'           => 'nullable|string|max:300',
+            'venue' => 'nullable|string|max:300',
         ]);
 
         $user = $request->user();
         $date = Carbon::parse($request->evaluation_date);
-        $time  = $request->input('evaluation_time');
+        $time = $request->input('evaluation_time');
         $venue = $request->input('venue');
 
         $query = Proposal::where('status', 'funded')
-            ->whereExists(fn ($q) =>
-                $q->from('budget_settlements')
-                  ->join('budget_requests', 'budget_settlements.budget_request_id', '=', 'budget_requests.id')
-                  ->whereColumn('budget_requests.proposal_id', 'proposals.id')
-                  ->where('budget_settlements.status', 'finance_verified')
+            ->whereExists(fn ($q) => $q->from('budget_settlements')
+                ->join('budget_requests', 'budget_settlements.budget_request_id', '=', 'budget_requests.id')
+                ->whereColumn('budget_requests.proposal_id', 'proposals.id')
+                ->where('budget_settlements.status', 'finance_verified')
             );
 
         if ($user->hasRole('college_officer') || $user->hasRole('college_officer')) {
@@ -162,7 +168,7 @@ class MidtermEvaluationController extends Controller
 
         $proposals = $query->get();
         $scheduled = 0;
-        $skipped   = 0;
+        $skipped = 0;
 
         foreach ($proposals as $proposal) {
             try {
@@ -174,22 +180,22 @@ class MidtermEvaluationController extends Controller
         }
 
         return response()->json([
-            'data'    => ['scheduled' => $scheduled, 'skipped' => $skipped],
+            'data' => ['scheduled' => $scheduled, 'skipped' => $skipped],
             'message' => "{$scheduled} evaluation(s) scheduled for your college.",
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ], 201);
     }
 
     public function submitReport(Request $request, string $id): JsonResponse
     {
         $request->validate([
-            'progress_summary'                 => 'required|string',
+            'progress_summary' => 'required|string',
             'financial_utilization_percentage' => 'nullable|numeric|min:0|max:100',
-            'publications_count'               => 'nullable|integer|min:0',
-            'challenges'                       => 'nullable|string',
-            'milestones_achieved'              => 'nullable|string',
-            'milestones_missed'                => 'nullable|string',
+            'publications_count' => 'nullable|integer|min:0',
+            'challenges' => 'nullable|string',
+            'milestones_achieved' => 'nullable|string',
+            'milestones_missed' => 'nullable|string',
         ]);
 
         $evaluation = MidtermEvaluation::with('proposal')->findOrFail($id);
@@ -206,9 +212,9 @@ class MidtermEvaluationController extends Controller
     public function score(Request $request, string $id): JsonResponse
     {
         $request->validate([
-            'progress_score'  => 'required|numeric|min:0|max:100',
-            'recommendation'  => 'required|in:continue,hold',
-            'comments'        => 'nullable|string',
+            'progress_score' => 'required|numeric|min:0|max:100',
+            'recommendation' => 'required|in:continue,hold',
+            'comments' => 'nullable|string',
         ]);
 
         $evaluation = MidtermEvaluation::with('proposal.college')->findOrFail($id);
@@ -217,14 +223,23 @@ class MidtermEvaluationController extends Controller
             $updated = $this->service->score($evaluation, $request->user(), [
                 'progress_score' => $request->progress_score,
                 'recommendation' => $request->recommendation,
-                'comments'       => $request->input('comments', ''),
+                'comments' => $request->input('comments', ''),
             ]);
 
+            AuditLogger::log(
+                'evaluation.midterm_scored',
+                MidtermEvaluation::class,
+                $evaluation->id,
+                $request->user()->id,
+                null,
+                ['score' => $request->progress_score, 'recommendation' => $request->recommendation, 'tracker' => $evaluation->proposal?->tracker_number],
+            );
+
             return response()->json([
-                'data'    => $updated,
+                'data' => $updated,
                 'message' => 'Evaluation scored. Recommendation: '.ucfirst($request->recommendation).'.',
-                'errors'  => [],
-                'meta'    => [],
+                'errors' => [],
+                'meta' => [],
             ]);
         } catch (\Exception $e) {
             return response()->json(['data' => null, 'message' => $e->getMessage(), 'errors' => [], 'meta' => []], 422);
@@ -239,15 +254,15 @@ class MidtermEvaluationController extends Controller
         ]);
 
         $evaluation = MidtermEvaluation::findOrFail($id);
-        $path       = $request->file('file')->store("midterm/{$id}/{$request->type}", 'private');
-        $field      = $request->type === 'financial' ? 'financial_report_path' : 'progress_report_path';
+        $path = $request->file('file')->store("midterm/{$id}/{$request->type}", 'private');
+        $field = $request->type === 'financial' ? 'financial_report_path' : 'progress_report_path';
         $evaluation->update([$field => $path]);
 
         return response()->json([
-            'data'    => ['path' => $path, 'filename' => $request->file('file')->getClientOriginalName()],
+            'data' => ['path' => $path, 'filename' => $request->file('file')->getClientOriginalName()],
             'message' => ucfirst($request->type).' report uploaded.',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ]);
     }
 
@@ -256,9 +271,9 @@ class MidtermEvaluationController extends Controller
         $evaluation = MidtermEvaluation::findOrFail($id);
 
         $path = match ($type) {
-            'progress'  => $evaluation->progress_report_path,
+            'progress' => $evaluation->progress_report_path,
             'financial' => $evaluation->financial_report_path,
-            default     => null,
+            default => null,
         };
 
         if (! $path) {
@@ -278,16 +293,16 @@ class MidtermEvaluationController extends Controller
     {
         return response()->json([
             'data' => [
-                'total'            => MidtermEvaluation::count(),
-                'scheduled'        => MidtermEvaluation::where('status', 'scheduled')->count(),
+                'total' => MidtermEvaluation::count(),
+                'scheduled' => MidtermEvaluation::where('status', 'scheduled')->count(),
                 'report_submitted' => MidtermEvaluation::where('status', 'report_submitted')->count(),
-                'scored'           => MidtermEvaluation::where('status', 'scored')->count(),
-                'continue'         => MidtermEvaluation::where('recommendation', 'continue')->count(),
-                'hold'             => MidtermEvaluation::where('recommendation', 'hold')->count(),
+                'scored' => MidtermEvaluation::where('status', 'scored')->count(),
+                'continue' => MidtermEvaluation::where('recommendation', 'continue')->count(),
+                'hold' => MidtermEvaluation::where('recommendation', 'hold')->count(),
             ],
             'message' => '',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ]);
     }
 }

@@ -115,7 +115,7 @@ function StatsDonut({ stats, primaryColor, academicYear }) {
     return (
         <div ref={ref} className="relative bg-white/5 border border-white/10 rounded-3xl p-6 backdrop-blur-sm">
             {/* Title */}
-            <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-5">
+            <p className="text-xs font-bold uppercase tracking-widest text-slate-300 mb-5">
                 {academicYear ? `${academicYear} Overview` : 'Platform Overview'}
             </p>
 
@@ -148,7 +148,7 @@ function StatsDonut({ stats, primaryColor, academicYear }) {
                             <span className="text-2xl font-extrabold text-white tabular-nums">
                                 {total.toLocaleString()}
                             </span>
-                            <span className="text-[10px] text-slate-400 mt-0.5 font-medium uppercase tracking-wide">Total</span>
+                            <span className="text-[10px] text-slate-300 mt-0.5 font-medium uppercase tracking-wide">Total</span>
                         </div>
                     </>
                 ) : (
@@ -163,7 +163,7 @@ function StatsDonut({ stats, primaryColor, academicYear }) {
                     <div key={d.name} className="flex items-start gap-2.5">
                         <div className="w-3 h-3 rounded-full mt-0.5 shrink-0" style={{ backgroundColor: d.color }} />
                         <div>
-                            <div className="text-[11px] text-slate-400 leading-tight">{d.name}</div>
+                            <div className="text-[11px] text-slate-300 leading-tight font-medium">{d.name}</div>
                             <div className="text-sm font-bold text-white mt-0.5">
                                 {d.value > 0 ? d.value.toLocaleString() : '—'}
                             </div>

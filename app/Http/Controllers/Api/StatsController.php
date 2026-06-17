@@ -19,6 +19,7 @@ class StatsController extends Controller
                 'total_proposals' => DB::table('proposals')
                     ->whereNull('deleted_at')
                     ->where('academic_year', $currentYear)
+                    ->where('status', 'submitted')
                     ->count(),
                 'funded' => DB::table('proposals')
                     ->whereIn('status', ['funded', 'midterm_evaluation', 'completed', 'archived'])

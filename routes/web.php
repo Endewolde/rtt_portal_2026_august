@@ -44,6 +44,7 @@ Route::get('/verify-email', fn () => Inertia::render('Auth/VerifyEmail'));
 
 // ── Protected (auth handled client-side via useAuth hook) ────────────────────
 Route::get('/dashboard', fn () => Inertia::render('Dashboard/Index'));
+Route::get('/researcher-hub', fn () => Inertia::render('ResearcherHub/Index'));
 Route::get('/proposals', fn () => Inertia::render('Proposals/Index'));
 Route::get('/proposals/create', fn () => Inertia::render('Proposals/Create'));
 Route::get('/proposals/{id}', fn () => Inertia::render('Proposals/Show'));

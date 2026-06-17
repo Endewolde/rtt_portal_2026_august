@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Award;
 use App\Models\Proposal;
 use App\Services\AwardService;
+use App\Support\AuditLogger;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -51,6 +52,15 @@ class AwardController extends Controller
             if ($request->filled('approval_notes')) {
                 $award->update(['approval_notes' => $request->approval_notes]);
             }
+
+            AuditLogger::log(
+                'award.issued',
+                Proposal::class,
+                $proposal->id,
+                $request->user()->id,
+                null,
+                ['grant_reference' => $award->grant_reference, 'awarded_amount' => $request->awarded_amount, 'tracker' => $proposal->tracker_number],
+            );
 
             return response()->json([
                 'data' => $award->fresh()->load('approvedBy:id,name'),
@@ -113,7 +123,16 @@ class AwardController extends Controller
         }
 
         if (! empty($updates)) {
+            $old = $award->only(array_keys($updates));
             $award->update($updates);
+            AuditLogger::log(
+                'award.updated',
+                Award::class,
+                $award->id,
+                $request->user()->id,
+                $old,
+                $updates,
+            );
         }
 
         return response()->json([

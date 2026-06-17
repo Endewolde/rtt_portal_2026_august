@@ -288,6 +288,13 @@ export default function MyProposals() {
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
                         <ViewToggle view={view} onChange={setView} />
+                        <a
+                            href="/api/v1/calendar/events.ics"
+                            className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors"
+                        >
+                            <Download size={12} />
+                            Calendar
+                        </a>
                         <Link href="/proposals/create"
                             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 shadow-sm">
                             + New Application

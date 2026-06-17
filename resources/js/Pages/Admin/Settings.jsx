@@ -747,8 +747,9 @@ function EmailSettingsPanel({ values, onChange, onSave, colleges, isAdmin = fals
         setSending(true)
         try {
             const r = await api.post('/settings/send-email', broadcast)
-            setSendResult({ ok: true, message: r.message, sent: r.data?.sent ?? 0, failed: r.data?.failed ?? 0 })
-            if ((r.data?.failed ?? 0) === 0) {
+            const stats = r.data?.data ?? r.data ?? {}
+            setSendResult({ ok: true, message: r.data?.message ?? r.message, sent: stats.sent ?? 0, failed: stats.failed ?? 0 })
+            if ((stats.failed ?? 0) === 0) {
                 setBroadcast(b => ({ ...b, subject: '', message: '' }))
             }
         } catch (e) {
@@ -879,12 +880,12 @@ function EmailSettingsPanel({ values, onChange, onSave, colleges, isAdmin = fals
 
             {/* ── Test Connection ─────────────────────────────────────────── */}
             <SectionCard icon={Zap} color="bg-green-50/50" title="Test Connection" subtitle="Send a test email to verify your SMTP setup">
-                <div className="flex gap-3 items-end">
+                <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
                     <Field label="Send Test To" hint="Leave blank to send to your account">
                         <Input type="email" value={testEmail} onChange={e => setTestEmail(e.target.value)} placeholder="your@email.com (optional)" className="flex-1" />
                     </Field>
                     <button onClick={runTest} disabled={testing}
-                        className="shrink-0 flex items-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60 transition-colors mb-[1px]">
+                        className="sm:shrink-0 flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60 transition-colors sm:mb-[1px]">
                         {testing ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} />}
                         {testing ? 'Sending…' : 'Send Test'}
                     </button>
@@ -1040,28 +1041,53 @@ function EmailSettingsPanel({ values, onChange, onSave, colleges, isAdmin = fals
                 </Field>
 
                 {sendResult && (
-                    <div className={`flex items-start gap-3 rounded-xl p-4 border ${
-                        sendResult.ok ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'
+                    <div className={`rounded-xl border overflow-hidden ${
+                        sendResult.ok ? 'border-emerald-200' : 'border-red-200'
                     }`}>
-                        <div className={`shrink-0 h-7 w-7 rounded-lg flex items-center justify-center ${sendResult.ok ? 'bg-emerald-100' : 'bg-red-100'}`}>
-                            {sendResult.ok
-                                ? <CheckCircle2 size={14} className="text-emerald-600" />
-                                : <AlertTriangle size={14} className="text-red-500" />
-                            }
-                        </div>
-                        <div>
-                            <p className={`text-sm font-semibold ${sendResult.ok ? 'text-emerald-800' : 'text-red-800'}`}>
-                                {sendResult.ok ? 'Emails sent!' : 'Send failed'}
-                            </p>
-                            <p className={`text-xs mt-0.5 ${sendResult.ok ? 'text-emerald-600' : 'text-red-600'}`}>
-                                {sendResult.message}
-                            </p>
-                            {sendResult.ok && sendResult.failed > 0 && (
-                                <p className="text-xs text-amber-600 mt-1">
-                                    {sendResult.failed} address(es) failed — check mail server logs for details.
+                        {/* Header */}
+                        <div className={`flex items-center gap-3 px-4 py-3 ${sendResult.ok ? 'bg-emerald-50' : 'bg-red-50'}`}>
+                            <div className={`shrink-0 h-7 w-7 rounded-lg flex items-center justify-center ${sendResult.ok ? 'bg-emerald-100' : 'bg-red-100'}`}>
+                                {sendResult.ok
+                                    ? <CheckCircle2 size={14} className="text-emerald-600" />
+                                    : <AlertTriangle size={14} className="text-red-500" />
+                                }
+                            </div>
+                            <div>
+                                <p className={`text-sm font-semibold ${sendResult.ok ? 'text-emerald-800' : 'text-red-800'}`}>
+                                    {sendResult.ok ? 'Delivery complete' : 'Send failed'}
                                 </p>
-                            )}
+                                <p className={`text-xs mt-0.5 ${sendResult.ok ? 'text-emerald-600' : 'text-red-600'}`}>
+                                    {sendResult.message}
+                                </p>
+                            </div>
                         </div>
+                        {/* Stats row */}
+                        {sendResult.ok && (
+                            <div className="grid grid-cols-2 divide-x divide-gray-100 border-t border-gray-100 bg-white">
+                                <div className="flex items-center gap-3 px-5 py-3">
+                                    <div className="h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
+                                        <CheckCircle2 size={15} className="text-emerald-600" />
+                                    </div>
+                                    <div>
+                                        <p className="text-xl font-extrabold text-emerald-700 tabular-nums">{sendResult.sent ?? 0}</p>
+                                        <p className="text-[11px] text-gray-500 font-medium">Delivered</p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-3 px-5 py-3">
+                                    <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${
+                                        (sendResult.failed ?? 0) > 0 ? 'bg-red-100' : 'bg-gray-100'
+                                    }`}>
+                                        <AlertTriangle size={15} className={(sendResult.failed ?? 0) > 0 ? 'text-red-500' : 'text-gray-400'} />
+                                    </div>
+                                    <div>
+                                        <p className={`text-xl font-extrabold tabular-nums ${(sendResult.failed ?? 0) > 0 ? 'text-red-600' : 'text-gray-400'}`}>
+                                            {sendResult.failed ?? 0}
+                                        </p>
+                                        <p className="text-[11px] text-gray-500 font-medium">Failed</p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -1937,11 +1963,30 @@ export default function SettingsPage() {
                     )}
                 </div>
 
-                <div className="flex gap-5 items-start">
+                <div className="flex flex-col md:flex-row gap-5 md:items-start">
 
-                    {/* ── Sidebar ───────────────────────────────────────────────── */}
-                    <div className="w-52 shrink-0 sticky top-4">
-                        <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+                    {/* ── Sidebar (desktop) / Horizontal tabs (mobile) ─────────── */}
+                    <div className="md:w-52 md:shrink-0 md:sticky md:top-4">
+                        {/* Mobile: horizontal scroll tabs */}
+                        <div className="flex md:hidden gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+                            {visibleSections.map(s => {
+                                const Icon     = s.icon
+                                const isActive = activeSection === s.key
+                                return (
+                                    <button key={s.key} onClick={() => setActiveSection(s.key)}
+                                        className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold whitespace-nowrap shrink-0 transition-all ${
+                                            isActive
+                                                ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                                                : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'
+                                        }`}>
+                                        <Icon size={13} />
+                                        {s.label}
+                                    </button>
+                                )
+                            })}
+                        </div>
+                        {/* Desktop: vertical list */}
+                        <div className="hidden md:block bg-white border border-gray-200 rounded-2xl overflow-hidden">
                             {visibleSections.map(s => {
                                 const Icon     = s.icon
                                 const isActive = activeSection === s.key

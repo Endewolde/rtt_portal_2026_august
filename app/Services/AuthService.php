@@ -2,10 +2,12 @@
 
 namespace App\Services;
 
+use App\Mail\TwoFactorCodeMail;
 use App\Models\AppSetting;
 use App\Models\NotificationPreference;
 use App\Models\User;
 use Illuminate\Auth\Events\Registered;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
@@ -98,6 +100,26 @@ class AuthService
             ]);
         }
 
+        if ($user->two_factor_enabled) {
+            $partialToken = $this->sendTwoFactorCode($user);
+
+            return [
+                'user' => null,
+                'token' => null,
+                'evicted_session' => false,
+                'requires_2fa' => true,
+                'partial_token' => $partialToken,
+            ];
+        }
+
+        return $this->issueToken($user);
+    }
+
+    /**
+     * @return array{ user: User, token: string, evicted_session: bool, requires_2fa: false }
+     */
+    private function issueToken(User $user): array
+    {
         $user->update(['last_login_at' => now()]);
 
         DB::table('audit_logs')->insert([
@@ -117,7 +139,63 @@ class AuthService
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        return ['user' => $user->load('roles'), 'token' => $token, 'evicted_session' => $evictedSession];
+        return [
+            'user' => $user->load('roles'),
+            'token' => $token,
+            'evicted_session' => $evictedSession,
+            'requires_2fa' => false,
+            'partial_token' => null,
+        ];
+    }
+
+    /**
+     * Generate a 6-digit OTP, cache it with a partial token, send the email.
+     * Returns the partial token the client must submit with the OTP.
+     */
+    public function sendTwoFactorCode(User $user): string
+    {
+        $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        $partialToken = Str::uuid()->toString();
+
+        Cache::put("2fa_user:{$partialToken}", $user->id, 300);
+        Cache::put("2fa_code:{$user->id}", $code, 300);
+
+        Mail::to($user->email)->send(new TwoFactorCodeMail($user, $code));
+
+        return $partialToken;
+    }
+
+    /**
+     * Validate partial token + OTP code and issue a full auth token.
+     *
+     * @return array{ user: User, token: string, evicted_session: bool, requires_2fa: false }
+     *
+     * @throws ValidationException
+     */
+    public function verifyTwoFactorCode(string $partialToken, string $code): array
+    {
+        $userId = Cache::get("2fa_user:{$partialToken}");
+
+        if (! $userId) {
+            throw ValidationException::withMessages([
+                'partial_token' => ['Verification session expired or invalid. Please sign in again.'],
+            ]);
+        }
+
+        $user = User::findOrFail($userId);
+
+        $cached = Cache::get("2fa_code:{$userId}");
+
+        if (! $cached || ! hash_equals($cached, $code)) {
+            throw ValidationException::withMessages([
+                'code' => ['The verification code is incorrect.'],
+            ]);
+        }
+
+        Cache::forget("2fa_user:{$partialToken}");
+        Cache::forget("2fa_code:{$userId}");
+
+        return $this->issueToken($user);
     }
 
     /**

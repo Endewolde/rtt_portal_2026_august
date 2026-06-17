@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\SendRawMailJob;
 use App\Jobs\StoreInAppNotificationJob;
 use App\Models\Award;
 use App\Models\BudgetAllocation;
@@ -15,13 +16,11 @@ use App\Services\BudgetAllocationService;
 use App\Services\BudgetRequestService;
 use App\Services\BudgetSettlementService;
 use App\Services\DisbursementService;
-use App\Services\MailConfigService;
 use App\Services\SignatureService;
+use App\Support\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 
 class BudgetController extends Controller
 {
@@ -777,6 +776,15 @@ class BudgetController extends Controller
             'college_review_notes' => $request->input('notes'),
         ]);
 
+        AuditLogger::log(
+            'budget.request_approved',
+            BudgetRequest::class,
+            $budgetRequest->id,
+            $user->id,
+            ['status' => 'pending'],
+            ['status' => 'approved', 'tracker' => $budgetRequest->proposal?->tracker_number],
+        );
+
         $this->notifyBudgetRequestApproved($budgetRequest->fresh()->load(['proposal.pi', 'proposal.members.user']));
 
         return response()->json(['data' => $budgetRequest->fresh()]);
@@ -812,7 +820,7 @@ class BudgetController extends Controller
             if (! $user->email) {
                 continue;
             }
-            \App\Jobs\SendRawMailJob::dispatch(
+            SendRawMailJob::dispatch(
                 view('emails.notifications.budget_request_approved', array_merge($data, ['recipient' => $user]))->render(),
                 $user->email,
                 $user->name,
@@ -848,6 +856,15 @@ class BudgetController extends Controller
             $budgetRequest, (float) $request->amount, $request->only(['transaction_id', 'cheque_number', 'notes']), $request->user()
         );
 
+        AuditLogger::log(
+            'budget.disbursed',
+            BudgetRequest::class,
+            $budgetRequest->id,
+            $request->user()->id,
+            null,
+            ['amount' => $request->amount, 'tracker' => $budgetRequest->proposal?->tracker_number],
+        );
+
         return response()->json(['data' => $disbursement], 201);
     }
 
@@ -860,6 +877,15 @@ class BudgetController extends Controller
             $budgetRequest, $request->user(), $request->all()
         );
 
+        AuditLogger::log(
+            'budget.settlement_submitted',
+            BudgetRequest::class,
+            $budgetRequest->id,
+            $request->user()->id,
+            null,
+            ['total_spent' => $request->total_spent, 'tracker' => $budgetRequest->proposal?->tracker_number],
+        );
+
         return response()->json(['data' => $settlement], 201);
     }
 
@@ -870,6 +896,15 @@ class BudgetController extends Controller
             $settlement, $request->user(), $request->input('notes', '')
         );
 
+        AuditLogger::log(
+            'budget.settlement_verified',
+            BudgetSettlement::class,
+            $settlement->id,
+            $request->user()->id,
+            ['status' => 'submitted'],
+            ['status' => 'verified'],
+        );
+
         return response()->json(['data' => $verified]);
     }
 
@@ -878,6 +913,15 @@ class BudgetController extends Controller
         $settlement = BudgetSettlement::findOrFail($id);
         $finalized = $this->settlementService->finalizeSettlement(
             $settlement, $request->user(), $request->input('notes', '')
+        );
+
+        AuditLogger::log(
+            'budget.settlement_finalized',
+            BudgetSettlement::class,
+            $settlement->id,
+            $request->user()->id,
+            ['status' => 'verified'],
+            ['status' => 'finalized'],
         );
 
         return response()->json(['data' => $finalized]);

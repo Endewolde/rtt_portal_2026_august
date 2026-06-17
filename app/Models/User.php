@@ -54,6 +54,7 @@ class User extends Authenticatable
         'email_verified_at',
         'email_verification_token',
         'email_verification_expires_at',
+        'two_factor_enabled',
     ];
 
     protected $hidden = [
@@ -70,6 +71,7 @@ class User extends Authenticatable
             'last_login_at' => 'datetime',
             'password' => 'hashed',
             'expertise' => 'array',
+            'two_factor_enabled' => 'boolean',
         ];
     }
 

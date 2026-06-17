@@ -13,6 +13,7 @@ use App\Services\AuthService;
 use App\Services\SubscriptionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
@@ -53,6 +54,18 @@ class AuthController extends Controller
                 'message' => 'Invalid credentials.',
                 'errors' => $e->errors(),
             ], 422);
+        }
+
+        if ($result['requires_2fa']) {
+            return response()->json([
+                'data' => [
+                    'requires_2fa' => true,
+                    'partial_token' => $result['partial_token'],
+                ],
+                'message' => 'A verification code has been sent to your email.',
+                'errors' => [],
+                'meta' => [],
+            ]);
         }
 
         $user = $result['user'];
@@ -342,6 +355,78 @@ class AuthController extends Controller
         return response()->json([
             'data' => ['token' => $token],
             'message' => 'Telegram link token generated.',
+            'errors' => [],
+        ]);
+    }
+
+    public function verify2FA(Request $request): JsonResponse
+    {
+        $request->validate([
+            'partial_token' => 'required|string|uuid',
+            'code' => 'required|string|size:6',
+        ]);
+
+        try {
+            $result = $this->authService->verifyTwoFactorCode(
+                $request->partial_token,
+                $request->code
+            );
+        } catch (ValidationException $e) {
+            return response()->json([
+                'data' => null,
+                'message' => 'Verification failed.',
+                'errors' => $e->errors(),
+            ], 422);
+        }
+
+        return response()->json([
+            'data' => [
+                'token' => $result['token'],
+                'user' => $this->buildUserPayload($result['user']),
+                'evicted_session' => $result['evicted_session'],
+            ],
+            'message' => 'Login successful.',
+            'errors' => [],
+        ]);
+    }
+
+    public function resend2FA(Request $request): JsonResponse
+    {
+        $request->validate(['partial_token' => 'required|string|uuid']);
+
+        $userId = Cache::get("2fa_user:{$request->partial_token}");
+
+        if (! $userId) {
+            return response()->json([
+                'data' => null,
+                'message' => 'Verification session expired. Please sign in again.',
+                'errors' => [],
+            ], 422);
+        }
+
+        $user = User::findOrFail($userId);
+        $partialToken = $this->authService->sendTwoFactorCode($user);
+
+        Cache::forget("2fa_user:{$request->partial_token}");
+
+        return response()->json([
+            'data' => ['partial_token' => $partialToken],
+            'message' => 'A new code has been sent to your email.',
+            'errors' => [],
+        ]);
+    }
+
+    public function toggle2FA(Request $request): JsonResponse
+    {
+        $request->validate(['enabled' => 'required|boolean']);
+
+        $request->user()->update(['two_factor_enabled' => $request->enabled]);
+
+        return response()->json([
+            'data' => ['two_factor_enabled' => $request->enabled],
+            'message' => $request->enabled
+                ? 'Two-factor authentication enabled.'
+                : 'Two-factor authentication disabled.',
             'errors' => [],
         ]);
     }

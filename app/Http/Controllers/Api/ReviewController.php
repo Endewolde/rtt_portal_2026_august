@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\SendRawMailJob;
 use App\Jobs\StoreInAppNotificationJob;
 use App\Models\DefenceSession;
 use App\Models\EvaluationCategory;
@@ -17,10 +18,10 @@ use App\Services\DefenceSessionService;
 use App\Services\MailConfigService;
 use App\Services\ReviewAssignmentService;
 use App\Services\ReviewScoreService;
+use App\Support\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 
 class ReviewController extends Controller
 {
@@ -57,6 +58,15 @@ class ReviewController extends Controller
             $request->due_date
         );
 
+        AuditLogger::log(
+            'review.assigned',
+            Proposal::class,
+            $proposal->id,
+            $request->user()->id,
+            null,
+            ['tracker' => $proposal->tracker_number, 'reviewers' => count($request->reviewer_ids), 'due_date' => $request->due_date],
+        );
+
         return response()->json(['data' => $assignments], 201);
     }
 
@@ -66,6 +76,15 @@ class ReviewController extends Controller
 
         $assignment = ReviewAssignment::findOrFail($id);
         $result = $this->scoreService->submitScore($assignment, $request->answers, $request->user());
+
+        AuditLogger::log(
+            'review.score_submitted',
+            ReviewAssignment::class,
+            $assignment->id,
+            $request->user()->id,
+            null,
+            ['proposal_id' => $assignment->proposal_id],
+        );
 
         return response()->json(['data' => $result]);
     }
@@ -322,6 +341,84 @@ class ReviewController extends Controller
         return response()->json(['data' => $assignments, 'message' => '', 'errors' => [], 'meta' => []]);
     }
 
+    public function reviewerAnalytics(Request $request): JsonResponse
+    {
+        $query = ReviewAssignment::with([
+            'reviewer:id,name,email',
+            'scores:id,review_assignment_id,score',
+        ])
+            ->when($request->college_id, fn ($q) => $q->whereHas(
+                'proposal',
+                fn ($p) => $p->where('college_id', $request->college_id)
+            ));
+
+        $assignments = $query->get([
+            'id', 'reviewer_id', 'status', 'assigned_at', 'due_date', 'submitted_at',
+        ]);
+
+        $grouped = $assignments->groupBy('reviewer_id');
+
+        $stats = $grouped->map(function ($items) {
+            $reviewer = $items->first()->reviewer;
+            $total = $items->count();
+            $completed = $items->where('status', 'submitted')->count();
+            $declined = $items->where('status', 'declined')->count();
+            $pending = $items->whereIn('status', ['pending', 'in_progress'])->count();
+            $overdue = $items->filter(fn ($a) => ! in_array($a->status, ['submitted', 'declined'])
+                && $a->due_date
+                && now()->greaterThan($a->due_date)
+            )->count();
+
+            $completedItems = $items->where('status', 'submitted')->filter(fn ($a) => $a->submitted_at && $a->assigned_at);
+            $avgDays = $completedItems->isNotEmpty()
+                ? round($completedItems->avg(fn ($a) => $a->assigned_at->diffInDays($a->submitted_at)))
+                : null;
+
+            $onTimeCount = $items->where('status', 'submitted')->filter(fn ($a) => $a->submitted_at && $a->due_date && $a->submitted_at->lte($a->due_date)
+            )->count();
+            $onTimeRate = $completed > 0 ? round(($onTimeCount / $completed) * 100) : null;
+
+            $allScores = $items->flatMap(fn ($a) => $a->scores)->pluck('score')->filter();
+            $avgScore = $allScores->isNotEmpty() ? round($allScores->avg(), 1) : null;
+
+            return [
+                'reviewer_id' => $reviewer?->id,
+                'reviewer' => $reviewer ? ['id' => $reviewer->id, 'name' => $reviewer->name, 'email' => $reviewer->email] : null,
+                'total' => $total,
+                'completed' => $completed,
+                'pending' => $pending,
+                'overdue' => $overdue,
+                'declined' => $declined,
+                'avg_days' => $avgDays,
+                'on_time_rate' => $onTimeRate,
+                'avg_score' => $avgScore,
+            ];
+        })->values();
+
+        $totalReviewers = $stats->count();
+        $avgCompletionRate = $stats->isNotEmpty()
+            ? round($stats->avg(fn ($s) => $s['total'] > 0 ? ($s['completed'] / $s['total']) * 100 : 0))
+            : 0;
+        $totalOverdue = $stats->sum('overdue');
+        $avgDaysAll = $stats->filter(fn ($s) => $s['avg_days'] !== null);
+        $avgDaysGlobal = $avgDaysAll->isNotEmpty() ? round($avgDaysAll->avg('avg_days')) : null;
+
+        return response()->json([
+            'data' => [
+                'summary' => [
+                    'total_reviewers' => $totalReviewers,
+                    'avg_completion_rate' => $avgCompletionRate,
+                    'total_overdue' => $totalOverdue,
+                    'avg_days_to_complete' => $avgDaysGlobal,
+                ],
+                'reviewers' => $stats,
+            ],
+            'message' => '',
+            'errors' => [],
+            'meta' => [],
+        ]);
+    }
+
     public function reassignReviewer(Request $request, string $id): JsonResponse
     {
         $request->validate([
@@ -348,6 +445,7 @@ class ReviewController extends Controller
             ], 422);
         }
 
+        $oldReviewerId = $assignment->reviewer_id;
         $assignment->update([
             'reviewer_id' => $request->new_reviewer_id,
             'status' => 'pending',
@@ -356,6 +454,15 @@ class ReviewController extends Controller
         ]);
 
         ReviewScore::where('review_assignment_id', $assignment->id)->delete();
+
+        AuditLogger::log(
+            'review.reassigned',
+            ReviewAssignment::class,
+            $assignment->id,
+            $request->user()->id,
+            ['reviewer_id' => $oldReviewerId],
+            ['reviewer_id' => $request->new_reviewer_id, 'due_date' => $request->due_date],
+        );
 
         // Notify the newly assigned reviewer
         $newReviewer = User::find($request->new_reviewer_id);
@@ -373,7 +480,7 @@ class ReviewController extends Controller
             ];
 
             if ($newReviewer->email) {
-                \App\Jobs\SendRawMailJob::dispatch(
+                SendRawMailJob::dispatch(
                     view('emails.notifications.review_assignment', array_merge($data, ['recipient' => $newReviewer]))->render(),
                     $newReviewer->email,
                     $newReviewer->name,
@@ -464,7 +571,7 @@ class ReviewController extends Controller
             ];
 
             if ($reviewer->email) {
-                \App\Jobs\SendRawMailJob::dispatch(
+                SendRawMailJob::dispatch(
                     view('emails.notifications.review_assignment', array_merge($data, ['recipient' => $reviewer]))->render(),
                     $reviewer->email,
                     $reviewer->name,
@@ -514,7 +621,17 @@ class ReviewController extends Controller
     {
         $request->validate(['due_date' => 'required|date|after:today']);
         $assignment = ReviewAssignment::findOrFail($id);
+        $oldDue = $assignment->due_date;
         $assignment->update(['due_date' => $request->due_date]);
+
+        AuditLogger::log(
+            'review.due_extended',
+            ReviewAssignment::class,
+            $assignment->id,
+            $request->user()->id,
+            ['due_date' => $oldDue],
+            ['due_date' => $request->due_date],
+        );
 
         return response()->json([
             'data' => $assignment->fresh(),

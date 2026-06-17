@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AwardController;
 use App\Http\Controllers\Api\BudgetController;
+use App\Http\Controllers\Api\CalendarController;
 use App\Http\Controllers\Api\CentralEvaluationController;
 use App\Http\Controllers\Api\CollegeController;
 use App\Http\Controllers\Api\ComplaintController;
@@ -37,6 +38,7 @@ use App\Http\Controllers\Api\ProposalValidationController;
 use App\Http\Controllers\Api\ProposalWizardController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\RepositoryController;
+use App\Http\Controllers\Api\ResearcherHubController;
 use App\Http\Controllers\Api\ResearchOutputController;
 use App\Http\Controllers\Api\ResourceController;
 use App\Http\Controllers\Api\ReviewController;
@@ -61,6 +63,12 @@ Route::prefix('v1')->group(function () {
     // ── Public auth — rate limited ────────────────────────────────────────────
     // 30 attempts per minute per IP
     Route::middleware('throttle:30,1')->post('/auth/login', [AuthController::class, 'login']);
+
+    // 2FA verification — 10 attempts per minute per IP
+    Route::middleware('throttle:10,1')->group(function () {
+        Route::post('/auth/2fa/verify', [AuthController::class, 'verify2FA']);
+        Route::post('/auth/2fa/resend', [AuthController::class, 'resend2FA']);
+    });
 
     // 30 attempts per hour per IP
     Route::middleware('throttle:30,60')->group(function () {
@@ -110,9 +118,12 @@ Route::prefix('v1')->group(function () {
         Route::post('/auth/avatar', [AuthController::class, 'uploadAvatar']);
         Route::post('/auth/change-password', [AuthController::class, 'changePassword']);
         Route::post('/auth/telegram/generate-token', [AuthController::class, 'generateTelegramToken']);
+        Route::put('/auth/2fa/toggle', [AuthController::class, 'toggle2FA']);
 
         // Users
         Route::get('/users', [UserController::class, 'index']);
+        Route::get('/users/stats', [UserController::class, 'stats']);
+        Route::post('/users/bulk', [UserController::class, 'bulkAction']);
         Route::post('/users', [UserController::class, 'store']);
         Route::get('/users/export', [UserController::class, 'export']);
         Route::get('/users/import-template', [UserController::class, 'importTemplate']);
@@ -285,6 +296,7 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/admin/review-management', [ReviewController::class, 'proposalReviewList']);
         Route::get('/admin/reviewer-workload', [ReviewController::class, 'reviewerWorkload']);
+        Route::get('/admin/reviewer-analytics', [ReviewController::class, 'reviewerAnalytics']);
         Route::post('/proposals/{id}/review/add-reviewer', [ReviewController::class, 'addReviewer']);
         Route::delete('/review-assignments/{id}/remove', [ReviewController::class, 'removeReviewer']);
         Route::put('/review-assignments/{id}/reassign', [ReviewController::class, 'reassignReviewer']);
@@ -465,6 +477,12 @@ Route::prefix('v1')->group(function () {
         // Dashboard
         Route::get('/dashboard', [DashboardController::class, 'index']);
         Route::get('/dashboard/widgets/{name}', [DashboardController::class, 'widget']);
+
+        // Researcher Hub
+        Route::get('/researcher-hub', [ResearcherHubController::class, 'index']);
+
+        // Calendar export
+        Route::get('/calendar/events.ics', [CalendarController::class, 'export']);
 
         // Notifications
         Route::get('/notifications', [NotificationController::class, 'index']);

@@ -2,7 +2,7 @@ import { useState, useRef, useCallback } from 'react'
 import {
     User, Mail, Phone, CreditCard, Shield, Lock,
     Camera, Save, Eye, EyeOff, CheckCircle2, AlertCircle,
-    Building2, Layers, MessageSquare, ExternalLink,
+    Building2, Layers, MessageSquare, ExternalLink, ShieldCheck,
 } from 'lucide-react'
 import AppLayout from '../../Layouts/AppLayout'
 import { useAuth } from '../../hooks/useAuth'
@@ -404,6 +404,62 @@ function TelegramSection({ user, onUpdated }) {
     )
 }
 
+// ─── Security section ─────────────────────────────────────────────────────────
+
+function SecuritySection({ user, onUpdated }) {
+    const { success, error } = useToast()
+    const [saving, setSaving] = useState(false)
+    const enabled = !!user?.two_factor_enabled
+
+    const toggle = async () => {
+        setSaving(true)
+        try {
+            await api.put('/auth/2fa/toggle', { enabled: !enabled })
+            onUpdated({ two_factor_enabled: !enabled })
+            success(enabled ? 'Two-factor authentication disabled.' : 'Two-factor authentication enabled.')
+        } catch (e) {
+            error(e.response?.data?.message ?? 'Update failed.')
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    return (
+        <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+                <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${
+                    enabled ? 'bg-green-100' : 'bg-gray-100'
+                }`}>
+                    <ShieldCheck size={18} className={enabled ? 'text-green-600' : 'text-gray-400'} />
+                </div>
+                <div>
+                    <p className="text-sm font-semibold text-gray-800">Two-Factor Authentication</p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                        {enabled
+                            ? 'Enabled — you will receive a 6-digit code by email on each sign-in.'
+                            : 'Disabled — only your password is required to sign in.'}
+                    </p>
+                </div>
+            </div>
+            <button
+                onClick={toggle}
+                disabled={saving}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent
+                            transition-colors duration-200 focus:outline-none
+                            ${enabled ? 'bg-green-500' : 'bg-gray-200'}
+                            ${saving ? 'opacity-50 cursor-not-allowed' : ''}`}
+                role="switch"
+                aria-checked={enabled}
+            >
+                <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow
+                                transition duration-200 ${enabled ? 'translate-x-5' : 'translate-x-0'}`}
+                />
+            </button>
+        </div>
+    )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ProfileEdit() {
@@ -469,6 +525,12 @@ export default function ProfileEdit() {
                 <Card title="Change Password" icon={Lock}
                       iconColor="bg-amber-100 text-amber-600">
                     <ChangePasswordForm />
+                </Card>
+
+                {/* Security */}
+                <Card title="Security" icon={ShieldCheck}
+                      iconColor="bg-green-100 text-green-600">
+                    <SecuritySection user={currentUser} onUpdated={handleUpdated} />
                 </Card>
 
                 {/* Telegram */}

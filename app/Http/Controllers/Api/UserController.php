@@ -42,7 +42,13 @@ class UserController extends Controller
             return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
         }
 
-        $query = User::with(['roles:id,name', 'college:id,name', 'department:id,name'])->orderBy('name');
+        $allowedSorts = ['name', 'status', 'created_at', 'last_login_at', 'registration_method'];
+        $sortBy = in_array($request->query('sort_by'), $allowedSorts, true)
+            ? $request->query('sort_by')
+            : 'name';
+        $sortDir = $request->query('sort_dir') === 'desc' ? 'desc' : 'asc';
+
+        $query = User::with(['roles:id,name', 'college:id,name', 'department:id,name'])->orderBy($sortBy, $sortDir);
 
         // College Admin scoped to own college
         if ($isAdmin && $request->user()->hasRole('college_officer') && $request->user()->college_id) {
@@ -72,6 +78,10 @@ class UserController extends Controller
             $query->where('status', $status);
         }
 
+        if ($isAdmin && ($collegeId = $request->query('college_id'))) {
+            $query->where('college_id', $collegeId);
+        }
+
         $perPage = $isAdmin ? 25 : 10;
 
         return response()->json([
@@ -79,6 +89,24 @@ class UserController extends Controller
             'message' => 'Users retrieved.',
             'errors' => [],
             'meta' => [],
+        ]);
+    }
+
+    public function stats(Request $request): JsonResponse
+    {
+        if (! $request->user()?->can('users.view_any')) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        $base = User::query();
+
+        return response()->json([
+            'data' => [
+                'total' => (clone $base)->count(),
+                'active' => (clone $base)->where('status', 'active')->count(),
+                'inactive' => (clone $base)->whereIn('status', ['inactive', 'suspended'])->count(),
+                'new_this_month' => (clone $base)->where('created_at', '>=', now()->startOfMonth())->count(),
+            ],
         ]);
     }
 
@@ -348,17 +376,17 @@ class UserController extends Controller
 
             fputcsv($handle, [
                 'name', 'email', 'password', 'role',
-                'college_code', 'employee_id', 'phone', 'gender',
+                'college_code', 'department_code', 'employee_id', 'phone', 'gender',
             ]);
 
             // Example rows
             fputcsv($handle, [
                 'John Doe', 'john.doe@example.com', 'Password123', 'staff',
-                'CBE', 'EMP-001', '+251911000001', 'male',
+                'CBE', 'CS', 'EMP-001', '+251911000001', 'male',
             ]);
             fputcsv($handle, [
                 'Jane Smith', 'jane.smith@example.com', 'Password123', 'reviewer',
-                'CSSH', 'EMP-002', '+251911000002', 'female',
+                'CSSH', 'PSYCH', 'EMP-002', '+251911000002', 'female',
             ]);
 
             fclose($handle);
@@ -384,14 +412,15 @@ class UserController extends Controller
             $rawHeaders[0] = ltrim($rawHeaders[0], "\xEF\xBB\xBF");
         }
         $headerMap = array_flip(array_map('trim', $rawHeaders ?? []));
-
         $col = fn (string $name) => $headerMap[$name] ?? null;
 
+        // Pre-load all lookup tables once — avoids per-row queries
         $colleges = College::pluck('id', 'code')->toArray();
-        $validRoles = DB::table('roles')->pluck('name')->toArray();
+        $departments = Department::pluck('id', 'code')->toArray();
+        $roleMap = DB::table('roles')->pluck('id', 'name')->toArray(); // name → id
 
-        $created = 0;
-        $skipped = 0;
+        // ── Pass 1: parse & validate every row ────────────────────────────
+        $rawRows = [];
         $errors = [];
         $rowIndex = 1;
 
@@ -403,11 +432,11 @@ class UserController extends Controller
             $password = trim($row[$col('password')] ?? '');
             $role = trim($row[$col('role')] ?? '');
             $collegeCode = strtoupper(trim($row[$col('college_code')] ?? ''));
+            $departmentCode = strtoupper(trim($row[$col('department_code')] ?? ''));
             $employeeId = trim($row[$col('employee_id')] ?? '');
             $phone = trim($row[$col('phone')] ?? '');
             $gender = strtolower(trim($row[$col('gender')] ?? ''));
 
-            // Row-level validation
             $rowErrors = [];
             if (! $name) {
                 $rowErrors[] = 'name is required';
@@ -421,7 +450,7 @@ class UserController extends Controller
             if (! $role) {
                 $rowErrors[] = 'role is required';
             }
-            if ($role && ! in_array($role, $validRoles, true)) {
+            if ($role && ! isset($roleMap[$role])) {
                 $rowErrors[] = "unknown role \"{$role}\"";
             }
             if ($gender && ! in_array($gender, ['male', 'female', 'other'], true)) {
@@ -434,34 +463,91 @@ class UserController extends Controller
                 continue;
             }
 
-            if (User::where('email', $email)->exists()) {
+            $rawRows[] = compact('rowIndex', 'name', 'email', 'password', 'role', 'collegeCode', 'departmentCode', 'employeeId', 'phone', 'gender');
+        }
+
+        fclose($handle);
+
+        // ── Pass 2: resolve duplicates with a single query ─────────────────
+        $csvEmails = array_column($rawRows, 'email');
+
+        // Existing DB emails (one query)
+        $existingEmails = User::whereIn('email', $csvEmails)->pluck('email')->flip()->toArray();
+
+        // Also track emails seen within this CSV so intra-file dupes are caught
+        $seenInFile = [];
+
+        $skipped = 0;
+        $toInsert = []; // valid, non-duplicate rows
+
+        foreach ($rawRows as $r) {
+            if (isset($existingEmails[$r['email']]) || isset($seenInFile[$r['email']])) {
                 $skipped++;
 
                 continue;
             }
 
-            $collegeId = $collegeCode && isset($colleges[$collegeCode]) ? $colleges[$collegeCode] : null;
-
-            $user = User::create([
-                'name' => $name,
-                'email' => $email,
-                'password' => Hash::make($password ?: Str::random(16)),
-                'college_id' => $collegeId,
-                'employee_id' => $employeeId ?: null,
-                'phone' => $phone ?: null,
-                'gender' => $gender ?: null,
-                'status' => 'active',
-                'email_verified_at' => now(),
-                'registration_method' => 'imported',
-            ]);
-
-            $user->assignRole($role);
-            NotificationPreference::create(['user_id' => $user->id]);
-
-            $created++;
+            $seenInFile[$r['email']] = true;
+            $toInsert[] = $r;
         }
 
-        fclose($handle);
+        // ── Pass 3: bulk insert in chunks ──────────────────────────────────
+        $now = now()->toDateTimeString();
+        $created = 0;
+
+        foreach (array_chunk($toInsert, 200) as $chunk) {
+            $userRows = [];
+            $roleRows = [];
+            $notifRows = [];
+
+            foreach ($chunk as $r) {
+                $userId = Str::orderedUuid()->toString();
+
+                // bcrypt cost=4 for import — rehash_on_login=true upgrades it on first sign-in
+                $hashed = Hash::make($r['password'] ?: Str::random(16), ['rounds' => 4]);
+
+                $userRows[] = [
+                    'id' => $userId,
+                    'name' => $r['name'],
+                    'email' => $r['email'],
+                    'password' => $hashed,
+                    'college_id' => ($r['collegeCode'] && isset($colleges[$r['collegeCode']])) ? $colleges[$r['collegeCode']] : null,
+                    'department_id' => ($r['departmentCode'] && isset($departments[$r['departmentCode']])) ? $departments[$r['departmentCode']] : null,
+                    'employee_id' => $r['employeeId'] ?: null,
+                    'phone' => $r['phone'] ?: null,
+                    'gender' => $r['gender'] ?: null,
+                    'status' => 'active',
+                    'email_verified_at' => $now,
+                    'registration_method' => 'imported',
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+
+                $roleRows[] = [
+                    'role_id' => $roleMap[$r['role']],
+                    'model_type' => User::class,
+                    'model_id' => $userId,
+                ];
+
+                $notifRows[] = [
+                    'id' => Str::orderedUuid()->toString(),
+                    'user_id' => $userId,
+                    'email_enabled' => true,
+                    'telegram_enabled' => true,
+                    'inapp_enabled' => true,
+                    'created_at' => $now,
+                    'updated_at' => $now,
+                ];
+
+                $created++;
+            }
+
+            DB::transaction(function () use ($userRows, $roleRows, $notifRows) {
+                DB::table('users')->insert($userRows);
+                DB::table('model_has_roles')->insert($roleRows);
+                DB::table('notification_preferences')->insert($notifRows);
+            });
+        }
 
         DB::table('audit_logs')->insert([
             'id' => Str::uuid()->toString(),
@@ -473,7 +559,7 @@ class UserController extends Controller
             'new_values' => json_encode(['created' => $created, 'skipped' => $skipped, 'errors' => count($errors)]),
             'ip_address' => $request->ip(),
             'user_agent' => $request->userAgent() ?? '',
-            'created_at' => now(),
+            'created_at' => $now,
         ]);
 
         return response()->json([
@@ -661,6 +747,141 @@ class UserController extends Controller
         });
 
         return response()->json(['message' => 'User deleted.', 'errors' => [], 'meta' => []]);
+    }
+
+    public function bulkAction(Request $request): JsonResponse
+    {
+        if (! $request->user()->hasAnyRole(['super_admin', 'admin'])) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        $request->validate([
+            'action' => 'required|in:activate,deactivate,delete',
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'required|string|uuid',
+        ]);
+
+        $action = $request->action;
+        $ids = $request->ids;
+        $actorId = $request->user()->id;
+
+        if (in_array($action, ['activate', 'deactivate'])) {
+            $newStatus = $action === 'activate' ? 'active' : 'inactive';
+            $users = User::whereIn('id', $ids)
+                ->where('id', '!=', $actorId)
+                ->get();
+
+            foreach ($users as $u) {
+                $u->update(['status' => $newStatus]);
+            }
+
+            return response()->json([
+                'message' => "{$users->count()} user(s) {$newStatus}d.",
+                'errors' => [],
+                'meta' => ['affected' => $users->count()],
+            ]);
+        }
+
+        // delete
+        $deleted = 0;
+        $skipped = [];
+
+        $users = User::whereIn('id', $ids)->where('id', '!=', $actorId)->get();
+
+        foreach ($users as $user) {
+            $uid = $user->id;
+
+            $hasLinked = DB::table('review_assignments')->where('reviewer_id', $uid)->orWhere('assigned_by', $uid)->exists()
+                || DB::table('defence_sessions')->where('scheduled_by', $uid)->exists()
+                || DB::table('midterm_evaluations')->where('scheduled_by', $uid)->exists()
+                || DB::table('completion_workshops')->where('scheduled_by', $uid)->exists()
+                || DB::table('budget_requests')->where('requested_by', $uid)->exists()
+                || DB::table('budget_allocations')->where('allocated_by', $uid)->exists()
+                || DB::table('budget_approvals')->where('approved_by', $uid)->exists()
+                || DB::table('budget_settlements')->where('submitted_by', $uid)->exists()
+                || DB::table('workflow_logs')->where('actor_id', $uid)->exists()
+                || DB::table('research_outputs')->where('recorded_by', $uid)->exists();
+
+            if ($hasLinked) {
+                $skipped[] = $user->name;
+
+                continue;
+            }
+
+            DB::transaction(function () use ($user, $uid) {
+                $proposalIds = DB::table('proposals')
+                    ->where('pi_user_id', $uid)
+                    ->orWhere('created_by', $uid)
+                    ->pluck('id')
+                    ->toArray();
+
+                foreach ($proposalIds as $pid) {
+                    $brIds = DB::table('budget_requests')->where('proposal_id', $pid)->pluck('id')->toArray();
+
+                    if (! empty($brIds)) {
+                        $disbIds = DB::table('disbursements')->whereIn('budget_request_id', $brIds)->pluck('id')->toArray();
+
+                        if (! empty($disbIds)) {
+                            DB::table('payment_proofs')->whereIn('disbursement_id', $disbIds)->delete();
+                        }
+                        DB::table('disbursements')->whereIn('budget_request_id', $brIds)->delete();
+                        DB::table('form_signatures')->whereIn('budget_request_id', $brIds)->delete();
+                        DB::table('budget_approvals')->whereIn('budget_request_id', $brIds)->delete();
+                        DB::table('budget_transactions')->whereIn('budget_request_id', $brIds)->delete();
+                        DB::table('budget_settlements')->whereIn('budget_request_id', $brIds)->delete();
+                        DB::table('budget_request_items')->whereIn('budget_request_id', $brIds)->delete();
+                    }
+                    DB::table('budget_requests')->where('proposal_id', $pid)->delete();
+                    DB::table('review_assignments')->where('proposal_id', $pid)->delete();
+                    DB::table('workflow_logs')->where('proposal_id', $pid)->delete();
+                    DB::table('midterm_evaluations')->where('proposal_id', $pid)->delete();
+                    DB::table('defence_sessions')->where('proposal_id', $pid)->delete();
+                    DB::table('completion_workshops')->where('proposal_id', $pid)->delete();
+                    DB::table('research_outputs')->where('proposal_id', $pid)->delete();
+                    DB::table('repository_records')->where('proposal_id', $pid)->delete();
+                    DB::table('awards')->where('proposal_id', $pid)->delete();
+                    DB::table('budget_allocations')->where('proposal_id', $pid)->delete();
+                    DB::table('proposal_documents')->where('proposal_id', $pid)->delete();
+                    DB::table('proposal_budgets')->where('proposal_id', $pid)->delete();
+                    DB::table('proposal_members')->where('proposal_id', $pid)->delete();
+                    DB::table('proposals')->where('id', $pid)->delete();
+                }
+
+                DB::table('proposal_calls')->where('created_by', $uid)->update(['created_by' => null]);
+                DB::table('proposal_documents')->where('uploaded_by', $uid)->delete();
+                DB::table('notification_preferences')->where('user_id', $uid)->delete();
+                DB::table('proposal_members')->where('user_id', $uid)->delete();
+                DB::table('personal_access_tokens')
+                    ->where('tokenable_type', User::class)
+                    ->where('tokenable_id', $uid)
+                    ->delete();
+                DB::table('budget_allocations')->where('approved_by', $uid)->update(['approved_by' => null]);
+                DB::table('midterm_evaluations')->where('scored_by', $uid)->update(['scored_by' => null]);
+                DB::table('resources')->where('created_by', $uid)->update(['created_by' => null]);
+
+                $user->roles()->detach();
+                $user->permissions()->detach();
+                $user->forceDelete();
+            });
+
+            $deleted++;
+        }
+
+        $message = "{$deleted} user(s) deleted.";
+
+        if (! empty($skipped)) {
+            $message .= ' Skipped (linked records): '.implode(', ', array_slice($skipped, 0, 5));
+
+            if (count($skipped) > 5) {
+                $message .= ' and '.(count($skipped) - 5).' more.';
+            }
+        }
+
+        return response()->json([
+            'message' => $message,
+            'errors' => [],
+            'meta' => ['deleted' => $deleted, 'skipped' => count($skipped)],
+        ]);
     }
 
     public function updateUserRoles(Request $request, string $id): JsonResponse

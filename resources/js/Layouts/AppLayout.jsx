@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import NotificationBell from '../Components/NotificationBell'
 import FeedbackPopup from '../Components/FeedbackPopup'
+import GenderPromptModal from '../Components/GenderPromptModal'
 import SwitchLoginModal from '../Components/SwitchLoginModal'
 import ConfirmDialog from '../Components/ConfirmDialog'
 import { useToast } from '../Components/Toast'
@@ -439,7 +440,7 @@ function GuestBanner() {
 // ─── AppLayout ────────────────────────────────────────────────────────────────
 
 export default function AppLayout({ children, breadcrumb }) {
-    const { user, logout, hasRole, hasAnyRole, hasPermission, refreshUser, isImpersonating, stopImpersonating, impersonate } = useAuth()
+    const { user, setUser, logout, hasRole, hasAnyRole, hasPermission, refreshUser, isImpersonating, stopImpersonating, impersonate } = useAuth()
     const toast = useToast()
     const canImpersonate = hasPermission('users.impersonate') && !isImpersonating
     const [switchLoginOpen, setSwitchLoginOpen] = useState(false)
@@ -503,11 +504,14 @@ export default function AppLayout({ children, breadcrumb }) {
 
     const [announcementDismissed, setAnnouncementDismissed] = useState(false)
 
+    // ── Gender prompt ───────────────────────────────────────────────────────────
+    const showGenderPrompt = !!user && !user.gender
+
     // ── Feedback popup ──────────────────────────────────────────────────────────
     const feedbackPopupEnabled = appSettings.feedback_popup_enabled === 'true'
     const feedbackSubmitted    = user?.feedback_submitted ?? true
     const [feedbackDismissed, setFeedbackDismissed] = useState(false)
-    const showFeedbackPopup = feedbackPopupEnabled && !feedbackSubmitted && !feedbackDismissed
+    const showFeedbackPopup = feedbackPopupEnabled && !feedbackSubmitted && !feedbackDismissed && !showGenderPrompt
 
     // ── Session timeout ────────────────────────────────────────────────────────
     const [sessionWarning, setSessionWarning] = useState(null) // { secondsLeft }
@@ -551,7 +555,7 @@ export default function AppLayout({ children, breadcrumb }) {
         const currentPath   = window.location.pathname
         const currentSearch = window.location.search
         if (href.includes('?')) return currentPath + currentSearch === href
-        const exactOnly = ['/dashboard', '/proposals', '/my-proposals', '/reviews', '/complaints', '/repository']
+        const exactOnly = ['/dashboard', '/researcher-hub', '/proposals', '/my-proposals', '/reviews', '/complaints', '/repository']
         if (exactOnly.includes(href)) return currentPath === href
         return currentPath === href || currentPath.startsWith(href + '/')
     }
@@ -571,6 +575,7 @@ export default function AppLayout({ children, breadcrumb }) {
             group: 'Main',
             items: [
                 { label: 'Dashboard', href: '/dashboard', icon: 'LayoutDashboard', show: true },
+                { label: 'My Research Hub', href: '/researcher-hub', icon: 'Brain', show: true },
             ],
         },
         {
@@ -1131,6 +1136,12 @@ export default function AppLayout({ children, breadcrumb }) {
                     secondsLeft={sessionWarning.secondsLeft}
                     onContinue={() => { resetActivity(); setSessionWarning(null) }}
                     onLogout={handleSessionLogout}
+                />
+            )}
+
+            {showGenderPrompt && (
+                <GenderPromptModal
+                    onSaved={(gender) => setUser({ ...user, gender })}
                 />
             )}
 

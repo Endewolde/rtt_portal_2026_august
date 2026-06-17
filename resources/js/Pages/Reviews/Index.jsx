@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from '@inertiajs/react';
-import { ClipboardCheck, Clock, AlertCircle } from 'lucide-react';
+import { ClipboardCheck, Clock, AlertCircle, Download } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import { useToast } from '../../Components/Toast';
 import api from '../../lib/api';
@@ -44,9 +44,18 @@ export default function ReviewIndex() {
     return (
         <AppLayout breadcrumb="Reviews">
             <div className="p-6 max-w-6xl mx-auto">
-                <div className="mb-6">
-                    <h1 className="text-2xl font-bold text-gray-900">My Review Assignments</h1>
-                    <p className="text-sm text-gray-500 mt-1">Proposals assigned to you for evaluation</p>
+                <div className="mb-6 flex items-start justify-between gap-4">
+                    <div>
+                        <h1 className="text-2xl font-bold text-gray-900">My Review Assignments</h1>
+                        <p className="text-sm text-gray-500 mt-1">Proposals assigned to you for evaluation</p>
+                    </div>
+                    <a
+                        href="/api/v1/calendar/events.ics"
+                        className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors shrink-0"
+                    >
+                        <Download size={12} />
+                        Export Calendar
+                    </a>
                 </div>
 
                 {assignments.length === 0 ? (
