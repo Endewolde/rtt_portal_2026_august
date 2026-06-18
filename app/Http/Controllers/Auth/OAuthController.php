@@ -58,6 +58,14 @@ class OAuthController extends Controller
             return redirect('/login?sso_error='.urlencode('No email address returned by the provider.'));
         }
 
+        $oauthId = (string) $socialUser->getId();
+        $existingUser = User::where('oauth_provider', $provider)->where('oauth_id', $oauthId)->first()
+            ?? User::where('email', $email)->first();
+
+        if (! $existingUser && AppSetting::where('key', 'self_registration')->value('value') === 'false') {
+            return redirect('/login?sso_error='.urlencode('Your account ('.$email.') is not registered in this system. Please contact the administrator to create your account before signing in with SSO.'));
+        }
+
         $user = $this->findOrCreateUser($provider, $socialUser);
 
         $user->update(['last_login_at' => now()]);
@@ -92,11 +100,6 @@ class OAuthController extends Controller
             $user->update(['oauth_provider' => $provider, 'oauth_id' => $oauthId]);
 
             return $user;
-        }
-
-        // 3. Block new account creation if self-registration is disabled
-        if (AppSetting::where('key', 'self_registration')->value('value') === 'false') {
-            return redirect('/login?sso_error='.urlencode('Your account ('.$email.') is not registered in this system. Please contact the administrator to create your account before signing in with SSO.'));
         }
 
         $user = User::create([

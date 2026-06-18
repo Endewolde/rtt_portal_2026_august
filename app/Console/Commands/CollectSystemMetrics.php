@@ -10,7 +10,6 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Notification;
 
 #[Signature('metrics:collect')]
 #[Description('Collect system and application metrics for the monitoring dashboard')]
@@ -56,6 +55,8 @@ class CollectSystemMetrics extends Command
         $rows[] = $this->row('req_avg_ms', $reqStats['avg_ms'], $now);
         $rows[] = $this->row('req_error_rate', $reqStats['error_rate'], $now);
         $rows[] = $this->row('req_count', $reqStats['count'], $now);
+        $rows[] = $this->row('req_p95_ms', $reqStats['p95'], $now);
+        $rows[] = $this->row('req_p99_ms', $reqStats['p99'], $now);
 
         DB::table('system_metrics')->insert($rows);
 
@@ -74,10 +75,8 @@ class CollectSystemMetrics extends Command
         }
 
         // ── Housekeeping ──────────────────────────────────────────────────────
+        // RPM counter resets every minute; DELETEs run via metrics:housekeeping daily
         Cache::put('metric:rpm', 0, 120);
-        DB::table('system_metrics')->where('recorded_at', '<', now()->subDays(7))->delete();
-        DB::table('request_logs')->where('requested_at', '<', now()->subDays(3))->delete();
-        DB::table('system_alerts')->where('resolved', true)->where('resolved_at', '<', now()->subDays(7))->delete();
 
         $this->info('Metrics collected. New alerts: '.count($allNew));
 
@@ -196,17 +195,25 @@ class CollectSystemMetrics extends Command
 
     private function requestMetrics(): array
     {
-        $row = DB::table('request_logs')
+        $rows = DB::table('request_logs')
             ->where('requested_at', '>=', now()->subMinutes(5))
-            ->selectRaw('COUNT(*) as cnt, AVG(duration_ms) as avg_ms, SUM(status_code >= 400) as failed')
-            ->first();
+            ->select('duration_ms', 'status_code')
+            ->get();
 
-        $count = (int) ($row?->cnt ?? 0);
-        $avgMs = round((float) ($row?->avg_ms ?? 0), 1);
-        $failed = (int) ($row?->failed ?? 0);
-        $errorRate = $count > 0 ? round($failed / $count * 100, 1) : 0.0;
+        $count = $rows->count();
+        if ($count === 0) {
+            return ['count' => 0, 'avg_ms' => 0.0, 'error_rate' => 0.0, 'p95' => 0, 'p99' => 0];
+        }
 
-        return ['count' => $count, 'avg_ms' => $avgMs, 'error_rate' => $errorRate];
+        $avgMs = round($rows->avg('duration_ms'), 1);
+        $failed = $rows->where('status_code', '>=', 400)->count();
+        $errorRate = round($failed / $count * 100, 1);
+
+        $sorted = $rows->pluck('duration_ms')->sort()->values();
+        $p95 = (int) $sorted[max(0, (int) ceil($count * 0.95) - 1)];
+        $p99 = (int) $sorted[max(0, (int) ceil($count * 0.99) - 1)];
+
+        return ['count' => $count, 'avg_ms' => $avgMs, 'error_rate' => $errorRate, 'p95' => $p95, 'p99' => $p99];
     }
 
     // ── Threshold alerts ──────────────────────────────────────────────────────

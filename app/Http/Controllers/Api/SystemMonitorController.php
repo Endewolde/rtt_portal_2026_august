@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Notifications\SystemAlertNotification;
-use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -69,8 +68,8 @@ class SystemMonitorController extends Controller
         $failed = (clone $base)->where('status_code', '>=', 400)->count();
         $avgMs = (clone $base)->avg('duration_ms') ?? 0;
         $slowCount = (clone $base)->where('duration_ms', '>', 2000)->count();
-        $p95 = $this->percentile($since, 95);
-        $p99 = $this->percentile($since, 99);
+        $p95 = (int) (DB::table('system_metrics')->where('metric', 'req_p95_ms')->orderByDesc('recorded_at')->value('value') ?? 0);
+        $p99 = (int) (DB::table('system_metrics')->where('metric', 'req_p99_ms')->orderByDesc('recorded_at')->value('value') ?? 0);
 
         $byStatus = (clone $base)
             ->selectRaw('status_code, COUNT(*) as count')
@@ -363,23 +362,5 @@ class SystemMonitorController extends Controller
             'alerts_count' => DB::table('system_alerts')->where('resolved', false)->count(),
             'collected_at' => now()->toIso8601String(),
         ];
-    }
-
-    private function percentile(Carbon $since, int $pct): int
-    {
-        $total = DB::table('request_logs')->where('requested_at', '>=', $since)->count();
-        if ($total === 0) {
-            return 0;
-        }
-        $offset = (int) ceil($total * $pct / 100) - 1;
-
-        $row = DB::table('request_logs')
-            ->where('requested_at', '>=', $since)
-            ->orderBy('duration_ms')
-            ->skip($offset)
-            ->limit(1)
-            ->value('duration_ms');
-
-        return (int) ($row ?? 0);
     }
 }

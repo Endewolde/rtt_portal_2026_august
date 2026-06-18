@@ -2,7 +2,7 @@
 
 namespace App\Notifications;
 
-use Illuminate\Notifications\Messages\MailMessage;
+use App\Mail\SystemAlertMail;
 use Illuminate\Notifications\Notification;
 
 class SystemAlertNotification extends Notification
@@ -28,28 +28,17 @@ class SystemAlertNotification extends Notification
         return $channels;
     }
 
-    public function toMail(object $notifiable): MailMessage
+    public function toMail(object $notifiable): SystemAlertMail
     {
-        $severityLabel = ucfirst($this->severity);
-        $isAnomaly = $this->anomalyType !== null;
-        $subject = $isAnomaly
-            ? "[RTT] Anomaly Detected: {$this->message}"
-            : "[RTT] System Alert ({$severityLabel}): {$this->message}";
-
-        return (new MailMessage)->view(
-            'emails.system-alert',
-            [
-                'user' => $notifiable,
-                'alertType' => $this->alertType,
-                'severity' => $this->severity,
-                'severityLabel' => $severityLabel,
-                'alertMessage' => $this->message,
-                'context' => $this->context,
-                'anomalyType' => $this->anomalyType,
-                'isAnomaly' => $isAnomaly,
-                'dashboardUrl' => url('/admin/system-monitor'),
-            ]
-        )->subject($subject);
+        return new SystemAlertMail(
+            user: $notifiable,
+            alertType: $this->alertType,
+            severity: $this->severity,
+            alertMessage: $this->message,
+            context: $this->context,
+            anomalyType: $this->anomalyType,
+            isAnomaly: $this->anomalyType !== null,
+        );
     }
 
     public function toArray(object $notifiable): array

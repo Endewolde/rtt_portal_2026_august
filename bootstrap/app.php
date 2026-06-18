@@ -16,6 +16,7 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -98,5 +99,10 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('rtt:cleanup-telegram-tokens')->weekly();
         $schedule->command('cache:warm-dashboard')->dailyAt('06:00');
         $schedule->command('metrics:collect')->everyMinute();
+        $schedule->call(function () {
+            DB::table('system_metrics')->where('recorded_at', '<', now()->subDays(7))->delete();
+            DB::table('request_logs')->where('requested_at', '<', now()->subDays(3))->delete();
+            DB::table('system_alerts')->where('resolved', true)->where('resolved_at', '<', now()->subDays(7))->delete();
+        })->dailyAt('02:00')->name('metrics:housekeeping');
     })
     ->create();
