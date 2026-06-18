@@ -72,6 +72,7 @@ class User extends Authenticatable
             'password' => 'hashed',
             'expertise' => 'array',
             'two_factor_enabled' => 'boolean',
+            'alert_preferences' => 'array',
         ];
     }
 

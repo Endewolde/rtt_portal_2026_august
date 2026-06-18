@@ -145,6 +145,14 @@ class SettingsController extends Controller
         Cache::forget('inertia_app_settings');
         Cache::forget('blade_app_meta');
 
+        // Bust OAuth credential caches when provider keys change
+        if (str_starts_with($key, 'microsoft_') || $key === 'microsoft_sso_enabled') {
+            Cache::forget('oauth_creds_microsoft');
+        }
+        if (str_starts_with($key, 'google_') || $key === 'google_sso_enabled') {
+            Cache::forget('oauth_creds_google');
+        }
+
         // Keep legacy site_name in sync with system_name (used by AwardController)
         if ($key === 'system_name') {
             AppSetting::where('key', 'site_name')

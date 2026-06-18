@@ -494,7 +494,7 @@ class ConferenceController extends Controller
 
     private function sendRegistrationConfirmation(Conference $conference, ConferenceRegistration $reg): void
     {
-        SendRawMailJob::dispatch(
+        SendRawMailJob::dispatchSync(
             view('emails.conference_registration', [
                 'conference' => $conference,
                 'registration' => $reg,
@@ -515,7 +515,7 @@ class ConferenceController extends Controller
                 continue;
             }
 
-            SendRawMailJob::dispatch(
+            SendRawMailJob::dispatchSync(
                 view('emails.conference_registration_admin', [
                     'conference' => $conference,
                     'registration' => $reg,
@@ -538,7 +538,7 @@ class ConferenceController extends Controller
                 continue;
             }
 
-            SendRawMailJob::dispatch(
+            SendRawMailJob::dispatchSync(
                 view('emails.conference_published', [
                     'conference' => $conference,
                     'admin' => $admin,
@@ -558,7 +558,7 @@ class ConferenceController extends Controller
             ->get();
 
         foreach ($registrants as $reg) {
-            SendRawMailJob::dispatch(
+            SendRawMailJob::dispatchSync(
                 view('emails.conference_updated', [
                     'conference' => $conference,
                     'registration' => $reg,
@@ -578,7 +578,7 @@ class ConferenceController extends Controller
             ->get();
 
         foreach ($registrants as $reg) {
-            SendRawMailJob::dispatch(
+            SendRawMailJob::dispatchSync(
                 view('emails.conference_cancelled', [
                     'conference' => $conference,
                     'registration' => $reg,

@@ -163,7 +163,7 @@ class AbstractController extends Controller
 
     private function sendSubmissionConfirmation(ConferenceAbstract $abstract, Conference $conference): void
     {
-        SendRawMailJob::dispatch(
+        SendRawMailJob::dispatchSync(
             view('emails.abstract_submission_received', compact('abstract', 'conference') + ['senderName' => $this->senderName()])->render(),
             $abstract->submitter_email,
             $abstract->submitter_name,
@@ -177,7 +177,7 @@ class AbstractController extends Controller
             if (! $admin->email) {
                 continue;
             }
-            SendRawMailJob::dispatch(
+            SendRawMailJob::dispatchSync(
                 view('emails.abstract_admin_alert', compact('abstract', 'conference', 'admin') + ['senderName' => $this->senderName()])->render(),
                 $admin->email,
                 $admin->name,

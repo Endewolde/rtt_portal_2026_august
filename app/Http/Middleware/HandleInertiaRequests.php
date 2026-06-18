@@ -44,6 +44,7 @@ class HandleInertiaRequests extends Middleware
                     'sso_enabled',
                     'google_sso_enabled',
                     'microsoft_sso_enabled',
+                    'password_login_enabled',
                     // Public site content
                     'public_header_tagline',
                     'public_footer_tagline',

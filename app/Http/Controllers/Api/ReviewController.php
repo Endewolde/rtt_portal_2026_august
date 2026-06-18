@@ -480,7 +480,7 @@ class ReviewController extends Controller
             ];
 
             if ($newReviewer->email) {
-                SendRawMailJob::dispatch(
+                SendRawMailJob::dispatchSync(
                     view('emails.notifications.review_assignment', array_merge($data, ['recipient' => $newReviewer]))->render(),
                     $newReviewer->email,
                     $newReviewer->name,
@@ -571,7 +571,7 @@ class ReviewController extends Controller
             ];
 
             if ($reviewer->email) {
-                SendRawMailJob::dispatch(
+                SendRawMailJob::dispatchSync(
                     view('emails.notifications.review_assignment', array_merge($data, ['recipient' => $reviewer]))->render(),
                     $reviewer->email,
                     $reviewer->name,

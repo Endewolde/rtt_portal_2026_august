@@ -74,6 +74,7 @@ const KEY_LABELS = {
     max_concurrent_sessions: 'Max Concurrent Sessions',
     account_lockout_minutes: 'Lockout Duration (min)', force_password_on_first_login: 'Force Password Change on First Login',
     captcha_enabled: 'CAPTCHA Enabled', allowed_ips: 'Allowed IP Addresses',
+    password_login_enabled: 'Password Login Enabled',
     default_user_role: 'Default User Role', self_registration: 'Self-Registration',
     email_verification_required: 'Email Verification Required', default_import_password: 'Default Import Password',
     account_activation_method: 'Account Activation Method',
@@ -1772,8 +1773,35 @@ const MICROSOFT_LOGO = (
 )
 
 function IntegrationPanel({ values, onChange, onSave }) {
+    const passwordLoginEnabled = values['password_login_enabled'] === 'true' || values['password_login_enabled'] === true
+
     return (
         <div className="space-y-4">
+            {/* Password Login toggle */}
+            <div className="bg-white border border-gray-200 rounded-2xl px-5 py-2">
+                <div className="flex items-center justify-between py-3">
+                    <div>
+                        <p className="text-sm font-medium text-gray-900">Password Login</p>
+                        <p className="text-xs text-gray-400 mt-0.5">Show the email &amp; password sign-in option on the login page</p>
+                    </div>
+                    <button
+                        onClick={() => {
+                            const next = passwordLoginEnabled ? 'false' : 'true'
+                            onChange('password_login_enabled', next)
+                            onSave('password_login_enabled', next)
+                        }}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                            passwordLoginEnabled
+                                ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                        }`}
+                    >
+                        {passwordLoginEnabled ? <ToggleRight size={15} /> : <ToggleLeft size={15} />}
+                        {passwordLoginEnabled ? 'Enabled' : 'Disabled'}
+                    </button>
+                </div>
+            </div>
+
             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex gap-3">
                 <AlertTriangle size={15} className="text-amber-500 shrink-0 mt-0.5" />
                 <p className="text-xs text-amber-700">

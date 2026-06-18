@@ -1,11 +1,21 @@
 <?php
 
+use App\Exceptions\ComplaintAlreadyFiledException;
+use App\Exceptions\UnauthorizedResolutionException;
+use App\Http\Middleware\EnsureCategoryScope;
+use App\Http\Middleware\EnsureCollegeScope;
+use App\Http\Middleware\EnsureFeatureEnabled;
+use App\Http\Middleware\EnsureUserIsActive;
+use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\SecurityHeaders;
+use App\Http\Middleware\TrackRequestMetrics;
+use Illuminate\Auth\AuthenticationException;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Request;
-use Illuminate\Console\Scheduling\Schedule;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -16,14 +26,15 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->web(append: [
-            \App\Http\Middleware\HandleInertiaRequests::class,
+            HandleInertiaRequests::class,
+            TrackRequestMetrics::class,
         ]);
-        $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
+        $middleware->append(SecurityHeaders::class);
         $middleware->alias([
-            'college.scope'  => \App\Http\Middleware\EnsureCollegeScope::class,
-            'category.scope' => \App\Http\Middleware\EnsureCategoryScope::class,
-            'user.active'    => \App\Http\Middleware\EnsureUserIsActive::class,
-            'feature'        => \App\Http\Middleware\EnsureFeatureEnabled::class,
+            'college.scope' => EnsureCollegeScope::class,
+            'category.scope' => EnsureCategoryScope::class,
+            'user.active' => EnsureUserIsActive::class,
+            'feature' => EnsureFeatureEnabled::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
@@ -34,15 +45,15 @@ return Application::configure(basePath: dirname(__DIR__))
         // Return JSON 401 for unauthenticated API requests instead of
         // redirecting to route('login') (which doesn't exist in this SPA).
         $exceptions->render(function (
-            \Illuminate\Auth\AuthenticationException $_e,
+            AuthenticationException $_e,
             Request $request
         ) {
             if ($request->is('api/*')) {
                 return response()->json([
-                    'data'    => null,
+                    'data' => null,
                     'message' => 'Unauthenticated. Please log in.',
-                    'errors'  => [],
-                    'meta'    => [],
+                    'errors' => [],
+                    'meta' => [],
                 ], 401);
             }
         });
@@ -51,30 +62,30 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(function (ThrottleRequestsException $e, Request $request) {
             if ($request->is('api/*')) {
                 return response()->json([
-                    'data'    => null,
+                    'data' => null,
                     'message' => 'Too many requests. Please try again later.',
-                    'errors'  => ['retry_after' => (int) $e->getHeaders()['Retry-After'] ?? 60],
-                    'meta'    => [],
+                    'errors' => ['retry_after' => (int) $e->getHeaders()['Retry-After'] ?? 60],
+                    'meta' => [],
                 ], 429, $e->getHeaders());
             }
         });
 
         // Duplicate complaint → 409 Conflict
-        $exceptions->render(function (\App\Exceptions\ComplaintAlreadyFiledException $e, Request $request) {
+        $exceptions->render(function (ComplaintAlreadyFiledException $e, Request $request) {
             if ($request->is('api/*')) {
                 return response()->json(['data' => null, 'message' => $e->getMessage(), 'errors' => [], 'meta' => []], 409);
             }
         });
 
         // Business-rule violations in complaint/resolution flows → 422 Unprocessable
-        $exceptions->render(function (\App\Exceptions\UnauthorizedResolutionException $e, Request $request) {
+        $exceptions->render(function (UnauthorizedResolutionException $e, Request $request) {
             if ($request->is('api/*')) {
                 return response()->json(['data' => null, 'message' => $e->getMessage(), 'errors' => [], 'meta' => []], 422);
             }
         });
 
         // Service-layer argument violations (wrong stage, non-funded proposal, etc.) → 422
-        $exceptions->render(function (\InvalidArgumentException $e, Request $request) {
+        $exceptions->render(function (InvalidArgumentException $e, Request $request) {
             if ($request->is('api/*')) {
                 return response()->json(['data' => null, 'message' => $e->getMessage(), 'errors' => [], 'meta' => []], 422);
             }
@@ -86,5 +97,6 @@ return Application::configure(basePath: dirname(__DIR__))
         $schedule->command('rtt:expire-calls')->everyMinute();
         $schedule->command('rtt:cleanup-telegram-tokens')->weekly();
         $schedule->command('cache:warm-dashboard')->dailyAt('06:00');
+        $schedule->command('metrics:collect')->everyMinute();
     })
     ->create();

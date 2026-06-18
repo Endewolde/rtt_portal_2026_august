@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
 use App\Models\User;
+use GuzzleHttp\Client as GuzzleClient;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
@@ -38,7 +40,12 @@ class OAuthController extends Controller
         $this->applyProviderConfig($provider);
 
         try {
-            $socialUser = Socialite::driver($this->driverName($provider))->user();
+            $socialUser = Socialite::driver($this->driverName($provider))
+                ->setHttpClient(new GuzzleClient([
+                    'connect_timeout' => 8,
+                    'timeout' => 15,
+                ]))
+                ->user();
         } catch (\Exception $e) {
             Log::warning("[SSO] OAuth callback failed for {$provider}: ".$e->getMessage());
 
@@ -89,7 +96,7 @@ class OAuthController extends Controller
 
         // 3. Block new account creation if self-registration is disabled
         if (AppSetting::where('key', 'self_registration')->value('value') === 'false') {
-            abort(403, 'Self-registration is currently disabled. Please contact the system administrator for more information or visit the administration office for assistance.');
+            return redirect('/login?sso_error='.urlencode('Your account ('.$email.') is not registered in this system. Please contact the administrator to create your account before signing in with SSO.'));
         }
 
         $user = User::create([
@@ -117,16 +124,25 @@ class OAuthController extends Controller
         $redirectBase = config('app.url');
 
         if ($provider === 'google') {
+            $creds = Cache::remember('oauth_creds_google', 3600, fn () => [
+                'client_id' => AppSetting::where('key', 'google_client_id')->value('value'),
+                'client_secret' => AppSetting::where('key', 'google_client_secret')->value('value'),
+            ]);
             config([
-                'services.google.client_id' => AppSetting::where('key', 'google_client_id')->value('value'),
-                'services.google.client_secret' => AppSetting::where('key', 'google_client_secret')->value('value'),
+                'services.google.client_id' => $creds['client_id'],
+                'services.google.client_secret' => $creds['client_secret'],
                 'services.google.redirect' => "{$redirectBase}/auth/oauth/google/callback",
             ]);
         } else {
+            $creds = Cache::remember('oauth_creds_microsoft', 3600, fn () => [
+                'client_id' => AppSetting::where('key', 'microsoft_client_id')->value('value'),
+                'client_secret' => AppSetting::where('key', 'microsoft_client_secret')->value('value'),
+                'tenant' => AppSetting::where('key', 'microsoft_tenant_id')->value('value') ?: 'common',
+            ]);
             config([
-                'services.azure.client_id' => AppSetting::where('key', 'microsoft_client_id')->value('value'),
-                'services.azure.client_secret' => AppSetting::where('key', 'microsoft_client_secret')->value('value'),
-                'services.azure.tenant' => AppSetting::where('key', 'microsoft_tenant_id')->value('value') ?: 'common',
+                'services.azure.client_id' => $creds['client_id'],
+                'services.azure.client_secret' => $creds['client_secret'],
+                'services.azure.tenant' => $creds['tenant'],
                 'services.azure.redirect' => "{$redirectBase}/auth/oauth/microsoft/callback",
             ]);
         }

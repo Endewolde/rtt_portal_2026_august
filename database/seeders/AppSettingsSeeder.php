@@ -37,6 +37,7 @@ class AppSettingsSeeder extends Seeder
             ['key' => 'force_password_on_first_login', 'value' => 'true',   'type' => 'boolean',  'group' => 'security'],
             ['key' => 'captcha_enabled',               'value' => 'false',  'type' => 'boolean',  'group' => 'security'],
             ['key' => 'allowed_ips',                   'value' => '',       'type' => 'textarea', 'group' => 'security'],
+            ['key' => 'password_login_enabled',        'value' => 'true',   'type' => 'boolean',  'group' => 'integration'],
 
             // User Management
             ['key' => 'default_user_role',           'value' => 'guest',        'type' => 'select',  'group' => 'users'],

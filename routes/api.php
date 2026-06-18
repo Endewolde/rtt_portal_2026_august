@@ -47,6 +47,7 @@ use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\SettlementController;
 use App\Http\Controllers\Api\SimilarityController;
 use App\Http\Controllers\Api\StatsController;
+use App\Http\Controllers\Api\SystemMonitorController;
 use App\Http\Controllers\Api\ThematicAreaController;
 use App\Http\Controllers\Api\UserController;
 use App\Models\FormTemplate;
@@ -197,6 +198,23 @@ Route::prefix('v1')->group(function () {
 
         // Audit logs
         Route::get('/audit-logs', [AuditLogController::class, 'index']);
+
+        // System monitoring
+        Route::prefix('system-monitor')->group(function () {
+            Route::get('/current', [SystemMonitorController::class, 'current']);
+            Route::get('/history', [SystemMonitorController::class, 'history']);
+            Route::get('/requests', [SystemMonitorController::class, 'requestStats']);
+            Route::get('/alerts', [SystemMonitorController::class, 'alerts']);
+            Route::post('/alerts/{id}/resolve', [SystemMonitorController::class, 'resolveAlert']);
+            Route::get('/preferences', [SystemMonitorController::class, 'getPreferences']);
+            Route::put('/preferences', [SystemMonitorController::class, 'savePreferences']);
+            Route::post('/test-alert', [SystemMonitorController::class, 'testAlert']);
+            Route::get('/failed-jobs', [SystemMonitorController::class, 'failedJobs']);
+            Route::post('/failed-jobs/retry-all', [SystemMonitorController::class, 'retryAllFailedJobs']);
+            Route::delete('/failed-jobs/flush', [SystemMonitorController::class, 'flushFailedJobs']);
+            Route::post('/failed-jobs/{uuid}/retry', [SystemMonitorController::class, 'retryFailedJob']);
+            Route::delete('/failed-jobs/{uuid}', [SystemMonitorController::class, 'forgetFailedJob']);
+        });
 
         // Feature management (super_admin only — no feature gate needed on this route itself)
         Route::get('/features', [FeatureController::class, 'index']);

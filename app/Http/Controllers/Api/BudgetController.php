@@ -820,7 +820,7 @@ class BudgetController extends Controller
             if (! $user->email) {
                 continue;
             }
-            SendRawMailJob::dispatch(
+            SendRawMailJob::dispatchSync(
                 view('emails.notifications.budget_request_approved', array_merge($data, ['recipient' => $user]))->render(),
                 $user->email,
                 $user->name,

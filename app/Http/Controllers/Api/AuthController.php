@@ -210,7 +210,7 @@ class AuthController extends Controller
             $resetUrl = config('app.url').'/reset-password?token='.$rawToken.'&email='.urlencode($user->email);
             $expiresAt = now()->addMinutes(60)->format('d M Y, H:i');
 
-            SendRawMailJob::dispatch(
+            SendRawMailJob::dispatchSync(
                 view('emails.password_reset', [
                     'userName' => $user->name,
                     'resetUrl' => $resetUrl,

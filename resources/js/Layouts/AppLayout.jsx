@@ -41,6 +41,7 @@ const ROUTE_PERMISSIONS = [
     ['/admin/permissions',         ['super_admin']],
     ['/admin/features',            ['super_admin']],
     ['/admin/audit-logs',          _A],
+    ['/admin/system-monitor',      ['super_admin', 'central_officer']],
     ['/admin/evaluation-criteria', _A],
     ['/admin/similarity-flags',    _A],
     ['/admin/users',               _A],
@@ -804,6 +805,10 @@ export default function AppLayout({ children, breadcrumb }) {
                 {
                     label: 'Audit Logs', href: '/admin/audit-logs', icon: 'Shield',
                     show: perm('audit_logs.view_any'),
+                },
+                {
+                    label: 'System Monitor', href: '/admin/system-monitor', icon: 'Activity',
+                    show: hasAnyRole(['super_admin', 'central_officer']),
                 },
                 {
                     label: 'Feature Management', href: '/admin/features', icon: 'Settings',
