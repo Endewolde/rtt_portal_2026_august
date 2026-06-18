@@ -66,7 +66,7 @@ class AnalyticsController extends Controller
             $q->where('college_id', $filters['college_id']);
         }
 
-        $total = (clone $q)->count();
+        $total = (clone $q)->where('status', '!=', 'draft')->count();
         $funded = (clone $q)->whereIn('status', ['funded', 'accepted', 'completed'])->count();
         $rejected = (clone $q)->where('status', 'rejected')->count();
         $active = (clone $q)->whereNotIn('status', ['funded', 'rejected', 'archived', 'completed', 'draft'])->count();
@@ -84,7 +84,8 @@ class AnalyticsController extends Controller
     {
         $q = DB::table('proposals')
             ->whereNull('deleted_at')
-            ->whereNotNull('research_type');
+            ->whereNotNull('research_type')
+            ->where('status', '!=', 'draft');
 
         if (! empty($filters['academic_year'])) {
             $q->where('academic_year', $filters['academic_year']);
@@ -113,7 +114,8 @@ class AnalyticsController extends Controller
         return DB::table('colleges as c')
             ->leftJoin('proposals as p', function ($join) use ($year) {
                 $join->on('p.college_id', '=', 'c.id')
-                    ->whereNull('p.deleted_at');
+                    ->whereNull('p.deleted_at')
+                    ->where('p.status', '!=', 'draft');
                 if ($year) {
                     $join->where('p.academic_year', $year);
                 }
@@ -139,6 +141,7 @@ class AnalyticsController extends Controller
         return DB::table('proposals')
             ->whereNull('deleted_at')
             ->whereNotNull('academic_year')
+            ->where('status', '!=', 'draft')
             ->select(
                 'academic_year',
                 DB::raw('COUNT(*) as total'),
@@ -176,7 +179,8 @@ class AnalyticsController extends Controller
         $q = DB::table('proposals as p')
             ->join('users as u', 'u.id', '=', 'p.pi_user_id')
             ->whereNull('p.deleted_at')
-            ->whereNotNull('u.gender');
+            ->whereNotNull('u.gender')
+            ->where('p.status', '!=', 'draft');
 
         if (! empty($filters['academic_year'])) {
             $q->where('p.academic_year', $filters['academic_year']);
@@ -203,6 +207,7 @@ class AnalyticsController extends Controller
         return DB::table('proposals')
             ->whereNull('deleted_at')
             ->whereNotNull('academic_year')
+            ->where('status', '!=', 'draft')
             ->select(
                 'academic_year',
                 DB::raw('COUNT(*) as total'),
@@ -222,7 +227,8 @@ class AnalyticsController extends Controller
         $q = DB::table('proposals as p')
             ->join('colleges as c', 'c.id', '=', 'p.college_id')
             ->whereNull('p.deleted_at')
-            ->whereNull('c.deleted_at');
+            ->whereNull('c.deleted_at')
+            ->where('p.status', '!=', 'draft');
 
         if (! empty($filters['academic_year'])) {
             $q->where('p.academic_year', $filters['academic_year']);
@@ -246,6 +252,7 @@ class AnalyticsController extends Controller
         $yearlyData = DB::table('proposals')
             ->whereNull('deleted_at')
             ->whereNotNull('academic_year')
+            ->where('status', '!=', 'draft')
             ->select('academic_year', DB::raw('COUNT(*) as total'))
             ->groupBy('academic_year')
             ->orderBy('academic_year')
