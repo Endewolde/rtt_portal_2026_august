@@ -9,14 +9,26 @@ use App\Models\ProposalCall;
 use App\Models\ReviewAssignment;
 use App\Support\ICalBuilder;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Laravel\Sanctum\PersonalAccessToken;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class CalendarController extends Controller
 {
-    public function export(Request $request): StreamedResponse
+    public function export(Request $request): StreamedResponse|JsonResponse
     {
+        // Browser downloads cannot send Authorization headers, so we accept ?token= as fallback.
         $user = $request->user();
+
+        if (! $user && $request->query('token')) {
+            $pat = PersonalAccessToken::findToken($request->query('token'));
+            $user = $pat?->tokenable;
+        }
+
+        if (! $user) {
+            return response()->json(['data' => null, 'message' => 'Unauthenticated.', 'errors' => [], 'meta' => []], 401);
+        }
         $cal = new ICalBuilder('RTT Platform Calendar');
 
         // All users — open proposal calls

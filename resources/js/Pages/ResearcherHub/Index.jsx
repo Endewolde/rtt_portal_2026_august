@@ -160,7 +160,7 @@ export default function ResearcherHubIndex() {
     const activeProposals    = proposals.filter(p => !['completed', 'archived', 'rejected'].includes(p.status))
     const totalOutputs       = Object.values(researchOutputs).reduce((a, b) => a + b, 0)
 
-    const calendarUrl = `${window.location.origin}/api/v1/calendar/events.ics`
+    const calendarUrl = `/api/v1/calendar/export?token=${localStorage.getItem('rtt_token') ?? ''}`
 
     return (
         <AppLayout breadcrumb="My Research Hub">

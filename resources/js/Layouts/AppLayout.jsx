@@ -469,6 +469,7 @@ export default function AppLayout({ children, breadcrumb }) {
     const [collapsed, setCollapsed] = useState(false)
     const [mobileOpen, setMobileOpen] = useState(false)
     const [unreadNotifications, setUnreadNotifications] = useState(0)
+    const [isOnline, setIsOnline] = useState(() => navigator.onLine)
     // authReady gates the route guard — prevents a stale-localStorage "Access Denied"
     // flash while the fresh /auth/me call is in flight.
     const [authReady, setAuthReady] = useState(false)
@@ -489,6 +490,17 @@ export default function AppLayout({ children, breadcrumb }) {
             toast.info('Your previous session on another device has been logged out.')
         }
     }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+    useEffect(() => {
+        const goOnline  = () => setIsOnline(true)
+        const goOffline = () => setIsOnline(false)
+        window.addEventListener('online',  goOnline)
+        window.addEventListener('offline', goOffline)
+        return () => {
+            window.removeEventListener('online',  goOnline)
+            window.removeEventListener('offline', goOffline)
+        }
+    }, [])
 
     // All appearance / general settings come from the Inertia shared props
     const appSettings = usePage().props.app_settings ?? {}
@@ -841,6 +853,19 @@ export default function AppLayout({ children, breadcrumb }) {
 
     return (
         <div className="flex h-screen bg-gray-50/50 overflow-hidden">
+
+            {/* ── Offline banner ────────────────────────────────────────────── */}
+            {!isOnline && (
+                <div className="fixed top-0 inset-x-0 z-9999 flex items-center justify-center gap-2.5
+                                px-4 py-2.5 bg-gray-900 text-white text-sm font-medium
+                                animate-in slide-in-from-top duration-300">
+                    <span className="flex h-2 w-2 relative shrink-0">
+                        <span className="absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75 animate-ping" />
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+                    </span>
+                    No internet connection — changes you make may not be saved until you reconnect.
+                </div>
+            )}
 
             {/* ── Mobile sidebar backdrop ───────────────────────────────────── */}
             {mobileOpen && (

@@ -50,7 +50,7 @@ export default function ReviewIndex() {
                         <p className="text-sm text-gray-500 mt-1">Proposals assigned to you for evaluation</p>
                     </div>
                     <a
-                        href="/api/v1/calendar/events.ics"
+                        href={`/api/v1/calendar/export?token=${localStorage.getItem('rtt_token') ?? ''}`}
                         className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors shrink-0"
                     >
                         <Download size={12} />

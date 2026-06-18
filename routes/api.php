@@ -499,8 +499,7 @@ Route::prefix('v1')->group(function () {
         // Researcher Hub
         Route::get('/researcher-hub', [ResearcherHubController::class, 'index']);
 
-        // Calendar export
-        Route::get('/calendar/events.ics', [CalendarController::class, 'export']);
+        // Calendar export — auth handled in controller (supports ?token= for browser downloads)
 
         // Notifications
         Route::get('/notifications', [NotificationController::class, 'index']);
@@ -515,4 +514,8 @@ Route::prefix('v1')->group(function () {
             Route::post('/proposals/{id}/documents', [ProposalWizardController::class, 'uploadDocument']);
         });
     });
+
+    // Calendar export — outside auth:sanctum so browser downloads work without Authorization header.
+    // The controller authenticates via query ?token= param.
+    Route::get('/calendar/export', [CalendarController::class, 'export']);
 });

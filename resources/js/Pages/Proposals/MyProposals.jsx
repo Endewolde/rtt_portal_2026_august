@@ -289,7 +289,7 @@ export default function MyProposals() {
                     <div className="flex items-center gap-3 shrink-0">
                         <ViewToggle view={view} onChange={setView} />
                         <a
-                            href="/api/v1/calendar/events.ics"
+                            href={`/api/v1/calendar/export?token=${localStorage.getItem('rtt_token') ?? ''}`}
                             className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors"
                         >
                             <Download size={12} />
