@@ -187,4 +187,46 @@ class CentralEvaluationController extends Controller
             ], 422);
         }
     }
+
+    /** Revoke funding for a funded proposal and move it back to rejected. */
+    public function revokeFunding(Request $request, string $id): JsonResponse
+    {
+        $request->validate(['reason' => 'required|string|min:10']);
+
+        if (! $request->user()?->hasAnyRole(['super_admin', 'central_officer'])) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        $proposal = Proposal::findOrFail($id);
+
+        if ($proposal->status !== 'funded') {
+            return response()->json(['message' => 'Only funded proposals can have their funding revoked.'], 422);
+        }
+
+        try {
+            DB::table('proposals')->where('id', $proposal->id)
+                ->update(['rejection_reason' => $request->reason, 'rejected_at' => now()]);
+
+            $updated = $this->workflowService->transition(
+                $proposal->fresh(),
+                'revoke_funding',
+                $request->user(),
+                $request->reason
+            );
+
+            return response()->json([
+                'data' => ['status' => $updated->status],
+                'message' => 'Funding revoked. Proposal has been moved to rejected.',
+                'errors' => [],
+                'meta' => [],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'data' => null,
+                'message' => $e->getMessage(),
+                'errors' => [],
+                'meta' => [],
+            ], 422);
+        }
+    }
 }

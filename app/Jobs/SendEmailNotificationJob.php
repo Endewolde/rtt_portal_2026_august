@@ -73,6 +73,7 @@ class SendEmailNotificationJob implements ShouldQueue
             'appeal_submitted' => 'Appeal Received — '.($this->data['tracker_number'] ?? ''),
             'appeal_resolved' => 'Your Appeal Has Been Resolved — '.($this->data['tracker_number'] ?? ''),
             'budget_request_submitted' => 'New Budget Request Submitted — '.($this->data['tracker_number'] ?? ''),
+            'funding_revoked' => 'Funding Revoked — '.($this->data['tracker_number'] ?? ''),
             default => 'RTT Platform Notification',
         };
     }
@@ -97,6 +98,7 @@ class SendEmailNotificationJob implements ShouldQueue
             'appeal_submitted' => 'generic',
             'appeal_resolved' => 'decision_result',
             'budget_request_submitted' => 'generic',
+            'funding_revoked' => 'decision_result',
             default => 'generic',
         };
     }

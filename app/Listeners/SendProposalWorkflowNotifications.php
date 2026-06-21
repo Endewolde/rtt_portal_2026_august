@@ -15,11 +15,15 @@ class SendProposalWorkflowNotifications
     {
         $proposal = $event->proposal->loadMissing(['pi', 'members.user']);
 
+        $fromStage = $event->fromStage ?? null;
+
         match ($event->toStage) {
             'submitted' => $this->onSubmitted($proposal),
             'validated' => $this->onValidated($proposal),
             'accepted' => $this->onAccepted($proposal),
-            'rejected' => $this->onDecision($proposal, 'rejected'),
+            'rejected' => $fromStage === 'funded'
+                ? $this->onFundingRevoked($proposal)
+                : $this->onDecision($proposal, 'rejected'),
             'funded' => $this->onFunded($proposal),
             'under_blind_review' => $this->onUnderReview($proposal, 'blind review'),
             'under_open_defence' => $this->onUnderReview($proposal, 'open defence'),
@@ -102,6 +106,21 @@ class SendProposalWorkflowNotifications
 
         foreach ($this->allRecipients($proposal) as $user) {
             $this->notify($user, 'central_eval_approved', $data, 'central_eval_approved');
+        }
+    }
+
+    private function onFundingRevoked(Proposal $proposal): void
+    {
+        $data = [
+            'tracker_number' => $proposal->tracker_number,
+            'title' => $proposal->title,
+            'decision' => 'funding_revoked',
+            'reason' => $proposal->rejection_reason
+                ?? 'The funding previously awarded to your proposal has been revoked. Please contact the RTT Office for further information.',
+        ];
+
+        foreach ($this->allRecipients($proposal) as $user) {
+            $this->notify($user, 'funding_revoked', $data, 'funding_revoked');
         }
     }
 

@@ -333,6 +333,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/central-evaluation', [CentralEvaluationController::class, 'index']);
         Route::post('/proposals/{id}/central/approve', [CentralEvaluationController::class, 'centralApprove']);
         Route::post('/proposals/{id}/central/reject', [CentralEvaluationController::class, 'centralReject']);
+        Route::post('/proposals/{id}/funding/revoke', [CentralEvaluationController::class, 'revokeFunding']);
 
         // Awards
         Route::get('/proposals/awarded/export', [AwardController::class, 'exportAwarded']);

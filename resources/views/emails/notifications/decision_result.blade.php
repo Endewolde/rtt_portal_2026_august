@@ -46,19 +46,21 @@
   $orgName      = $s->get('organization_name', 'Research Office');
 
   $dec = strtolower($decision ?? 'pending');
-  $isAccepted     = $dec === 'accepted';
-  $isRejected     = $dec === 'rejected';
-  $isValidated    = $dec === 'validated';
-  $isCentralEval  = $dec === 'central_eval_approved';
+  $isAccepted        = $dec === 'accepted';
+  $isRejected        = $dec === 'rejected';
+  $isValidated       = $dec === 'validated';
+  $isCentralEval     = $dec === 'central_eval_approved';
+  $isFundingRevoked  = $dec === 'funding_revoked';
   $isOfficerNotif = in_array($dec, ['appeal_resolved', 'central_eval_approved']);
   $isReview       = str_contains($dec, 'review') || str_contains($dec, 'defence');
 
-  if ($isCentralEval)    { $heroClass = 'hero-central'; $heroBg = '#0e7490'; $icon = 'eye'; $label = '→ Central Evaluation'; $heading = 'Advanced to Central Evaluation'; $sub = 'Your proposal has passed to the next stage.'; }
-  elseif ($isAccepted)   { $heroClass = 'hero-accepted'; $heroBg = '#065f46'; $icon = 'check'; $label = '✓ Accepted'; $heading = 'Congratulations!'; $sub = 'Your proposal has been accepted.'; }
-  elseif ($isRejected)   { $heroClass = 'hero-rejected'; $heroBg = '#7f1d1d'; $icon = 'x'; $label = '✗ Not Selected'; $heading = 'Proposal Decision'; $sub = 'We regret to inform you of the outcome.'; }
-  elseif ($isValidated)  { $heroClass = 'hero-validated'; $heroBg = '#1e40af'; $icon = 'check'; $label = '✓ Validated'; $heading = 'Proposal Validated'; $sub = 'Your proposal passed initial review.'; }
-  elseif ($isReview)     { $heroClass = 'hero-review'; $heroBg = '#6b21a8'; $icon = 'eye'; $label = '⟳ Under Review'; $heading = 'Under Review'; $sub = 'Your proposal has entered the review phase.'; }
-  else                   { $heroClass = 'hero-default'; $heroBg = '#334155'; $icon = 'info'; $label = strtoupper($dec); $heading = 'Proposal Update'; $sub = 'An update on your research proposal.'; }
+  if ($isCentralEval)       { $heroClass = 'hero-central'; $heroBg = '#0e7490'; $icon = 'eye'; $label = '→ Central Evaluation'; $heading = 'Advanced to Central Evaluation'; $sub = 'Your proposal has passed to the next stage.'; }
+  elseif ($isFundingRevoked){ $heroClass = 'hero-rejected'; $heroBg = '#7f1d1d'; $icon = 'x'; $label = '✗ Funding Revoked'; $heading = 'Funding Revoked'; $sub = 'We regret to inform you that your research funding has been revoked.'; }
+  elseif ($isAccepted)      { $heroClass = 'hero-accepted'; $heroBg = '#065f46'; $icon = 'check'; $label = '✓ Accepted'; $heading = 'Congratulations!'; $sub = 'Your proposal has been accepted.'; }
+  elseif ($isRejected)      { $heroClass = 'hero-rejected'; $heroBg = '#7f1d1d'; $icon = 'x'; $label = '✗ Not Selected'; $heading = 'Proposal Decision'; $sub = 'We regret to inform you of the outcome.'; }
+  elseif ($isValidated)     { $heroClass = 'hero-validated'; $heroBg = '#1e40af'; $icon = 'check'; $label = '✓ Validated'; $heading = 'Proposal Validated'; $sub = 'Your proposal passed initial review.'; }
+  elseif ($isReview)        { $heroClass = 'hero-review'; $heroBg = '#6b21a8'; $icon = 'eye'; $label = '⟳ Under Review'; $heading = 'Under Review'; $sub = 'Your proposal has entered the review phase.'; }
+  else                      { $heroClass = 'hero-default'; $heroBg = '#334155'; $icon = 'info'; $label = strtoupper($dec); $heading = 'Proposal Update'; $sub = 'An update on your research proposal.'; }
 @endphp
 <div class="wrap">
   @include('emails.partials.logo_header')

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from '@inertiajs/react';
-import { BadgeDollarSign, Pencil, RefreshCw, ExternalLink, FileText, ReceiptText, Hash } from 'lucide-react';
+import { BadgeDollarSign, Pencil, RefreshCw, ExternalLink, FileText, ReceiptText, Hash, XCircle } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import WorkflowBreadcrumb from '../../Components/WorkflowBreadcrumb';
 import ViewToggle from '../../Components/ViewToggle';
@@ -45,12 +45,69 @@ function EditAmountModal({ proposal, onSave, onClose }) {
     );
 }
 
+function RevokeFundingModal({ proposal, onSave, onClose }) {
+    const [reason, setReason] = useState('');
+    const [saving, setSaving] = useState(false);
+    const { error, success } = useToast();
+
+    const save = async () => {
+        if (reason.trim().length < 10) { error('Please provide at least 10 characters explaining the reason.'); return; }
+        setSaving(true);
+        try {
+            const res = await api.post(`/proposals/${proposal.id}/funding/revoke`, { reason });
+            success(res.data?.message || 'Funding revoked.');
+            onSave();
+        } catch (e) { error(e.response?.data?.message || 'Failed to revoke funding.'); }
+        setSaving(false);
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+                <div className="flex items-center gap-3 mb-1">
+                    <div className="h-9 w-9 bg-red-100 rounded-xl flex items-center justify-center shrink-0">
+                        <XCircle size={18} className="text-red-600" />
+                    </div>
+                    <h3 className="text-base font-semibold text-gray-900">Revoke Funding</h3>
+                </div>
+                <p className="text-xs text-gray-500 mb-1 font-mono">{proposal.tracker_number}</p>
+                <p className="text-xs text-gray-500 mb-4 line-clamp-2">{proposal.title}</p>
+
+                <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4">
+                    <p className="text-xs font-semibold text-amber-800">This action is irreversible via normal workflow.</p>
+                    <p className="text-xs text-amber-700 mt-0.5">The proposal will be moved to <strong>Rejected</strong> status and the PI will be notified.</p>
+                </div>
+
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Reason for Revocation <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                    value={reason}
+                    onChange={e => setReason(e.target.value)}
+                    rows={4}
+                    placeholder="Explain why the funding is being revoked..."
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 mb-4 resize-none"
+                />
+
+                <div className="flex gap-3">
+                    <button onClick={onClose} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Cancel</button>
+                    <button onClick={save} disabled={saving}
+                        className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 disabled:opacity-60">
+                        {saving ? 'Revoking…' : 'Revoke Funding'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function ProposalFunding() {
     const { error } = useToast();
     const [view, setView] = useViewPreference('proposal_funding', 'card');
     const [proposals, setProposals] = useState([]);
     const [loading, setLoading]     = useState(true);
     const [editModal, setEditModal] = useState(null);
+    const [revokeModal, setRevokeModal] = useState(null);
 
     const load = async () => {
         setLoading(true);
@@ -186,6 +243,14 @@ export default function ProposalFunding() {
                                         className="flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-900 font-medium px-2.5 py-1 rounded-lg hover:bg-white transition-colors">
                                         <ReceiptText size={11} /> Budget Requests
                                     </Link>
+                                    <div className="ml-auto">
+                                        <button
+                                            onClick={() => setRevokeModal(p)}
+                                            className="flex items-center gap-1.5 text-xs text-red-600 hover:text-red-700 font-medium px-2.5 py-1 rounded-lg hover:bg-red-50 transition-colors"
+                                        >
+                                            <XCircle size={11} /> Revoke Funding
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         ))}
@@ -198,6 +263,14 @@ export default function ProposalFunding() {
                     proposal={editModal}
                     onSave={() => { setEditModal(null); load(); }}
                     onClose={() => setEditModal(null)}
+                />
+            )}
+
+            {revokeModal && (
+                <RevokeFundingModal
+                    proposal={revokeModal}
+                    onSave={() => { setRevokeModal(null); load(); }}
+                    onClose={() => setRevokeModal(null)}
                 />
             )}
         </AppLayout>
