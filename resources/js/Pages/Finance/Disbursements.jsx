@@ -440,14 +440,15 @@ export default function Disbursements() {
                                 <table className="w-full text-sm">
                                     <thead className="border-b border-gray-200">
                                         <tr>
-                                            {['Proposal', 'Round', 'Amount', 'Transaction', 'Disbursed By', 'Date'].map(h => (
+                                            {['#', 'Proposal', 'Round', 'Amount', 'Transaction', 'Disbursed By', 'Date'].map(h => (
                                                 <th key={h} className="px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide">{h}</th>
                                             ))}
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-50">
-                                        {disbursements.map(d => (
+                                        {disbursements.map((d, i) => (
                                             <tr key={d.id} className="hover:bg-gray-50">
+                                                <td className="px-3 py-3 text-xs font-medium text-gray-400 tabular-nums w-10">{i + 1}</td>
                                                 <td className="px-3 py-3">
                                                     <p className="font-mono text-xs font-bold text-blue-600">{d.budget_request?.proposal?.tracker_number}</p>
                                                     <p className="text-xs text-gray-500 truncate max-w-48">{d.budget_request?.proposal?.title}</p>
@@ -468,7 +469,7 @@ export default function Disbursements() {
                                     </tbody>
                                     <tfoot className="border-t border-gray-200 bg-gray-50">
                                         <tr>
-                                            <td className="px-3 py-2.5 text-sm font-semibold text-gray-700" colSpan={2}>
+                                            <td className="px-3 py-2.5 text-sm font-semibold text-gray-700" colSpan={3}>
                                                 {disbursements.length} disbursement{disbursements.length !== 1 ? 's' : ''}
                                             </td>
                                             <td className="px-3 py-2.5 text-sm font-bold text-blue-700">{formatCurrency(disbursedTotal)}</td>

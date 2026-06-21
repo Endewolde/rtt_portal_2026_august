@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import NotificationBell from '../Components/NotificationBell'
 import FeedbackPopup from '../Components/FeedbackPopup'
-import GenderPromptModal from '../Components/GenderPromptModal'
+import ProfileCompleteModal from '../Components/ProfileCompleteModal'
 import SwitchLoginModal from '../Components/SwitchLoginModal'
 import ConfirmDialog from '../Components/ConfirmDialog'
 import { useToast } from '../Components/Toast'
@@ -52,8 +52,8 @@ const ROUTE_PERMISSIONS = [
     ['/admin/validation-queue',    [..._A, ..._OR]],
     ['/admin/central-evaluation',  [..._A, ..._OR]],
     ['/admin/funding',             [..._A, ..._OR]],
-    ['/admin/blind-review',        [..._A, ..._AO]],
-    ['/admin/open-defence',        [..._A, ..._AO]],
+    ['/admin/blind-review',        [..._A, 'college_officer']],
+    ['/admin/open-defence',        [..._A, 'college_officer']],
     ['/admin/awarded',             [..._A, ..._AO, _FO]],
     ['/admin/completed-archive',   [..._A, ..._AO, _FO]],
     ['/admin/assign-reviewers',    _A],
@@ -517,14 +517,16 @@ export default function AppLayout({ children, breadcrumb }) {
 
     const [announcementDismissed, setAnnouncementDismissed] = useState(false)
 
-    // ── Gender prompt ───────────────────────────────────────────────────────────
-    const showGenderPrompt = !!user && !user.gender
+    // ── Profile completeness prompt ─────────────────────────────────────────────
+    const showProfileComplete = !!user && (
+        !user.gender || !user.college_id || !(user.expertise?.length > 0)
+    )
 
     // ── Feedback popup ──────────────────────────────────────────────────────────
     const feedbackPopupEnabled = appSettings.feedback_popup_enabled === 'true'
     const feedbackSubmitted    = user?.feedback_submitted ?? true
     const [feedbackDismissed, setFeedbackDismissed] = useState(false)
-    const showFeedbackPopup = feedbackPopupEnabled && !feedbackSubmitted && !feedbackDismissed && !showGenderPrompt
+    const showFeedbackPopup = feedbackPopupEnabled && !feedbackSubmitted && !feedbackDismissed && !showProfileComplete
 
     // ── Session timeout ────────────────────────────────────────────────────────
     const [sessionWarning, setSessionWarning] = useState(null) // { secondsLeft }
@@ -632,17 +634,17 @@ export default function AppLayout({ children, breadcrumb }) {
             items: [
                 {
                     label: 'Validation Queue', href: '/admin/validation-queue', icon: 'CheckSquare',
-                    show: perm('proposals.validate') && hasSubFeature('evaluation.validation'),
+                    show: perm('proposals.validate') && hasAnyRole([...ALL_ADMIN, ...OFFICER_ROLES]) && hasSubFeature('evaluation.validation'),
                     badge: c => c.validation_queue,
                 },
                 {
                     label: 'Blind Review', href: '/admin/blind-review', icon: 'EyeOff',
-                    show: perm('reviews.view_any') && hasAnyRole([...ALL_ADMIN, ...ALL_OFFICERS]) && hasSubFeature('evaluation.blind_review'),
+                    show: perm('reviews.view_any') && hasAnyRole([...ALL_ADMIN, 'college_officer']) && hasSubFeature('evaluation.blind_review'),
                     badge: c => c.blind_review_queue,
                 },
                 {
                     label: 'Open Defence', href: '/admin/open-defence', icon: 'Presentation',
-                    show: perm('defence_sessions.view_any') && hasSubFeature('evaluation.open_defence'),
+                    show: perm('defence_sessions.view_any') && hasAnyRole([...ALL_ADMIN, 'college_officer']) && hasSubFeature('evaluation.open_defence'),
                     badge: c => c.open_defence_queue,
                 },
                 {
@@ -1169,9 +1171,14 @@ export default function AppLayout({ children, breadcrumb }) {
                 />
             )}
 
-            {showGenderPrompt && (
-                <GenderPromptModal
-                    onSaved={(gender) => setUser({ ...user, gender })}
+            {showProfileComplete && (
+                <ProfileCompleteModal
+                    user={user}
+                    onSaved={(updates) => {
+                        const updated = { ...user, ...updates }
+                        localStorage.setItem('rtt_user', JSON.stringify(updated))
+                        setUser(updated)
+                    }}
                 />
             )}
 

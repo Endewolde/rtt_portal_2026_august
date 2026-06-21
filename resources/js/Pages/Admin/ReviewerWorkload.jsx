@@ -82,7 +82,7 @@ function EvalBadge({ name, label }) {
 
 // ─── Summary row (per proposal) ───────────────────────────────────────────────
 
-function ProposalRow({ proposal }) {
+function ProposalRow({ proposal, rowNum }) {
     const [open, setOpen] = useState(false);
     const assignments = proposal.assignments ?? [];
 
@@ -92,6 +92,7 @@ function ProposalRow({ proposal }) {
                 className="hover:bg-gray-50 cursor-pointer transition-colors"
                 onClick={() => setOpen(o => !o)}
             >
+                <td className="px-5 py-3.5 text-xs font-medium text-gray-400 tabular-nums w-10">{rowNum}</td>
                 <td className="px-5 py-3.5">
                     <div className="flex items-center gap-2">
                         <span className={`p-0.5 transition-transform text-gray-400 ${open ? 'rotate-90' : ''}`}>
@@ -524,7 +525,7 @@ function SummaryTable({ proposals }) {
                 <table className="min-w-full">
                     <thead>
                         <tr className="bg-linear-to-r from-indigo-600 to-indigo-700">
-                            {['Tracker', 'Proposal Title', 'College', 'Blind Review', 'Open Defence', 'Total'].map(h => (
+                            {['#', 'Tracker', 'Proposal Title', 'College', 'Blind Review', 'Open Defence', 'Total'].map(h => (
                                 <th key={h} className="px-5 py-3.5 text-left text-xs font-semibold text-indigo-100 uppercase tracking-wide whitespace-nowrap">
                                     {h}
                                 </th>
@@ -532,7 +533,7 @@ function SummaryTable({ proposals }) {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
-                        {proposals.map(p => <ProposalRow key={p.id} proposal={p} />)}
+                        {proposals.map((p, i) => <ProposalRow key={p.id} proposal={p} rowNum={i + 1} />)}
                     </tbody>
                 </table>
             </div>
@@ -592,6 +593,7 @@ function AllAssignmentsTable({ assignments }) {
                         <table className="min-w-full text-sm">
                             <thead>
                                 <tr className="text-xs text-gray-400 uppercase border-b border-gray-50">
+                                    <th className="px-5 py-2.5 text-left font-medium w-10">#</th>
                                     <th className="px-5 py-2.5 text-left font-medium">Tracker</th>
                                     <th className="px-5 py-2.5 text-left font-medium">Proposal Title</th>
                                     <th className="px-5 py-2.5 text-left font-medium">Evaluation Type</th>
@@ -601,8 +603,9 @@ function AllAssignmentsTable({ assignments }) {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
-                                {items.map(a => (
+                                {items.map((a, idx) => (
                                     <tr key={a.id} className="hover:bg-gray-50 transition-colors">
+                                        <td className="px-5 py-3 text-xs font-medium text-gray-400 tabular-nums w-10">{idx + 1}</td>
                                         <td className="px-5 py-3">
                                             <span className="font-mono text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded font-bold">
                                                 {a.proposal?.tracker_number ?? '—'}
@@ -775,6 +778,7 @@ function AnalyticsTab({ analytics, loading, onDownload }) {
                         <table className="min-w-full">
                             <thead>
                                 <tr className="bg-linear-to-r from-indigo-600 to-indigo-700">
+                                    <th className="px-5 py-3.5 text-left text-xs font-semibold text-indigo-200 uppercase tracking-wide w-10">#</th>
                                     <th className="px-5 py-3.5 text-left text-xs font-semibold text-indigo-100 uppercase tracking-wide">Reviewer</th>
                                     <SortHeader label="Total"     col="total" />
                                     <SortHeader label="Completed" col="completed" />
@@ -787,8 +791,9 @@ function AnalyticsTab({ analytics, loading, onDownload }) {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
-                                {sortedReviewers.map(r => (
+                                {sortedReviewers.map((r, i) => (
                                     <tr key={r.reviewer_id} className="hover:bg-gray-50 transition-colors">
+                                        <td className="px-5 py-3.5 text-xs font-medium text-gray-400 tabular-nums w-10">{i + 1}</td>
                                         <td className="px-5 py-3.5">
                                             <p className="text-sm font-medium text-gray-900">{r.reviewer?.name ?? '—'}</p>
                                             <p className="text-xs text-gray-400">{r.reviewer?.email}</p>

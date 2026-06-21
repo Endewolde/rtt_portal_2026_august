@@ -545,6 +545,95 @@ function AssignRolesModal({ user, allRoles, onSave, onClose }) {
     );
 }
 
+// ─── Bulk Assign Role modal ───────────────────────────────────────────────────
+
+function BulkAssignRoleModal({ count, allRoles, onSave, onClose }) {
+    const [role, setRole]   = useState('');
+    const [saving, setSaving] = useState(false);
+    const { error } = useToast();
+
+    const submit = async () => {
+        if (!role) { error('Please select a role.'); return; }
+        setSaving(true);
+        try { await onSave(role); } catch (e) { error(e.response?.data?.message || 'Failed.'); setSaving(false); }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                    <div className="flex items-center gap-3">
+                        <div className="h-9 w-9 bg-indigo-50 rounded-xl flex items-center justify-center">
+                            <ShieldCheck size={16} className="text-indigo-600" />
+                        </div>
+                        <div>
+                            <h2 className="text-base font-bold text-gray-900">Assign Role</h2>
+                            <p className="text-xs text-gray-400">{count} user{count !== 1 ? 's' : ''} selected</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={18} /></button>
+                </div>
+
+                <div className="px-5 py-5 space-y-4">
+                    <p className="text-sm text-gray-500">
+                        Choose a role to assign to all selected users. This will <strong className="text-gray-800">replace</strong> each user's current role.
+                    </p>
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1.5">Role</label>
+                        <select
+                            value={role}
+                            onChange={e => setRole(e.target.value)}
+                            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
+                        >
+                            <option value="">Select a role…</option>
+                            {ROLE_GROUPS.map(group => {
+                                const groupRoles = group.roles.filter(r => allRoles.includes(r));
+                                if (!groupRoles.length) return null;
+                                return (
+                                    <optgroup key={group.label} label={group.label}>
+                                        {groupRoles.map(r => (
+                                            <option key={r} value={r}>{ROLE_LABELS[r] ?? r.replace(/_/g, ' ')}</option>
+                                        ))}
+                                    </optgroup>
+                                );
+                            })}
+                            {(() => {
+                                const allGroupedRoles = ROLE_GROUPS.flatMap(g => g.roles);
+                                const custom = allRoles.filter(r => !allGroupedRoles.includes(r));
+                                if (!custom.length) return null;
+                                return (
+                                    <optgroup label="Custom">
+                                        {custom.map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+                                    </optgroup>
+                                );
+                            })()}
+                        </select>
+                    </div>
+                    {role && (
+                        <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2">
+                            <ShieldCheck size={13} className="text-indigo-500 shrink-0" />
+                            <span className="text-xs text-indigo-700">
+                                All {count} user{count !== 1 ? 's' : ''} will be set to <strong>{ROLE_LABELS[role] ?? role}</strong>
+                            </span>
+                        </div>
+                    )}
+                </div>
+
+                <div className="px-5 py-4 border-t border-gray-100 bg-gray-50/50 flex items-center justify-end gap-3">
+                    <button onClick={onClose}
+                        className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-100 transition-colors">
+                        Cancel
+                    </button>
+                    <button onClick={submit} disabled={saving || !role}
+                        className="flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors">
+                        {saving ? <><RefreshCw size={13} className="animate-spin" /> Assigning…</> : 'Assign Role'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // ─── Download helper (blob from axios) ───────────────────────────────────────
 
 async function downloadBlob(axiosPromise, filename) {
@@ -1101,9 +1190,12 @@ export default function AdminUsers() {
     const hasFilters = search || roleFilter || statusFilter || collegeFilter;
 
     // ── Bulk selection ────────────────────────────────────────────────────────
-    const [selectedIds,  setSelectedIds]  = useState(new Set());
-    const [bulkLoading,  setBulkLoading]  = useState(false);
-    const [bulkConfirm,  setBulkConfirm]  = useState(null);
+    const [selectedIds,    setSelectedIds]    = useState(new Set());
+    const [bulkLoading,    setBulkLoading]    = useState(false);
+    const [bulkConfirm,    setBulkConfirm]    = useState(null);
+    const [bulkRoleModal,  setBulkRoleModal]  = useState(false);
+
+    const canAssignRoles = hasPermission('roles.assign');
 
     const pageIds         = visibleUsers.map(u => u.id);
     const allPageSelected = pageIds.length > 0 && pageIds.every(id => selectedIds.has(id));
@@ -1148,6 +1240,14 @@ export default function AdminUsers() {
             setBulkLoading(false);
             setBulkConfirm(null);
         }
+    };
+
+    const executeBulkAssignRole = async (role) => {
+        const res = await api.post('/users/bulk', { action: 'assign_role', ids: [...selectedIds], role });
+        success(res.data?.message ?? 'Done.');
+        setBulkRoleModal(false);
+        setSelectedIds(new Set());
+        load();
     };
 
     return (
@@ -1295,6 +1395,12 @@ export default function AdminUsers() {
                     <div className="flex items-center gap-3 bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-2.5">
                         <span className="text-sm font-semibold text-indigo-700">{selectedIds.size} selected</span>
                         <div className="flex items-center gap-2 flex-1 flex-wrap">
+                            {canAssignRoles && (
+                                <button onClick={() => setBulkRoleModal(true)}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition">
+                                    <ShieldCheck size={12} /> Assign Role
+                                </button>
+                            )}
                             {canManageUsers && (
                                 <>
                                     <button onClick={() => confirmBulk('activate')}
@@ -1568,6 +1674,15 @@ export default function AdminUsers() {
                 <ImportModal
                     onClose={() => setImportModal(false)}
                     onDone={() => { load(); }}
+                />
+            )}
+
+            {bulkRoleModal && (
+                <BulkAssignRoleModal
+                    count={selectedIds.size}
+                    allRoles={allRoles}
+                    onSave={executeBulkAssignRole}
+                    onClose={() => setBulkRoleModal(false)}
                 />
             )}
 

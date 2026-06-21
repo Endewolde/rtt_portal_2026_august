@@ -303,6 +303,7 @@ export default function Analytics({
                                     <table className="w-full text-xs">
                                         <thead>
                                             <tr className="bg-gray-50 border-b border-gray-100">
+                                                <th className="py-2.5 px-4 text-gray-400 font-semibold w-10">#</th>
                                                 <th className="text-left py-2.5 px-4 text-gray-500 font-semibold">College</th>
                                                 <th className="text-right py-2.5 px-4 text-gray-500 font-semibold">Total</th>
                                                 <th className="text-right py-2.5 px-4 text-emerald-600 font-semibold">Funded</th>
@@ -313,6 +314,7 @@ export default function Analytics({
                                         <tbody>
                                             {collegePerf.map((c, i) => (
                                                 <tr key={i} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                                                    <td className="py-2.5 px-4 text-xs font-medium text-gray-400 tabular-nums">{i + 1}</td>
                                                     <td className="py-2.5 px-4 text-gray-700 font-medium">{c.college}</td>
                                                     <td className="py-2.5 px-4 text-right text-gray-600">{c.total}</td>
                                                     <td className="py-2.5 px-4 text-right text-emerald-600 font-semibold">{c.funded}</td>

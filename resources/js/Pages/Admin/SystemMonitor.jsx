@@ -877,6 +877,7 @@ export default function SystemMonitor() {
                                 <table className="w-full text-xs">
                                     <thead>
                                         <tr className="border-b border-white/6">
+                                            <th className="text-left pb-3 pr-4 font-semibold text-slate-500 uppercase tracking-wider text-[10px] w-8">#</th>
                                             <th className="text-left pb-3 pr-4 font-semibold text-slate-500 uppercase tracking-wider text-[10px]">Method</th>
                                             <th className="text-left pb-3 pr-4 font-semibold text-slate-500 uppercase tracking-wider text-[10px]">Path</th>
                                             <th className="text-left pb-3 pr-4 font-semibold text-slate-500 uppercase tracking-wider text-[10px]">Status</th>
@@ -886,6 +887,7 @@ export default function SystemMonitor() {
                                     <tbody className="divide-y divide-white/4">
                                         {reqStats.top_slow.map((row, i) => (
                                             <tr key={i} className="group hover:bg-white/3 transition-colors">
+                                                <td className="py-2.5 pr-4 text-[10px] font-medium text-slate-600 tabular-nums">{i + 1}</td>
                                                 <td className="py-2.5 pr-4">
                                                     <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-300 font-mono font-semibold text-[10px]">
                                                         {row.method}

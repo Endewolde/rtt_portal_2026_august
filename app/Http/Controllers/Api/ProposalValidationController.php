@@ -23,7 +23,7 @@ class ProposalValidationController extends Controller
 
     public function approve(string $id, Request $request): JsonResponse
     {
-        $proposal  = Proposal::findOrFail($id);
+        $proposal = Proposal::findOrFail($id);
         $validated = $this->service->approve($proposal, $request->user());
 
         return response()->json(['data' => $validated]);
@@ -32,11 +32,51 @@ class ProposalValidationController extends Controller
     public function return(string $id, Request $request): JsonResponse
     {
         $request->validate(['reason' => 'required|string|min:10']);
-        $proposal   = Proposal::findOrFail($id);
+        $proposal = Proposal::findOrFail($id);
         $corrections = $request->input('required_corrections', []);
-        $returned   = $this->service->returnForCorrection($proposal, $request->user(), $request->reason, $corrections);
+        $returned = $this->service->returnForCorrection($proposal, $request->user(), $request->reason, $corrections);
 
         return response()->json(['data' => $returned]);
+    }
+
+    public function bulkApprove(Request $request): JsonResponse
+    {
+        if (! $request->user()?->can('proposals.validate')) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        $request->validate([
+            'ids' => 'required|array|min:1',
+            'ids.*' => 'required|string|uuid',
+        ]);
+
+        $user = $request->user();
+        $approved = 0;
+        $skipped = [];
+
+        foreach ($request->ids as $id) {
+            $proposal = Proposal::find($id);
+            if (! $proposal) {
+                continue;
+            }
+            try {
+                $this->service->approve($proposal, $user);
+                $approved++;
+            } catch (\Exception $e) {
+                $skipped[] = $proposal->tracker_number ?? $id;
+            }
+        }
+
+        $message = "{$approved} proposal(s) approved.";
+        if (! empty($skipped)) {
+            $message .= ' Skipped: '.implode(', ', $skipped).'.';
+        }
+
+        return response()->json([
+            'message' => $message,
+            'errors' => [],
+            'meta' => ['approved' => $approved, 'skipped' => count($skipped)],
+        ]);
     }
 
     public function reject(string $id, Request $request): JsonResponse

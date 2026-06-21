@@ -1,8 +1,9 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import {
     User, Mail, Phone, CreditCard, Shield, Lock,
     Camera, Save, Eye, EyeOff, CheckCircle2, AlertCircle,
     Building2, Layers, MessageSquare, ExternalLink, ShieldCheck,
+    BookOpen, X, GraduationCap,
 } from 'lucide-react'
 import AppLayout from '../../Layouts/AppLayout'
 import { useAuth } from '../../hooks/useAuth'
@@ -148,13 +149,7 @@ function PersonalInfoForm({ user, onUpdated }) {
         try {
             const res = await api.put('/auth/profile', form)
             const updated = res.data?.data?.user ?? res.data?.data
-            if (updated) {
-                onUpdated(updated)
-                localStorage.setItem('rtt_user', JSON.stringify({
-                    ...JSON.parse(localStorage.getItem('rtt_user') ?? '{}'),
-                    ...updated,
-                }))
-            }
+            if (updated) onUpdated(updated)
             success('Profile saved.')
         } catch (e) {
             error(e.response?.data?.message ?? 'Failed to save.')
@@ -223,32 +218,48 @@ function PersonalInfoForm({ user, onUpdated }) {
 
 function AccountInfo({ user }) {
     const rows = [
-        { label: 'Status',     value: user?.status ?? '—',
+        { label: 'Status', value: user?.status ?? '—',
           badge: user?.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700' },
-        { label: 'Role',       value: (() => { const r = (user?.roles ?? [])[0]; return ((typeof r === 'string' ? r : r?.name) ?? 'guest').replace(/_/g, ' ') })(),
+        { label: 'Role', value: (() => { const r = (user?.roles ?? [])[0]; return ((typeof r === 'string' ? r : r?.name) ?? 'guest').replace(/_/g, ' ') })(),
           badge: 'bg-indigo-100 text-indigo-700' },
-        { label: 'College',    value: user?.college?.name ?? 'Not assigned' },
-        { label: 'Department', value: user?.department?.name ?? 'Not assigned' },
+        { label: 'College',    value: user?.college?.name ?? (user?.college_id ? 'Loading…' : 'Not assigned') },
+        { label: 'Department', value: user?.department?.name ?? (user?.department_id ? 'Loading…' : 'Not assigned') },
         { label: 'Member since', value: user?.created_at
             ? new Date(user.created_at).toLocaleDateString('en-GB', { day:'numeric', month:'long', year:'numeric' })
             : '—' },
     ]
 
+    const expertise = user?.expertise ?? []
+
     return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
-            {rows.map(row => (
-                <div key={row.label} className="flex items-center justify-between py-2
-                                                border-b border-gray-50 last:border-0">
-                    <span className="text-xs text-gray-500 font-medium">{row.label}</span>
-                    {row.badge ? (
-                        <span className={`text-xs font-semibold px-2.5 py-1 rounded-full capitalize ${row.badge}`}>
-                            {row.value}
-                        </span>
-                    ) : (
-                        <span className="text-xs font-semibold text-gray-800">{row.value}</span>
-                    )}
+        <div className="space-y-0">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8">
+                {rows.map(row => (
+                    <div key={row.label} className="flex items-center justify-between py-2.5
+                                                    border-b border-gray-50 last:border-0">
+                        <span className="text-xs text-gray-500 font-medium">{row.label}</span>
+                        {row.badge ? (
+                            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full capitalize ${row.badge}`}>
+                                {row.value}
+                            </span>
+                        ) : (
+                            <span className="text-xs font-semibold text-gray-800 text-right max-w-[60%]">{row.value}</span>
+                        )}
+                    </div>
+                ))}
+            </div>
+            {expertise.length > 0 && (
+                <div className="pt-3">
+                    <p className="text-xs text-gray-500 font-medium mb-2">Research Expertise</p>
+                    <div className="flex flex-wrap gap-1.5">
+                        {expertise.map((tag, i) => (
+                            <span key={i} className="text-xs font-medium bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full border border-indigo-100">
+                                {tag}
+                            </span>
+                        ))}
+                    </div>
                 </div>
-            ))}
+            )}
         </div>
     )
 }
@@ -338,13 +349,15 @@ function ChangePasswordForm() {
 
 // ─── Telegram section ─────────────────────────────────────────────────────────
 
-function TelegramSection({ user, onUpdated }) {
-    const { success, error } = useToast()
+function TelegramSection({ user }) {
+    const { error } = useToast()
     const [token, setToken] = useState(null)
     const [loading, setLoading] = useState(false)
+    const [copied, setCopied] = useState(false)
 
     const generate = async () => {
         setLoading(true)
+        setToken(null)
         try {
             const res = await api.post('/auth/telegram/generate-token')
             setToken(res.data?.data?.token ?? null)
@@ -352,10 +365,18 @@ function TelegramSection({ user, onUpdated }) {
         setLoading(false)
     }
 
+    const copy = () => {
+        navigator.clipboard.writeText(token).then(() => {
+            setCopied(true)
+            setTimeout(() => setCopied(false), 2000)
+        })
+    }
+
     const connected = !!user?.telegram_chat_id
 
     return (
         <div className="space-y-4">
+            {/* Status badge */}
             <div className={`flex items-center gap-3 p-4 rounded-xl ${
                 connected ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-200'
             }`}>
@@ -371,33 +392,68 @@ function TelegramSection({ user, onUpdated }) {
                     <p className="text-xs text-gray-500 mt-0.5">
                         {connected
                             ? 'You will receive RTT notifications via Telegram.'
-                            : 'Connect your Telegram account to receive notifications.'}
+                            : 'Connect your Telegram account to receive proposal updates and deadline reminders.'}
                     </p>
                 </div>
             </div>
 
             {!connected && (
-                <div className="space-y-3">
-                    <button onClick={generate} disabled={loading}
-                        className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white
-                                   rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
-                        {loading
-                            ? <><div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Generating…</>
-                            : <><MessageSquare size={14} /> Generate Link Token</>
-                        }
-                    </button>
+                <div className="space-y-4">
+                    {/* How-to steps */}
+                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
+                        <p className="text-xs font-bold text-blue-800 uppercase tracking-wide">How to connect</p>
+                        <ol className="space-y-2.5">
+                            {[
+                                <>Open Telegram and search for <a href="https://t.me/rtt_backup_bot" target="_blank" rel="noreferrer" className="font-semibold text-blue-700 underline underline-offset-2">@rtt_backup_bot</a> — or click the link to open it directly.</>,
+                                <>Click <strong>Start</strong> if this is your first time chatting with the bot.</>,
+                                <>Click <strong>Generate Token</strong> below to get a one-time code.</>,
+                                <>Send the token to the bot. Type <code className="bg-blue-100 rounded px-1 font-mono text-[11px]">/link YOUR_TOKEN</code> and press Send.</>,
+                                <>The bot will confirm — your account is linked automatically.</>,
+                            ].map((step, i) => (
+                                <li key={i} className="flex gap-2.5">
+                                    <span className="shrink-0 h-5 w-5 rounded-full bg-blue-200 text-blue-800 flex items-center justify-center text-[10px] font-bold mt-0.5">
+                                        {i + 1}
+                                    </span>
+                                    <span className="text-xs text-blue-700 leading-relaxed">{step}</span>
+                                </li>
+                            ))}
+                        </ol>
+                    </div>
 
-                    {token && (
-                        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-2">
-                            <p className="text-xs font-semibold text-blue-800">Your link token:</p>
-                            <code className="block text-sm font-mono bg-blue-100 rounded-lg px-3 py-2 text-blue-900 break-all">
-                                {token}
-                            </code>
-                            <p className="text-xs text-blue-700">
-                                Send this token to the RTT Telegram bot to link your account. Token expires in 10 minutes.
-                            </p>
-                        </div>
-                    )}
+                    {/* Token generation */}
+                    <div className="space-y-2">
+                        <button onClick={generate} disabled={loading}
+                            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white
+                                       rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                            {loading
+                                ? <><div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Generating…</>
+                                : <><MessageSquare size={14} /> Generate Token</>
+                            }
+                        </button>
+
+                        {token && (
+                            <div className="bg-white border border-blue-200 rounded-xl p-4 space-y-2.5">
+                                <div className="flex items-center justify-between">
+                                    <p className="text-xs font-semibold text-gray-700">Your one-time token</p>
+                                    <span className="text-[10px] text-amber-600 font-medium bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                                        Expires in 10 min
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <code className="flex-1 text-sm font-mono bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-900 break-all select-all">
+                                        {token}
+                                    </code>
+                                    <button onClick={copy}
+                                        className="shrink-0 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-semibold text-gray-600 transition-colors">
+                                        {copied ? 'Copied!' : 'Copy'}
+                                    </button>
+                                </div>
+                                <p className="text-xs text-gray-500">
+                                    Send this to <a href="https://t.me/rtt_backup_bot" target="_blank" rel="noreferrer" className="text-blue-600 font-medium hover:underline">@rtt_backup_bot</a> as: <code className="bg-gray-100 rounded px-1 font-mono text-[11px]">/link {token}</code>
+                                </p>
+                            </div>
+                        )}
+                    </div>
                 </div>
             )}
         </div>
@@ -460,6 +516,138 @@ function SecuritySection({ user, onUpdated }) {
     )
 }
 
+// ─── Academic info section ────────────────────────────────────────────────────
+
+function AcademicInfoForm({ user, onUpdated }) {
+    const { success, error } = useToast()
+    const [collegeId, setCollegeId]       = useState(user?.college_id ?? '')
+    const [departmentId, setDepartmentId] = useState(user?.department_id ?? '')
+    const [expertiseTags, setExpertiseTags] = useState(user?.expertise ?? [])
+    const [expertiseInput, setExpertiseInput] = useState('')
+    const [colleges, setColleges]     = useState([])
+    const [departments, setDepartments] = useState([])
+    const [saving, setSaving] = useState(false)
+
+    useEffect(() => {
+        api.get('/colleges/public').then(r => setColleges(r.data?.data ?? [])).catch(() => {})
+    }, [])
+
+    useEffect(() => {
+        setDepartmentId('')
+        setDepartments([])
+        if (collegeId) {
+            api.get(`/colleges/${collegeId}/departments/public`)
+                .then(r => setDepartments(r.data?.data ?? []))
+                .catch(() => {})
+        }
+    }, [collegeId])
+
+    // Seed departments for the current college on mount (so the selector is populated)
+    useEffect(() => {
+        if (user?.college_id) {
+            setCollegeId(user.college_id)
+            api.get(`/colleges/${user.college_id}/departments/public`)
+                .then(r => { setDepartments(r.data?.data ?? []); setDepartmentId(user?.department_id ?? '') })
+                .catch(() => {})
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [user?.college_id])
+
+    const addTag = (val) => {
+        const trimmed = val.trim()
+        if (!trimmed || expertiseTags.includes(trimmed)) { setExpertiseInput(''); return }
+        setExpertiseTags(prev => [...prev, trimmed])
+        setExpertiseInput('')
+    }
+
+    const removeTag = (idx) => setExpertiseTags(prev => prev.filter((_, i) => i !== idx))
+
+    const changed = collegeId !== (user?.college_id ?? '')
+        || departmentId !== (user?.department_id ?? '')
+        || JSON.stringify(expertiseTags) !== JSON.stringify(user?.expertise ?? [])
+
+    const save = async () => {
+        setSaving(true)
+        try {
+            const res = await api.put('/auth/profile', {
+                college_id:    collegeId    || null,
+                department_id: departmentId || null,
+                expertise:     expertiseTags,
+            })
+            const updated = res.data?.data?.user ?? res.data?.data
+            if (updated) onUpdated(updated)
+            success('Academic profile saved.')
+        } catch (e) {
+            error(e.response?.data?.message ?? 'Failed to save.')
+        }
+        setSaving(false)
+    }
+
+    return (
+        <div className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field label="College / Faculty">
+                    <Select value={collegeId} onChange={e => setCollegeId(e.target.value)}>
+                        <option value="">Select college…</option>
+                        {colleges.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </Select>
+                </Field>
+                <Field label="Department">
+                    <Select value={departmentId} onChange={e => setDepartmentId(e.target.value)}
+                            disabled={!collegeId || departments.length === 0}>
+                        <option value="">{!collegeId ? 'Select a college first' : departments.length === 0 ? 'No departments' : 'Select department…'}</option>
+                        {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </Select>
+                </Field>
+            </div>
+
+            <Field label="Research Expertise Areas">
+                {expertiseTags.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-2.5">
+                        {expertiseTags.map((tag, i) => (
+                            <span key={i} className="flex items-center gap-1 bg-indigo-50 text-indigo-700 text-xs font-medium px-2.5 py-1 rounded-full border border-indigo-200">
+                                {tag}
+                                <button onClick={() => removeTag(i)} className="ml-0.5 text-indigo-400 hover:text-red-500 transition-colors">
+                                    <X size={11} />
+                                </button>
+                            </span>
+                        ))}
+                    </div>
+                )}
+                <div className="flex gap-2">
+                    <Input
+                        value={expertiseInput}
+                        onChange={e => setExpertiseInput(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(expertiseInput) } }}
+                        onBlur={() => addTag(expertiseInput)}
+                        placeholder="e.g. Machine Learning, Hydrology — press Enter to add"
+                        className="flex-1"
+                    />
+                    <button onClick={() => addTag(expertiseInput)}
+                        className="px-3.5 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition-colors">
+                        Add
+                    </button>
+                </div>
+                <p className="text-xs text-gray-400 mt-1">Press Enter or comma to add each area.</p>
+            </Field>
+
+            {changed && (
+                <div className="flex justify-end pt-1">
+                    <button onClick={save} disabled={saving}
+                        className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white
+                                   rounded-xl text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60
+                                   transition-colors">
+                        {saving
+                            ? <><div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Saving…</>
+                            : <><Save size={14} /> Save Changes</>
+                        }
+                    </button>
+                </div>
+            )}
+        </div>
+    )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ProfileEdit() {
@@ -468,9 +656,11 @@ export default function ProfileEdit() {
 
     const currentUser = localUser ?? user
 
+    // Always load fresh data from the server on mount
+    useEffect(() => { refreshUser?.() }, [])
+
     const handleUpdated = useCallback((data) => {
         setLocalUser(prev => ({ ...(prev ?? user ?? {}), ...data }))
-        // Also refresh auth hook state
         refreshUser?.()
     }, [user, refreshUser])
 
@@ -519,6 +709,12 @@ export default function ProfileEdit() {
                 <Card title="Personal Information" icon={User}
                       iconColor="bg-blue-100 text-blue-600">
                     <PersonalInfoForm user={currentUser} onUpdated={handleUpdated} />
+                </Card>
+
+                {/* Academic profile */}
+                <Card title="Academic Profile" icon={GraduationCap}
+                      iconColor="bg-purple-100 text-purple-600">
+                    <AcademicInfoForm user={currentUser} onUpdated={handleUpdated} />
                 </Card>
 
                 {/* Password */}

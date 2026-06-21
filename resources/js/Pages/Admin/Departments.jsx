@@ -293,6 +293,7 @@ export default function Departments() {
                                 <table className="w-full text-sm">
                                     <thead>
                                         <tr className="text-xs text-gray-400 uppercase border-b border-gray-50">
+                                            <th className="px-5 py-2.5 text-left font-medium w-10">#</th>
                                             <th className="px-5 py-2.5 text-left font-medium">Name</th>
                                             <th className="px-5 py-2.5 text-left font-medium">Code</th>
                                             <th className="px-5 py-2.5 text-left font-medium">Status</th>
@@ -300,8 +301,9 @@ export default function Departments() {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-50">
-                                        {depts.map(d => (
+                                        {depts.map((d, i) => (
                                             <tr key={d.id} className="hover:bg-blue-50/30 transition-colors group">
+                                                <td className="px-5 py-3 text-xs font-medium text-gray-400 tabular-nums w-10">{i + 1}</td>
                                                 <td className="px-5 py-3">
                                                     <span className="font-semibold text-gray-900">{d.name}</span>
                                                 </td>

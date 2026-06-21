@@ -280,6 +280,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/proposals/{id}/budget', [ProposalController::class, 'budget']);
 
         // Validation
+        Route::post('/proposals/validation/bulk-approve', [ProposalValidationController::class, 'bulkApprove']);
         Route::post('/proposals/{id}/validation/approve', [ProposalValidationController::class, 'approve']);
         Route::post('/proposals/{id}/validation/return', [ProposalValidationController::class, 'return']);
         Route::post('/proposals/{id}/validation/reject', [ProposalValidationController::class, 'reject']);

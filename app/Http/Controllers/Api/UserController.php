@@ -756,14 +756,50 @@ class UserController extends Controller
         }
 
         $request->validate([
-            'action' => 'required|in:activate,deactivate,delete',
+            'action' => 'required|in:activate,deactivate,delete,assign_role',
             'ids' => 'required|array|min:1',
             'ids.*' => 'required|string|uuid',
+            'role' => 'required_if:action,assign_role|nullable|string|exists:roles,name',
         ]);
 
         $action = $request->action;
         $ids = $request->ids;
         $actorId = $request->user()->id;
+
+        if ($action === 'assign_role') {
+            if (! $request->user()->can('roles.assign')) {
+                return response()->json(['message' => 'Forbidden.'], 403);
+            }
+
+            $role = $request->role;
+            $users = User::whereIn('id', $ids)
+                ->where('id', '!=', $actorId)
+                ->get();
+
+            $now = now();
+            foreach ($users as $u) {
+                $oldRole = $u->getRoleNames()->first() ?? 'none';
+                $u->syncRoles([$role]);
+                DB::table('audit_logs')->insert([
+                    'id' => Str::uuid()->toString(),
+                    'auditable_type' => User::class,
+                    'auditable_id' => $u->id,
+                    'event' => 'user.role_changed',
+                    'actor_id' => $actorId,
+                    'old_values' => json_encode(['role' => $oldRole]),
+                    'new_values' => json_encode(['role' => $role]),
+                    'ip_address' => $request->ip(),
+                    'user_agent' => $request->userAgent() ?? '',
+                    'created_at' => $now,
+                ]);
+            }
+
+            return response()->json([
+                'message' => "{$users->count()} user(s) assigned role \"{$role}\".",
+                'errors' => [],
+                'meta' => ['affected' => $users->count()],
+            ]);
+        }
 
         if (in_array($action, ['activate', 'deactivate'])) {
             $newStatus = $action === 'activate' ? 'active' : 'inactive';

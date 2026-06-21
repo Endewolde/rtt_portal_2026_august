@@ -118,3 +118,27 @@ test('expertise is required for registration', function () {
         ->assertUnprocessable()
         ->assertJsonValidationErrors(['expertise']);
 });
+
+test('registration is blocked when email does not match allowed domain', function () {
+    AppSetting::create(['key' => 'registration_email_domain', 'value' => 'wsu.edu.et', 'type' => 'string', 'group' => 'users', 'description' => 'test']);
+
+    $this->postJson('/api/v1/auth/register', validRegistrationData(['email' => 'jane@gmail.com']))
+        ->assertUnprocessable()
+        ->assertJsonPath('errors.email.0', fn ($msg) => str_contains($msg, 'wsu.edu.et'));
+});
+
+test('registration succeeds when email matches allowed domain', function () {
+    AppSetting::create(['key' => 'registration_email_domain', 'value' => 'wsu.edu.et', 'type' => 'string', 'group' => 'users', 'description' => 'test']);
+
+    $this->postJson('/api/v1/auth/register', validRegistrationData(['email' => 'jane@wsu.edu.et']))
+        ->assertCreated();
+});
+
+test('registration with wrong domain is blocked regardless of form request', function () {
+    AppSetting::create(['key' => 'registration_email_domain', 'value' => 'wsu.edu.et', 'type' => 'string', 'group' => 'users', 'description' => 'test']);
+
+    foreach (['jane@ethernet.edu.et', 'jane@gmail.com', 'jane@yahoo.com', 'jane@wsu.edu.et.fake.com'] as $bad) {
+        $this->postJson('/api/v1/auth/register', validRegistrationData(['email' => $bad]))
+            ->assertUnprocessable("Expected 422 for email: {$bad}");
+    }
+});

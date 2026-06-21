@@ -660,6 +660,7 @@ function SettlementsTable({ settlements }) {
                 <table className="w-full text-sm">
                     <thead className="bg-gray-50 border-b border-gray-200">
                         <tr>
+                            <th className="px-4 py-3 text-xs font-semibold text-gray-400 uppercase w-10">#</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Proposal</th>
                             <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Round</th>
                             <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Approved</th>
@@ -670,10 +671,11 @@ function SettlementsTable({ settlements }) {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                        {settlements.map(s => {
+                        {settlements.map((s, i) => {
                             const statusConf = STATUS_CONFIG[s.status] || STATUS_CONFIG.submitted
                             return (
                                 <tr key={s.id} className="hover:bg-gray-50">
+                                    <td className="px-4 py-3 text-xs font-medium text-gray-400 tabular-nums w-10">{i + 1}</td>
                                     <td className="px-4 py-3">
                                         <p className="font-mono text-xs text-blue-600 font-bold">
                                             {s.budget_request?.proposal?.tracker_number}

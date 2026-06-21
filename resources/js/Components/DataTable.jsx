@@ -23,6 +23,21 @@ export default function DataTable({
 
     const resolveId = getRowId ?? ((row) => row.id);
 
+    const rowNumberColumn = useMemo(() => ({
+        id: '__rownum__',
+        header: '#',
+        cell: ({ row, table }) => {
+            const { pageIndex, pageSize } = table.getState().pagination;
+            return (
+                <span className="text-xs font-medium text-gray-400 tabular-nums">
+                    {pageIndex * pageSize + row.index + 1}
+                </span>
+            );
+        },
+        enableSorting: false,
+        size: 48,
+    }), []);
+
     const selectionColumn = useMemo(() => ({
         id: '__select__',
         header: ({ table }) => (
@@ -49,7 +64,7 @@ export default function DataTable({
         size: 40,
     }), []);
 
-    const effectiveColumns = selectable ? [selectionColumn, ...columns] : columns;
+    const effectiveColumns = [rowNumberColumn, ...(selectable ? [selectionColumn, ...columns] : columns)];
 
     const table = useReactTable({
         data,

@@ -246,7 +246,7 @@ export default function AdminColleges() {
                         <table className="min-w-full">
                             <thead>
                                 <tr className="bg-linear-to-r from-indigo-600 to-indigo-700">
-                                    {['College', 'Code', 'Dean', 'Departments', 'Status', ''].map((h) => (
+                                    {['#', 'College', 'Code', 'Dean', 'Departments', 'Status', ''].map((h) => (
                                         <th key={h} className="px-5 py-3.5 text-left text-xs font-semibold text-indigo-100 uppercase tracking-wide">{h}</th>
                                     ))}
                                 </tr>
@@ -258,6 +258,7 @@ export default function AdminColleges() {
                                             key={college.id}
                                             className={`hover:bg-indigo-50/40 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}
                                         >
+                                            <td className="px-5 py-4 text-xs font-medium text-indigo-200 tabular-nums w-10">{idx + 1}</td>
                                             <td className="px-5 py-4">
                                                 <button
                                                     onClick={() => toggleExpand(college.id)}

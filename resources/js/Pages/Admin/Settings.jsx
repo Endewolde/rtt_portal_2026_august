@@ -1774,7 +1774,8 @@ const MICROSOFT_LOGO = (
 )
 
 function IntegrationPanel({ values, onChange, onSave }) {
-    const passwordLoginEnabled = values['password_login_enabled'] === 'true' || values['password_login_enabled'] === true
+    const passwordLoginEnabled  = values['password_login_enabled']  === 'true' || values['password_login_enabled']  === true
+    const ssoAllowRegistration  = values['sso_allow_registration']  === 'true' || values['sso_allow_registration']  === true
 
     return (
         <div className="space-y-4">
@@ -1799,6 +1800,32 @@ function IntegrationPanel({ values, onChange, onSave }) {
                     >
                         {passwordLoginEnabled ? <ToggleRight size={15} /> : <ToggleLeft size={15} />}
                         {passwordLoginEnabled ? 'Enabled' : 'Disabled'}
+                    </button>
+                </div>
+
+                {/* SSO Registration toggle */}
+                <div className="flex items-center justify-between py-3 border-t border-gray-100">
+                    <div>
+                        <p className="text-sm font-medium text-gray-900">SSO Registration</p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                            Allow new users to create accounts via SSO (Microsoft/Google).
+                            When disabled, SSO can still be used to <strong>sign in</strong> but not to register — new users must complete the registration form.
+                        </p>
+                    </div>
+                    <button
+                        onClick={() => {
+                            const next = ssoAllowRegistration ? 'false' : 'true'
+                            onChange('sso_allow_registration', next)
+                            onSave('sso_allow_registration', next)
+                        }}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shrink-0 ml-4 ${
+                            ssoAllowRegistration
+                                ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                        }`}
+                    >
+                        {ssoAllowRegistration ? <ToggleRight size={15} /> : <ToggleLeft size={15} />}
+                        {ssoAllowRegistration ? 'Allowed' : 'Blocked'}
                     </button>
                 </div>
             </div>

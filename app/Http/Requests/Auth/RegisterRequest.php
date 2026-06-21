@@ -29,10 +29,12 @@ class RegisterRequest extends BaseRequest
 
         $domain = AppSetting::where('key', 'registration_email_domain')->value('value');
         if ($domain) {
-            $suffix = str_starts_with($domain, '@') ? $domain : "@{$domain}";
-            $emailRules[] = Rule::when(true, function () use ($suffix) {
-                return ['regex:/'.preg_quote($suffix, '/').'$/i'];
-            });
+            $cleanDomain = ltrim($domain, '@');
+            $emailRules[] = function (string $attribute, mixed $value, \Closure $fail) use ($cleanDomain): void {
+                if (! str_ends_with(strtolower((string) $value), '@'.strtolower($cleanDomain))) {
+                    $fail("Email must use the @{$cleanDomain} domain (e.g. yourname@{$cleanDomain}).");
+                }
+            };
         }
 
         // Department is required only when the selected college has departments
@@ -60,11 +62,7 @@ class RegisterRequest extends BaseRequest
 
     public function messages(): array
     {
-        $domain = AppSetting::where('key', 'registration_email_domain')->value('value');
-        $suffix = $domain ? (str_starts_with($domain, '@') ? $domain : "@{$domain}") : '';
-
         return [
-            'email.regex' => "Email must end with {$suffix}",
             'college_id.required' => 'Please select your college.',
             'department_id.required' => 'Please select your department.',
             'expertise.required' => 'Add at least one area of expertise.',

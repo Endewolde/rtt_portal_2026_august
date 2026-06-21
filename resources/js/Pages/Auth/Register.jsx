@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link, usePage } from '@inertiajs/react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import {
     User, GraduationCap, Mail, Phone, CreditCard,
-    ChevronDown, Building2, BookOpen, X, AlertCircle,
+    ChevronDown, Building2, BookOpen, X, AlertCircle, Info,
 } from 'lucide-react';
 import GuestLayout from '../../Layouts/GuestLayout';
 import { post, get } from '../../lib/api';
@@ -79,6 +79,8 @@ export default function Register() {
     const appSettings = usePage().props.app_settings ?? {};
     const emailDomain = appSettings.registration_email_domain ?? '';
 
+    const ssoNotice = new URLSearchParams(window.location.search).get('sso_notice') ?? '';
+
     const [success, setSuccess]             = useState(false);
     const [serverError, setServerError]     = useState('');
     const [colleges, setColleges]           = useState([]);
@@ -89,12 +91,16 @@ export default function Register() {
     const [selectedCollege, setSelectedCollege] = useState('');
 
     const hasDepartments = departments.length > 0;
-    const schema = buildSchema(emailDomain, hasDepartments);
+    const schema = useMemo(() => buildSchema(emailDomain, hasDepartments), [emailDomain, hasDepartments]);
 
-    const { register, handleSubmit, setValue, formState: { errors, isSubmitting } } = useForm({
+    const { register, handleSubmit, setValue, trigger, setError, formState: { errors, isSubmitting } } = useForm({
         resolver: zodResolver(schema),
+        mode: 'onBlur',
+        reValidateMode: 'onChange',
         defaultValues: { expertise: [], gender: '', college_id: '', department_id: '', phone: '', employee_id: '' },
     });
+
+    const expertiseError = errors.expertise?.message ?? errors.expertise?.root?.message;
 
     useEffect(() => {
         get('/colleges/public').then(r => setColleges(r.data ?? [])).catch(() => {});
@@ -121,14 +127,14 @@ export default function Register() {
         if (!tag) return;
         const next = [...expertiseTags, tag].filter((t, i, arr) => arr.indexOf(t) === i);
         setExpertiseTags(next);
-        setValue('expertise', next);
+        setValue('expertise', next, { shouldValidate: true });
         setExpertiseInput('');
     };
 
     const removeTag = (tag) => {
         const next = expertiseTags.filter(t => t !== tag);
         setExpertiseTags(next);
-        setValue('expertise', next);
+        setValue('expertise', next, { shouldValidate: true });
     };
 
     const onExpertiseKey = (e) => {
@@ -148,14 +154,23 @@ export default function Register() {
                 phone:       data.phone       || null,
                 title:       data.title       || null,
             };
-            await post('/auth/register', payload);
+            await post('/auth/register', payload, { skipErrorToast: true });
             setSuccess(true);
         } catch (e) {
             const status = e.response?.status;
             if (status === 429) {
                 setServerError('Too many attempts. Please wait before trying again.');
             } else {
-                setServerError(e.response?.data?.message ?? 'Registration failed. Please try again.');
+                // Surface field-level errors inline (e.g. domain check, duplicate email)
+                const fieldErrors = e.response?.data?.errors ?? {};
+                let hasFieldError = false;
+                Object.entries(fieldErrors).forEach(([field, messages]) => {
+                    setError(field, { type: 'server', message: Array.isArray(messages) ? messages[0] : messages });
+                    hasFieldError = true;
+                });
+                if (!hasFieldError) {
+                    setServerError(e.response?.data?.message ?? 'Registration failed. Please try again.');
+                }
             }
         }
     };
@@ -170,7 +185,7 @@ export default function Register() {
 
     if (success) return (
         <GuestLayout {...layoutProps}>
-            <div className="bg-white rounded-3xl shadow-lg border border-gray-100 px-8 py-10 text-center">
+            <div className="bg-white rounded-3xl shadow-lg border border-gray-100 px-5 py-8 sm:px-8 sm:py-10 text-center">
                 <div className="mx-auto mb-5 h-16 w-16 rounded-2xl bg-teal-50 flex items-center justify-center">
                     <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#0d9488" strokeWidth="2">
                         <polyline points="20 6 9 17 4 12" />
@@ -196,10 +211,18 @@ export default function Register() {
 
     return (
         <GuestLayout {...layoutProps}>
-            <div className="bg-white rounded-3xl shadow-lg border border-gray-100 px-8 py-8">
+            <div className="bg-white rounded-3xl shadow-lg border border-gray-100 px-4 py-6 sm:px-8 sm:py-8">
+
+                {/* SSO-blocked notice */}
+                {ssoNotice && (
+                    <div className="mb-5 flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
+                        <Info size={15} className="text-blue-500 shrink-0 mt-0.5" />
+                        <p className="text-sm text-blue-700">{ssoNotice}</p>
+                    </div>
+                )}
 
                 {/* Header */}
-                <div className="mb-7">
+                <div className="mb-6">
                     <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Create account</h1>
                     <p className="mt-1 text-sm text-gray-500">
                         Already have an account?{' '}
@@ -209,12 +232,26 @@ export default function Register() {
                     </p>
                 </div>
 
+                {/* Domain restriction notice */}
+                {emailDomain && (
+                    <div className="mb-6 flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3.5">
+                        <AlertCircle size={15} className="text-amber-500 shrink-0 mt-0.5" />
+                        <div>
+                            <p className="text-sm font-semibold text-amber-800">Institutional email required</p>
+                            <p className="text-xs text-amber-700 mt-0.5">
+                                Registration is restricted to <strong>@{emailDomain.replace(/^@/, '')}</strong> email addresses only.
+                                Personal emails (Gmail, Yahoo, etc.) will not be accepted.
+                            </p>
+                        </div>
+                    </div>
+                )}
+
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-7">
 
                     {/* ── Personal Information ─────────────────────────── */}
                     <div>
                         <SectionHeading icon={User} label="Personal Information" color="bg-teal-500" />
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4">
 
                             <FieldWrap label="Full Name" required icon={User} error={errors.name?.message}>
                                 <input type="text" placeholder="e.g. Abebe Kebede"
@@ -228,9 +265,9 @@ export default function Register() {
                             </FieldWrap>
 
                             <FieldWrap label="Email" required icon={Mail} error={errors.email?.message}
-                                hint={emailDomain ? `Must end with @${emailDomain.replace(/^@/, '')}` : undefined}>
+                                hint={emailDomain && !errors.email ? `Use your @${emailDomain.replace(/^@/, '')} institutional email` : undefined}>
                                 <input type="email"
-                                    placeholder={emailDomain ? `name@${emailDomain.replace(/^@/, '')}` : 'you@institution.edu.et'}
+                                    placeholder={emailDomain ? `yourname@${emailDomain.replace(/^@/, '')}` : 'you@institution.edu.et'}
                                     className={inputCls} {...register('email')} />
                             </FieldWrap>
 
@@ -260,7 +297,7 @@ export default function Register() {
                     {/* ── Organisation ────────────────────────────────── */}
                     <div>
                         <SectionHeading icon={Building2} label="Organisation" color="bg-indigo-500" />
-                        <div className="grid grid-cols-2 gap-x-4 gap-y-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-4">
 
                             <FieldWrap label="College" required icon={Building2} error={errors.college_id?.message}>
                                 <select
@@ -309,11 +346,11 @@ export default function Register() {
                                 Expertise Areas <span className="text-red-500">*</span>
                             </label>
                             <div className={`flex flex-wrap gap-1.5 p-3 rounded-xl bg-white transition-all duration-150 min-h-12
-                                ${errors.expertise
+                                ${expertiseError
                                     ? 'ring-2 ring-red-300 border-red-300'
                                     : 'border-gray-200 focus-within:border-teal-400 focus-within:ring-2 focus-within:ring-teal-100'
                                 }`}
-                                style={{ border: errors.expertise ? undefined : '1px solid #e5e7eb' }}>
+                                style={{ border: expertiseError ? undefined : '1px solid #e5e7eb' }}>
                                 {expertiseTags.map((tag, i) => (
                                     <span key={i}
                                         className="flex items-center gap-1 bg-teal-50 text-teal-700 border border-teal-200 text-xs font-medium px-2.5 py-1 rounded-lg">
@@ -328,17 +365,16 @@ export default function Register() {
                                     value={expertiseInput}
                                     onChange={e => setExpertiseInput(e.target.value)}
                                     onKeyDown={onExpertiseKey}
-                                    onBlur={() => addTag(expertiseInput)}
-                                    placeholder={expertiseTags.length === 0 ? 'Type an area and press Enter or comma — e.g. Machine Learning, Biomedical Engineering…' : ''}
-                                    className="flex-1 min-w-48 text-sm outline-none bg-transparent placeholder-gray-400 px-1"
+                                    onBlur={() => { addTag(expertiseInput); if (!expertiseTags.length) trigger('expertise'); }}
+                                    placeholder={expertiseTags.length === 0 ? 'e.g. Machine Learning, Biomedical Engineering…' : ''}
+                                    className="flex-1 min-w-24 sm:min-w-48 text-sm outline-none bg-transparent placeholder-gray-400 px-1"
                                 />
                             </div>
-                            {errors.expertise && (
+                            {expertiseError ? (
                                 <p className="flex items-center gap-1 text-xs text-red-500">
-                                    <AlertCircle size={10} /> {errors.expertise.message}
+                                    <AlertCircle size={10} /> {expertiseError}
                                 </p>
-                            )}
-                            {!errors.expertise && (
+                            ) : (
                                 <p className="text-xs text-gray-400">Press Enter or comma after each area. Used to match you with relevant proposals.</p>
                             )}
                         </div>

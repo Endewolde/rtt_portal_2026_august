@@ -676,7 +676,7 @@ export default function ProposalCallsAdmin() {
                     <table className="w-full text-sm">
                         <thead className="bg-gray-50 border-b border-gray-200">
                             <tr>
-                                {['Title', 'Category', 'Year', 'Status', 'Opens', 'Deadline', 'Submissions', ''].map((h) => (
+                                {['#', 'Title', 'Category', 'Year', 'Status', 'Opens', 'Deadline', 'Submissions', ''].map((h) => (
                                     <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
                                         {h}
                                     </th>
@@ -684,10 +684,11 @@ export default function ProposalCallsAdmin() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {filteredCalls.map((c) => (
+                            {filteredCalls.map((c, i) => (
                                 <tr key={c.id}
                                     onClick={() => canManage && openEdit(c)}
                                     className={canManage ? 'hover:bg-gray-50 cursor-pointer' : ''}>
+                                    <td className="px-4 py-3 text-xs font-medium text-gray-400 tabular-nums w-10">{i + 1}</td>
                                     <td className="px-4 py-3 max-w-xs">
                                         <p className="font-medium text-gray-900 line-clamp-1">{c.title}</p>
                                         <p className="text-xs text-gray-400 font-mono mt-0.5">{c.slug}</p>

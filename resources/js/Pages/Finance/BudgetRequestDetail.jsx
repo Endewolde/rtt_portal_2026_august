@@ -238,7 +238,7 @@ export default function BudgetRequestDetail() {
                                         <table className="w-full text-sm">
                                             <thead>
                                                 <tr className="border-b border-gray-100">
-                                                    {['Category', 'Description', 'Amount', 'Justification'].map(h => (
+                                                    {['#', 'Category', 'Description', 'Amount', 'Justification'].map(h => (
                                                         <th key={h} className="text-left py-2 pr-4 text-xs font-bold text-gray-400 uppercase tracking-wide">{h}</th>
                                                     ))}
                                                 </tr>
@@ -246,6 +246,7 @@ export default function BudgetRequestDetail() {
                                             <tbody className="divide-y divide-gray-50">
                                                 {request.items.map((item, i) => (
                                                     <tr key={i}>
+                                                        <td className="py-2.5 pr-4 text-xs font-medium text-gray-400 tabular-nums">{i + 1}</td>
                                                         <td className="py-2.5 pr-4 font-medium text-gray-700">{item.category}</td>
                                                         <td className="py-2.5 pr-4 text-gray-600">{item.description}</td>
                                                         <td className="py-2.5 pr-4 font-semibold text-gray-900">{formatCurrency(item.amount)}</td>

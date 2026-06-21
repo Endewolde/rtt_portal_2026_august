@@ -17,9 +17,17 @@ const STATUS_COLORS = {
     rejected:            'bg-red-50 text-red-700 border-red-200',
 };
 
-function SkeletonRow() {
+function SkeletonRow({ hasSelect = false }) {
     return (
         <tr>
+            {hasSelect && (
+                <td className="px-4 py-3 w-10">
+                    <div className="h-4 w-4 bg-gray-200 rounded animate-pulse" />
+                </td>
+            )}
+            <td className="px-4 py-3 w-10">
+                <div className="h-3.5 w-5 bg-gray-200 rounded animate-pulse" />
+            </td>
             {[...Array(5)].map((_, i) => (
                 <td key={i} className="px-4 py-3">
                     <div className="h-3.5 bg-gray-200 rounded animate-pulse" style={{ width: `${60 + i * 10}%` }} />
@@ -36,12 +44,19 @@ export default function ProposalTable({
     loading = false,
     emptyMessage = 'No proposals found.',
     emptyIcon = '📄',
+    selectable = false,
+    selectedIds = null,
+    onToggle = null,
+    onToggleAll = null,
 }) {
+    const allSelected = selectable && proposals.length > 0 && proposals.every(p => selectedIds?.has(p.id));
+    const someSelected = selectable && proposals.some(p => selectedIds?.has(p.id));
+
     if (loading) {
         return (
             <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
                 <table className="w-full text-sm">
-                    <tbody>{[...Array(5)].map((_, i) => <SkeletonRow key={i} />)}</tbody>
+                    <tbody>{[...Array(5)].map((_, i) => <SkeletonRow key={i} hasSelect={selectable} />)}</tbody>
                 </table>
             </div>
         );
@@ -71,6 +86,19 @@ export default function ProposalTable({
                 <table className="w-full text-sm">
                     <thead>
                         <tr className="bg-gray-50 border-b border-gray-200">
+                            {selectable && (
+                                <th className="px-4 py-3 w-10">
+                                    <input
+                                        type="checkbox"
+                                        className="h-4 w-4 rounded border-gray-300 text-green-600 cursor-pointer"
+                                        checked={allSelected}
+                                        ref={el => { if (el) el.indeterminate = someSelected && !allSelected; }}
+                                        onChange={onToggleAll}
+                                        aria-label="Select all"
+                                    />
+                                </th>
+                            )}
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wide w-10">#</th>
                             {col('tracker') && <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Tracker #</th>}
                             {col('grant_reference') && <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Grant Ref</th>}
                             {col('title') && <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Title</th>}
@@ -91,7 +119,23 @@ export default function ProposalTable({
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                         {proposals.map((p, i) => (
-                            <tr key={p.id} className={`hover:bg-blue-50/40 transition-colors ${i % 2 === 0 ? '' : 'bg-gray-50/40'}`}>
+                            <tr key={p.id} className={`transition-colors ${
+                                selectedIds?.has(p.id) ? 'bg-green-50' : `hover:bg-blue-50/40 ${i % 2 === 0 ? '' : 'bg-gray-50/40'}`
+                            }`}>
+                                {selectable && (
+                                    <td className="px-4 py-3 w-10">
+                                        <input
+                                            type="checkbox"
+                                            className="h-4 w-4 rounded border-gray-300 text-green-600 cursor-pointer"
+                                            checked={!!selectedIds?.has(p.id)}
+                                            onChange={() => onToggle?.(p.id)}
+                                            onClick={e => e.stopPropagation()}
+                                        />
+                                    </td>
+                                )}
+                                <td className="px-4 py-3 text-xs font-medium text-gray-400 tabular-nums w-10">
+                                    {i + 1}
+                                </td>
                                 {col('tracker') && (
                                     <td className="px-4 py-3 whitespace-nowrap">
                                         <a href={`/proposals/${p.id}`}

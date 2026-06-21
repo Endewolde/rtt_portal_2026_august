@@ -16,6 +16,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -34,6 +35,20 @@ class AuthController extends Controller
             403,
             'Self-registration is currently disabled. Please contact the system administrator for more information or visit the administration office for assistance.'
         );
+
+        // Hard-enforce email domain restriction (second layer after RegisterRequest)
+        $allowedDomain = AppSetting::where('key', 'registration_email_domain')->value('value');
+        if ($allowedDomain) {
+            $cleanDomain = strtolower(ltrim($allowedDomain, '@'));
+            $email = strtolower((string) $request->input('email', ''));
+            if (! str_ends_with($email, '@'.$cleanDomain)) {
+                return response()->json([
+                    'message' => "Only @{$cleanDomain} email addresses are allowed to register.",
+                    'errors' => ['email' => ["Email must end with @{$cleanDomain} (e.g. yourname@{$cleanDomain})."]],
+                    'data' => null,
+                ], 422);
+            }
+        }
 
         $result = $this->authService->register($request->validated());
 
@@ -111,10 +126,16 @@ class AuthController extends Controller
     private function buildUserPayload(User $user): array
     {
         $subscription = null;
+        $college = null;
 
         if ($user->college_id) {
-            $college = $user->college()->first();
+            $user->loadMissing('college');
+            $college = $user->college;
             $subscription = $college ? $this->subscriptionService->getSubscriptionSummary($college) : null;
+        }
+
+        if ($user->department_id) {
+            $user->loadMissing('department');
         }
 
         return array_merge($user->toArray(), [
@@ -133,6 +154,10 @@ class AuthController extends Controller
             'avatar' => ['sometimes', 'nullable', 'string', 'max:500'],
             'employee_id' => ['sometimes', 'nullable', 'string', 'max:50'],
             'gender' => ['sometimes', 'nullable', 'in:male,female,other'],
+            'college_id' => ['sometimes', 'nullable', 'uuid', 'exists:colleges,id'],
+            'department_id' => ['sometimes', 'nullable', 'uuid', 'exists:departments,id'],
+            'expertise' => ['sometimes', 'nullable', 'array'],
+            'expertise.*' => ['string', 'max:100'],
         ]);
 
         $request->user()->update($validated);
@@ -140,7 +165,7 @@ class AuthController extends Controller
         $user = $request->user()->fresh()->load('roles');
 
         return response()->json([
-            'data' => ['user' => $user],
+            'data' => ['user' => $this->buildUserPayload($user)],
             'message' => 'Profile updated.',
             'errors' => [],
         ]);
@@ -433,6 +458,40 @@ class AuthController extends Controller
 
     public function telegramWebhook(Request $request): JsonResponse
     {
+        $update = $request->all();
+
+        // Telegram native webhook update
+        if (isset($update['message'])) {
+            $message = $update['message'];
+            $chatId = (string) ($message['chat']['id'] ?? '');
+            $text = trim($message['text'] ?? '');
+
+            if (str_starts_with($text, '/link ')) {
+                $linkToken = trim(substr($text, 6));
+                try {
+                    $user = $this->authService->linkTelegramAccount($linkToken, $chatId);
+                    $this->replyTelegram($chatId,
+                        "✅ Success! Your RTT account ({$user->name}) is now linked.\n\nYou will receive proposal updates and deadline reminders here."
+                    );
+                } catch (\Exception $e) {
+                    $this->replyTelegram($chatId,
+                        "❌ Could not link your account: {$e->getMessage()}\n\nPlease generate a new token at:\nhttps://rtt.wsu.edu.et/profile"
+                    );
+                }
+            } elseif ($text === '/start' || $text === '/help') {
+                $this->replyTelegram($chatId,
+                    "👋 Welcome to the RTT Notification Bot!\n\nTo link your account:\n1. Go to https://rtt.wsu.edu.et/profile\n2. Scroll to Telegram Integration\n3. Click Generate Token\n4. Send: /link YOUR_TOKEN\n\nYou'll start receiving notifications once linked."
+                );
+            } else {
+                $this->replyTelegram($chatId,
+                    "To link your RTT account, send:\n\n/link YOUR_TOKEN\n\nGet your token at:\nhttps://rtt.wsu.edu.et/profile"
+                );
+            }
+
+            return response()->json(['ok' => true]);
+        }
+
+        // Legacy internal format (token + chat_id as explicit params)
         $token = $request->input('token');
         $chatId = $request->input('chat_id');
 
@@ -458,6 +517,19 @@ class AuthController extends Controller
             'data' => ['user_id' => $user->id],
             'message' => 'Telegram account linked successfully.',
             'errors' => [],
+        ]);
+    }
+
+    private function replyTelegram(string $chatId, string $text): void
+    {
+        $botToken = AppSetting::where('key', 'telegram_bot_token')->value('value');
+        if (! $botToken) {
+            return;
+        }
+
+        Http::timeout(5)->post("https://api.telegram.org/bot{$botToken}/sendMessage", [
+            'chat_id' => $chatId,
+            'text' => $text,
         ]);
     }
 }

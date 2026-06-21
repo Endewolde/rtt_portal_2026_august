@@ -102,7 +102,7 @@ export default function GuestLayout({
             </div>
 
             {/* ── Right form panel ─────────────────────────────────────────── */}
-            <div className="flex flex-1 flex-col items-center justify-center p-6 sm:p-10 overflow-y-auto">
+            <div className="flex flex-1 flex-col items-center justify-start sm:justify-center p-6 sm:p-10 overflow-y-auto">
 
                 {/* Mobile-only logo */}
                 <div className="lg:hidden mb-8 flex items-center gap-2.5">

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { CheckCircle, RotateCcw, XCircle, Clock, ShieldCheck, RefreshCw, FileQuestion } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { CheckCircle, RotateCcw, XCircle, Clock, ShieldCheck, RefreshCw, FileQuestion, X } from 'lucide-react';
 import { Link } from '@inertiajs/react';
 import AppLayout from '../../Layouts/AppLayout';
 import WorkflowBreadcrumb from '../../Components/WorkflowBreadcrumb';
@@ -30,11 +30,25 @@ function CountdownTimer({ endDate }) {
     return <p className="text-sm font-semibold text-amber-700">{display}</p>;
 }
 
-function ProposalRow({ proposal, onAction }) {
+function ProposalCard({ proposal, onAction, num, checked, onToggle }) {
     return (
-        <div className="bg-white border border-gray-200 rounded-xl flex items-stretch overflow-hidden hover:shadow-md transition-shadow">
-            <div className="w-0.5 bg-blue-600 shrink-0" />
-            <div className="flex items-center gap-4 flex-1 min-w-0 px-4 py-3.5">
+        <div className={`bg-white border rounded-xl flex items-stretch overflow-hidden hover:shadow-md transition-all ${
+            checked ? 'border-green-300 shadow-sm' : 'border-gray-200'
+        }`}>
+            <div className={`w-0.5 shrink-0 ${checked ? 'bg-green-500' : 'bg-blue-600'}`} />
+            <div className="flex items-center gap-3 flex-1 min-w-0 px-4 py-3.5">
+                {onToggle && (
+                    <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => onToggle(proposal.id)}
+                        onClick={e => e.stopPropagation()}
+                        className="h-4 w-4 rounded border-gray-300 text-green-600 cursor-pointer shrink-0"
+                    />
+                )}
+                {num != null && (
+                    <span className="text-xs font-medium text-gray-400 tabular-nums w-5 text-center shrink-0">{num}</span>
+                )}
                 <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg shrink-0">
                     {proposal.tracker_number}
                 </span>
@@ -48,21 +62,18 @@ function ProposalRow({ proposal, onAction }) {
                     <button
                         onClick={() => onAction('approve', proposal.id)}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-xl text-xs font-semibold hover:bg-green-700 transition-colors"
-                        title="Approve"
                     >
                         <CheckCircle size={13} /> Approve
                     </button>
                     <button
                         onClick={() => onAction('return', proposal.id)}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white rounded-xl text-xs font-semibold hover:bg-amber-600 transition-colors"
-                        title="Return"
                     >
                         <RotateCcw size={13} /> Return
                     </button>
                     <button
                         onClick={() => onAction('reject', proposal.id)}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white rounded-xl text-xs font-semibold hover:bg-red-700 transition-colors"
-                        title="Reject"
                     >
                         <XCircle size={13} /> Reject
                     </button>
@@ -74,16 +85,24 @@ function ProposalRow({ proposal, onAction }) {
 
 export default function ValidationQueue() {
     const toast = useToast();
-    const [data, setData] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [dialog, setDialog] = useState(null);
-    const [reason, setReason] = useState('');
+    const [data, setData]           = useState([]);
+    const [loading, setLoading]     = useState(true);
+    const [dialog, setDialog]       = useState(null);
+    const [reason, setReason]       = useState('');
     const [submitting, setSubmitting] = useState(false);
-    const [view, setView] = useViewPreference('validation_queue', 'card');
+    const [view, setView]           = useViewPreference('validation_queue', 'card');
+
+    // Bulk selection
+    const [selectedIds, setSelectedIds]   = useState(new Set());
+    const [bulkApproving, setBulkApproving] = useState(false);
 
     const load = () => {
+        setLoading(true);
         get('/proposals/validation-queue')
-            .then((r) => setData(r.data?.data ?? r.data ?? []))
+            .then((r) => {
+                setData(r.data?.data ?? r.data ?? []);
+                setSelectedIds(new Set());
+            })
             .catch(() => {})
             .finally(() => setLoading(false));
     };
@@ -114,6 +133,46 @@ export default function ValidationQueue() {
     const now = new Date();
     const awaitingDeadline   = data.filter(p => p.proposal_call && new Date(p.proposal_call.end_date) > now);
     const readyForValidation = data.filter(p => !p.proposal_call || new Date(p.proposal_call.end_date) <= now);
+
+    // Selection helpers scoped to readyForValidation
+    const readyIds    = readyForValidation.map(p => p.id);
+    const allSelected = readyIds.length > 0 && readyIds.every(id => selectedIds.has(id));
+    const someSelected = readyIds.some(id => selectedIds.has(id));
+    const selectAllRef = useRef(null);
+
+    useEffect(() => {
+        if (selectAllRef.current) {
+            selectAllRef.current.indeterminate = someSelected && !allSelected;
+        }
+    }, [someSelected, allSelected]);
+
+    const toggleOne = (id) => setSelectedIds(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+    });
+
+    const toggleAll = () => setSelectedIds(prev => {
+        const next = new Set(prev);
+        if (allSelected) { readyIds.forEach(id => next.delete(id)); }
+        else             { readyIds.forEach(id => next.add(id)); }
+        return next;
+    });
+
+    const executeBulkApprove = async () => {
+        setBulkApproving(true);
+        try {
+            const res = await post('/proposals/validation/bulk-approve', { ids: [...selectedIds] });
+            toast.success(res.data?.message ?? `${selectedIds.size} proposal(s) approved.`, {
+                title: 'Bulk Approved',
+                action: { label: 'Go to Blind Review', onClick: () => { window.location.href = '/admin/blind-review'; } },
+            });
+            load();
+        } catch (e) {
+            toast.error(e.response?.data?.message ?? 'Bulk approve failed.');
+        }
+        setBulkApproving(false);
+    };
 
     return (
         <AppLayout breadcrumb="Validation Queue">
@@ -179,10 +238,11 @@ export default function ValidationQueue() {
                                     </h2>
                                 </div>
                                 <div className="space-y-2">
-                                    {awaitingDeadline.map(p => (
+                                    {awaitingDeadline.map((p, i) => (
                                         <div key={p.id} className="bg-white border border-amber-200 rounded-xl flex items-stretch overflow-hidden hover:shadow-md transition-shadow">
                                             <div className="w-0.5 bg-amber-500 shrink-0" />
                                             <div className="flex items-center gap-4 flex-1 min-w-0 px-4 py-3.5">
+                                                <span className="text-xs font-medium text-gray-400 tabular-nums w-5 text-center shrink-0">{i + 1}</span>
                                                 <span className="font-mono text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-lg shrink-0">
                                                     {p.tracker_number}
                                                 </span>
@@ -204,19 +264,60 @@ export default function ValidationQueue() {
 
                         {readyForValidation.length > 0 && (
                             <div>
-                                <div className="flex items-center gap-2 mb-3">
-                                    <span className="inline-block w-2.5 h-2.5 rounded-full bg-blue-600" />
-                                    <h2 className="text-sm font-semibold text-gray-700">
-                                        Ready for Validation
-                                        <span className="ml-2 inline-flex items-center justify-center bg-blue-100 text-blue-700 text-xs font-bold px-2 py-0.5 rounded-full">
-                                            {readyForValidation.length}
-                                        </span>
-                                    </h2>
+                                {/* Section header with select-all + bulk bar */}
+                                <div className="flex items-center gap-3 mb-3 flex-wrap">
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            ref={selectAllRef}
+                                            type="checkbox"
+                                            className="h-4 w-4 rounded border-gray-300 text-green-600 cursor-pointer"
+                                            checked={allSelected}
+                                            onChange={toggleAll}
+                                            aria-label="Select all ready proposals"
+                                        />
+                                        <span className="inline-block w-2.5 h-2.5 rounded-full bg-blue-600" />
+                                        <h2 className="text-sm font-semibold text-gray-700">
+                                            Ready for Validation
+                                            <span className="ml-2 inline-flex items-center justify-center bg-blue-100 text-blue-700 text-xs font-bold px-2 py-0.5 rounded-full">
+                                                {readyForValidation.length}
+                                            </span>
+                                        </h2>
+                                    </div>
+
+                                    {selectedIds.size > 0 && (
+                                        <div className="ml-auto flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl px-3 py-1.5">
+                                            <span className="text-xs font-semibold text-green-700">
+                                                {selectedIds.size} selected
+                                            </span>
+                                            <button
+                                                onClick={executeBulkApprove}
+                                                disabled={bulkApproving}
+                                                className="flex items-center gap-1.5 px-3 py-1 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 disabled:opacity-60 transition-colors"
+                                            >
+                                                {bulkApproving
+                                                    ? <><RefreshCw size={11} className="animate-spin" /> Approving…</>
+                                                    : <><CheckCircle size={11} /> Approve All</>
+                                                }
+                                            </button>
+                                            <button
+                                                onClick={() => setSelectedIds(new Set())}
+                                                className="text-green-500 hover:text-green-800 transition-colors"
+                                                aria-label="Clear selection"
+                                            >
+                                                <X size={14} />
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
+
                                 {view === 'table' ? (
                                     <ProposalTable
                                         proposals={readyForValidation}
                                         showColumns={['tracker','title','category','pi','college','deadline']}
+                                        selectable
+                                        selectedIds={selectedIds}
+                                        onToggle={toggleOne}
+                                        onToggleAll={toggleAll}
                                         actions={(p) => (
                                             <div className="flex items-center gap-1.5 justify-end">
                                                 <button onClick={() => openDialog('approve', p.id)}
@@ -231,8 +332,15 @@ export default function ValidationQueue() {
                                     />
                                 ) : (
                                     <div className="space-y-2">
-                                        {readyForValidation.map(p => (
-                                            <ProposalRow key={p.id} proposal={p} onAction={openDialog} />
+                                        {readyForValidation.map((p, i) => (
+                                            <ProposalCard
+                                                key={p.id}
+                                                proposal={p}
+                                                onAction={openDialog}
+                                                num={i + 1}
+                                                checked={selectedIds.has(p.id)}
+                                                onToggle={toggleOne}
+                                            />
                                         ))}
                                     </div>
                                 )}

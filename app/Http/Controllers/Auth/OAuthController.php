@@ -66,6 +66,10 @@ class OAuthController extends Controller
             return redirect('/login?sso_error='.urlencode('Your account ('.$email.') is not registered in this system. Please contact the administrator to create your account before signing in with SSO.'));
         }
 
+        if (! $existingUser && AppSetting::where('key', 'sso_allow_registration')->value('value') !== 'true') {
+            return redirect('/register?sso_notice='.urlencode('You don\'t have an account yet. Please complete the registration form to create one — SSO can then be used to sign in.'));
+        }
+
         $user = $this->findOrCreateUser($provider, $socialUser);
 
         $user->update([

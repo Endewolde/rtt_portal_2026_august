@@ -215,7 +215,7 @@ function BudgetUtilizationChart({ data }) {
                 <table className="w-full text-sm">
                     <thead className="bg-gray-50 border-b border-gray-200">
                         <tr>
-                            {['Tracker #', 'Title', 'Allocated', 'Disbursed', 'Settled', 'Utilization'].map(h => (
+                            {['#', 'Tracker #', 'Title', 'Allocated', 'Disbursed', 'Settled', 'Utilization'].map(h => (
                                 <th key={h} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide">{h}</th>
                             ))}
                         </tr>
@@ -223,6 +223,7 @@ function BudgetUtilizationChart({ data }) {
                     <tbody className="divide-y divide-gray-50">
                         {rows.map((r, i) => (
                             <tr key={i} className="hover:bg-gray-50">
+                                <td className="px-4 py-3 text-xs font-medium text-gray-400 tabular-nums w-10">{i + 1}</td>
                                 <td className="px-4 py-3 font-mono text-xs text-blue-600 font-bold">{r.name}</td>
                                 <td className="px-4 py-3 text-xs text-gray-700 max-w-48 truncate" title={r.title}>{r.title}</td>
                                 <td className="px-4 py-3 text-xs font-medium">{formatCurrency(r.Allocated)}</td>
@@ -346,6 +347,7 @@ function SummaryTable({ columns, rows }) {
             <table className="w-full text-sm">
                 <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
+                        <th className="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wide w-10">#</th>
                         {columns.map(c => (
                             <th key={c} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide">{c}</th>
                         ))}
@@ -354,6 +356,7 @@ function SummaryTable({ columns, rows }) {
                 <tbody className="divide-y divide-gray-50">
                     {rows.map((row, i) => (
                         <tr key={i} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 text-xs font-medium text-gray-400 tabular-nums">{i + 1}</td>
                             {row.map((cell, j) => (
                                 <td key={j} className={`px-4 py-3 text-sm ${j === 0 ? 'font-semibold text-gray-800' : 'text-gray-600'}`}>{cell}</td>
                             ))}

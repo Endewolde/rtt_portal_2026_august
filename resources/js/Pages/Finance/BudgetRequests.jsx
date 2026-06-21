@@ -1019,14 +1019,15 @@ export default function BudgetRequests() {
                                 <table className="w-full text-sm">
                                     <thead className="border-b border-gray-200">
                                         <tr>
-                                            {['Proposal', 'Round', 'Amount', 'Status', 'Signatures', 'Date', ''].map(h => (
+                                            {['#', 'Proposal', 'Round', 'Amount', 'Status', 'Signatures', 'Date', ''].map(h => (
                                                 <th key={h} className="px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide">{h}</th>
                                             ))}
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-50">
-                                        {filtered.map(r => (
+                                        {filtered.map((r, i) => (
                                             <tr key={r.id} className="hover:bg-gray-50">
+                                                <td className="px-3 py-3 text-xs font-medium text-gray-400 tabular-nums w-10">{i + 1}</td>
                                                 <td className="px-3 py-3">
                                                     <p className="font-mono text-xs font-bold text-blue-600">{r.proposal?.tracker_number}</p>
                                                     <p className="text-xs text-gray-500 truncate max-w-48">{r.proposal?.title}</p>

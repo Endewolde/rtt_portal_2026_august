@@ -102,7 +102,7 @@ export default function SimilarityFlags() {
                             <table className="w-full text-sm">
                                 <thead>
                                     <tr className="bg-gray-50 border-b border-gray-200">
-                                        {['Proposal', 'Title', 'Similar To', 'Score', 'Flagged', 'Checked', 'Actions'].map(h => (
+                                        {['#', 'Proposal', 'Title', 'Similar To', 'Score', 'Flagged', 'Checked', 'Actions'].map(h => (
                                             <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                                         ))}
                                     </tr>
@@ -110,6 +110,7 @@ export default function SimilarityFlags() {
                                 <tbody className="divide-y divide-gray-100">
                                     {visible.map((f, i) => (
                                         <tr key={f.id} className={`hover:bg-orange-50/30 transition-colors ${i % 2 === 0 ? '' : 'bg-gray-50/40'}`}>
+                                            <td className="px-4 py-3 text-xs font-medium text-gray-400 tabular-nums w-10">{i + 1}</td>
                                             <td className="px-4 py-3 whitespace-nowrap">
                                                 <a href={`/proposals/${f.proposal_id}`}
                                                     className="font-mono text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded hover:bg-blue-100">
