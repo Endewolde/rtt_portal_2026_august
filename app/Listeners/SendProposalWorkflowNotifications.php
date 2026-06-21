@@ -29,6 +29,12 @@ class SendProposalWorkflowNotifications
 
     // ── Stage handlers ────────────────────────────────────────────────────────
 
+    private const CATEGORY_OFFICER_ROLES = [
+        'research' => 'research_officer',
+        'community_engagement' => 'community_officer',
+        'technology_transfer' => 'technology_officer',
+    ];
+
     private function onSubmitted(Proposal $proposal): void
     {
         $pi = $proposal->pi;
@@ -49,6 +55,25 @@ class SendProposalWorkflowNotifications
             $this->notify($coI, 'co_investigator_notified', array_merge($baseData, [
                 'pi_name' => $pi?->name ?? 'the PI',
             ]), 'co_investigator_notified');
+        }
+
+        // Category officers: notify that a new proposal is in their queue
+        $this->notifyCategoryOfficers($proposal, array_merge($baseData, [
+            'pi_name' => $pi?->name ?? 'Unknown',
+            'category' => ucwords(str_replace('_', ' ', (string) $proposal->category)),
+        ]));
+    }
+
+    private function notifyCategoryOfficers(Proposal $proposal, array $data): void
+    {
+        $role = self::CATEGORY_OFFICER_ROLES[$proposal->category] ?? null;
+        if (! $role) {
+            return;
+        }
+
+        $officers = User::role($role)->where('status', 'active')->get();
+        foreach ($officers as $officer) {
+            $this->notify($officer, 'proposal_submitted_officer', $data, 'proposal_submitted_officer');
         }
     }
 
@@ -194,6 +219,10 @@ class SendProposalWorkflowNotifications
             'award_approval' => "Congratulations! Proposal Funded — {$tracker}",
             'budget_request_approved' => "Budget Request Approved — {$tracker}",
             'budget_allocated' => "Budget Allocated — {$title}",
+            'proposal_submitted_officer' => "New Proposal Submitted — {$tracker}",
+            'appeal_submitted' => "Appeal Received — {$tracker}",
+            'appeal_resolved' => "Your Appeal Has Been Resolved — {$tracker}",
+            'budget_request_submitted' => "New Budget Request — {$tracker}",
             default => "RTT Platform Notification — {$tracker}",
         };
     }

@@ -11,7 +11,6 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
-use Spatie\Permission\Models\Permission;
 
 class ReviewAssignmentService
 {
@@ -131,15 +130,8 @@ class ReviewAssignmentService
             ->unique()
             ->values();
 
-        // Eligible reviewers: any active user whose role carries reviews.create,
-        // excluding super_admin and the proposal's own PI/team members.
-        $eligibleRoleIds = Permission::where('name', 'reviews.create')
-            ->first()
-            ?->roles
-            ->pluck('id') ?? collect();
-
-        $query = User::whereHas('roles', fn ($q) => $q->whereIn('id', $eligibleRoleIds))
-            ->whereDoesntHave('roles', fn ($q) => $q->where('name', 'super_admin'))
+        // Eligible reviewers: active staff users, excluding the proposal's own PI/team.
+        $query = User::whereHas('roles', fn ($q) => $q->where('name', 'staff'))
             ->whereNotIn('id', $excludedIds)
             ->where('status', 'active')
             ->with(['roles:name', 'college:id,name', 'department:id,name'])

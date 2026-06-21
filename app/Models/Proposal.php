@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use App\Models\BudgetAllocation;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -15,7 +14,9 @@ class Proposal extends Model
     use HasUuids, SoftDeletes;
 
     protected $primaryKey = 'id';
+
     public $incrementing = false;
+
     protected $keyType = 'string';
 
     protected $fillable = [
@@ -45,11 +46,11 @@ class Proposal extends Model
 
     protected $casts = [
         'wizard_completed_steps' => 'array',
-        'draft_data'             => 'array',
-        'submitted_at'           => 'datetime',
-        'validated_at'           => 'datetime',
-        'rejected_at'            => 'datetime',
-        'current_wizard_step'    => 'integer',
+        'draft_data' => 'array',
+        'submitted_at' => 'datetime',
+        'validated_at' => 'datetime',
+        'rejected_at' => 'datetime',
+        'current_wizard_step' => 'integer',
     ];
 
     public function proposalCall(): BelongsTo
@@ -90,6 +91,11 @@ class Proposal extends Model
     public function budgets(): HasMany
     {
         return $this->hasMany(ProposalBudget::class);
+    }
+
+    public function budgetRequests(): HasMany
+    {
+        return $this->hasMany(BudgetRequest::class);
     }
 
     public function workflowLogs(): HasMany

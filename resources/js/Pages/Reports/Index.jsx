@@ -659,14 +659,23 @@ export default function ReportsIndex() {
             <div className="max-w-6xl mx-auto space-y-5">
 
                 {/* Page header */}
-                <div className="flex items-center gap-3">
-                    <Icon size={24} className="text-indigo-600" />
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-900">{currentMeta?.label ?? 'Reports'}</h1>
-                        {currentMeta && (
-                            <p className="text-sm text-gray-500 mt-0.5">{currentMeta.desc}</p>
-                        )}
+                <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                        <Icon size={24} className="text-indigo-600" />
+                        <div>
+                            <h1 className="text-2xl font-bold text-gray-900">{currentMeta?.label ?? 'Reports'}</h1>
+                            {currentMeta && (
+                                <p className="text-sm text-gray-500 mt-0.5">{currentMeta.desc}</p>
+                            )}
+                        </div>
                     </div>
+                    <a
+                        href="/api/v1/reports/proposals/export"
+                        download
+                        className="flex items-center gap-2 px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                    >
+                        <Download size={14} /> Export CSV
+                    </a>
                 </div>
 
                 {/* Navigation chips — use Inertia Link to avoid full page reloads */}

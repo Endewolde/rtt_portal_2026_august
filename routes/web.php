@@ -57,6 +57,7 @@ Route::get('/reviews/{id}/score', fn () => Inertia::render('Reviews/Score'));
 Route::get('/budget-requests', fn () => Inertia::render('Finance/BudgetRequests'));
 Route::get('/budget-requests/{id}', fn () => Inertia::render('Finance/BudgetRequestDetail'));
 Route::get('/admin/validation-queue', fn () => Inertia::render('Admin/ValidationQueue'));
+Route::get('/admin/appeals', fn () => Inertia::render('Admin/Appeals'));
 Route::get('/my-proposals', fn () => Inertia::render('Proposals/MyProposals'));
 Route::get('/admin/departments', fn () => Inertia::render('Admin/Departments'));
 Route::get('/admin/roles', fn () => Inertia::render('Admin/Roles'));

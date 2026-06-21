@@ -49,6 +49,7 @@ const ROUTE_PERMISSIONS = [
     ['/admin/departments',         _A],
     ['/admin/reviewer-workload',   _A],
     ['/admin/resources',           _A],
+    ['/admin/appeals',             [..._A, ..._OR]],
     ['/admin/validation-queue',    [..._A, ..._OR]],
     ['/admin/central-evaluation',  [..._A, ..._OR]],
     ['/admin/funding',             [..._A, ..._OR]],
@@ -636,6 +637,10 @@ export default function AppLayout({ children, breadcrumb }) {
                     label: 'Validation Queue', href: '/admin/validation-queue', icon: 'CheckSquare',
                     show: perm('proposals.validate') && hasAnyRole([...ALL_ADMIN, ...OFFICER_ROLES]) && hasSubFeature('evaluation.validation'),
                     badge: c => c.validation_queue,
+                },
+                {
+                    label: 'Appeals', href: '/admin/appeals', icon: 'MessageSquare',
+                    show: hasAnyRole([...ALL_ADMIN, ...OFFICER_ROLES]),
                 },
                 {
                     label: 'Blind Review', href: '/admin/blind-review', icon: 'EyeOff',

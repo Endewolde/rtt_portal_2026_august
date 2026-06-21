@@ -745,6 +745,52 @@ function DocumentsTab({ proposalId, documents, userId, isPI, onRefresh }) {
     );
 }
 
+// ── Appeal Modal ─────────────────────────────────────────────────────────────
+function AppealModal({ proposal, onSave, onClose }) {
+    const [reason, setReason] = useState('');
+    const [saving, setSaving] = useState(false);
+    const { error, success } = useToast();
+
+    const submit = async () => {
+        if (reason.trim().length < 20) { error('Please provide at least 20 characters explaining your appeal.'); return; }
+        setSaving(true);
+        try {
+            const res = await post(`/proposals/${proposal.id}/appeal`, { reason });
+            success(res?.message || 'Appeal submitted successfully.');
+            onSave();
+        } catch (e) {
+            error(e.response?.data?.message || 'Failed to submit appeal.');
+        }
+        setSaving(false);
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
+                <h2 className="text-base font-semibold text-gray-900 mb-1">Request Reconsideration</h2>
+                <p className="text-xs text-gray-500 mb-4 font-mono">{proposal.tracker_number}</p>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Reason for Appeal <span className="text-red-500">*</span>
+                    <span className="ml-1 font-normal text-gray-400">(min 20 characters)</span>
+                </label>
+                <textarea
+                    value={reason}
+                    onChange={e => setReason(e.target.value)}
+                    rows={5}
+                    placeholder="Explain why you believe this proposal should be reconsidered..."
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4 resize-none"
+                />
+                <div className="flex justify-end gap-2">
+                    <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 rounded-lg border border-gray-200 hover:bg-gray-50">Cancel</button>
+                    <button onClick={submit} disabled={saving} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                        {saving ? 'Submitting…' : 'Submit Appeal'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function ProposalShow() {
     const { url } = usePage();
     const id = url.split('/')[2];
@@ -758,6 +804,8 @@ export default function ProposalShow() {
     const [dialog, setDialog] = useState(null);
     const [reason, setReason] = useState('');
     const [submitting, setSubmitting] = useState(false);
+    const [appeal, setAppeal] = useState(null);
+    const [showAppealModal, setShowAppealModal] = useState(false);
 
     const isAdmin    = hasAnyRole(['super_admin', 'central_office']);
     const isOfficer  = hasAnyRole(['college_officer', 'college_admin', 'research_officer', 'community_officer', 'technology_officer']);
@@ -770,7 +818,11 @@ export default function ProposalShow() {
             .finally(() => setLoading(false));
     };
 
-    useEffect(() => { load(); }, [id]);
+    const loadAppeal = () => {
+        get(`/proposals/${id}/appeal`).then(r => setAppeal(r.data)).catch(() => {});
+    };
+
+    useEffect(() => { load(); loadAppeal(); }, [id]);
 
     const handleAction = (action) => { setDialog(action); setReason(''); };
 
@@ -845,10 +897,32 @@ export default function ProposalShow() {
                     </div>
 
                     {/* Status-specific info panels */}
-                    {proposal.status === 'rejected' && proposal.rejection_reason && (
-                        <div className="mt-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3">
-                            <p className="text-sm font-semibold text-red-800 mb-1">Rejection Reason</p>
-                            <p className="text-sm text-red-700">{proposal.rejection_reason}</p>
+                    {proposal.status === 'rejected' && (
+                        <div className="mt-4 space-y-3">
+                            {proposal.rejection_reason && (
+                                <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3">
+                                    <p className="text-sm font-semibold text-red-800 mb-1">Rejection Reason</p>
+                                    <p className="text-sm text-red-700">{proposal.rejection_reason}</p>
+                                </div>
+                            )}
+                            {/* Appeal section */}
+                            {appeal ? (
+                                <div className={`rounded-lg border px-4 py-3 ${appeal.status === 'pending' ? 'bg-amber-50 border-amber-200' : appeal.status === 'approved' ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
+                                    <p className={`text-sm font-semibold mb-1 ${appeal.status === 'pending' ? 'text-amber-800' : appeal.status === 'approved' ? 'text-green-800' : 'text-gray-700'}`}>
+                                        Appeal {appeal.status === 'pending' ? 'Pending Review' : appeal.status === 'approved' ? 'Approved — Proposal Returned to Draft' : 'Denied'}
+                                    </p>
+                                    {appeal.resolution_notes && <p className="text-sm text-gray-600">{appeal.resolution_notes}</p>}
+                                </div>
+                            ) : user?.id === proposal.pi_user_id && (
+                                <div className="flex justify-end">
+                                    <button
+                                        onClick={() => setShowAppealModal(true)}
+                                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                                    >
+                                        <RotateCcw size={14} /> Request Reconsideration
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     )}
                     {proposal.status === 'funded' && proposal.award && (
@@ -1072,6 +1146,13 @@ export default function ProposalShow() {
                         </div>
                     </div>
                 </div>
+            )}
+            {showAppealModal && (
+                <AppealModal
+                    proposal={proposal}
+                    onSave={() => { setShowAppealModal(false); loadAppeal(); }}
+                    onClose={() => setShowAppealModal(false)}
+                />
             )}
         </AppLayout>
     );

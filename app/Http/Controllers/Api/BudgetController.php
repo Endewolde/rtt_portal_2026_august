@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\SendEmailNotificationJob;
 use App\Jobs\SendRawMailJob;
 use App\Jobs\StoreInAppNotificationJob;
 use App\Models\Award;
@@ -12,6 +13,7 @@ use App\Models\BudgetSettlement;
 use App\Models\College;
 use App\Models\MidtermEvaluation;
 use App\Models\Proposal;
+use App\Models\User;
 use App\Services\BudgetAllocationService;
 use App\Services\BudgetRequestService;
 use App\Services\BudgetSettlementService;
@@ -21,6 +23,7 @@ use App\Support\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class BudgetController extends Controller
 {
@@ -129,6 +132,8 @@ class BudgetController extends Controller
                 'meta' => [],
             ], 422);
         }
+
+        $this->notifyFinanceOfficers($proposal, $budgetRequest);
 
         return response()->json([
             'data' => $budgetRequest->load(['items', 'signatures.user']),
@@ -925,5 +930,25 @@ class BudgetController extends Controller
         );
 
         return response()->json(['data' => $finalized]);
+    }
+
+    private function notifyFinanceOfficers(Proposal $proposal, BudgetRequest $budgetRequest): void
+    {
+        $officers = User::role('finance_officer')->where('status', 'active')->get();
+        $data = [
+            'tracker_number' => $proposal->tracker_number,
+            'title' => $proposal->title,
+            'total_amount' => $budgetRequest->total_amount,
+            'pi_name' => $proposal->pi?->name ?? 'Unknown',
+        ];
+
+        foreach ($officers as $officer) {
+            try {
+                SendEmailNotificationJob::dispatchSync($officer, 'budget_request_submitted', $data);
+                StoreInAppNotificationJob::dispatchSync($officer->id, 'budget_request_submitted', $data);
+            } catch (\Exception $e) {
+                Log::error("Finance officer notify failed: {$e->getMessage()}");
+            }
+        }
     }
 }

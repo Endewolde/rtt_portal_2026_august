@@ -32,6 +32,7 @@ use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\LoginNoticeController;
 use App\Http\Controllers\Api\MidtermEvaluationController;
 use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\ProposalAppealController;
 use App\Http\Controllers\Api\ProposalCallController;
 use App\Http\Controllers\Api\ProposalController;
 use App\Http\Controllers\Api\ProposalValidationController;
@@ -322,6 +323,12 @@ Route::prefix('v1')->group(function () {
         Route::put('/review-assignments/{id}/reassign', [ReviewController::class, 'reassignReviewer']);
         Route::put('/review-assignments/{id}/extend', [ReviewController::class, 'extendDueDate']);
 
+        // Appeals
+        Route::post('/proposals/{id}/appeal', [ProposalAppealController::class, 'store']);
+        Route::get('/proposals/{id}/appeal', [ProposalAppealController::class, 'show']);
+        Route::get('/appeals', [ProposalAppealController::class, 'index']);
+        Route::post('/appeals/{id}/resolve', [ProposalAppealController::class, 'resolve']);
+
         // Central evaluation
         Route::get('/central-evaluation', [CentralEvaluationController::class, 'index']);
         Route::post('/proposals/{id}/central/approve', [CentralEvaluationController::class, 'centralApprove']);
@@ -439,6 +446,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/reports/generate', [ReportController::class, 'generate']);
             Route::get('/reports/{id}', [ReportController::class, 'show']);
         });
+        Route::get('/reports/proposals/export', [ReportController::class, 'exportProposals']);
 
         // ── Complaints module (feature: complaints) ────────────────────────────
         Route::middleware('feature:complaints')->group(function () {
