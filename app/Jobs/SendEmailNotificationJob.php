@@ -68,6 +68,11 @@ class SendEmailNotificationJob implements ShouldQueue
             'team_restructured' => 'Team Update — Proposal '.($this->data['tracker_number'] ?? ''),
             'co_investigator_notified' => 'Co-Investigator Invitation — '.($this->data['tracker_number'] ?? ''),
             'budget_request_approved' => 'Budget Request Approved — '.($this->data['tracker_number'] ?? ''),
+            'central_eval_approved' => 'Proposal Advanced to Central Evaluation — '.($this->data['tracker_number'] ?? ''),
+            'proposal_submitted_officer' => 'New Proposal Submitted — '.($this->data['tracker_number'] ?? ''),
+            'appeal_submitted' => 'Appeal Received — '.($this->data['tracker_number'] ?? ''),
+            'appeal_resolved' => 'Your Appeal Has Been Resolved — '.($this->data['tracker_number'] ?? ''),
+            'budget_request_submitted' => 'New Budget Request Submitted — '.($this->data['tracker_number'] ?? ''),
             default => 'RTT Platform Notification',
         };
     }
@@ -87,6 +92,11 @@ class SendEmailNotificationJob implements ShouldQueue
             'team_restructured' => 'team_restructured',
             'co_investigator_notified' => 'co_investigator_notified',
             'budget_request_approved' => 'budget_request_approved',
+            'central_eval_approved' => 'decision_result',
+            'proposal_submitted_officer' => 'decision_result',
+            'appeal_submitted' => 'generic',
+            'appeal_resolved' => 'decision_result',
+            'budget_request_submitted' => 'generic',
             default => 'generic',
         };
     }

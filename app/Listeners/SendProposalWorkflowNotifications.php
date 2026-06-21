@@ -18,7 +18,7 @@ class SendProposalWorkflowNotifications
         match ($event->toStage) {
             'submitted' => $this->onSubmitted($proposal),
             'validated' => $this->onValidated($proposal),
-            'accepted' => $this->onDecision($proposal, 'accepted'),
+            'accepted' => $this->onAccepted($proposal),
             'rejected' => $this->onDecision($proposal, 'rejected'),
             'funded' => $this->onFunded($proposal),
             'under_blind_review' => $this->onUnderReview($proposal, 'blind review'),
@@ -88,6 +88,20 @@ class SendProposalWorkflowNotifications
 
         foreach ($this->allRecipients($proposal) as $user) {
             $this->notify($user, 'decision_result', $data, 'decision_result');
+        }
+    }
+
+    private function onAccepted(Proposal $proposal): void
+    {
+        $data = [
+            'tracker_number' => $proposal->tracker_number,
+            'title' => $proposal->title,
+            'decision' => 'central_eval_approved',
+            'reason' => 'Your proposal has passed both the Blind Review and Open Defence phases and has been forwarded to the Central Evaluation Committee. You will receive a separate notification once the final funding decision has been made.',
+        ];
+
+        foreach ($this->allRecipients($proposal) as $user) {
+            $this->notify($user, 'central_eval_approved', $data, 'central_eval_approved');
         }
     }
 
@@ -199,31 +213,5 @@ class SendProposalWorkflowNotifications
         } catch (\Exception $e) {
             Log::error("Failed to store in-app notification [{$event}]: ".$e->getMessage());
         }
-    }
-
-    private function resolveSubject(string $template, array $data): string
-    {
-        $tracker = $data['tracker_number'] ?? '';
-        $title = $data['title'] ?? '';
-
-        return match ($template) {
-            'submission_success' => "Proposal Submitted — {$tracker}",
-            'co_investigator_notified' => "Co-Investigator Invitation — {$tracker}",
-            'decision_result' => match (strtolower($data['decision'] ?? '')) {
-                'accepted' => "Proposal Accepted — {$tracker}",
-                'rejected' => "Proposal Rejected — {$tracker}",
-                'validated' => "Proposal Validated — Proceeding to Review — {$tracker}",
-                'under review' => "Proposal Under Review — {$tracker}",
-                default => "Proposal Update — {$tracker}",
-            },
-            'award_approval' => "Congratulations! Proposal Funded — {$tracker}",
-            'budget_request_approved' => "Budget Request Approved — {$tracker}",
-            'budget_allocated' => "Budget Allocated — {$title}",
-            'proposal_submitted_officer' => "New Proposal Submitted — {$tracker}",
-            'appeal_submitted' => "Appeal Received — {$tracker}",
-            'appeal_resolved' => "Your Appeal Has Been Resolved — {$tracker}",
-            'budget_request_submitted' => "New Budget Request — {$tracker}",
-            default => "RTT Platform Notification — {$tracker}",
-        };
     }
 }

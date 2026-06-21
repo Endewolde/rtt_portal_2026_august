@@ -563,10 +563,11 @@ class ReviewController extends Controller
 
         $reviewer = User::find($request->reviewer_id);
         if ($reviewer) {
+            $reviewType = $proposal->status === 'under_open_defence' ? 'Open Defence' : 'Blind Review';
             $data = [
                 'tracker_number' => $proposal->tracker_number,
                 'proposal_title' => $proposal->title,
-                'review_type' => 'Blind Review',
+                'review_type' => $reviewType,
                 'due_date' => $assignment->due_date,
             ];
 
@@ -575,7 +576,7 @@ class ReviewController extends Controller
                     view('emails.notifications.review_assignment', array_merge($data, ['recipient' => $reviewer]))->render(),
                     $reviewer->email,
                     $reviewer->name,
-                    "Blind Review Assignment — {$proposal->tracker_number}"
+                    "{$reviewType} Assignment — {$proposal->tracker_number}"
                 );
             }
 
