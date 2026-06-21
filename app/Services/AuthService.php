@@ -26,12 +26,15 @@ class AuthService
         $user = DB::transaction(function () use ($data) {
             $user = User::create([
                 'name' => $data['name'],
+                'title' => $data['title'] ?? null,
                 'email' => $data['email'],
-                'password' => Hash::make($data['password']),
+                'password' => Hash::make($data['password'] ?? Str::random(32)),
                 'employee_id' => $data['employee_id'] ?? null,
                 'college_id' => $data['college_id'] ?? null,
                 'department_id' => $data['department_id'] ?? null,
                 'phone' => $data['phone'] ?? null,
+                'gender' => $data['gender'] ?? null,
+                'expertise' => $data['expertise'] ?? null,
                 'status' => 'active',
                 'registration_method' => 'self_registered',
             ]);
@@ -120,7 +123,10 @@ class AuthService
      */
     private function issueToken(User $user): array
     {
-        $user->update(['last_login_at' => now()]);
+        $user->update([
+            'last_login_at' => now(),
+            'first_login_at' => $user->first_login_at ?? now(),
+        ]);
 
         DB::table('audit_logs')->insert([
             'id' => Str::uuid()->toString(),

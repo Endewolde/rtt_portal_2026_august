@@ -11,6 +11,7 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 Schedule::command('users:deactivate-expired-guests')->daily();
+Schedule::command('rtt:deadline-reminders')->dailyAt('08:00');
 
 $backupTime = AppSetting::where('key', 'backup_time')->value('value') ?? '02:00';
 

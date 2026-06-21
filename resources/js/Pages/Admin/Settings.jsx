@@ -76,6 +76,7 @@ const KEY_LABELS = {
     captcha_enabled: 'CAPTCHA Enabled', allowed_ips: 'Allowed IP Addresses',
     password_login_enabled: 'Password Login Enabled',
     default_user_role: 'Default User Role', self_registration: 'Self-Registration',
+    registration_email_domain: 'Registration Email Domain',
     email_verification_required: 'Email Verification Required', default_import_password: 'Default Import Password',
     account_activation_method: 'Account Activation Method',
     mail_driver: 'Mail Driver', mail_host: 'SMTP Host', mail_port: 'SMTP Port',
@@ -2108,6 +2109,43 @@ export default function SettingsPage() {
                                         <Info size={32} className="mx-auto mb-2 opacity-40" />
                                         <p className="text-sm">No settings found for this section.</p>
                                         <p className="text-xs mt-1">Run the AppSettingsSeeder to populate.</p>
+                                    </div>
+                                )}
+
+                                {/* ── Users section: email domain restriction ───── */}
+                                {activeSection === 'users' && (
+                                    <div className="bg-white border border-gray-200 rounded-2xl p-5">
+                                        <h3 className="text-sm font-bold text-gray-800 mb-1">Registration Email Domain</h3>
+                                        <p className="text-xs text-gray-400 mb-3">
+                                            Force self-registration to use a specific email domain suffix.
+                                            Enter the domain only (e.g. <code className="font-mono bg-gray-100 px-1 rounded">wsu.edu.et</code> or
+                                            <code className="font-mono bg-gray-100 px-1 rounded ml-1">example.edu.et</code>).
+                                            Leave blank to allow any email.
+                                        </p>
+                                        <div className="flex gap-2">
+                                            <div className="relative flex-1">
+                                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm select-none pointer-events-none">@</span>
+                                                <input
+                                                    type="text"
+                                                    value={(values.registration_email_domain ?? '').replace(/^@/, '')}
+                                                    onChange={e => handleChange('registration_email_domain', e.target.value)}
+                                                    placeholder="wsu.edu.et"
+                                                    className="w-full border border-gray-200 rounded-xl pl-7 pr-3 py-2.5 text-sm
+                                                               focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                />
+                                            </div>
+                                            <button
+                                                onClick={() => handleSave('registration_email_domain', values.registration_email_domain ?? '')}
+                                                className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white
+                                                           rounded-xl text-xs font-semibold hover:bg-blue-700 shrink-0">
+                                                <Save size={13} /> Save
+                                            </button>
+                                        </div>
+                                        {values.registration_email_domain && (
+                                            <p className="text-xs text-blue-600 mt-2">
+                                                Users must register with an email ending in <strong>@{values.registration_email_domain.replace(/^@/, '')}</strong>
+                                            </p>
+                                        )}
                                     </div>
                                 )}
 

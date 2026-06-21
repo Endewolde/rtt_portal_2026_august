@@ -200,7 +200,11 @@ class ProposalController extends Controller
             'members.user.college', 'members.user.department', 'workflowLogs',
             'documents.uploadedBy:id,name', 'budgets',
             'award.approvedBy:id,name',
-        ])->findOrFail($id);
+        ])->find($id);
+
+        if (! $proposal) {
+            return response()->json(['data' => null, 'message' => 'Proposal not found.', 'errors' => [], 'meta' => []], 404);
+        }
 
         return response()->json(['data' => new ProposalResource($proposal)]);
     }

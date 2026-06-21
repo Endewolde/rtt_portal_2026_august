@@ -108,6 +108,7 @@ Route::prefix('v1')->group(function () {
     Route::get('/proposals/public', [ProposalController::class, 'publicIndex']);
     Route::get('/proposals/public/archive/years', [ProposalController::class, 'publicArchiveYears']);
     Route::get('/colleges/public', [CollegeController::class, 'publicList']);
+    Route::get('/colleges/{id}/departments/public', [CollegeController::class, 'publicDepartments']);
     Route::get('/thematic-areas/public', [ThematicAreaController::class, 'publicIndex']);
     Route::get('/external-funds/opportunities/public', [EFOpportunityController::class, 'publicIndex']);
 

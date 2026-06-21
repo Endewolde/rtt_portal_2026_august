@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Notifications\SystemAlertNotification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
@@ -164,7 +166,7 @@ class SystemMonitorController extends Controller
             return response()->json(['data' => null, 'message' => 'Job not found.'], 404);
         }
 
-        \Artisan::call('queue:retry', ['id' => [$uuid]]);
+        Artisan::call('queue:retry', ['id' => [$uuid]]);
 
         return response()->json(['data' => null, 'message' => 'Job queued for retry.', 'errors' => [], 'meta' => []]);
     }
@@ -186,7 +188,7 @@ class SystemMonitorController extends Controller
             return response()->json(['data' => null, 'message' => 'Unauthorized.'], 403);
         }
 
-        \Artisan::call('queue:retry', ['id' => ['all']]);
+        Artisan::call('queue:retry', ['id' => ['all']]);
 
         return response()->json(['data' => null, 'message' => 'All failed jobs queued for retry.', 'errors' => [], 'meta' => []]);
     }
@@ -309,6 +311,16 @@ class SystemMonitorController extends Controller
         return response()->json(['data' => null, 'message' => 'Test alert sent to your email and notification bell.', 'errors' => [], 'meta' => []]);
     }
 
+    private function userStats(): array
+    {
+        return [
+            'live_online' => User::where('last_activity_at', '>=', now()->subMinutes(5))->count(),
+            'active_users' => User::where('last_activity_at', '>=', now()->subMinutes(30))->count(),
+            'ever_logged_in' => User::whereNotNull('last_login_at')->count(),
+            'first_time_today' => User::whereDate('first_login_at', today())->count(),
+        ];
+    }
+
     private function snapshot(): array
     {
         // Latest value of each server metric
@@ -327,7 +339,7 @@ class SystemMonitorController extends Controller
         $getMeta = fn (string $k) => isset($metrics[$k]) && $metrics[$k]->meta ? json_decode($metrics[$k]->meta, true) : null;
 
         // Live app stats (no historical lag)
-        $activeUsers = Cache::get('metric:active_users', 0);
+        $activeUsers = User::where('last_activity_at', '>=', now()->subMinutes(5))->count();
         $rpm = Cache::get('metric:rpm', 0);
         $queuePending = DB::table('jobs')->count();
         $queueFailed = DB::table('failed_jobs')->count();
@@ -337,6 +349,8 @@ class SystemMonitorController extends Controller
             ->where('requested_at', '>=', now()->subMinutes(5))
             ->selectRaw('COUNT(*) as total, SUM(status_code >= 400) as failed, AVG(duration_ms) as avg_ms')
             ->first();
+
+        $userStats = $this->userStats();
 
         return [
             'server' => [
@@ -359,6 +373,7 @@ class SystemMonitorController extends Controller
                 'failed_5m' => (int) ($last5MinReqs?->failed ?? 0),
                 'avg_response_ms' => round((float) ($last5MinReqs?->avg_ms ?? 0), 0),
             ],
+            'users' => $userStats,
             'alerts_count' => DB::table('system_alerts')->where('resolved', false)->count(),
             'collected_at' => now()->toIso8601String(),
         ];

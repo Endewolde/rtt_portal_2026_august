@@ -9,6 +9,7 @@ import {
     RefreshCw, Bell, BellOff, TrendingUp, Server, Layers,
     X, ShieldAlert, Wifi, CircleDot, Settings, Mail, FlaskConical,
     Search, ToggleLeft, ToggleRight, Save, RotateCcw, Trash2,
+    Radio, UserCheck, UserPlus, LogIn,
 } from 'lucide-react'
 import AppLayout from '../../Layouts/AppLayout'
 import { get, post, put, del } from '../../lib/api'
@@ -70,10 +71,20 @@ function RingGauge({ value, label, icon: Icon, meta, size = 120 }) {
     const gap = circ - dash
 
     return (
-        <div className="relative flex flex-col items-center gap-3 p-5 rounded-2xl bg-slate-900 border border-white/6 overflow-hidden group hover:border-white/10 hover:bg-slate-800/60 transition-all duration-300">
-            {/* subtle gradient glow behind ring */}
-            <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-                style={{ background: `radial-gradient(circle at 50% 50%, ${h.glow}08 0%, transparent 70%)` }} />
+        <div className="relative flex flex-col items-center gap-3 p-5 rounded-2xl bg-slate-900 border border-white/8 overflow-hidden
+            group cursor-default
+            transition-all duration-250 ease-out
+            hover:scale-[1.09] hover:-translate-y-2
+            hover:shadow-[0_20px_60px_rgba(0,0,0,0.6)]">
+            {/* full-card colored wash */}
+            <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-250 pointer-events-none"
+                style={{ background: `radial-gradient(ellipse at 50% 30%, ${h.glow}30 0%, ${h.glow}10 50%, transparent 75%)` }} />
+            {/* glowing border ring */}
+            <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-250 pointer-events-none"
+                style={{ boxShadow: `inset 0 0 0 1.5px ${h.glow}70` }} />
+            {/* bottom shimmer bar */}
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-center"
+                style={{ background: `linear-gradient(90deg, transparent, ${h.glow}, transparent)` }} />
 
             <div className="flex items-center gap-2 self-start w-full">
                 <div className={`p-1.5 rounded-lg ring-1 ${h.badge}`}>
@@ -117,27 +128,46 @@ function RingGauge({ value, label, icon: Icon, meta, size = 120 }) {
 // ─── Stat Card ───────────────────────────────────────────────────────────────
 
 const CARD_ACCENT = {
-    indigo:  { icon: 'bg-indigo-500/15 text-indigo-400 ring-indigo-500/25',  val: 'text-indigo-300' },
-    emerald: { icon: 'bg-emerald-500/15 text-emerald-400 ring-emerald-500/25', val: 'text-emerald-300' },
-    amber:   { icon: 'bg-amber-500/15 text-amber-400 ring-amber-500/25',   val: 'text-amber-300' },
-    red:     { icon: 'bg-red-500/15 text-red-400 ring-red-500/25',         val: 'text-red-300' },
-    blue:    { icon: 'bg-blue-500/15 text-blue-400 ring-blue-500/25',      val: 'text-blue-300' },
-    violet:  { icon: 'bg-violet-500/15 text-violet-400 ring-violet-500/25', val: 'text-violet-300' },
-    cyan:    { icon: 'bg-cyan-500/15 text-cyan-400 ring-cyan-500/25',      val: 'text-cyan-300' },
-    rose:    { icon: 'bg-rose-500/15 text-rose-400 ring-rose-500/25',      val: 'text-rose-300' },
+    indigo:  { icon: 'bg-indigo-500/15 text-indigo-400 ring-indigo-500/25',   val: 'text-indigo-300',  glow: '#6366f1' },
+    emerald: { icon: 'bg-emerald-500/15 text-emerald-400 ring-emerald-500/25', val: 'text-emerald-300', glow: '#10b981' },
+    amber:   { icon: 'bg-amber-500/15 text-amber-400 ring-amber-500/25',       val: 'text-amber-300',   glow: '#f59e0b' },
+    red:     { icon: 'bg-red-500/15 text-red-400 ring-red-500/25',             val: 'text-red-300',     glow: '#ef4444' },
+    blue:    { icon: 'bg-blue-500/15 text-blue-400 ring-blue-500/25',          val: 'text-blue-300',    glow: '#3b82f6' },
+    violet:  { icon: 'bg-violet-500/15 text-violet-400 ring-violet-500/25',    val: 'text-violet-300',  glow: '#8b5cf6' },
+    cyan:    { icon: 'bg-cyan-500/15 text-cyan-400 ring-cyan-500/25',          val: 'text-cyan-300',    glow: '#06b6d4' },
+    rose:    { icon: 'bg-rose-500/15 text-rose-400 ring-rose-500/25',          val: 'text-rose-300',    glow: '#f43f5e' },
 }
 
 function StatCard({ icon: Icon, label, value, sub, color = 'indigo' }) {
     const c = CARD_ACCENT[color]
     return (
-        <div className="relative flex flex-col justify-between gap-5 p-5 rounded-2xl bg-slate-900 border border-white/6 overflow-hidden group hover:border-white/10 hover:bg-slate-800/60 transition-all duration-200">
-            <div className={`w-9 h-9 flex items-center justify-center rounded-xl ring-1 shrink-0 ${c.icon}`}>
-                <Icon size={15} />
+        <div className="relative flex flex-col justify-between gap-5 p-5 rounded-2xl bg-slate-900 border border-white/8 overflow-hidden
+            group cursor-default
+            transition-all duration-250 ease-out
+            hover:scale-[1.09] hover:-translate-y-2
+            hover:shadow-[0_20px_60px_rgba(0,0,0,0.6)]">
+            {/* full-card colored wash — the clearly visible bg on hover */}
+            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-250 pointer-events-none"
+                style={{ background: `linear-gradient(135deg, ${c.glow}28 0%, ${c.glow}10 55%, transparent 100%)` }} />
+            {/* glowing border ring on hover */}
+            <div className="absolute inset-0 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-250 pointer-events-none"
+                style={{ boxShadow: `inset 0 0 0 1.5px ${c.glow}70` }} />
+            {/* corner orb */}
+            <div className="absolute -top-8 -right-8 w-24 h-24 rounded-full blur-2xl opacity-0 group-hover:opacity-60 transition-all duration-400 pointer-events-none"
+                style={{ background: c.glow }} />
+            {/* bottom shimmer bar */}
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 scale-x-0 group-hover:scale-x-100 transition-transform duration-300 origin-left"
+                style={{ background: `linear-gradient(90deg, ${c.glow}, ${c.glow}40)` }} />
+
+            <div className={`relative w-10 h-10 flex items-center justify-center rounded-xl ring-1 shrink-0 ${c.icon}
+                transition-all duration-250 group-hover:scale-125 group-hover:shadow-lg`}
+                style={{ '--tw-shadow-color': c.glow }}>
+                <Icon size={16} />
             </div>
-            <div>
-                <p className={`text-2xl font-bold tabular-nums tracking-tight ${c.val}`}>{value}</p>
-                <p className="text-xs text-slate-500 mt-1.5 font-medium leading-tight">{label}</p>
-                {sub && <p className="text-xs text-slate-700 mt-1">{sub}</p>}
+            <div className="relative">
+                <p className={`text-2xl font-bold tabular-nums tracking-tight transition-all duration-250 group-hover:text-white ${c.val}`}>{value}</p>
+                <p className="text-xs text-slate-400 mt-1.5 font-medium leading-tight transition-colors duration-250 group-hover:text-slate-200">{label}</p>
+                {sub && <p className="text-xs text-slate-600 mt-1 transition-colors duration-250 group-hover:text-slate-400">{sub}</p>}
             </div>
         </div>
     )
@@ -147,7 +177,9 @@ function StatCard({ icon: Icon, label, value, sub, color = 'indigo' }) {
 
 function ChartPanel({ title, subtitle, children, action }) {
     return (
-        <div className="rounded-2xl bg-slate-900 border border-white/6 overflow-hidden">
+        <div className="rounded-2xl bg-slate-900 border border-white/6 overflow-hidden
+            transition-all duration-300 ease-out
+            hover:border-white/12 hover:shadow-xl hover:shadow-black/30">
             <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-white/6 bg-white/2">
                 <div>
                     <h3 className="text-sm font-semibold text-slate-100">{title}</h3>
@@ -403,6 +435,7 @@ export default function SystemMonitor() {
     const activeAlerts = alerts.active?.length ?? 0
     const s = current?.server ?? {}
     const a = current?.app ?? {}
+    const u = current?.users ?? {}
 
     // Derive overall health
     const overallHealth = [s.cpu_pct, s.memory_pct, s.disk_pct].some(v => v >= 90) ? 'critical'
@@ -581,6 +614,21 @@ export default function SystemMonitor() {
                             color={activeAlerts > 0 ? 'red' : 'emerald'} />
                         <StatCard icon={Activity} label="Failed Requests (5 min)" value={fmt(a.failed_5m)}
                             color={a.failed_5m > 0 ? 'rose' : 'emerald'} />
+                    </div>
+
+                    {/* User activity metrics */}
+                    <div>
+                        <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">User Activity</h3>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                            <StatCard icon={Radio}     label="Live Online"      value={fmt(u.live_online)}      color="emerald"
+                                sub="active in last 5 min" />
+                            <StatCard icon={Users}     label="Active Users"     value={fmt(u.active_users)}     color="indigo"
+                                sub="active in last 30 min" />
+                            <StatCard icon={UserCheck} label="Ever Logged In"   value={fmt(u.ever_logged_in)}   color="blue"
+                                sub="have at least 1 login" />
+                            <StatCard icon={UserPlus}  label="First-Time Today" value={fmt(u.first_time_today)} color="violet"
+                                sub="new logins today" />
+                        </div>
                     </div>
 
                     {/* Trend chart */}

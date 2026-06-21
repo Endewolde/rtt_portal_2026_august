@@ -44,29 +44,21 @@ class TrackRequestMetrics
         // Increment RPM counter (expires after 2 min; reset by CollectSystemMetrics)
         Cache::increment('metric:rpm');
 
-        // Track active users: mark user active for 5 minutes
+        // Update last_activity_at for authenticated users (throttled to once per minute)
         if ($request->user()) {
-            $key = 'metric:active_user:'.$request->user()->id;
-            Cache::put($key, 1, 300);
-            $count = Cache::get('metric:active_users_count', 0);
-            // Recount every 10 requests roughly
-            if (random_int(1, 10) === 1) {
-                $this->recountActiveUsers();
+            $userId = $request->user()->id;
+            $throttleKey = 'user:activity_throttle:'.$userId;
+
+            if (! Cache::has($throttleKey)) {
+                Cache::put($throttleKey, 1, 60);
+                try {
+                    DB::table('users')->where('id', $userId)->update(['last_activity_at' => now()]);
+                } catch (\Throwable) {
+                    // Never let metrics break the app
+                }
             }
         }
 
         return $response;
-    }
-
-    private function recountActiveUsers(): void
-    {
-        // Count how many active_user keys exist - approximate using DB users seen recently
-        $count = DB::table('request_logs')
-            ->where('requested_at', '>=', now()->subMinutes(5))
-            ->whereNotNull('user_id')
-            ->distinct('user_id')
-            ->count('user_id');
-
-        Cache::put('metric:active_users', $count, 360);
     }
 }

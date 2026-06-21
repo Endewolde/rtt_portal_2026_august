@@ -854,6 +854,7 @@ export default function ProposalCreate() {
         setProposalId(resumeId);
         api.get(`/proposals/${resumeId}`)
             .then(res => {
+
                 const p = res.data?.data ?? res.data;
                 if (!p) return;
 
@@ -916,7 +917,15 @@ export default function ProposalCreate() {
                 setStep(nextStep ?? 5);
                 setPhase('wizard');
             })
-            .catch(() => toast.warning('Could not load proposal data.'));
+            .catch(err => {
+                setProposalId(null);
+                window.history.replaceState({}, '', window.location.pathname);
+                if (err?.response?.status === 404) {
+                    toast.warning('This proposal no longer exists. Please start a new application.');
+                } else {
+                    toast.warning('Could not load proposal data.');
+                }
+            });
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Pre-select call from ?call_id= param

@@ -68,7 +68,10 @@ class OAuthController extends Controller
 
         $user = $this->findOrCreateUser($provider, $socialUser);
 
-        $user->update(['last_login_at' => now()]);
+        $user->update([
+            'last_login_at' => now(),
+            'first_login_at' => $user->first_login_at ?? now(),
+        ]);
 
         $token = $user->createToken('sso_token')->plainTextToken;
 

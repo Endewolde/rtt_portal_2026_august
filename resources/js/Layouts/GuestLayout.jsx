@@ -7,6 +7,7 @@ export default function GuestLayout({
     panelSubtext  = 'Sign in with your institutional credentials to access the research management platform.',
     panelLinkText = null,
     panelLinkHref = null,
+    contentWidth  = 'max-w-sm',
 }) {
     const appSettings = usePage().props.app_settings ?? {}
 
@@ -126,7 +127,7 @@ export default function GuestLayout({
                     </div>
                 </div>
 
-                <div className="w-full max-w-sm">
+                <div className={`w-full ${contentWidth}`}>
                     {children}
                 </div>
             </div>

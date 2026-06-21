@@ -18,6 +18,16 @@ class CollegeController extends Controller
         ]);
     }
 
+    /** Public, unauthenticated — returns departments for a college. */
+    public function publicDepartments(string $id): JsonResponse
+    {
+        $departments = Department::where('college_id', $id)
+            ->orderBy('name')
+            ->get(['id', 'name', 'code']);
+
+        return response()->json(['data' => $departments]);
+    }
+
     public function index(): JsonResponse
     {
         $colleges = College::withCount('departments')

@@ -92,6 +92,7 @@ class HandleInertiaRequests extends Middleware
                     'public_social_instagram',
                     'public_social_youtube',
                     'self_registration',
+                    'registration_email_domain',
                     'public_topbar_text',
                     'developer_credits',
                     'feedback_popup_enabled',

@@ -1,9 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { Link, usePage } from '@inertiajs/react';
 import {
-    ArrowRight, Search, ChevronRight, Globe,
+    ArrowRight, Search, ChevronRight, ChevronDown, Globe,
     FileText, CheckSquare, Award, BookOpen, BarChart2, Shield,
-    Calendar, Clock,
+    Calendar, Clock, HelpCircle,
 } from 'lucide-react';
 import {
     PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
@@ -342,12 +342,79 @@ function SectionHead({ eyebrow, title, action, actionHref, light = false }) {
     );
 }
 
+// ─── FAQ ──────────────────────────────────────────────────────────────────────
+
+const DEFAULT_FAQS = [
+    {
+        q: 'Who can submit a research proposal?',
+        a: 'Any registered staff member or researcher affiliated with the university can submit a proposal during an active call period. Guest users have read-only access and cannot submit.',
+    },
+    {
+        q: 'How do I know which proposal call to apply to?',
+        a: 'Browse the "Open Calls" section on this page or visit the Proposal Calls page. Each call lists its eligible category, focus areas, deadline, and a downloadable guidelines document. Read the guidelines carefully before applying.',
+    },
+    {
+        q: 'Can I edit my proposal after submitting it?',
+        a: 'No — once submitted, a proposal is locked for editing unless a validation officer returns it to you for revision. You will receive a notification with comments if a revision is requested.',
+    },
+    {
+        q: 'What is a Tracker Number and how do I use it?',
+        a: 'A Tracker Number (e.g., RTT-2026-00123) is automatically assigned to your proposal upon submission. You can use it on the Track Proposal page to check your proposal\'s current status at any time — no login required.',
+    },
+    {
+        q: 'How long does the review process take?',
+        a: 'Timelines vary by call. Typically: validation takes 1–2 weeks, blind peer review takes 3–6 weeks, open defence is scheduled after reviews complete, and central evaluation takes 1–2 weeks. Check the specific call\'s guidelines for expected timelines.',
+    },
+    {
+        q: 'What happens after my proposal is accepted?',
+        a: 'Accepted proposals enter the funding stage. Once funded, your PI receives an award letter and can submit a budget request. After disbursement, periodic monitoring (midterm evaluation, completion workshop) tracks your project\'s progress.',
+    },
+    {
+        q: 'Can I add co-investigators to my proposal?',
+        a: 'Yes. In Step 3 of the proposal wizard you can search for and invite co-investigators. They must be registered system users. Each invited member will receive a notification and must accept before the proposal is submitted.',
+    },
+    {
+        q: 'What file formats are accepted for document uploads?',
+        a: 'The system accepts PDF, DOC, DOCX, XLS, XLSX, JPG, and PNG files. PDFs are recommended for proposal documents. Each file must be within the size limit set by your administrator (typically 10 MB).',
+    },
+];
+
+function FaqItem({ item, open, onToggle, primaryColor }) {
+    return (
+        <div className="border border-gray-200 rounded-2xl overflow-hidden transition-shadow duration-200 hover:shadow-sm">
+            <button
+                onClick={onToggle}
+                className="w-full flex items-center justify-between gap-4 px-6 py-4 text-left bg-white hover:bg-gray-50 transition-colors duration-150"
+            >
+                <span className="font-semibold text-slate-800 text-sm leading-snug pr-2">{item.q}</span>
+                <ChevronDown
+                    size={18}
+                    className="shrink-0 transition-transform duration-300"
+                    style={{
+                        color: primaryColor,
+                        transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+                    }}
+                />
+            </button>
+            <div
+                className="overflow-hidden transition-all duration-300 ease-in-out"
+                style={{ maxHeight: open ? '300px' : '0px' }}
+            >
+                <p className="px-6 pb-5 pt-1 text-sm text-slate-500 leading-relaxed border-t border-gray-100">
+                    {item.a}
+                </p>
+            </div>
+        </div>
+    );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function Home() {
     const [calls, setCalls]               = useState([]);
     const [stats, setStats]               = useState({});
     const [thematicAreas, setThematicAreas] = useState([]);
+    const [openFaq, setOpenFaq]           = useState(null);
 
     const s            = usePage().props.app_settings ?? {};
     const primaryColor = s.primary_color     || '#6366f1';
@@ -366,6 +433,7 @@ export default function Home() {
     const showCalls    = s.public_show_open_calls   !== 'false';
     const showHIW      = s.public_show_how_it_works !== 'false';
     const showFeatures = s.public_show_features     !== 'false';
+    const showFaq      = s.public_show_faq          !== 'false';
     const showCTA      = s.public_show_cta          !== 'false';
 
     const featTitle = s.public_features_title    || 'Everything You Need to Manage RTT';
@@ -627,6 +695,51 @@ export default function Home() {
                                     <p className="text-xs text-slate-500 leading-relaxed">{f.desc}</p>
                                 </div>
                             ))}
+                        </div>
+                    </div>
+                </section>
+            )}
+
+            {/* ── FAQ ───────────────────────────────────────────────────────── */}
+            {showFaq && (
+                <section className="bg-white py-14 border-t border-gray-100">
+                    <div className="max-w-4xl mx-auto px-6">
+                        <SectionHead
+                            eyebrow="Got Questions?"
+                            title="Frequently Asked Questions"
+                        />
+
+                        <div className="flex flex-col gap-3">
+                            {DEFAULT_FAQS.map((item, i) => (
+                                <FaqItem
+                                    key={i}
+                                    item={item}
+                                    open={openFaq === i}
+                                    onToggle={() => setOpenFaq(openFaq === i ? null : i)}
+                                    primaryColor={primaryColor}
+                                />
+                            ))}
+                        </div>
+
+                        {/* Still have questions CTA */}
+                        <div className="mt-10 flex flex-col sm:flex-row items-center gap-4 rounded-2xl border border-gray-100 p-6"
+                            style={{ background: `linear-gradient(135deg, ${primaryColor}06, ${primaryColor}02)` }}>
+                            <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0"
+                                style={{ backgroundColor: `${primaryColor}15` }}>
+                                <HelpCircle size={22} style={{ color: primaryColor }} />
+                            </div>
+                            <div className="flex-1 text-center sm:text-left">
+                                <p className="font-semibold text-slate-800 text-sm">Still have questions?</p>
+                                <p className="text-xs text-slate-500 mt-0.5">
+                                    Contact the Research & Technology Transfer office or use the feedback form below.
+                                </p>
+                            </div>
+                            <a href="/tracker"
+                                className="shrink-0 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl
+                                           text-xs font-bold text-white transition-all hover:opacity-90"
+                                style={{ background: `linear-gradient(135deg, ${primaryColor}, ${primaryColor}cc)` }}>
+                                Track Your Proposal <ArrowRight size={13} />
+                            </a>
                         </div>
                     </div>
                 </section>

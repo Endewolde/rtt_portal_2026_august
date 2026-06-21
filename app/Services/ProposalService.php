@@ -15,6 +15,7 @@ use App\Models\ProposalDocument;
 use App\Models\ProposalMember;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class ProposalService
@@ -236,7 +237,11 @@ class ProposalService
             );
         });
 
-        CheckProposalSimilarityJob::dispatch($submitted->id);
+        try {
+            CheckProposalSimilarityJob::dispatch($submitted->id);
+        } catch (\Throwable $e) {
+            Log::warning("Could not dispatch similarity check for proposal {$submitted->id}: {$e->getMessage()}");
+        }
 
         return $submitted;
     }

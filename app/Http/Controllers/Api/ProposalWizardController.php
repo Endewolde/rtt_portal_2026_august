@@ -50,7 +50,16 @@ class ProposalWizardController extends Controller
             ], 422);
         }
 
-        $proposal = $this->service->createDraft($request->user(), $validated['proposal_call_id']);
+        try {
+            $proposal = $this->service->createDraft($request->user(), $validated['proposal_call_id']);
+        } catch (\RuntimeException $e) {
+            return response()->json([
+                'data' => null,
+                'message' => $e->getMessage(),
+                'errors' => [],
+                'meta' => [],
+            ], 422);
+        }
 
         return response()->json([
             'data' => $proposal,

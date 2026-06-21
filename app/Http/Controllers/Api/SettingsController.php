@@ -130,8 +130,9 @@ class SettingsController extends Controller
             'public_show_features' => 'boolean',
             'public_show_cta' => 'boolean',
         ];
+        $usersKeys = ['registration_email_domain', 'default_user_role', 'self_registration', 'email_verification_required', 'default_import_password', 'account_activation_method'];
         $isPublicSiteKey = str_starts_with($key, 'public_');
-        $defaultGroup = $isPublicSiteKey ? 'public_site' : (in_array($key, $appearanceKeys) ? 'appearance' : 'general');
+        $defaultGroup = $isPublicSiteKey ? 'public_site' : (in_array($key, $appearanceKeys) ? 'appearance' : (in_array($key, $usersKeys) ? 'users' : 'general'));
         $defaultType = $publicSiteTypes[$key]
             ?? (in_array($key, ['primary_color', 'secondary_color', 'sidebar_color']) ? 'color' : 'string');
 
