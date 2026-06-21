@@ -14,13 +14,7 @@ class ProposalValidationService
 
     private function checkCategoryPermission(User $validator, Proposal $proposal): void
     {
-        $categoryMap = [
-            'research_officer'   => 'research',
-            'community_officer'  => 'community_engagement',
-            'technology_officer' => 'technology_transfer',
-        ];
-
-        foreach ($categoryMap as $role => $category) {
+        foreach (self::ROLE_CATEGORY_MAP as $role => $category) {
             if ($validator->hasRole($role)) {
                 if ($proposal->category !== $category) {
                     throw new AuthorizationException(
@@ -106,7 +100,7 @@ class ProposalValidationService
         DB::table('proposals')
             ->where('id', $proposal->id)
             ->update([
-                'rejected_at'      => now(),
+                'rejected_at' => now(),
                 'rejection_reason' => $reason,
             ]);
 
@@ -118,14 +112,27 @@ class ProposalValidationService
         );
     }
 
+    private const ROLE_CATEGORY_MAP = [
+        'research_officer' => 'research',
+        'community_officer' => 'community_engagement',
+        'technology_officer' => 'technology_transfer',
+    ];
+
     /**
-     * Get proposals awaiting validation, optionally scoped to a single college.
+     * Get proposals awaiting validation, scoped by the validator's role category and optionally by college.
      */
-    public function getValidationQueue(?string $collegeScope = null): LengthAwarePaginator
+    public function getValidationQueue(User $validator, ?string $collegeScope = null): LengthAwarePaginator
     {
         $query = Proposal::where('status', 'submitted')
             ->with(['pi', 'college', 'proposalCall'])
             ->orderBy('submitted_at', 'asc');
+
+        foreach (self::ROLE_CATEGORY_MAP as $role => $category) {
+            if ($validator->hasRole($role)) {
+                $query->where('category', $category);
+                break;
+            }
+        }
 
         if ($collegeScope) {
             $query->where('college_id', $collegeScope);

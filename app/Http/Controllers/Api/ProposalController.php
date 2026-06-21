@@ -251,16 +251,20 @@ class ProposalController extends Controller
 
         $baseQuery = Proposal::query();
 
-        if ($user->hasRole('college_officer') || $user->hasRole('college_officer')) {
-            $baseQuery->where('college_id', $user->college_id);
+        if ($user->hasRole('college_officer')) {
+            $baseQuery->where('proposals.college_id', $user->college_id);
+        }
+
+        if ($request->_college_scope) {
+            $baseQuery->where('proposals.college_id', $request->_college_scope);
         }
 
         if ($request->_category_scope) {
-            $baseQuery->where('category', $request->_category_scope);
+            $baseQuery->where('proposals.category', $request->_category_scope);
         }
 
         if ($request->academic_year) {
-            $baseQuery->where('academic_year', $request->academic_year);
+            $baseQuery->where('proposals.academic_year', $request->academic_year);
         }
 
         $byCollege = (clone $baseQuery)

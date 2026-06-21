@@ -36,6 +36,10 @@ class CentralEvaluationController extends Controller
             ])
             ->orderByDesc('updated_at');
 
+        if ($request->_category_scope) {
+            $query->where('category', $request->_category_scope);
+        }
+
         if ($request->_college_scope) {
             $query->where('college_id', $request->_college_scope);
         }

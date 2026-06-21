@@ -18,7 +18,7 @@ class ProposalValidationController extends Controller
             return response()->json(['data' => null, 'message' => 'Unauthorized.'], 403);
         }
 
-        return response()->json(['data' => $this->service->getValidationQueue($request->_college_scope)]);
+        return response()->json(['data' => $this->service->getValidationQueue($request->user(), $request->_college_scope)]);
     }
 
     public function approve(string $id, Request $request): JsonResponse
@@ -62,7 +62,7 @@ class ProposalValidationController extends Controller
             try {
                 $this->service->approve($proposal, $user);
                 $approved++;
-            } catch (\Exception $e) {
+            } catch (\Exception) {
                 $skipped[] = $proposal->tracker_number ?? $id;
             }
         }
