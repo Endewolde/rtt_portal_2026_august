@@ -86,7 +86,7 @@ class ProposalController extends Controller
             // Category-scoped: middleware already sets _category_scope
         } elseif ($user->hasRole('college_officer')) {
             $query->where('college_id', $user->college_id);
-        } elseif ($user->hasAnyRole(['staff', 'pi'])) {
+        } elseif ($user->hasRole('staff')) {
             $query->where('pi_user_id', $user->id);
         }
 
@@ -255,6 +255,18 @@ class ProposalController extends Controller
             $baseQuery->where('proposals.college_id', $user->college_id);
         }
 
+        $officerCategoryMap = [
+            'research_officer' => 'research',
+            'community_officer' => 'community_engagement',
+            'technology_officer' => 'technology_transfer',
+        ];
+        foreach ($officerCategoryMap as $role => $category) {
+            if ($user->hasRole($role)) {
+                $baseQuery->where('proposals.category', $category);
+                break;
+            }
+        }
+
         if ($request->_college_scope) {
             $baseQuery->where('proposals.college_id', $request->_college_scope);
         }
@@ -347,7 +359,12 @@ class ProposalController extends Controller
         $proposal = Proposal::findOrFail($id);
         $user = request()->user();
 
-        $isAdmin = $user?->hasAnyRole(['super_admin', 'central_officer', 'college_officer']);
+        // College officers cannot see submission history — actor names reveal PI identity
+        if ($user?->hasRole('college_officer')) {
+            return response()->json(['data' => [], 'hidden' => true]);
+        }
+
+        $isAdmin = $user?->hasAnyRole(['super_admin', 'central_officer']);
 
         $history = WorkflowLog::where('proposal_id', $proposal->id)
             ->orderBy('created_at', 'asc')

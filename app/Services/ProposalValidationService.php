@@ -5,7 +5,7 @@ namespace App\Services;
 use App\Models\Proposal;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 
 class ProposalValidationService
@@ -121,7 +121,7 @@ class ProposalValidationService
     /**
      * Get proposals awaiting validation, scoped by the validator's role category and optionally by college.
      */
-    public function getValidationQueue(User $validator, ?string $collegeScope = null): LengthAwarePaginator
+    public function getValidationQueue(User $validator, ?string $collegeScope = null): Collection
     {
         $query = Proposal::where('status', 'submitted')
             ->with(['pi', 'college', 'proposalCall'])
@@ -138,6 +138,6 @@ class ProposalValidationService
             $query->where('college_id', $collegeScope);
         }
 
-        return $query->paginate(25);
+        return $query->get();
     }
 }

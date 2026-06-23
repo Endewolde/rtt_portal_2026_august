@@ -19,7 +19,14 @@ export default function SwitchLoginModal({ open, onClose, onSelect }) {
             setLoading(true);
             try {
                 const res = await get('/users', { search: query.trim() });
-                setResults(res.data?.data ?? []);
+                const protectedRoles = ['super_admin', 'admin'];
+                setResults(
+                    (res.data?.data ?? []).filter(
+                        (u) => !(u.roles ?? []).some((r) =>
+                            protectedRoles.includes(typeof r === 'string' ? r : r.name)
+                        )
+                    )
+                );
             } catch {
                 setResults([]);
             }

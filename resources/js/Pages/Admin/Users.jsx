@@ -62,9 +62,9 @@ const STATUS_CONFIG = {
 };
 
 const ROLE_GROUPS = [
-    { label: 'Administration', roles: ['admin', 'central_office', 'central_officer', 'college_admin', 'department_head'] },
-    { label: 'Research',       roles: ['pi', 'staff', 'research_officer', 'community_officer', 'technology_officer'] },
-    { label: 'Operations',     roles: ['reviewer', 'finance_officer', 'college_officer', 'support_officer', 'guest'] },
+    { label: 'Administration', roles: ['admin', 'central_officer', 'super_admin'] },
+    { label: 'Research',       roles: ['staff', 'research_officer', 'community_officer', 'technology_officer', 'college_officer'] },
+    { label: 'Operations',     roles: ['finance_officer', 'support_officer', 'guest'] },
 ];
 
 const AVATAR_GRADIENTS = [
@@ -671,7 +671,7 @@ const EXPECTED_COLS = ['name', 'email', 'password', 'role', 'college_code', 'dep
 
 const IMPORT_ROLE_LABELS = {
     admin: 'admin',
-    staff: 'staff', reviewer: 'reviewer', pi: 'pi',
+    staff: 'staff',
     finance_officer: 'finance_officer',
     college_officer: 'college_officer', research_officer: 'research_officer',
     community_officer: 'community_officer', technology_officer: 'technology_officer',
@@ -1063,6 +1063,7 @@ export default function AdminUsers() {
     const isAdminRole       = hasRole('admin');
     const canManageUsers    = isSuperAdmin || isAdminRole;
     const canCreateUser     = hasPermission('users.create');
+    const canEditUser       = hasPermission('users.update');
     const canImportUsers    = hasPermission('users.import');
     const canImpersonate    = hasPermission('users.impersonate');
     const [impersonateTarget, setImpersonateTarget] = useState(null);
@@ -1557,11 +1558,13 @@ export default function AdminUsers() {
                                                         title="View profile">
                                                         <Eye size={13} />
                                                     </Link>
+                                                    {canEditUser && (
                                                     <button onClick={() => setEditModal(u)}
                                                         className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                                                         title="Edit user">
                                                         <Pencil size={13} />
                                                     </button>
+                                                    )}
                                                     {isSuperAdmin && (
                                                         <button onClick={() => setAssignModal(u)}
                                                             className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
@@ -1576,7 +1579,7 @@ export default function AdminUsers() {
                                                             <LogIn size={13} />
                                                         </button>
                                                     )}
-                                                    {canManageUsers && (
+                                                    {canManageUsers && u.id !== currentUser?.id && (isSuperAdmin || !allRoleNames.includes('super_admin')) && (isSuperAdmin || !allRoleNames.includes('admin')) && (
                                                         <>
                                                             {(u.status ?? 'active') === 'active' ? (
                                                                 <button onClick={() => setStatusConfirm({ user: u, newStatus: 'inactive' })}

@@ -6,7 +6,7 @@ import ViewToggle from '../../Components/ViewToggle'
 import ProposalTable from '../../Components/ProposalTable'
 import { useViewPreference } from '../../hooks/useViewPreference'
 import { useAuth } from '../../hooks/useAuth'
-import { BarChart2, Users, Building, GraduationCap, TrendingUp } from 'lucide-react'
+import { BarChart2, Users, Building, GraduationCap, TrendingUp, Download } from 'lucide-react'
 import api from '../../lib/api'
 
 const COLLEGE_COLORS = [
@@ -49,7 +49,10 @@ const CATEGORY_CONFIG = {
 export default function ProposalIndex() {
     const { error } = useToast()
     const { hasAnyRole, user } = useAuth()
-    const isAdmin = hasAnyRole(['super_admin', 'central_office', 'college_admin', 'department_head'])
+    const isAdmin = hasAnyRole([
+        'super_admin', 'admin', 'central_officer',
+        'research_officer', 'community_officer', 'technology_officer',
+    ])
 
     const [view, setView] = useViewPreference('proposals_index', 'table')
     const [stats, setStats] = useState(null)
@@ -124,6 +127,13 @@ export default function ProposalIndex() {
                             <BarChart2 size={14} />
                             {showStats ? 'Hide' : 'Show'} Stats
                         </button>
+                        <a
+                            href={`/api/v1/reports/proposals/export?${new URLSearchParams(Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== ''))).toString()}`}
+                            download
+                            className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+                        >
+                            <Download size={14} /> Export CSV
+                        </a>
                         <ViewToggle view={view} onChange={setView} />
                     </div>
                 </div>
@@ -383,6 +393,7 @@ export default function ProposalIndex() {
                             className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         >
                             <option value="">All Statuses</option>
+                            <option value="draft">Draft</option>
                             <option value="submitted">Submitted</option>
                             <option value="validated">Validated</option>
                             <option value="under_blind_review">Blind Review</option>

@@ -9,6 +9,7 @@ use App\Models\ProposalCall;
 use App\Services\ProposalCallService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Storage;
 
 class ProposalCallController extends Controller
@@ -19,7 +20,7 @@ class ProposalCallController extends Controller
      * All calls for admin dashboard — includes drafts and expired, with submission counts.
      * Requires proposal_calls.view_any permission.
      */
-    public function allForAdmin(Request $request): \Illuminate\Http\Resources\Json\AnonymousResourceCollection|\Illuminate\Http\JsonResponse
+    public function allForAdmin(Request $request): AnonymousResourceCollection|JsonResponse
     {
         if (! $request->user()?->can('proposal_calls.view_any')) {
             return response()->json(['data' => [], 'message' => 'Forbidden.', 'errors' => [], 'meta' => []], 403);
@@ -55,9 +56,9 @@ class ProposalCallController extends Controller
         }
 
         return response()->json([
-            'data'    => ProposalCallResource::collection($calls),
+            'data' => ProposalCallResource::collection($calls),
             'message' => 'Proposal calls retrieved.',
-            'errors'  => [],
+            'errors' => [],
         ]);
     }
 
@@ -66,9 +67,9 @@ class ProposalCallController extends Controller
         $call = ProposalCall::where('slug', $slug)->firstOrFail();
 
         return response()->json([
-            'data'    => new ProposalCallResource($call),
+            'data' => new ProposalCallResource($call),
             'message' => 'Proposal call retrieved.',
-            'errors'  => [],
+            'errors' => [],
         ]);
     }
 
@@ -81,22 +82,22 @@ class ProposalCallController extends Controller
         }
 
         $validated = $request->validate([
-            'academic_year'        => ['required', 'string', 'regex:/^\d{4}-\d{4}$/'],
-            'category'             => ['required', 'string', 'max:50'],
-            'title'                => ['required', 'string', 'max:500'],
-            'description'          => ['nullable', 'string'],
-            'eligibility'          => ['nullable', 'string'],
-            'start_date'           => ['required', 'date_format:Y-m-d\TH:i'],
-            'end_date'             => ['required', 'date_format:Y-m-d\TH:i', 'after:start_date'],
+            'academic_year' => ['required', 'string', 'regex:/^\d{4}-\d{4}$/'],
+            'category' => ['required', 'string', 'max:50'],
+            'title' => ['required', 'string', 'max:500'],
+            'description' => ['nullable', 'string'],
+            'eligibility' => ['nullable', 'string'],
+            'start_date' => ['required', 'date_format:Y-m-d\TH:i'],
+            'end_date' => ['required', 'date_format:Y-m-d\TH:i', 'after:start_date'],
             'max_proposals_per_pi' => ['nullable', 'integer', 'min:1'],
         ]);
 
         $call = $this->service->create($validated, $user);
 
         return response()->json([
-            'data'    => new ProposalCallResource($call),
+            'data' => new ProposalCallResource($call),
             'message' => 'Proposal call created.',
-            'errors'  => [],
+            'errors' => [],
         ], 201);
     }
 
@@ -108,15 +109,15 @@ class ProposalCallController extends Controller
             return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
         }
 
-        $call      = ProposalCall::findOrFail($id);
+        $call = ProposalCall::findOrFail($id);
         $validated = $request->validate([
-            'title'                => ['sometimes', 'string', 'max:500'],
-            'description'          => ['sometimes', 'nullable', 'string'],
-            'eligibility'          => ['sometimes', 'nullable', 'string'],
-            'start_date'           => ['sometimes', 'date_format:Y-m-d\TH:i'],
-            'end_date'             => ['sometimes', 'date_format:Y-m-d\TH:i', 'after:start_date'],
-            'category'             => ['sometimes', 'string', 'max:50'],
-            'academic_year'        => ['sometimes', 'string', 'regex:/^\d{4}-\d{4}$/'],
+            'title' => ['sometimes', 'string', 'max:500'],
+            'description' => ['sometimes', 'nullable', 'string'],
+            'eligibility' => ['sometimes', 'nullable', 'string'],
+            'start_date' => ['sometimes', 'date_format:Y-m-d\TH:i'],
+            'end_date' => ['sometimes', 'date_format:Y-m-d\TH:i', 'after:start_date'],
+            'category' => ['sometimes', 'string', 'max:50'],
+            'academic_year' => ['sometimes', 'string', 'regex:/^\d{4}-\d{4}$/'],
             'max_proposals_per_pi' => ['sometimes', 'nullable', 'integer', 'min:1'],
         ]);
 
@@ -127,9 +128,9 @@ class ProposalCallController extends Controller
         }
 
         return response()->json([
-            'data'    => new ProposalCallResource($call),
+            'data' => new ProposalCallResource($call),
             'message' => 'Proposal call updated.',
-            'errors'  => [],
+            'errors' => [],
         ]);
     }
 
@@ -150,9 +151,9 @@ class ProposalCallController extends Controller
         }
 
         return response()->json([
-            'data'    => new ProposalCallResource($call),
+            'data' => new ProposalCallResource($call),
             'message' => 'Proposal call activated.',
-            'errors'  => [],
+            'errors' => [],
         ]);
     }
 
@@ -167,9 +168,9 @@ class ProposalCallController extends Controller
         $call = $this->service->close(ProposalCall::findOrFail($id));
 
         return response()->json([
-            'data'    => new ProposalCallResource($call),
+            'data' => new ProposalCallResource($call),
             'message' => 'Proposal call closed.',
-            'errors'  => [],
+            'errors' => [],
         ]);
     }
 
@@ -190,9 +191,9 @@ class ProposalCallController extends Controller
         }
 
         return response()->json([
-            'data'    => new ProposalCallResource($call),
+            'data' => new ProposalCallResource($call),
             'message' => 'Proposal call reopened successfully.',
-            'errors'  => [],
+            'errors' => [],
         ]);
     }
 
@@ -204,11 +205,11 @@ class ProposalCallController extends Controller
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
         }
 
-        if ($call->status !== 'draft') {
+        if ($call->status === 'active') {
             return response()->json([
-                'data'    => null,
-                'message' => 'Only draft proposal calls can be deleted.',
-                'errors'  => [],
+                'data' => null,
+                'message' => 'Active proposal calls cannot be deleted. Close the call first.',
+                'errors' => [],
             ], 422);
         }
 
@@ -218,18 +219,18 @@ class ProposalCallController extends Controller
 
         if ($submissionsCount > 0) {
             return response()->json([
-                'data'    => null,
+                'data' => null,
                 'message' => "Cannot delete — this call has {$submissionsCount} submitted proposal(s).",
-                'errors'  => [],
+                'errors' => [],
             ], 422);
         }
 
         $call->delete();
 
         return response()->json([
-            'data'    => null,
+            'data' => null,
             'message' => 'Proposal call deleted successfully.',
-            'errors'  => [],
+            'errors' => [],
         ]);
     }
 
@@ -247,12 +248,12 @@ class ProposalCallController extends Controller
         $call->update(['guidelines_file' => $path]);
 
         return response()->json([
-            'data'    => [
-                'guidelines_file'     => $path,
+            'data' => [
+                'guidelines_file' => $path,
                 'guidelines_filename' => $request->file('file')->getClientOriginalName(),
             ],
             'message' => 'Guidelines uploaded successfully.',
-            'errors'  => [],
+            'errors' => [],
         ]);
     }
 

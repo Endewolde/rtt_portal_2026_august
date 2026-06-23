@@ -47,8 +47,10 @@ class ProposalResource extends JsonResource
             'department_id' => $this->department_id,
             'department' => $this->whenLoaded('department', fn () => ['id' => $this->department?->id, 'name' => $this->department?->name]),
 
-            // Team members — hidden from reviewers
+            // Team members and history — hidden from reviewers and college officers for blind integrity
             'members' => $hidePI ? [] : $this->whenLoaded('members'),
+            'members_hidden' => $hidePI,
+            'history_hidden' => $hidePI,
             'documents' => $this->whenLoaded('documents'),
             'budgets' => $this->whenLoaded('budgets'),
 

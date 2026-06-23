@@ -327,6 +327,15 @@ function Step2({ user }) {
 
 // ─── Step 4 — Budget ──────────────────────────────────────────────────────────
 
+const CATEGORY_COLORS = {
+    Personnel:       'bg-blue-50 text-blue-700 border-blue-200',
+    Equipment:       'bg-purple-50 text-purple-700 border-purple-200',
+    Supplies:        'bg-green-50 text-green-700 border-green-200',
+    Travel:          'bg-amber-50 text-amber-700 border-amber-200',
+    'Indirect Costs':'bg-rose-50 text-rose-700 border-rose-200',
+    Other:           'bg-gray-100 text-gray-600 border-gray-200',
+};
+
 function Step4({ items, onChange, rowErrors }) {
     const add    = () => onChange([...items, { category: '', description: '', amount: '', justification: '' }]);
     const update = (i, field, val) => onChange(items.map((item, idx) => idx === i ? { ...item, [field]: val } : item));
@@ -334,96 +343,90 @@ function Step4({ items, onChange, rowErrors }) {
     const total  = items.reduce((s, it) => s + Number(it.amount || 0), 0);
 
     return (
-        <div className="space-y-5">
+        <div className="space-y-3">
             {items.length === 0 ? (
-                <div className="border-2 border-dashed border-amber-300 bg-amber-50 rounded-xl px-4 py-8 text-center">
+                <div className="border-2 border-dashed border-amber-300 bg-amber-50 rounded-xl px-4 py-10 text-center">
                     <DollarSign size={28} className="mx-auto text-amber-400 mb-2" />
                     <p className="text-sm font-semibold text-amber-700">No budget items yet</p>
                     <p className="text-xs text-amber-600 mt-1">Add at least one budget item to continue.</p>
                 </div>
             ) : (
-                <div className="border border-gray-200 rounded-xl overflow-hidden">
-                    <table className="w-full text-sm">
-                        <thead className="bg-gray-50 border-b border-gray-200">
-                            <tr>
-                                {['Category', 'Description', 'Amount (ETB)', 'Justification', ''].map(h => (
-                                    <th key={h} className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                            {items.map((item, i) => {
-                                const rowErr = rowErrors?.[i];
-                                return (
-                                    <tr key={i} className={rowErr ? 'bg-red-50' : 'hover:bg-gray-50'}>
-                                        <td className="px-3 py-2.5">
-                                            <select
-                                                value={item.category}
-                                                onChange={e => update(i, 'category', e.target.value)}
-                                                className={`w-32 text-xs border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white ${rowErr?.category ? 'border-red-400' : 'border-gray-200'}`}
-                                            >
-                                                <option value="">Select…</option>
-                                                {BUDGET_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                                            </select>
-                                        </td>
-                                        <td className="px-3 py-2.5">
-                                            <input
-                                                value={item.description}
-                                                onChange={e => update(i, 'description', e.target.value)}
-                                                placeholder="Item description"
-                                                className={`w-44 text-xs border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 ${rowErr?.description ? 'border-red-400' : 'border-gray-200'}`}
-                                            />
-                                        </td>
-                                        <td className="px-3 py-2.5">
-                                            <input
-                                                type="number" min="0"
-                                                value={item.amount}
-                                                onChange={e => update(i, 'amount', e.target.value)}
-                                                placeholder="0"
-                                                className={`w-28 text-xs border rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500 ${rowErr?.amount ? 'border-red-400' : 'border-gray-200'}`}
-                                            />
-                                        </td>
-                                        <td className="px-3 py-2.5">
-                                            <input
-                                                value={item.justification}
-                                                onChange={e => update(i, 'justification', e.target.value)}
-                                                placeholder="Optional"
-                                                className="w-40 text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                            />
-                                        </td>
-                                        <td className="px-3 py-2.5">
-                                            <button onClick={() => remove(i)}
-                                                className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors">
-                                                ✕
-                                            </button>
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                        <tfoot className="bg-gray-50 border-t border-gray-200">
-                            <tr>
-                                <td colSpan={2} className="px-3 py-2.5 text-xs text-gray-500">
-                                    {items.length} item{items.length !== 1 ? 's' : ''}
-                                </td>
-                                <td className="px-3 py-2.5">
-                                    <span className="text-sm font-bold text-gray-900">
-                                        ETB {Number(total).toLocaleString()}
-                                    </span>
-                                </td>
-                                <td colSpan={2} />
-                            </tr>
-                        </tfoot>
-                    </table>
+                <div className="space-y-2">
+                    {items.map((item, i) => {
+                        const rowErr  = rowErrors?.[i];
+                        const catColor = CATEGORY_COLORS[item.category] ?? 'bg-gray-100 text-gray-600 border-gray-200';
+                        return (
+                            <div key={i} className={`rounded-xl border p-4 transition-colors ${rowErr ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-white hover:border-gray-300'}`}>
+                                {/* Row 1: category + amount + delete */}
+                                <div className="flex items-center gap-3">
+                                    <select
+                                        value={item.category}
+                                        onChange={e => update(i, 'category', e.target.value)}
+                                        className={`text-xs font-medium border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white flex-1 min-w-0 ${rowErr?.category ? 'border-red-400' : 'border-gray-200'}`}
+                                    >
+                                        <option value="">Category…</option>
+                                        {BUDGET_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
+
+                                    {item.category && (
+                                        <span className={`shrink-0 text-[11px] font-semibold px-2 py-0.5 rounded-full border hidden sm:inline ${catColor}`}>
+                                            {item.category}
+                                        </span>
+                                    )}
+
+                                    {/* Amount with ETB prefix */}
+                                    <div className={`flex items-center shrink-0 rounded-lg border overflow-hidden ${rowErr?.amount ? 'border-red-400' : 'border-gray-200'}`}>
+                                        <span className="px-2.5 py-1.5 bg-gray-50 border-r border-gray-200 text-xs font-semibold text-gray-500">ETB</span>
+                                        <input
+                                            type="number" min="0"
+                                            value={item.amount}
+                                            onChange={e => update(i, 'amount', e.target.value)}
+                                            placeholder="0"
+                                            className="w-28 text-sm font-semibold text-gray-900 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+                                        />
+                                    </div>
+
+                                    <button onClick={() => remove(i)}
+                                        className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 transition-colors text-base leading-none">
+                                        ✕
+                                    </button>
+                                </div>
+
+                                {/* Row 2: description + justification */}
+                                <div className="mt-2.5 grid sm:grid-cols-2 gap-2">
+                                    <input
+                                        value={item.description}
+                                        onChange={e => update(i, 'description', e.target.value)}
+                                        placeholder="Item description *"
+                                        className={`text-sm border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 ${rowErr?.description ? 'border-red-400 bg-red-50' : 'border-gray-200'}`}
+                                    />
+                                    <input
+                                        value={item.justification}
+                                        onChange={e => update(i, 'justification', e.target.value)}
+                                        placeholder="Justification (optional)"
+                                        className="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                    />
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
             )}
 
-            <button
-                onClick={add}
-                className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-700 border border-blue-200 hover:border-blue-400 bg-blue-50 hover:bg-blue-100 px-4 py-2 rounded-xl transition-colors"
-            >
-                <DollarSign size={15} /> Add Budget Item
-            </button>
+            <div className="flex items-center justify-between pt-1">
+                <button
+                    onClick={add}
+                    className="flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700 border border-blue-200 hover:border-blue-400 bg-blue-50 hover:bg-blue-100 px-4 py-2.5 rounded-xl transition-colors"
+                >
+                    <DollarSign size={15} /> Add Budget Item
+                </button>
+                {items.length > 0 && (
+                    <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5">
+                        <span className="text-xs text-gray-500">{items.length} item{items.length !== 1 ? 's' : ''} · Total</span>
+                        <span className="text-sm font-bold text-gray-900">ETB {Number(total).toLocaleString()}</span>
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
@@ -1090,111 +1093,127 @@ export default function ProposalCreate() {
 
     if (phase === 'select_call') {
         return (
-            <AppLayout breadcrumb="Proposals / New Application">
-                <div className="max-w-3xl mx-auto">
-                    {/* Hero header */}
-                    <div className="text-center mb-8">
-                        <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-blue-200">
-                            <Megaphone size={28} className="text-white" />
+            <AppLayout breadcrumb="Proposals / Active Calls">
+                <div className="max-w-4xl mx-auto pb-28">
+
+                    {/* Page header */}
+                    <div className="mb-8">
+                        <div className="flex items-center gap-4 mb-1">
+                            <div className="w-11 h-11 bg-blue-600 rounded-xl flex items-center justify-center shadow-sm shadow-blue-200 shrink-0">
+                                <Megaphone size={22} className="text-white" />
+                            </div>
+                            <div>
+                                <h1 className="text-2xl font-bold text-gray-900">Active Proposal Calls</h1>
+                                <p className="text-sm text-gray-500 mt-0.5">Choose a funding call to start your application.</p>
+                            </div>
                         </div>
-                        <h1 className="text-2xl font-bold text-gray-900">New Research Proposal</h1>
-                        <p className="text-gray-500 mt-2 text-sm">Select the funding call you want to apply to, then complete the application wizard.</p>
                     </div>
 
-                    <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-                        <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2">
-                            <BookOpen size={16} className="text-gray-400" />
-                            <h2 className="text-sm font-semibold text-gray-700">Active Funding Calls</h2>
-                            {!callsLoading && <span className="ml-auto text-xs text-gray-400">{calls.length} available</span>}
+                    {callsLoading ? (
+                        <div className="flex items-center justify-center py-20">
+                            <div className="w-9 h-9 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
                         </div>
-
-                        <div className="p-6">
-                            {callsLoading ? (
-                                <div className="flex items-center justify-center py-10">
-                                    <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                                </div>
-                            ) : calls.length === 0 ? (
-                                <div className="text-center py-10 bg-amber-50 border border-amber-200 rounded-xl">
-                                    <Megaphone size={28} className="mx-auto text-amber-400 mb-2" />
-                                    <p className="text-amber-700 font-semibold text-sm">No active calls available</p>
-                                    <p className="text-amber-600 text-xs mt-1">Check back later or contact your administrator.</p>
-                                </div>
-                            ) : (
-                                <div className="space-y-3">
-                                    {calls.map(call => {
-                                        const style     = CATEGORY_STYLE[call.category] ?? CATEGORY_STYLE.research;
-                                        const isSelected = selectedCall?.id === call.id;
-                                        const daysLeft  = call.end_date
-                                            ? Math.max(0, Math.ceil((new Date(call.end_date) - new Date()) / 86400000))
-                                            : null;
-
-                                        return (
-                                            <button
-                                                key={call.id}
-                                                onClick={() => setSelectedCall(call)}
-                                                className={`w-full text-left border-2 rounded-2xl p-5 transition-all ${
-                                                    isSelected
-                                                        ? 'border-blue-600 bg-blue-50 shadow-md shadow-blue-100'
-                                                        : 'border-gray-200 hover:border-blue-300 hover:shadow-sm bg-white'
-                                                }`}
-                                            >
-                                                <div className="flex items-start justify-between gap-4">
-                                                    <div className="flex-1 min-w-0">
-                                                        <div className="flex items-center gap-2 mb-2">
-                                                            <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-medium border ${style.bg} ${style.text} ${style.border}`}>
-                                                                <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
-                                                                {call.category?.replace(/_/g, ' ')}
-                                                            </span>
-                                                            <span className="text-xs text-gray-400 font-medium">{call.academic_year}</span>
-                                                        </div>
-                                                        <h3 className="text-sm font-bold text-gray-900 leading-snug">{call.title}</h3>
-                                                        {call.description && (
-                                                            <p className="text-xs text-gray-500 mt-1.5 leading-relaxed line-clamp-2">{call.description}</p>
-                                                        )}
-                                                        {daysLeft !== null && (
-                                                            <div className={`mt-3 flex items-center gap-1.5 text-xs font-medium ${daysLeft <= 7 ? 'text-red-500' : 'text-gray-500'}`}>
-                                                                <Clock size={11} />
-                                                                {daysLeft === 0 ? 'Closes today' : `${daysLeft} day${daysLeft !== 1 ? 's' : ''} remaining`}
-                                                                {' · '}
-                                                                <span className="font-normal">
-                                                                    {new Date(call.end_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                                                                </span>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 mt-0.5 transition-colors ${
-                                                        isSelected ? 'bg-blue-600 border-blue-600' : 'border-gray-300'
-                                                    }`}>
-                                                        {isSelected && <CheckCircle2 size={14} className="text-white" />}
-                                                    </div>
-                                                </div>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            )}
-
-                            {/* CTA */}
-                            <div className="mt-6 pt-5 border-t border-gray-100">
-                                {selectedCall && (
-                                    <div className="flex items-center gap-2 mb-4 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-700">
-                                        <CheckCircle2 size={15} className="shrink-0" />
-                                        <span>Selected: <strong>{selectedCall.title}</strong></span>
-                                    </div>
-                                )}
-                                <button
-                                    type="button"
-                                    onClick={handleStartApplication}
-                                    disabled={!selectedCall || starting}
-                                    className="w-full py-3.5 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 bg-blue-600 text-white hover:bg-blue-700 shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
-                                >
-                                    {starting ? (
-                                        <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Starting…</>
-                                    ) : (
-                                        <>{selectedCall ? 'Start Application' : 'Select a Call to Continue'} <ChevronRight size={16} /></>
-                                    )}
-                                </button>
+                    ) : calls.length === 0 ? (
+                        <div className="text-center py-20 bg-white border border-gray-200 rounded-2xl">
+                            <div className="w-14 h-14 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                <Megaphone size={26} className="text-amber-400" />
                             </div>
+                            <p className="text-gray-700 font-semibold">No active calls right now</p>
+                            <p className="text-sm text-gray-400 mt-1">Check back later or contact your administrator.</p>
+                        </div>
+                    ) : (
+                        <div className={`grid gap-4 ${calls.length > 1 ? 'sm:grid-cols-2' : ''}`}>
+                            {calls.map(call => {
+                                const style      = CATEGORY_STYLE[call.category] ?? CATEGORY_STYLE.research;
+                                const isSelected = selectedCall?.id === call.id;
+                                const now        = new Date();
+                                const endDate    = call.end_date ? new Date(call.end_date) : null;
+                                const startDate  = call.start_date ? new Date(call.start_date) : null;
+                                const daysLeft   = endDate ? Math.max(0, Math.ceil((endDate - now) / 86400000)) : null;
+                                const totalDays  = (startDate && endDate) ? Math.max(1, Math.ceil((endDate - startDate) / 86400000)) : null;
+                                const elapsed    = (startDate && endDate) ? Math.min(100, Math.max(0, Math.ceil(((now - startDate) / (endDate - startDate)) * 100))) : null;
+                                const urgent     = daysLeft !== null && daysLeft <= 7;
+
+                                return (
+                                    <button
+                                        key={call.id}
+                                        onClick={() => setSelectedCall(isSelected ? null : call)}
+                                        className={`w-full text-left rounded-2xl border-2 p-5 transition-all group ${
+                                            isSelected
+                                                ? 'border-blue-600 bg-blue-50 shadow-lg shadow-blue-100'
+                                                : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-md'
+                                        }`}
+                                    >
+                                        {/* Top row: category + year + radio */}
+                                        <div className="flex items-center justify-between gap-3 mb-3">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                                <span className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-semibold border ${style.bg} ${style.text} ${style.border}`}>
+                                                    <span className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />
+                                                    {call.category?.replace(/_/g, ' ')}
+                                                </span>
+                                                <span className="text-xs text-gray-400 font-medium">{call.academic_year}</span>
+                                            </div>
+                                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
+                                                isSelected ? 'bg-blue-600 border-blue-600 scale-110' : 'border-gray-300 group-hover:border-blue-400'
+                                            }`}>
+                                                {isSelected && <CheckCircle2 size={12} className="text-white" />}
+                                            </div>
+                                        </div>
+
+                                        {/* Title + description */}
+                                        <h3 className="text-base font-bold text-gray-900 leading-snug mb-1">{call.title}</h3>
+                                        {call.description && (
+                                            <p className="text-xs text-gray-500 leading-relaxed line-clamp-2 mb-3">{call.description}</p>
+                                        )}
+
+                                        {/* Deadline row */}
+                                        {endDate && (
+                                            <div className="mt-3">
+                                                <div className="flex items-center justify-between text-xs mb-1.5">
+                                                    <span className={`flex items-center gap-1 font-semibold ${urgent ? 'text-red-500' : 'text-gray-500'}`}>
+                                                        <Clock size={11} />
+                                                        {daysLeft === 0 ? 'Closes today!' : urgent ? `${daysLeft} days left` : `${daysLeft} days remaining`}
+                                                    </span>
+                                                    <span className="text-gray-400">
+                                                        {endDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                    </span>
+                                                </div>
+                                                {elapsed !== null && (
+                                                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                                        <div
+                                                            className={`h-full rounded-full transition-all ${urgent ? 'bg-red-400' : 'bg-blue-400'}`}
+                                                            style={{ width: `${elapsed}%` }}
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+
+                {/* Sticky bottom CTA */}
+                <div className={`fixed bottom-0 left-0 right-0 z-40 transition-all duration-300 ${selectedCall ? 'translate-y-0' : 'translate-y-full'}`}>
+                    <div className="bg-white/95 backdrop-blur border-t border-gray-200 shadow-xl px-4 py-4">
+                        <div className="max-w-4xl mx-auto flex items-center gap-4">
+                            <div className="flex-1 min-w-0">
+                                <p className="text-xs text-gray-500">Selected call</p>
+                                <p className="text-sm font-semibold text-gray-900 truncate">{selectedCall?.title}</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={handleStartApplication}
+                                disabled={starting}
+                                className="shrink-0 flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl shadow-sm transition-colors disabled:opacity-60"
+                            >
+                                {starting
+                                    ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Starting…</>
+                                    : <>Start Application <ChevronRight size={15} /></>
+                                }
+                            </button>
                         </div>
                     </div>
                 </div>

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Award;
 use App\Models\Proposal;
+use App\Models\User;
 use App\Services\AwardService;
 use App\Services\ReviewScoreService;
 use App\Services\WorkflowService;
@@ -186,6 +187,64 @@ class CentralEvaluationController extends Controller
                 'meta' => [],
             ], 422);
         }
+    }
+
+    /** PI funding history: overlap detection, past awards, and co-investigator activity. */
+    public function piFundingHistory(Request $request, string $userId): JsonResponse
+    {
+        if (! $request->user()?->can('awards.view')) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        $pi = User::select('id', 'name', 'email')->findOrFail($userId);
+
+        // Proposals where this user is the PI
+        $asPi = Proposal::where('pi_user_id', $userId)
+            ->with(['award:id,proposal_id,grant_reference,awarded_amount,approved_at', 'college:id,name'])
+            ->orderByDesc('created_at')
+            ->get(['id', 'tracker_number', 'title', 'status', 'category', 'college_id', 'created_at']);
+
+        $activeFunded = $asPi->where('status', 'funded')->values();
+        $historicalFunded = $asPi->where('status', 'funded')->values(); // same for now; extend if you add 'completed'
+
+        // Proposals where this user is a co-investigator (any active/funded)
+        $asCoInv = Proposal::whereHas('members', fn ($q) => $q->where('user_id', $userId)->where('role', 'co_investigator'))
+            ->where('status', 'funded')
+            ->with(['college:id,name'])
+            ->get(['id', 'tracker_number', 'title', 'status', 'category', 'college_id']);
+
+        $totalAwarded = $asPi->whereNotNull('award')->sum(fn ($p) => (float) ($p->award?->awarded_amount ?? 0));
+        $fundedCount = $asPi->where('status', 'funded')->count();
+
+        return response()->json([
+            'data' => [
+                'pi' => $pi,
+                'has_overlap' => $activeFunded->count() > 0,
+                'active_funded' => $activeFunded->map(fn ($p) => [
+                    'id' => $p->id,
+                    'tracker_number' => $p->tracker_number,
+                    'title' => $p->title,
+                    'category' => $p->category,
+                    'college' => $p->college?->name,
+                    'grant_reference' => $p->award?->grant_reference,
+                    'awarded_amount' => $p->award?->awarded_amount,
+                    'approved_at' => $p->award?->approved_at,
+                ]),
+                'co_investigator_on' => $asCoInv->map(fn ($p) => [
+                    'id' => $p->id,
+                    'tracker_number' => $p->tracker_number,
+                    'title' => $p->title,
+                    'college' => $p->college?->name,
+                ]),
+                'stats' => [
+                    'total_funded_as_pi' => $fundedCount,
+                    'total_awarded_etb' => $totalAwarded,
+                    'co_investigator_active_count' => $asCoInv->count(),
+                ],
+            ],
+            'message' => '',
+            'errors' => [],
+        ]);
     }
 
     /** Revoke funding for a funded proposal and move it back to rejected. */

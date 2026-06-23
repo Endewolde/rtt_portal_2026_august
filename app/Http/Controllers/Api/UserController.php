@@ -3,9 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\BudgetRequest;
 use App\Models\College;
 use App\Models\Department;
 use App\Models\NotificationPreference;
+use App\Models\Proposal;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -173,7 +175,19 @@ class UserController extends Controller
             'status' => ['required', 'in:active,inactive,suspended'],
         ]);
 
+        $actor = $request->user();
         $target = User::findOrFail($id);
+
+        if ($target->id === $actor->id) {
+            return response()->json(['message' => 'You cannot change your own account status.'], 422);
+        }
+
+        // Only super_admin can deactivate another super_admin or admin.
+        if (! $actor->hasRole('super_admin') && $target->hasAnyRole(['super_admin', 'admin'])
+            && in_array($validated['status'], ['inactive', 'suspended'])) {
+            return response()->json(['message' => 'You do not have permission to deactivate this account.'], 403);
+        }
+
         $oldStatus = $target->status;
         $target->update(['status' => $validated['status']]);
 
@@ -631,10 +645,15 @@ class UserController extends Controller
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
+        $actor = $request->user();
         $user = User::findOrFail($id);
 
-        if ($user->id === $request->user()->id) {
+        if ($user->id === $actor->id) {
             return response()->json(['message' => 'Cannot delete your own account.'], 422);
+        }
+
+        if (! $actor->hasRole('super_admin') && $user->hasAnyRole(['super_admin', 'admin'])) {
+            return response()->json(['message' => 'You do not have permission to delete this account.'], 403);
         }
 
         $uid = $user->id;
@@ -960,6 +979,51 @@ class UserController extends Controller
         return response()->json([
             'data' => $departments,
             'message' => 'Departments retrieved.',
+            'errors' => [],
+        ]);
+    }
+
+    /** Funding history for a PI — shows all proposals where user is PI, grouped for the funding page warning. */
+    public function proposalHistory(string $id, Request $request): JsonResponse
+    {
+        $pi = User::findOrFail($id);
+
+        $proposals = Proposal::where('pi_user_id', $pi->id)
+            ->with(['award:id,proposal_id,grant_reference,awarded_amount,approved_at'])
+            ->select(['id', 'title', 'tracker_number', 'status', 'academic_year', 'submitted_at', 'pi_user_id'])
+            ->orderByDesc('submitted_at')
+            ->get();
+
+        $funded = $proposals->whereIn('status', ['funded', 'midterm_evaluation', 'completed']);
+        $pending = $proposals->whereIn('status', ['submitted', 'validated', 'under_blind_review', 'blind_review_passed', 'under_open_defence', 'accepted']);
+        $rejected = $proposals->where('status', 'rejected');
+        $archived = $proposals->where('status', 'archived');
+
+        // Check for unsettled budget requests across all PI proposals
+        $proposalIds = $proposals->pluck('id');
+        $pendingBudgets = BudgetRequest::whereIn('proposal_id', $proposalIds)
+            ->whereIn('status', ['pending', 'approved'])
+            ->count();
+        $unsettledBudgets = BudgetRequest::whereIn('proposal_id', $proposalIds)
+            ->where('status', 'approved')
+            ->whereDoesntHave('settlement', fn ($q) => $q->where('status', 'finance_verified'))
+            ->count();
+
+        return response()->json([
+            'data' => [
+                'pi' => ['id' => $pi->id, 'name' => $pi->name, 'email' => $pi->email],
+                'summary' => [
+                    'total' => $proposals->count(),
+                    'funded_active' => $funded->count(),
+                    'pending_review' => $pending->count(),
+                    'rejected' => $rejected->count(),
+                    'archived' => $archived->count(),
+                    'pending_budgets' => $pendingBudgets,
+                    'unsettled_budgets' => $unsettledBudgets,
+                ],
+                'proposals' => $proposals->values(),
+            ],
+            'message' => 'PI proposal history retrieved.',
             'errors' => [],
         ]);
     }

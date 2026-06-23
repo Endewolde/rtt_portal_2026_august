@@ -1,114 +1,224 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-    Activity, LogIn, LogOut, UserPlus, Shield, ToggleRight,
-    GitBranch, Settings, Search, X, ChevronDown, ChevronLeft,
-    ChevronRight, Filter, Monitor, Globe, Clock, RefreshCw,
-    User, FileText, AlertCircle, Users, Zap, Eye,
-    BarChart2, CalendarDays, TrendingUp, CheckSquare, DollarSign, Award,
+    Activity, LogIn, LogOut, Shield, Eye, Users, Settings,
+    Search, X, ChevronLeft, ChevronRight, RefreshCw, Filter,
+    Clock, Globe, Monitor, CheckCircle, XCircle, PlusCircle,
+    Pencil, Trash2, Send, Lock, Unlock, Upload, Download,
+    ToggleRight, UserPlus, AlertCircle, CalendarDays, BarChart2,
+    DollarSign, Award, FileText, Star, Zap, TrendingUp,
+    Database, Building2, BookOpen, FlaskConical, GitBranch,
+    BadgeCheck, RotateCcw, UserX, MessageSquare, PlayCircle,
+    Package, Radio, ChevronDown,
 } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import { get } from '../../lib/api';
 import { cn, timeAgo } from '../../lib/utils';
 
-// ─── Event config ─────────────────────────────────────────────────────────────
+// ─── Resource → colour/icon mapping ──────────────────────────────────────────
 
-const EVENT_CONFIG = {
-    // Auth
-    'user.login':                  { icon: LogIn,       color: '#3b82f6', bg: 'bg-blue-500',    soft: 'bg-blue-50 text-blue-700',      label: 'Login',                border: 'border-l-blue-400'    },
-    'user.logout':                 { icon: LogOut,      color: '#94a3b8', bg: 'bg-slate-400',   soft: 'bg-slate-100 text-slate-600',   label: 'Logout',               border: 'border-l-slate-300'   },
-    'user.registered':             { icon: UserPlus,    color: '#22c55e', bg: 'bg-green-500',   soft: 'bg-green-50 text-green-700',    label: 'Registered',           border: 'border-l-green-400'   },
-    'user.created':                { icon: UserPlus,    color: '#6366f1', bg: 'bg-indigo-500',  soft: 'bg-indigo-50 text-indigo-700',  label: 'User Created',         border: 'border-l-indigo-400'  },
-    'user.role_changed':           { icon: Shield,      color: '#a855f7', bg: 'bg-purple-500',  soft: 'bg-purple-50 text-purple-700',  label: 'Role Changed',         border: 'border-l-purple-400'  },
-    'user.status_changed':         { icon: ToggleRight, color: '#f97316', bg: 'bg-orange-500',  soft: 'bg-orange-50 text-orange-700',  label: 'Status Changed',       border: 'border-l-orange-400'  },
-    'user.session_evicted':        { icon: Zap,         color: '#ef4444', bg: 'bg-red-500',     soft: 'bg-red-50 text-red-700',        label: 'Session Evicted',      border: 'border-l-red-400'     },
-    'user.impersonation_started':  { icon: Eye,         color: '#0ea5e9', bg: 'bg-sky-500',     soft: 'bg-sky-50 text-sky-700',        label: 'Impersonation',        border: 'border-l-sky-400'     },
-    'users.imported':              { icon: Users,       color: '#14b8a6', bg: 'bg-teal-500',    soft: 'bg-teal-50 text-teal-700',      label: 'Users Imported',       border: 'border-l-teal-400'    },
-    // Proposals
-    'proposal.transitioned':       { icon: GitBranch,   color: '#8b5cf6', bg: 'bg-violet-600',  soft: 'bg-violet-50 text-violet-700',  label: 'Proposal Status',      border: 'border-l-violet-400'  },
-    // Review
-    'review.assigned':             { icon: FileText,    color: '#0284c7', bg: 'bg-sky-600',     soft: 'bg-sky-50 text-sky-700',        label: 'Review Assigned',      border: 'border-l-sky-500'     },
-    'review.score_submitted':      { icon: BarChart2,   color: '#7c3aed', bg: 'bg-violet-500',  soft: 'bg-violet-50 text-violet-700',  label: 'Score Submitted',      border: 'border-l-violet-400'  },
-    'review.reassigned':           { icon: RefreshCw,   color: '#d97706', bg: 'bg-amber-500',   soft: 'bg-amber-50 text-amber-700',    label: 'Reviewer Reassigned',  border: 'border-l-amber-400'   },
-    'review.due_extended':         { icon: CalendarDays,color: '#0891b2', bg: 'bg-cyan-500',    soft: 'bg-cyan-50 text-cyan-700',      label: 'Due Date Extended',    border: 'border-l-cyan-400'    },
-    // Budget
-    'budget.request_approved':     { icon: CheckSquare, color: '#16a34a', bg: 'bg-green-600',   soft: 'bg-green-50 text-green-700',    label: 'Budget Approved',      border: 'border-l-green-500'   },
-    'budget.disbursed':            { icon: DollarSign,  color: '#15803d', bg: 'bg-green-700',   soft: 'bg-emerald-50 text-emerald-800',label: 'Funds Disbursed',      border: 'border-l-emerald-500' },
-    'budget.settlement_submitted': { icon: TrendingUp,  color: '#0d9488', bg: 'bg-teal-600',    soft: 'bg-teal-50 text-teal-700',      label: 'Settlement Filed',     border: 'border-l-teal-500'    },
-    'budget.settlement_verified':  { icon: CheckSquare, color: '#0369a1', bg: 'bg-blue-700',    soft: 'bg-blue-50 text-blue-800',      label: 'Settlement Verified',  border: 'border-l-blue-500'    },
-    'budget.settlement_finalized': { icon: Award,       color: '#7e22ce', bg: 'bg-purple-700',  soft: 'bg-purple-50 text-purple-800',  label: 'Settlement Finalized', border: 'border-l-purple-500'  },
-    // Awards
-    'award.issued':                { icon: Award,       color: '#b45309', bg: 'bg-amber-600',   soft: 'bg-amber-50 text-amber-800',    label: 'Award Issued',         border: 'border-l-amber-500'   },
-    'award.updated':               { icon: Settings,    color: '#92400e', bg: 'bg-amber-700',   soft: 'bg-amber-50 text-amber-700',    label: 'Award Updated',        border: 'border-l-amber-400'   },
-    // Evaluation / Monitoring
-    'evaluation.midterm_scheduled':{ icon: CalendarDays,color: '#0e7490', bg: 'bg-cyan-600',    soft: 'bg-cyan-50 text-cyan-800',      label: 'Midterm Scheduled',    border: 'border-l-cyan-500'    },
-    'evaluation.midterm_scored':   { icon: BarChart2,   color: '#155e75', bg: 'bg-cyan-700',    soft: 'bg-cyan-50 text-cyan-700',      label: 'Midterm Scored',       border: 'border-l-cyan-400'    },
-    // Settings
-    'setting.updated':             { icon: Settings,    color: '#f59e0b', bg: 'bg-amber-500',   soft: 'bg-amber-50 text-amber-700',    label: 'Setting Updated',      border: 'border-l-amber-400'   },
+const RESOURCE_CONFIG = {
+    user:                 { color: '#3b82f6', bg: 'bg-blue-500',    soft: 'bg-blue-50 text-blue-700',        border: 'border-l-blue-400',    icon: Users        },
+    proposal:             { color: '#8b5cf6', bg: 'bg-violet-500',  soft: 'bg-violet-50 text-violet-700',    border: 'border-l-violet-400',  icon: FileText     },
+    proposal_call:        { color: '#6366f1', bg: 'bg-indigo-500',  soft: 'bg-indigo-50 text-indigo-700',    border: 'border-l-indigo-400',  icon: Radio        },
+    role:                 { color: '#a855f7', bg: 'bg-purple-500',  soft: 'bg-purple-50 text-purple-700',    border: 'border-l-purple-400',  icon: Shield       },
+    college:              { color: '#10b981', bg: 'bg-emerald-500', soft: 'bg-emerald-50 text-emerald-700',  border: 'border-l-emerald-400', icon: Building2    },
+    department:           { color: '#14b8a6', bg: 'bg-teal-500',    soft: 'bg-teal-50 text-teal-700',        border: 'border-l-teal-400',    icon: Building2    },
+    budget_request:       { color: '#22c55e', bg: 'bg-green-500',   soft: 'bg-green-50 text-green-700',      border: 'border-l-green-400',   icon: DollarSign   },
+    budget_allocation:    { color: '#16a34a', bg: 'bg-green-600',   soft: 'bg-green-50 text-green-800',      border: 'border-l-green-500',   icon: DollarSign   },
+    award:                { color: '#f59e0b', bg: 'bg-amber-500',   soft: 'bg-amber-50 text-amber-700',      border: 'border-l-amber-400',   icon: Award        },
+    settlement:           { color: '#0d9488', bg: 'bg-teal-600',    soft: 'bg-teal-50 text-teal-800',        border: 'border-l-teal-500',    icon: TrendingUp   },
+    disbursement:         { color: '#059669', bg: 'bg-emerald-600', soft: 'bg-emerald-50 text-emerald-800',  border: 'border-l-emerald-500', icon: DollarSign   },
+    review:               { color: '#0ea5e9', bg: 'bg-sky-500',     soft: 'bg-sky-50 text-sky-700',          border: 'border-l-sky-400',     icon: Star         },
+    review_assignment:    { color: '#0284c7', bg: 'bg-sky-600',     soft: 'bg-sky-50 text-sky-800',          border: 'border-l-sky-500',     icon: Star         },
+    complaint:            { color: '#ef4444', bg: 'bg-red-500',     soft: 'bg-red-50 text-red-700',          border: 'border-l-red-400',     icon: MessageSquare},
+    midterm_evaluation:   { color: '#0891b2', bg: 'bg-cyan-600',    soft: 'bg-cyan-50 text-cyan-800',        border: 'border-l-cyan-500',    icon: FlaskConical },
+    completion_workshop:  { color: '#7c3aed', bg: 'bg-violet-600',  soft: 'bg-violet-50 text-violet-800',    border: 'border-l-violet-500',  icon: PlayCircle   },
+    research_output:      { color: '#0369a1', bg: 'bg-blue-700',    soft: 'bg-blue-50 text-blue-800',        border: 'border-l-blue-600',    icon: BookOpen     },
+    repository:           { color: '#64748b', bg: 'bg-slate-500',   soft: 'bg-slate-50 text-slate-700',      border: 'border-l-slate-400',   icon: Database     },
+    thematic_area:        { color: '#d946ef', bg: 'bg-fuchsia-500', soft: 'bg-fuchsia-50 text-fuchsia-700',  border: 'border-l-fuchsia-400', icon: Package      },
+    setting:              { color: '#f97316', bg: 'bg-orange-500',  soft: 'bg-orange-50 text-orange-700',    border: 'border-l-orange-400',  icon: Settings     },
+    feature:              { color: '#ec4899', bg: 'bg-pink-500',    soft: 'bg-pink-50 text-pink-700',        border: 'border-l-pink-400',    icon: Zap          },
+    external_fund:        { color: '#06b6d4', bg: 'bg-cyan-500',    soft: 'bg-cyan-50 text-cyan-700',        border: 'border-l-cyan-400',    icon: Globe        },
+    report:               { color: '#9333ea', bg: 'bg-purple-600',  soft: 'bg-purple-50 text-purple-800',    border: 'border-l-purple-500',  icon: BarChart2    },
+    defence_session:      { color: '#1d4ed8', bg: 'bg-blue-700',    soft: 'bg-blue-50 text-blue-800',        border: 'border-l-blue-600',    icon: GitBranch    },
+    appeal:               { color: '#dc2626', bg: 'bg-red-600',     soft: 'bg-red-50 text-red-800',          border: 'border-l-red-500',     icon: RotateCcw    },
 };
 
-const DEFAULT_CFG = { icon: Activity, color: '#6b7280', bg: 'bg-gray-400', soft: 'bg-gray-100 text-gray-600', label: 'Event', border: 'border-l-gray-300' };
+const ACTION_ICONS = {
+    created:              PlusCircle,
+    updated:              Pencil,
+    deleted:              Trash2,
+    approved:             CheckCircle,
+    rejected:             XCircle,
+    submitted:            Send,
+    imported:             Upload,
+    exported:             Download,
+    login:                LogIn,
+    logout:               LogOut,
+    registered:           UserPlus,
+    status_changed:       ToggleRight,
+    roles_changed:        Shield,
+    role_changed:         Shield,
+    impersonated:         Eye,
+    impersonation_started:Eye,
+    closed:               Lock,
+    reopened:             Unlock,
+    validated:            BadgeCheck,
+    revoked:              XCircle,
+    funded:               Award,
+    bulk_approved:        CheckCircle,
+    bulk_updated:         Pencil,
+    assigned:             Star,
+    reassigned:           RefreshCw,
+    removed:              UserX,
+    resolved:             CheckCircle,
+    escalated:            TrendingUp,
+    session_evicted:      Zap,
+    finalized:            Lock,
+    verified:             BadgeCheck,
+    published:            Globe,
+    unpublished:          Lock,
+    scored:               Star,
+    appealed:             RotateCcw,
+    scheduled:            CalendarDays,
+    funding_changed:      DollarSign,
+    central_decision:     BadgeCheck,
+    result_processed:     CheckCircle,
+};
 
-const ALL_EVENT_TYPES = Object.keys(EVENT_CONFIG);
+const DEFAULT_RESOURCE_CONFIG = { color: '#6b7280', bg: 'bg-gray-400', soft: 'bg-gray-100 text-gray-600', border: 'border-l-gray-300', icon: Activity };
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Category tab definitions ─────────────────────────────────────────────────
 
-function parseUA(ua) {
-    if (!ua) return null;
-    let browser = 'Unknown', os = 'Unknown';
-    if      (ua.includes('Edg'))     browser = 'Edge';
-    else if (ua.includes('Chrome'))  browser = 'Chrome';
-    else if (ua.includes('Firefox')) browser = 'Firefox';
-    else if (ua.includes('Safari'))  browser = 'Safari';
-    if      (ua.includes('Windows')) os = 'Windows';
-    else if (ua.includes('Mac OS'))  os = 'macOS';
-    else if (ua.includes('Android')) os = 'Android';
-    else if (ua.includes('iPhone') || ua.includes('iPad')) os = 'iOS';
-    else if (ua.includes('Linux'))   os = 'Linux';
-    return `${browser} · ${os}`;
+const CATEGORIES = [
+    { id: 'all',        label: 'All Activity',    icon: Activity,    color: '#6366f1' },
+    { id: 'auth',       label: 'Auth & Access',   icon: LogIn,       color: '#3b82f6' },
+    { id: 'proposals',  label: 'Proposals',       icon: FileText,    color: '#8b5cf6' },
+    { id: 'people',     label: 'People & Roles',  icon: Users,       color: '#10b981' },
+    { id: 'finance',    label: 'Finance',         icon: DollarSign,  color: '#f59e0b' },
+    { id: 'system',     label: 'Administration',  icon: Settings,    color: '#f97316' },
+    { id: 'monitoring', label: 'Monitoring',      icon: FlaskConical,color: '#0891b2' },
+];
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function humanize(str) {
+    if (!str) return '';
+    return str.replace(/[._]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
-function entityLabel(type) {
-    return type?.split('\\').pop() ?? type ?? '—';
+function getEventParts(eventStr) {
+    const parts  = (eventStr ?? '').split('.');
+    const resource = parts[0] ?? 'unknown';
+    const action   = parts.slice(1).join('_') || 'changed';
+    return { resource, action };
+}
+
+function getEventConfig(eventStr) {
+    const { resource } = getEventParts(eventStr);
+    return RESOURCE_CONFIG[resource] ?? DEFAULT_RESOURCE_CONFIG;
+}
+
+function getActionIcon(action) {
+    return ACTION_ICONS[action] ?? Activity;
 }
 
 function eventSummary(log) {
     const actor = log.actor?.name ?? 'Unknown user';
-    const old   = log.old_values  ?? {};
-    const next  = log.new_values  ?? {};
-    switch (log.event) {
-        // Auth & Users
-        case 'user.login':                  return `${actor} signed in`;
-        case 'user.logout':                 return `${actor} signed out`;
-        case 'user.registered':             return `${actor} created an account`;
-        case 'user.created':                return `${actor}'s account was created`;
-        case 'user.role_changed':           return `${actor}'s role changed${old.role ? ` from ${old.role}` : ''}${next.role ? ` → ${next.role}` : ''}`;
-        case 'user.status_changed':         return `${actor}'s status changed${old.status ? ` from ${old.status}` : ''}${next.status ? ` → ${next.status}` : ''}`;
-        case 'user.session_evicted':        return `${actor}'s session was terminated by the system`;
-        case 'user.impersonation_started':  return `${actor} started an impersonation session`;
-        case 'users.imported':              return `Bulk import: ${next.count ?? '?'} users added`;
-        // Proposals
-        case 'proposal.transitioned':       return `Proposal${next.tracker ? ` ${next.tracker}` : ''} moved${old.status ? ` from "${old.status}"` : ''}${next.status ? ` → "${next.status}"` : ''}`;
-        // Review
-        case 'review.assigned':             return `${next.reviewers ?? '?'} reviewer(s) assigned to proposal ${next.tracker ?? ''}`;
-        case 'review.score_submitted':      return `${actor} submitted review scores`;
-        case 'review.reassigned':           return `${actor} reassigned a reviewer`;
-        case 'review.due_extended':         return `Review due date extended${old.due_date ? ` from ${old.due_date}` : ''}${next.due_date ? ` → ${next.due_date}` : ''}`;
-        // Budget
-        case 'budget.request_approved':     return `${actor} approved budget request for ${next.tracker ?? 'a proposal'}`;
-        case 'budget.disbursed':            return `${actor} disbursed ETB ${Number(next.amount ?? 0).toLocaleString()} to ${next.tracker ?? 'a proposal'}`;
-        case 'budget.settlement_submitted': return `${actor} submitted settlement (ETB ${Number(next.total_spent ?? 0).toLocaleString()})`;
-        case 'budget.settlement_verified':  return `${actor} verified settlement report`;
-        case 'budget.settlement_finalized': return `${actor} finalized settlement`;
-        // Awards
-        case 'award.issued':                return `Award issued to ${next.tracker ?? 'proposal'} — Grant ${next.grant_reference ?? '?'}, ETB ${Number(next.awarded_amount ?? 0).toLocaleString()}`;
-        case 'award.updated':               return `Award updated for ${next.tracker ?? 'proposal'}`;
-        // Evaluation / Monitoring
-        case 'evaluation.midterm_scheduled':return `Midterm evaluation scheduled for ${next.tracker ?? 'a proposal'} on ${next.evaluation_date ?? '?'}`;
-        case 'evaluation.midterm_scored':   return `Midterm scored: ${next.score ?? '?'}/100 — Recommendation: ${next.recommendation ?? '?'}`;
-        // Settings
-        case 'setting.updated':             return `Setting "${next.key ?? old.key ?? '?'}" was updated`;
-        default:                            return log.event?.replace(/[._]/g, ' ') ?? 'Unknown event';
-    }
+    const nv    = log.new_values ?? {};
+    const ov    = log.old_values ?? {};
+    const { resource, action } = getEventParts(log.event);
+
+    // Known explicit events
+    const explicit = {
+        'user.login':                 `${actor} signed in`,
+        'user.logout':                `${actor} signed out`,
+        'user.registered':            `${actor} created an account`,
+        'user.created':               `New user account created${nv.name ? ` — ${nv.name}` : ''}`,
+        'user.updated':               `${actor} updated user profile${nv.name ? ` of ${nv.name}` : ''}`,
+        'user.deleted':               `${actor} deleted user${nv.name ? ` ${nv.name}` : ''}`,
+        'user.status_changed':        `${actor} ${nv.status === 'inactive' ? 'deactivated' : 'activated'} an account${ov.name ? ` — ${ov.name}` : ''}`,
+        'user.roles_changed':         `${actor} updated roles${nv.name ? ` for ${nv.name}` : ''}`,
+        'user.impersonation_started': `${actor} started impersonation session`,
+        'user.session_evicted':       `${actor}'s session was terminated`,
+        'user.imported':              `${actor} bulk-imported users`,
+        'proposal.created':           `${actor} created a new proposal`,
+        'proposal.updated':           `${actor} updated proposal details`,
+        'proposal.deleted':           `${actor} deleted a proposal`,
+        'proposal.submitted':         `${actor} submitted a proposal for review`,
+        'proposal.approved':          `${actor} approved a proposal`,
+        'proposal.rejected':          `${actor} rejected a proposal`,
+        'proposal.validated':         `${actor} validated a proposal`,
+        'proposal.transitioned':      `Proposal moved${ov.status ? ` from "${ov.status}"` : ''}${nv.status ? ` → "${nv.status}"` : ''}`,
+        'proposal.funding_changed':   `${actor} changed funding status of a proposal`,
+        'proposal_call.created':      `${actor} created a proposal call${nv.title ? ` — "${nv.title}"` : ''}`,
+        'proposal_call.updated':      `${actor} updated a proposal call`,
+        'proposal_call.deleted':      `${actor} deleted a proposal call`,
+        'proposal_call.closed':       `${actor} closed a proposal call`,
+        'proposal_call.reopened':     `${actor} reopened a proposal call`,
+        'proposal_call.exported':     `${actor} exported proposal call data`,
+        'role.created':               `${actor} created role${nv.name ? ` "${nv.name}"` : ''}`,
+        'role.updated':               `${actor} updated a role`,
+        'role.deleted':               `${actor} deleted a role`,
+        'role.permissions_changed':   `${actor} updated permissions for a role`,
+        'college.created':            `${actor} added college${nv.name ? ` "${nv.name}"` : ''}`,
+        'college.updated':            `${actor} updated college details`,
+        'college.deleted':            `${actor} deleted a college`,
+        'department.created':         `${actor} added department${nv.name ? ` "${nv.name}"` : ''}`,
+        'department.updated':         `${actor} updated department details`,
+        'department.deleted':         `${actor} deleted a department`,
+        'budget_request.created':     `${actor} submitted a budget request`,
+        'budget_request.approved':    `${actor} approved a budget request`,
+        'budget_request.updated':     `${actor} updated a budget request`,
+        'budget_allocation.updated':  `${actor} updated budget allocation`,
+        'award.created':              `${actor} issued an award`,
+        'award.updated':              `${actor} updated award details`,
+        'settlement.created':         `${actor} filed a settlement report`,
+        'settlement.verified':        `${actor} verified a settlement`,
+        'settlement.finalized':       `${actor} finalized a settlement`,
+        'disbursement.created':       `${actor} recorded a disbursement`,
+        'review.assigned':            `${actor} assigned reviewer(s)`,
+        'review.updated':             `${actor} updated a review`,
+        'review_assignment.extended': `${actor} extended a review deadline`,
+        'review_assignment.removed':  `${actor} removed a reviewer`,
+        'review_assignment.reassigned':`${actor} reassigned a reviewer`,
+        'setting.updated':            `${actor} updated system setting${nv.key ? ` "${nv.key}"` : ''}`,
+        'feature.updated':            `${actor} toggled a feature flag`,
+        'midterm_evaluation.created': `${actor} scheduled a midterm evaluation`,
+        'midterm_evaluation.updated': `${actor} updated a midterm evaluation`,
+        'completion_workshop.created':`${actor} scheduled a completion workshop`,
+        'research_output.created':    `${actor} recorded a research output`,
+        'research_output.updated':    `${actor} updated a research output`,
+        'repository.published':       `${actor} published to the repository`,
+        'repository.unpublished':     `${actor} unpublished from repository`,
+        'appeal.created':             `${actor} filed an appeal`,
+        'appeal.resolved':            `${actor} resolved an appeal`,
+        'complaint.created':          `${actor} submitted a complaint`,
+        'complaint.resolved':         `${actor} resolved a complaint`,
+        'complaint.escalated':        `${actor} escalated a complaint`,
+    };
+
+    if (explicit[log.event]) return explicit[log.event];
+
+    // Fallback: auto-generate from event string
+    const rLabel = humanize(resource);
+    const aLabel = humanize(action);
+    return `${actor} — ${rLabel} ${aLabel}`;
+}
+
+function parseUA(ua) {
+    if (!ua) return null;
+    let browser = 'Unknown', os = 'Unknown';
+    if      (ua.includes('Edg'))    browser = 'Edge';
+    else if (ua.includes('Chrome')) browser = 'Chrome';
+    else if (ua.includes('Firefox'))browser = 'Firefox';
+    else if (ua.includes('Safari')) browser = 'Safari';
+    if      (ua.includes('Windows'))os = 'Windows';
+    else if (ua.includes('Mac OS')) os = 'macOS';
+    else if (ua.includes('Android'))os = 'Android';
+    else if (ua.includes('iPhone') || ua.includes('iPad')) os = 'iOS';
+    else if (ua.includes('Linux'))  os = 'Linux';
+    return `${browser} · ${os}`;
 }
 
 function initials(name) {
@@ -116,34 +226,51 @@ function initials(name) {
     return name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
 }
 
-function roleBadge(roles) {
-    const role = roles?.[0]?.name;
-    if (!role) return null;
+function roleColor(roleName) {
     const map = {
-        pi:       'bg-blue-100 text-blue-700',
-        reviewer: 'bg-purple-100 text-purple-700',
-        staff:    'bg-green-100 text-green-700',
-        admin:    'bg-amber-100 text-amber-700',
+        super_admin:       'bg-rose-100 text-rose-700',
+        admin:             'bg-amber-100 text-amber-700',
+        central_officer:   'bg-indigo-100 text-indigo-700',
+        college_officer:   'bg-sky-100 text-sky-700',
+        research_officer:  'bg-violet-100 text-violet-700',
+        community_officer: 'bg-emerald-100 text-emerald-700',
+        technology_officer:'bg-cyan-100 text-cyan-700',
+        finance_officer:   'bg-green-100 text-green-700',
+        staff:             'bg-blue-100 text-blue-700',
     };
-    return (
-        <span className={cn('text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md', map[role] ?? 'bg-gray-100 text-gray-600')}>
-            {role}
-        </span>
-    );
+    return map[roleName] ?? 'bg-gray-100 text-gray-600';
 }
 
 // ─── Diff viewer ──────────────────────────────────────────────────────────────
 
 function ChangeDiff({ oldValues, newValues }) {
-    const old  = oldValues ?? {};
-    const next = newValues ?? {};
-    const keys = [...new Set([...Object.keys(old), ...Object.keys(next)])];
-    if (!keys.length) return <span className="text-xs text-gray-400 italic">No field data recorded</span>;
+    const old  = oldValues  ?? {};
+    const next = newValues  ?? {};
+    const allOld  = Object.keys(old);
+    const allNext = Object.keys(next);
 
-    const fmt = (v) => v == null ? '—' : typeof v === 'object' ? JSON.stringify(v) : String(v);
+    // If one side is huge/complex, just show pretty-print
+    const isComplex = allOld.length === 0 && allNext.length > 0;
+    if (isComplex && allNext.length > 10) {
+        return (
+            <pre className="text-[11px] font-mono bg-gray-950 text-gray-300 p-4 rounded-xl overflow-x-auto leading-relaxed">
+                {JSON.stringify(next, null, 2)}
+            </pre>
+        );
+    }
+
+    const keys = [...new Set([...allOld, ...allNext])];
+    if (!keys.length) return <p className="text-xs text-gray-400 italic">No field data recorded.</p>;
+
+    const fmt = (v) => {
+        if (v == null) return '—';
+        if (typeof v === 'object') return JSON.stringify(v, null, 2);
+        if (typeof v === 'boolean') return v ? 'true' : 'false';
+        return String(v);
+    };
 
     return (
-        <div className="space-y-2">
+        <div className="space-y-1.5">
             {keys.map(key => {
                 const ov = old[key];
                 const nv = next[key];
@@ -152,25 +279,27 @@ function ChangeDiff({ oldValues, newValues }) {
                 const isChanged = !isAdded && !isRemoved && String(ov) !== String(nv);
                 if (!isAdded && !isRemoved && !isChanged) return null;
                 return (
-                    <div key={key} className="flex items-start gap-3 text-xs">
-                        <span className="text-gray-400 font-mono min-w-28 shrink-0 truncate pt-0.5">{key}</span>
+                    <div key={key}
+                        className={cn(
+                            'grid grid-cols-[120px_1fr] gap-3 items-start px-3 py-2 rounded-lg text-xs',
+                            isAdded   ? 'bg-emerald-50' :
+                            isRemoved ? 'bg-red-50' :
+                                        'bg-gray-50'
+                        )}>
+                        <span className="text-gray-500 font-mono font-medium truncate self-center">{key}</span>
                         {isAdded ? (
-                            <span className="font-mono text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg">
-                                + {fmt(nv)}
+                            <span className="font-mono text-emerald-700 break-all">
+                                <span className="text-emerald-400 mr-1">+</span>{fmt(nv)}
                             </span>
                         ) : isRemoved ? (
-                            <span className="font-mono text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-lg line-through opacity-70">
+                            <span className="font-mono text-red-500 line-through opacity-70 break-all">
                                 {fmt(ov)}
                             </span>
                         ) : (
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="font-mono text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-lg line-through opacity-70">
-                                    {fmt(ov)}
-                                </span>
-                                <ChevronRight size={10} className="text-gray-400 shrink-0" />
-                                <span className="font-mono text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg">
-                                    {fmt(nv)}
-                                </span>
+                            <div className="flex items-start gap-2 flex-wrap">
+                                <span className="font-mono text-red-500 line-through opacity-60 break-all">{fmt(ov)}</span>
+                                <ChevronRight size={11} className="text-gray-400 mt-0.5 shrink-0" />
+                                <span className="font-mono text-emerald-700 break-all">{fmt(nv)}</span>
                             </div>
                         )}
                     </div>
@@ -183,103 +312,111 @@ function ChangeDiff({ oldValues, newValues }) {
 // ─── Log entry card ───────────────────────────────────────────────────────────
 
 function LogEntry({ log, expanded, onToggle }) {
-    const cfg     = EVENT_CONFIG[log.event] ?? DEFAULT_CFG;
-    const Icon    = cfg.icon;
+    const cfg    = getEventConfig(log.event);
+    const { resource, action } = getEventParts(log.event);
+    const ActionIcon = getActionIcon(action);
+    const ResourceIcon = cfg.icon;
     const hasDiff = !!(log.old_values || log.new_values);
     const ua      = parseUA(log.user_agent);
     const ts      = new Date(log.created_at);
+    const primaryRole = log.actor?.roles?.[0]?.name;
 
     return (
         <div className={cn(
-            'bg-white rounded-2xl border border-gray-100 border-l-4 shadow-sm overflow-hidden',
+            'group bg-white rounded-2xl border border-gray-100 border-l-[3px] shadow-xs',
             'hover:shadow-md hover:border-gray-200 transition-all duration-200',
             cfg.border,
         )}>
             {/* Main row */}
-            <div className="flex items-start gap-3 px-4 py-3.5">
-                {/* Icon */}
-                <div className={cn('h-9 w-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5', cfg.bg)}>
-                    <Icon size={15} className="text-white" />
+            <div className="flex items-start gap-3.5 px-4 py-3.5">
+
+                {/* Icon stack */}
+                <div className="relative shrink-0 mt-0.5">
+                    <div className={cn('h-9 w-9 rounded-xl flex items-center justify-center', cfg.bg)}>
+                        <ResourceIcon size={15} className="text-white" />
+                    </div>
+                    <div className="absolute -bottom-1 -right-1 h-4.5 w-4.5 bg-white rounded-full flex items-center justify-center border border-gray-100 shadow-xs">
+                        <ActionIcon size={9} style={{ color: cfg.color }} />
+                    </div>
                 </div>
 
                 {/* Content */}
                 <div className="flex-1 min-w-0">
-                    {/* Top: badge + entity */}
-                    <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <span className={cn('text-[11px] font-bold px-2 py-0.5 rounded-full', cfg.soft)}>
-                            {cfg.label}
+                    {/* Badge row */}
+                    <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                        <span className={cn('inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full', cfg.soft)}>
+                            {humanize(resource)}
                         </span>
-                        {log.auditable_type && (
-                            <span className="text-[10px] text-gray-400 bg-gray-50 border border-gray-100 px-1.5 py-0.5 rounded-md font-medium">
-                                {entityLabel(log.auditable_type)}
-                            </span>
-                        )}
+                        <span className="text-[10px] font-semibold text-gray-400 bg-gray-50 border border-gray-100 px-2 py-0.5 rounded-full">
+                            {humanize(action)}
+                        </span>
                     </div>
 
                     {/* Summary */}
-                    <p className="text-sm font-semibold text-gray-800 leading-snug mb-2">
+                    <p className="text-sm font-semibold text-gray-800 leading-snug mb-2.5">
                         {eventSummary(log)}
                     </p>
 
-                    {/* Actor + meta row */}
+                    {/* Actor + meta */}
                     <div className="flex items-center gap-3 flex-wrap">
                         {log.actor ? (
                             <div className="flex items-center gap-1.5">
                                 {log.actor.avatar ? (
                                     <img src={log.actor.avatar} alt={log.actor.name}
-                                        className="h-5 w-5 rounded-full object-cover ring-1 ring-gray-200" />
+                                        className="h-5 w-5 rounded-full object-cover ring-1 ring-gray-200 shrink-0" />
                                 ) : (
                                     <div className="h-5 w-5 rounded-full bg-indigo-100 flex items-center justify-center
-                                                    text-[9px] font-bold text-indigo-600 ring-1 ring-indigo-200">
+                                                    text-[8px] font-extrabold text-indigo-600 shrink-0">
                                         {initials(log.actor.name)}
                                     </div>
                                 )}
                                 <span className="text-xs font-semibold text-gray-700">{log.actor.name}</span>
-                                {roleBadge(log.actor.roles)}
-                                <span className="text-[10px] text-gray-400">{log.actor.email}</span>
+                                {primaryRole && (
+                                    <span className={cn('text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md', roleColor(primaryRole))}>
+                                        {primaryRole.replace(/_/g, ' ')}
+                                    </span>
+                                )}
                             </div>
                         ) : (
-                            <span className="flex items-center gap-1 text-xs text-gray-400">
-                                <User size={10} /> System
-                            </span>
+                            <span className="flex items-center gap-1 text-xs text-gray-400 italic">System</span>
                         )}
 
                         {log.ip_address && (
                             <span className="flex items-center gap-1 text-[10px] text-gray-400">
-                                <Globe size={9} /> {log.ip_address}
+                                <Globe size={9} className="shrink-0" /> {log.ip_address}
                             </span>
                         )}
-
                         {ua && (
                             <span className="flex items-center gap-1 text-[10px] text-gray-400">
-                                <Monitor size={9} /> {ua}
+                                <Monitor size={9} className="shrink-0" /> {ua}
                             </span>
                         )}
                     </div>
                 </div>
 
-                {/* Right: time + expand */}
-                <div className="flex flex-col items-end gap-2 shrink-0 ml-2">
+                {/* Time + expand */}
+                <div className="flex flex-col items-end gap-2 shrink-0 ml-1">
                     <div className="text-right">
                         <time title={ts.toLocaleString()}
                             className="flex items-center gap-1 text-[10px] text-gray-400 font-medium justify-end">
                             <Clock size={9} /> {timeAgo(log.created_at)}
                         </time>
-                        <span className="text-[9px] text-gray-300 mt-0.5 block">
-                            {ts.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                        <span className="text-[9px] text-gray-300 block mt-0.5">
+                            {ts.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                         </span>
                     </div>
 
                     {hasDiff && (
                         <button onClick={onToggle}
                             className={cn(
-                                'flex items-center gap-1 text-[10px] font-semibold px-2.5 py-1 rounded-lg transition-all',
+                                'flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg transition-all',
                                 expanded
-                                    ? 'bg-indigo-600 text-white shadow-sm'
+                                    ? 'text-white shadow-sm'
                                     : 'bg-gray-50 text-gray-500 hover:bg-gray-100 border border-gray-200'
-                            )}>
-                            {expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
-                            {expanded ? 'Hide' : 'Changes'}
+                            )}
+                            style={expanded ? { backgroundColor: cfg.color } : {}}>
+                            <ChevronDown size={10} className={cn('transition-transform', expanded && 'rotate-180')} />
+                            {expanded ? 'Hide' : 'Details'}
                         </button>
                     )}
                 </div>
@@ -287,8 +424,10 @@ function LogEntry({ log, expanded, onToggle }) {
 
             {/* Expanded diff */}
             {expanded && hasDiff && (
-                <div className="border-t border-gray-100 bg-linear-to-r from-gray-50 to-white px-5 py-4">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3">Field changes</p>
+                <div className="border-t border-gray-100 bg-gray-50/60 px-5 py-4">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3 flex items-center gap-1.5">
+                        <Database size={10} /> Payload
+                    </p>
                     <ChangeDiff oldValues={log.old_values} newValues={log.new_values} />
                 </div>
             )}
@@ -296,18 +435,32 @@ function LogEntry({ log, expanded, onToggle }) {
     );
 }
 
-// ─── Stat chip ────────────────────────────────────────────────────────────────
+// ─── Top actor card ───────────────────────────────────────────────────────────
 
-function StatChip({ icon: Icon, label, value, color }) {
+function TopActorCard({ actor, total, rank }) {
+    if (!actor?.user) return null;
+    const u = actor.user;
+    const primaryRole = u.roles?.[0]?.name;
+    const colors = ['text-amber-500', 'text-slate-400', 'text-amber-700'];
     return (
-        <div className="flex items-center gap-2.5 bg-white/10 backdrop-blur-sm rounded-2xl px-4 py-3 border border-white/10">
-            <div className="h-8 w-8 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: `${color}30` }}>
-                <Icon size={15} style={{ color }} />
+        <div className="flex items-center gap-2.5 py-2">
+            <span className={cn('text-xs font-black w-5 text-center', colors[rank] ?? 'text-gray-300')}>
+                {rank + 1}
+            </span>
+            {u.avatar ? (
+                <img src={u.avatar} alt={u.name} className="h-7 w-7 rounded-full object-cover ring-1 ring-white/20 shrink-0" />
+            ) : (
+                <div className="h-7 w-7 rounded-full bg-white/10 flex items-center justify-center text-[9px] font-extrabold text-white shrink-0">
+                    {initials(u.name)}
+                </div>
+            )}
+            <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-white truncate">{u.name}</p>
+                {primaryRole && (
+                    <p className="text-[9px] text-white/40 truncate">{primaryRole.replace(/_/g, ' ')}</p>
+                )}
             </div>
-            <div>
-                <p className="text-lg font-extrabold text-white tabular-nums leading-none">{value?.toLocaleString() ?? '—'}</p>
-                <p className="text-[10px] text-white/50 font-medium mt-0.5">{label}</p>
-            </div>
+            <span className="text-xs font-bold text-white/60 tabular-nums shrink-0">{total}</span>
         </div>
     );
 }
@@ -321,28 +474,44 @@ function Pagination({ meta, page, onChange }) {
     const pages = [];
     for (let i = start; i <= end; i++) pages.push(i);
 
-    const btn = (label, disabled, onClick, active = false) => (
-        <button key={String(label)} onClick={onClick} disabled={disabled}
-            className={cn(
-                'h-8 min-w-8 px-2 rounded-lg text-xs font-semibold transition-all',
-                active   ? 'bg-indigo-600 text-white shadow-sm'
-                         : 'text-gray-600 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed'
-            )}>
-            {label}
-        </button>
-    );
-
     return (
         <div className="flex items-center justify-between pt-5 border-t border-gray-100">
             <span className="text-xs text-gray-400">
-                Showing <strong>{meta.from ?? 0}–{meta.to ?? 0}</strong> of <strong>{meta.total?.toLocaleString()}</strong> entries
+                Showing <strong className="text-gray-600">{meta.from ?? 0}–{meta.to ?? 0}</strong> of{' '}
+                <strong className="text-gray-600">{meta.total?.toLocaleString()}</strong> entries
             </span>
             <div className="flex items-center gap-1">
-                {btn(<ChevronLeft size={13} />, page === 1, () => onChange(page - 1))}
-                {start > 1 && <>{btn('1', false, () => onChange(1))}{start > 2 && <span className="text-gray-400 text-xs px-1">…</span>}</>}
-                {pages.map(p => btn(p, false, () => onChange(p), p === page))}
-                {end < meta.last_page && <>{end < meta.last_page - 1 && <span className="text-gray-400 text-xs px-1">…</span>}{btn(meta.last_page, false, () => onChange(meta.last_page))}</>}
-                {btn(<ChevronRight size={13} />, page === meta.last_page, () => onChange(page + 1))}
+                <button onClick={() => onChange(page - 1)} disabled={page === 1}
+                    className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                    <ChevronLeft size={14} />
+                </button>
+                {start > 1 && (
+                    <>
+                        <button onClick={() => onChange(1)}
+                            className="h-8 min-w-8 px-2 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-100 transition-colors">1</button>
+                        {start > 2 && <span className="text-gray-400 text-xs px-1">…</span>}
+                    </>
+                )}
+                {pages.map(p => (
+                    <button key={p} onClick={() => onChange(p)}
+                        className={cn(
+                            'h-8 min-w-8 px-2 rounded-lg text-xs font-semibold transition-all',
+                            p === page
+                                ? 'bg-indigo-600 text-white shadow-sm'
+                                : 'text-gray-600 hover:bg-gray-100'
+                        )}>{p}</button>
+                ))}
+                {end < meta.last_page && (
+                    <>
+                        {end < meta.last_page - 1 && <span className="text-gray-400 text-xs px-1">…</span>}
+                        <button onClick={() => onChange(meta.last_page)}
+                            className="h-8 min-w-8 px-2 rounded-lg text-xs font-semibold text-gray-600 hover:bg-gray-100 transition-colors">{meta.last_page}</button>
+                    </>
+                )}
+                <button onClick={() => onChange(page + 1)} disabled={page === meta.last_page}
+                    className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors">
+                    <ChevronRight size={14} />
+                </button>
             </div>
         </div>
     );
@@ -356,15 +525,25 @@ export default function AdminAuditLogs() {
     const [stats,      setStats]      = useState(null);
     const [loading,    setLoading]    = useState(true);
     const [page,       setPage]       = useState(1);
+    const [perPage,    setPerPage]    = useState(50);
     const [expandedId, setExpandedId] = useState(null);
-    const [filters,    setFilters]    = useState({ event: '', date_from: '', date_to: '', q: '' });
+    const [category,   setCategory]   = useState('all');
+    const [liveRefresh,setLiveRefresh]= useState(false);
+    const [filters,    setFilters]    = useState({ q: '', date_from: '', date_to: '' });
     const [search,     setSearch]     = useState('');
     const searchTimer = useRef(null);
+    const liveTimer   = useRef(null);
 
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const r = await get('/audit-logs', { ...filters, page });
+            const params = {
+                ...filters,
+                page,
+                per_page: perPage,
+                ...(category !== 'all' ? { category } : {}),
+            };
+            const r = await get('/audit-logs', params);
             const paginator = r.data;
             setLogs(paginator?.data ?? []);
             if (paginator?.total != null) {
@@ -380,9 +559,19 @@ export default function AdminAuditLogs() {
             if (r.meta?.stats) setStats(r.meta.stats);
         } catch {}
         setLoading(false);
-    }, [filters, page]);
+    }, [filters, page, perPage, category]);
 
     useEffect(() => { load(); }, [load]);
+
+    // Live refresh
+    useEffect(() => {
+        if (liveRefresh) {
+            liveTimer.current = setInterval(() => load(), 30_000);
+        } else {
+            clearInterval(liveTimer.current);
+        }
+        return () => clearInterval(liveTimer.current);
+    }, [liveRefresh, load]);
 
     const handleSearch = (val) => {
         setSearch(val);
@@ -393,127 +582,146 @@ export default function AdminAuditLogs() {
         }, 350);
     };
 
-    const setFilter = (key, val) => {
-        setFilters(f => ({ ...f, [key]: val }));
-        setPage(1);
-        setExpandedId(null);
-    };
+    const setFilter = (key, val) => { setFilters(f => ({ ...f, [key]: val })); setPage(1); };
+    const clearFilters = () => { setFilters({ q: '', date_from: '', date_to: '' }); setSearch(''); setPage(1); };
+    const hasFilters = filters.q || filters.date_from || filters.date_to;
 
-    const clearFilters = () => {
-        setFilters({ event: '', date_from: '', date_to: '', q: '' });
-        setSearch('');
-        setPage(1);
-    };
+    const changeCategory = (id) => { setCategory(id); setPage(1); setExpandedId(null); };
 
-    const hasFilters = filters.event || filters.date_from || filters.date_to || filters.q;
-
-    // Group by date
+    // Group logs by date
     const grouped = logs.reduce((acc, log) => {
         const day = new Date(log.created_at).toLocaleDateString('en-GB', {
             weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
         });
-        if (!acc[day]) acc[day] = [];
-        acc[day].push(log);
+        (acc[day] = acc[day] ?? []).push(log);
         return acc;
     }, {});
 
+    const totalEvents = stats ? Object.values(stats.by_event ?? {}).reduce((a, b) => a + b, 0) : 0;
+
     return (
         <AppLayout breadcrumb="Audit Logs">
-            <div className="max-w-5xl mx-auto space-y-5 pb-10">
+            <div className="max-w-6xl mx-auto space-y-5 pb-10">
 
-                {/* ── Hero header ──────────────────────────────────────────── */}
+                {/* ── Hero ─────────────────────────────────────────────────── */}
                 <div className="rounded-3xl overflow-hidden"
-                    style={{ background: 'linear-gradient(135deg,#0f172a 0%,#1e1b4b 60%,#312e81 100%)' }}>
+                    style={{ background: 'linear-gradient(135deg,#0f172a 0%,#1e1b4b 55%,#1d4ed8 100%)' }}>
 
-                    {/* Top decoration */}
-                    <div className="h-px w-full" style={{ background: 'linear-gradient(90deg, transparent, #6366f180, transparent)' }} />
+                    <div className="h-px w-full"
+                        style={{ background: 'linear-gradient(90deg,transparent,#818cf860,transparent)' }} />
 
-                    <div className="px-6 py-6">
-                        {/* Title row */}
-                        <div className="flex items-center justify-between mb-6">
-                            <div className="flex items-center gap-3">
-                                <div className="h-11 w-11 rounded-2xl bg-indigo-600/30 border border-indigo-500/30 flex items-center justify-center">
-                                    <Activity size={20} className="text-indigo-300" />
+                    <div className="px-6 pt-6 pb-5 flex flex-col lg:flex-row gap-6">
+
+                        {/* Left: title + stats */}
+                        <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between mb-5">
+                                <div className="flex items-center gap-3">
+                                    <div className="h-11 w-11 rounded-2xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center">
+                                        <Activity size={20} className="text-indigo-300" />
+                                    </div>
+                                    <div>
+                                        <h1 className="text-lg font-extrabold text-white tracking-tight">Activity Audit Log</h1>
+                                        <p className="text-xs text-white/40 mt-0.5">Every CRUD operation across all modules</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <h1 className="text-lg font-extrabold text-white tracking-tight">System Activity</h1>
-                                    <p className="text-xs text-white/40 mt-0.5">All user actions — super admins excluded</p>
+                                <div className="flex items-center gap-2">
+                                    {/* Live refresh toggle */}
+                                    <button onClick={() => setLiveRefresh(v => !v)}
+                                        className={cn(
+                                            'flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-xl border transition-all font-semibold',
+                                            liveRefresh
+                                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                                                : 'bg-white/5 text-white/50 border-white/10 hover:bg-white/10'
+                                        )}>
+                                        <Radio size={11} className={liveRefresh ? 'animate-pulse' : ''} />
+                                        {liveRefresh ? 'Live' : 'Live off'}
+                                    </button>
+                                    <button onClick={load} disabled={loading}
+                                        className="flex items-center gap-1.5 text-xs text-white/50 hover:text-white
+                                                   px-3 py-1.5 rounded-xl border border-white/10 hover:border-white/20
+                                                   bg-white/5 hover:bg-white/10 transition-all">
+                                        <RefreshCw size={11} className={loading ? 'animate-spin' : ''} />
+                                        Refresh
+                                    </button>
                                 </div>
                             </div>
 
-                            <button onClick={load} disabled={loading}
-                                className="flex items-center gap-1.5 text-xs text-white/60 hover:text-white
-                                           px-3 py-2 rounded-xl border border-white/10 hover:border-white/20
-                                           bg-white/5 hover:bg-white/10 transition-all">
-                                <RefreshCw size={12} className={loading ? 'animate-spin' : ''} /> Refresh
-                            </button>
+                            {/* Stat grid */}
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                                {[
+                                    { label: "Today",        value: stats?.today,         icon: CalendarDays, color: '#818cf8' },
+                                    { label: "This week",    value: stats?.this_week,     icon: TrendingUp,   color: '#34d399' },
+                                    { label: "Active users", value: stats?.unique_actors, icon: Users,        color: '#fb923c' },
+                                    { label: "Total events", value: meta?.total,          icon: BarChart2,    color: '#a78bfa' },
+                                ].map(s => (
+                                    <div key={s.label} className="bg-white/5 rounded-2xl px-4 py-3 border border-white/10 flex items-center gap-3">
+                                        <div className="h-8 w-8 rounded-xl flex items-center justify-center shrink-0"
+                                            style={{ backgroundColor: `${s.color}25` }}>
+                                            <s.icon size={15} style={{ color: s.color }} />
+                                        </div>
+                                        <div>
+                                            <p className="text-lg font-extrabold text-white tabular-nums leading-none">
+                                                {s.value?.toLocaleString() ?? '—'}
+                                            </p>
+                                            <p className="text-[10px] text-white/40 mt-0.5">{s.label}</p>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
 
-                        {/* Stats row */}
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                            <StatChip icon={CalendarDays} label="Today's events"    value={stats?.today}         color="#818cf8" />
-                            <StatChip icon={TrendingUp}   label="This week"         value={stats?.this_week}     color="#34d399" />
-                            <StatChip icon={Users}        label="Active users"      value={stats?.unique_actors} color="#fb923c" />
-                            <StatChip icon={BarChart2}    label="Total logged"      value={meta?.total}          color="#a78bfa" />
-                        </div>
+                        {/* Right: top actors */}
+                        {stats?.top_actors?.length > 0 && (
+                            <div className="lg:w-60 shrink-0 bg-white/5 border border-white/10 rounded-2xl px-4 py-3">
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-white/30 mb-2 flex items-center gap-1.5">
+                                    <Star size={10} /> Most active (30 days)
+                                </p>
+                                <div className="divide-y divide-white/5">
+                                    {stats.top_actors.map((a, i) => (
+                                        <TopActorCard key={i} actor={a} total={a.total} rank={i} />
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
 
-                {/* ── Event type quick-filter pills ────────────────────────── */}
-                <div className="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
-                    <button
-                        onClick={() => setFilter('event', '')}
-                        className={cn(
-                            'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap shrink-0 border transition-all',
-                            !filters.event
-                                ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm shadow-indigo-200'
-                                : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300 hover:text-indigo-600'
-                        )}>
-                        <Activity size={11} /> All
-                        {stats?.by_event && (
-                            <span className={cn('text-[9px] font-bold px-1 py-0.5 rounded-full ml-0.5',
-                                !filters.event ? 'bg-white/20' : 'bg-gray-100 text-gray-500')}>
-                                {Object.values(stats.by_event).reduce((a, b) => a + b, 0)}
-                            </span>
-                        )}
-                    </button>
-
-                    {ALL_EVENT_TYPES.map(evt => {
-                        const cfg    = EVENT_CONFIG[evt];
-                        const Icon   = cfg.icon;
-                        const count  = stats?.by_event?.[evt] ?? 0;
-                        if (!count && !filters.event) return null;
-                        const active = filters.event === evt;
+                {/* ── Category tabs ─────────────────────────────────────────── */}
+                <div className="bg-white border border-gray-100 rounded-2xl shadow-xs p-1.5 flex items-center gap-1 overflow-x-auto scrollbar-none">
+                    {CATEGORIES.map(cat => {
+                        const count = cat.id === 'all'
+                            ? totalEvents
+                            : (stats?.by_category?.[cat.id] ?? 0);
+                        const active = category === cat.id;
                         return (
-                            <button key={evt}
-                                onClick={() => setFilter('event', active ? '' : evt)}
+                            <button key={cat.id} onClick={() => changeCategory(cat.id)}
                                 className={cn(
-                                    'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap shrink-0 border transition-all',
+                                    'flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex-1 justify-center',
                                     active
-                                        ? 'text-white border-transparent shadow-sm'
-                                        : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
+                                        ? 'text-white shadow-sm'
+                                        : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
                                 )}
-                                style={active ? { backgroundColor: cfg.color, boxShadow: `0 2px 8px ${cfg.color}40` } : {}}>
-                                <Icon size={11} />
-                                {cfg.label}
+                                style={active ? { backgroundColor: cat.color } : {}}>
+                                <cat.icon size={12} />
+                                <span className="hidden sm:inline">{cat.label}</span>
                                 {count > 0 && (
-                                    <span className={cn('text-[9px] font-bold px-1 py-0.5 rounded-full ml-0.5',
-                                        active ? 'bg-white/25' : 'bg-gray-100 text-gray-500')}>
-                                        {count}
-                                    </span>
+                                    <span className={cn(
+                                        'text-[9px] font-bold px-1.5 py-0.5 rounded-full tabular-nums',
+                                        active ? 'bg-white/25' : 'bg-gray-100 text-gray-500'
+                                    )}>{count.toLocaleString()}</span>
                                 )}
                             </button>
                         );
                     })}
                 </div>
 
-                {/* ── Search + date filters ─────────────────────────────────── */}
-                <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-4">
+                {/* ── Filters bar ───────────────────────────────────────────── */}
+                <div className="bg-white border border-gray-100 rounded-2xl shadow-xs p-3.5">
                     <div className="flex flex-wrap gap-3 items-center">
-                        <Filter size={14} className="text-gray-400 shrink-0" />
+                        <Filter size={13} className="text-gray-300 shrink-0" />
 
                         {/* Search */}
-                        <div className="relative flex-1 min-w-52">
+                        <div className="relative flex-1 min-w-56">
                             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                             {search && (
                                 <button onClick={() => handleSearch('')}
@@ -521,50 +729,58 @@ export default function AdminAuditLogs() {
                                     <X size={12} />
                                 </button>
                             )}
-                            <input
-                                value={search}
-                                onChange={e => handleSearch(e.target.value)}
-                                placeholder="Search by name, email, IP, or event type…"
+                            <input value={search} onChange={e => handleSearch(e.target.value)}
+                                placeholder="Search by name, email, IP, or event…"
                                 className="w-full pl-8 pr-8 py-2 text-sm border border-gray-200 rounded-xl bg-gray-50
-                                           focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400/30 focus:border-indigo-300 transition-all"
-                            />
+                                           focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400/30 focus:border-indigo-300 transition-all" />
                         </div>
 
                         {/* Date range */}
-                        <div className="flex items-center gap-2 text-xs text-gray-400">
-                            <CalendarDays size={12} />
+                        <div className="flex items-center gap-2">
+                            <CalendarDays size={12} className="text-gray-400 shrink-0" />
                             <input type="date" value={filters.date_from}
                                 onChange={e => setFilter('date_from', e.target.value)}
-                                className="py-2 px-3 text-sm border border-gray-200 rounded-xl bg-gray-50
-                                           focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400/30 transition-all" />
-                            <span>—</span>
+                                className="py-2 px-3 text-sm border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400/30 transition-all" />
+                            <span className="text-gray-400 text-xs">—</span>
                             <input type="date" value={filters.date_to}
                                 onChange={e => setFilter('date_to', e.target.value)}
-                                className="py-2 px-3 text-sm border border-gray-200 rounded-xl bg-gray-50
-                                           focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400/30 transition-all" />
+                                className="py-2 px-3 text-sm border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400/30 transition-all" />
+                        </div>
+
+                        {/* Per page */}
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-400 shrink-0">Show</span>
+                            <select value={perPage} onChange={e => { setPerPage(Number(e.target.value)); setPage(1); }}
+                                className="py-2 px-3 text-sm border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400/30 transition-all">
+                                <option value={25}>25</option>
+                                <option value={50}>50</option>
+                                <option value={100}>100</option>
+                            </select>
                         </div>
 
                         {hasFilters && (
                             <button onClick={clearFilters}
-                                className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-700
-                                           px-3 py-2 rounded-xl hover:bg-red-50 border border-red-100 transition-all">
-                                <X size={12} /> Clear filters
+                                className="flex items-center gap-1.5 text-xs text-red-500 hover:text-red-700 px-3 py-2 rounded-xl hover:bg-red-50 border border-red-100 transition-all font-semibold">
+                                <X size={12} /> Clear
                             </button>
                         )}
                     </div>
                 </div>
 
-                {/* ── Timeline ─────────────────────────────────────────────── */}
+                {/* ── Timeline ──────────────────────────────────────────────── */}
                 {loading ? (
                     <div className="space-y-3">
-                        {[...Array(8)].map((_, i) => (
-                            <div key={i} className="bg-white rounded-2xl border border-gray-100 border-l-4 border-l-gray-200 p-4 space-y-2">
-                                <div className="flex items-center gap-3">
+                        {[...Array(6)].map((_, i) => (
+                            <div key={i} className="bg-white rounded-2xl border border-gray-100 border-l-[3px] border-l-gray-200 p-4">
+                                <div className="flex items-center gap-3.5">
                                     <div className="h-9 w-9 rounded-xl bg-gray-200 animate-pulse shrink-0" />
-                                    <div className="flex-1 space-y-1.5">
-                                        <div className="h-3 w-20 bg-gray-200 rounded animate-pulse" />
-                                        <div className="h-4 w-64 bg-gray-200 rounded animate-pulse" />
-                                        <div className="h-3 w-44 bg-gray-200 rounded animate-pulse" />
+                                    <div className="flex-1 space-y-2">
+                                        <div className="flex gap-2">
+                                            <div className="h-4 w-16 bg-gray-200 rounded-full animate-pulse" />
+                                            <div className="h-4 w-12 bg-gray-100 rounded-full animate-pulse" />
+                                        </div>
+                                        <div className="h-4 w-72 bg-gray-200 rounded animate-pulse" />
+                                        <div className="h-3 w-48 bg-gray-100 rounded animate-pulse" />
                                     </div>
                                 </div>
                             </div>
@@ -576,11 +792,11 @@ export default function AdminAuditLogs() {
                             <AlertCircle size={28} className="opacity-40" />
                         </div>
                         <p className="text-sm font-semibold text-gray-500">No activity found</p>
-                        <p className="text-xs text-gray-400 mt-1">Try adjusting your filters or date range</p>
+                        <p className="text-xs text-gray-400 mt-1">Try adjusting your filters or category</p>
                         {hasFilters && (
                             <button onClick={clearFilters}
                                 className="mt-4 text-xs font-semibold text-indigo-600 hover:text-indigo-700 px-4 py-2 rounded-xl border border-indigo-200 hover:bg-indigo-50 transition-colors">
-                                Clear all filters
+                                Clear filters
                             </button>
                         )}
                     </div>
@@ -588,27 +804,30 @@ export default function AdminAuditLogs() {
                     <div className="space-y-8">
                         {Object.entries(grouped).map(([day, dayLogs]) => (
                             <div key={day}>
-                                {/* Day separator */}
-                                <div className="flex items-center gap-3 mb-4">
-                                    <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-full px-3 py-1.5 shadow-sm shrink-0">
+                                {/* Day label */}
+                                <div className="flex items-center gap-3 mb-3">
+                                    <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-full pl-2.5 pr-3 py-1.5 shadow-xs shrink-0">
                                         <CalendarDays size={11} className="text-indigo-500" />
                                         <span className="text-[11px] font-bold text-gray-700">{day}</span>
                                     </div>
                                     <div className="flex-1 h-px bg-linear-to-r from-gray-200 to-transparent" />
-                                    <span className="text-[10px] font-semibold text-gray-400 bg-gray-50 border border-gray-200 px-2 py-1 rounded-full shrink-0">
+                                    <span className="text-[10px] font-semibold text-gray-400 bg-white border border-gray-200 px-2.5 py-1 rounded-full shrink-0">
                                         {dayLogs.length} {dayLogs.length === 1 ? 'event' : 'events'}
                                     </span>
                                 </div>
 
-                                {/* Entries */}
-                                <div className="space-y-2.5">
+                                {/* Entries with left timeline rail */}
+                                <div className="relative pl-4 border-l-2 border-gray-100 space-y-2.5 ml-3">
                                     {dayLogs.map(log => (
-                                        <LogEntry
-                                            key={log.id}
-                                            log={log}
-                                            expanded={expandedId === log.id}
-                                            onToggle={() => setExpandedId(expandedId === log.id ? null : log.id)}
-                                        />
+                                        <div key={log.id} className="relative">
+                                            {/* Rail dot */}
+                                            <div className="absolute -left-5.25 top-4 h-2.5 w-2.5 rounded-full border-2 border-white ring-1 ring-gray-200 bg-gray-300" />
+                                            <LogEntry
+                                                log={log}
+                                                expanded={expandedId === log.id}
+                                                onToggle={() => setExpandedId(expandedId === log.id ? null : log.id)}
+                                            />
+                                        </div>
                                     ))}
                                 </div>
                             </div>
@@ -616,8 +835,8 @@ export default function AdminAuditLogs() {
                     </div>
                 )}
 
-                {/* ── Pagination ───────────────────────────────────────────── */}
-                <Pagination meta={meta} page={page} onChange={(p) => { setPage(p); setExpandedId(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
+                {/* ── Pagination ────────────────────────────────────────────── */}
+                <Pagination meta={meta} page={page} onChange={p => { setPage(p); setExpandedId(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
             </div>
         </AppLayout>
     );

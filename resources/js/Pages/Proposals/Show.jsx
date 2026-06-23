@@ -581,7 +581,7 @@ const DOC_TYPE_COLORS = {
     shared_document: 'bg-blue-100 text-blue-700',
 };
 
-function DocumentsTab({ proposalId, documents, userId, isPI, onRefresh }) {
+function DocumentsTab({ proposalId, documents, userId, isPI, hideIdentity, onRefresh }) {
     const { success, error: toastError } = useToast();
     const [uploading,  setUploading]  = useState(false);
     const [docType,    setDocType]    = useState('shared_document');
@@ -696,7 +696,7 @@ function DocumentsTab({ proposalId, documents, userId, isPI, onRefresh }) {
                                             <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${typeColor}`}>
                                                 {typeLabel}
                                             </span>
-                                            {doc.uploaded_by?.name && (
+                                            {!hideIdentity && doc.uploaded_by?.name && (
                                                 <span className="text-xs text-gray-400">
                                                     by {doc.uploaded_by.name}
                                                 </span>
@@ -1011,7 +1011,17 @@ export default function ProposalShow() {
                         )}
 
                         {activeTab === 'Team' && (
-                            members.length === 0
+                            proposal.members_hidden
+                                ? (
+                                    <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3.5">
+                                        <span className="text-amber-500 text-base mt-0.5">🔒</span>
+                                        <div>
+                                            <p className="text-sm font-semibold text-amber-700">Member information is not visible to your role</p>
+                                            <p className="text-xs text-amber-600 mt-0.5">Team identity is concealed during blind and open defence review to preserve evaluation integrity.</p>
+                                        </div>
+                                    </div>
+                                )
+                            : members.length === 0
                                 ? <p className="text-sm text-gray-400">No team members on record.</p>
                                 : (
                                     <div className="overflow-x-auto">
@@ -1085,12 +1095,23 @@ export default function ProposalShow() {
                                 documents={documents}
                                 userId={user?.id}
                                 isPI={isProposalMember}
+                                hideIdentity={proposal.members_hidden}
                                 onRefresh={load}
                             />
                         )}
 
                         {activeTab === 'History' && (
-                            <ProposalTimeline history={history} currentStatus={proposal.status} />
+                            proposal.history_hidden ? (
+                                <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3.5">
+                                    <span className="text-amber-500 text-base mt-0.5">🔒</span>
+                                    <div>
+                                        <p className="text-sm font-semibold text-amber-700">Submission history is not visible to your role</p>
+                                        <p className="text-xs text-amber-600 mt-0.5">Activity logs are concealed during blind and open defence review to preserve evaluation integrity.</p>
+                                    </div>
+                                </div>
+                            ) : (
+                                <ProposalTimeline history={history} currentStatus={proposal.status} />
+                            )
                         )}
 
                         {activeTab === 'Complaints' && (

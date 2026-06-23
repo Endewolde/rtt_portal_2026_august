@@ -36,46 +36,48 @@ function ProposalCard({ proposal, onAction, num, checked, onToggle }) {
             checked ? 'border-green-300 shadow-sm' : 'border-gray-200'
         }`}>
             <div className={`w-0.5 shrink-0 ${checked ? 'bg-green-500' : 'bg-blue-600'}`} />
-            <div className="flex items-center gap-3 flex-1 min-w-0 px-4 py-3.5">
-                {onToggle && (
-                    <input
-                        type="checkbox"
-                        checked={checked}
-                        onChange={() => onToggle(proposal.id)}
-                        onClick={e => e.stopPropagation()}
-                        className="h-4 w-4 rounded border-gray-300 text-green-600 cursor-pointer shrink-0"
-                    />
-                )}
-                {num != null && (
-                    <span className="text-xs font-medium text-gray-400 tabular-nums w-5 text-center shrink-0">{num}</span>
-                )}
-                <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg shrink-0">
-                    {proposal.tracker_number}
-                </span>
-                <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-gray-900 truncate">{proposal.title}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                        {proposal.pi?.name ?? '—'} · {proposal.college?.name ?? '—'} · Submitted {formatDate(proposal.submitted_at)}
-                    </p>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 flex-1 min-w-0 px-4 py-3.5">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                    {onToggle && (
+                        <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => onToggle(proposal.id)}
+                            onClick={e => e.stopPropagation()}
+                            className="h-4 w-4 rounded border-gray-300 text-green-600 cursor-pointer shrink-0"
+                        />
+                    )}
+                    {num != null && (
+                        <span className="text-xs font-medium text-gray-400 tabular-nums w-5 text-center shrink-0">{num}</span>
+                    )}
+                    <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-lg shrink-0">
+                        {proposal.tracker_number}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{proposal.title}</p>
+                        <p className="text-xs text-gray-500 mt-0.5 truncate">
+                            {proposal.pi?.name ?? '—'} · {proposal.college?.name ?? '—'} · {formatDate(proposal.submitted_at)}
+                        </p>
+                    </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
                     <button
                         onClick={() => onAction('approve', proposal.id)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-xl text-xs font-semibold hover:bg-green-700 transition-colors"
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 bg-green-600 text-white rounded-xl text-xs font-semibold hover:bg-green-700 transition-colors"
                     >
-                        <CheckCircle size={13} /> Approve
+                        <CheckCircle size={13} /> <span className="hidden sm:inline">Approve</span>
                     </button>
                     <button
                         onClick={() => onAction('return', proposal.id)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white rounded-xl text-xs font-semibold hover:bg-amber-600 transition-colors"
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-500 text-white rounded-xl text-xs font-semibold hover:bg-amber-600 transition-colors"
                     >
-                        <RotateCcw size={13} /> Return
+                        <RotateCcw size={13} /> <span className="hidden sm:inline">Return</span>
                     </button>
                     <button
                         onClick={() => onAction('reject', proposal.id)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white rounded-xl text-xs font-semibold hover:bg-red-700 transition-colors"
+                        className="flex items-center gap-1.5 px-2.5 py-1.5 bg-red-600 text-white rounded-xl text-xs font-semibold hover:bg-red-700 transition-colors"
                     >
-                        <XCircle size={13} /> Reject
+                        <XCircle size={13} /> <span className="hidden sm:inline">Reject</span>
                     </button>
                 </div>
             </div>
@@ -180,7 +182,7 @@ export default function ValidationQueue() {
                 <WorkflowBreadcrumb current="submitted" />
 
                 {/* Page Header */}
-                <div className="flex items-start justify-between mb-6 gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between mb-6 gap-4">
                     <div className="flex items-center gap-3">
                         <div className="h-10 w-10 bg-blue-100 rounded-xl flex items-center justify-center shrink-0">
                             <ShieldCheck size={20} className="text-blue-600" />
@@ -190,20 +192,20 @@ export default function ValidationQueue() {
                             <p className="text-sm text-gray-500 mt-0.5">Review submitted proposals and approve, return, or reject them</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
                         {!loading && (
-                            <div className="flex items-center gap-2">
+                            <>
                                 {awaitingDeadline.length > 0 && (
                                     <span className="flex items-center gap-1.5 text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1.5 rounded-lg">
-                                        <Clock size={12} /> {awaitingDeadline.length} Awaiting Deadline
+                                        <Clock size={12} /> {awaitingDeadline.length} Awaiting
                                     </span>
                                 )}
                                 {readyForValidation.length > 0 && (
                                     <span className="flex items-center gap-1.5 text-xs font-semibold bg-green-50 text-green-700 border border-green-200 px-2.5 py-1.5 rounded-lg">
-                                        <CheckCircle size={12} /> {readyForValidation.length} Ready to Validate
+                                        <CheckCircle size={12} /> {readyForValidation.length} Ready
                                     </span>
                                 )}
-                            </div>
+                            </>
                         )}
                         <ViewToggle view={view} onChange={setView} />
                         <button onClick={load} className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors">
@@ -241,16 +243,18 @@ export default function ValidationQueue() {
                                     {awaitingDeadline.map((p, i) => (
                                         <div key={p.id} className="bg-white border border-amber-200 rounded-xl flex items-stretch overflow-hidden hover:shadow-md transition-shadow">
                                             <div className="w-0.5 bg-amber-500 shrink-0" />
-                                            <div className="flex items-center gap-4 flex-1 min-w-0 px-4 py-3.5">
-                                                <span className="text-xs font-medium text-gray-400 tabular-nums w-5 text-center shrink-0">{i + 1}</span>
-                                                <span className="font-mono text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-lg shrink-0">
-                                                    {p.tracker_number}
-                                                </span>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-sm font-semibold text-gray-900 truncate">{p.title}</p>
-                                                    <p className="text-xs text-gray-500 mt-0.5">{p.pi?.name ?? '—'} · {p.college?.name ?? '—'}</p>
+                                            <div className="flex flex-col sm:flex-row sm:items-center gap-2 flex-1 min-w-0 px-4 py-3.5">
+                                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                                    <span className="text-xs font-medium text-gray-400 tabular-nums w-5 text-center shrink-0">{i + 1}</span>
+                                                    <span className="font-mono text-xs font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-lg shrink-0">
+                                                        {p.tracker_number}
+                                                    </span>
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm font-semibold text-gray-900 truncate">{p.title}</p>
+                                                        <p className="text-xs text-gray-500 mt-0.5 truncate">{p.pi?.name ?? '—'} · {p.college?.name ?? '—'}</p>
+                                                    </div>
                                                 </div>
-                                                <div className="text-right shrink-0">
+                                                <div className="text-right shrink-0 self-end sm:self-auto">
                                                     <p className="text-xs text-amber-600 font-medium mb-0.5">Call closes:</p>
                                                     <CountdownTimer endDate={p.proposal_call.end_date} />
                                                     <p className="text-xs text-gray-400 mt-0.5">{formatDate(p.proposal_call.end_date)}</p>

@@ -51,6 +51,7 @@ use App\Http\Controllers\Api\StatsController;
 use App\Http\Controllers\Api\SystemMonitorController;
 use App\Http\Controllers\Api\ThematicAreaController;
 use App\Http\Controllers\Api\UserController;
+use App\Http\Middleware\AuditCrudMiddleware;
 use App\Models\FormTemplate;
 use Illuminate\Support\Facades\Route;
 
@@ -114,7 +115,7 @@ Route::prefix('v1')->group(function () {
     Route::get('/external-funds/opportunities/public', [EFOpportunityController::class, 'publicIndex']);
 
     // ── Authenticated — 300 requests per minute per user ─────────────────────
-    Route::middleware(['auth:sanctum', 'user.active', 'throttle:300,1', 'college.scope', 'category.scope'])->group(function () {
+    Route::middleware(['auth:sanctum', 'user.active', 'throttle:300,1', 'college.scope', 'category.scope', AuditCrudMiddleware::class])->group(function () {
         Route::post('/auth/logout', [AuthController::class, 'logout']);
         Route::get('/auth/me', [AuthController::class, 'me']);
         Route::put('/auth/profile', [AuthController::class, 'updateProfile']);
@@ -140,6 +141,7 @@ Route::prefix('v1')->group(function () {
         Route::put('/users/{id}/status', [UserController::class, 'updateStatus']);
         Route::post('/users/{id}/impersonate', [UserController::class, 'impersonate']);
         Route::get('/users/{id}/academic-info', [UserController::class, 'academicInfo']);
+        Route::get('/users/{id}/proposal-history', [UserController::class, 'proposalHistory']);
 
         // Roles and permissions
         Route::get('/roles', [RoleController::class, 'index']);
@@ -331,6 +333,7 @@ Route::prefix('v1')->group(function () {
 
         // Central evaluation
         Route::get('/central-evaluation', [CentralEvaluationController::class, 'index']);
+        Route::get('/central-evaluation/pi/{userId}/funding-history', [CentralEvaluationController::class, 'piFundingHistory']);
         Route::post('/proposals/{id}/central/approve', [CentralEvaluationController::class, 'centralApprove']);
         Route::post('/proposals/{id}/central/reject', [CentralEvaluationController::class, 'centralReject']);
         Route::post('/proposals/{id}/funding/revoke', [CentralEvaluationController::class, 'revokeFunding']);
