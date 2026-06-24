@@ -250,7 +250,8 @@ class ProposalController extends Controller
     {
         $user = $request->user();
 
-        $baseQuery = Proposal::query()->whereNotIn('proposals.status', ['draft']);
+        // Full base — used for KPI totals (includes drafts so the draft card is accurate)
+        $baseQuery = Proposal::query();
 
         if ($user->hasRole('college_officer')) {
             $baseQuery->where('proposals.college_id', $user->college_id);
@@ -280,7 +281,10 @@ class ProposalController extends Controller
             $baseQuery->where('proposals.academic_year', $request->academic_year);
         }
 
-        $byCollege = (clone $baseQuery)
+        // Submitted-only base — used for all breakdown charts (excludes drafts)
+        $submittedQuery = (clone $baseQuery)->whereNotIn('proposals.status', ['draft']);
+
+        $byCollege = (clone $submittedQuery)
             ->join('colleges', 'proposals.college_id', '=', 'colleges.id')
             ->selectRaw('colleges.id, colleges.name as college_name, colleges.code,
                          COUNT(*) as total,
@@ -296,7 +300,7 @@ class ProposalController extends Controller
             ->orderByDesc('total')
             ->get();
 
-        $byDepartment = (clone $baseQuery)
+        $byDepartment = (clone $submittedQuery)
             ->join('departments', 'proposals.department_id', '=', 'departments.id')
             ->join('colleges', 'departments.college_id', '=', 'colleges.id')
             ->selectRaw('departments.id, departments.name as department_name,
@@ -311,7 +315,7 @@ class ProposalController extends Controller
             ->limit(10)
             ->get();
 
-        $byGender = (clone $baseQuery)
+        $byGender = (clone $submittedQuery)
             ->join('users', 'proposals.pi_user_id', '=', 'users.id')
             ->selectRaw('COALESCE(users.gender, "not_specified") as gender,
                          COUNT(*) as total,
@@ -321,22 +325,23 @@ class ProposalController extends Controller
             ->groupBy('users.gender')
             ->get();
 
-        $byStatus = (clone $baseQuery)
-            ->selectRaw('status, COUNT(*) as count')
-            ->groupBy('status')
+        $byStatus = (clone $submittedQuery)
+            ->selectRaw('proposals.status as status, COUNT(*) as count')
+            ->groupBy('proposals.status')
             ->pluck('count', 'status');
 
-        $byCategory = (clone $baseQuery)
+        $byCategory = (clone $submittedQuery)
             ->selectRaw('category, COUNT(*) as total')
             ->groupBy('category')
             ->pluck('total', 'category');
 
         $totals = [
             'total' => (clone $baseQuery)->count(),
-            'submitted' => (clone $baseQuery)->count(),
-            'funded' => (clone $baseQuery)->whereIn('status', ['funded', 'midterm_evaluation', 'completed', 'archived'])->count(),
-            'rejected' => (clone $baseQuery)->where('status', 'rejected')->count(),
-            'under_review' => (clone $baseQuery)->whereIn('status', ['under_blind_review', 'under_open_defence', 'accepted'])->count(),
+            'submitted' => (clone $baseQuery)->whereNotIn('proposals.status', ['draft'])->count(),
+            'funded' => (clone $baseQuery)->whereIn('proposals.status', ['funded', 'midterm_evaluation', 'completed', 'archived'])->count(),
+            'rejected' => (clone $baseQuery)->where('proposals.status', 'rejected')->count(),
+            'under_review' => (clone $baseQuery)->whereIn('proposals.status', ['under_blind_review', 'under_open_defence', 'accepted'])->count(),
+            'draft' => (clone $baseQuery)->where('proposals.status', 'draft')->count(),
         ];
 
         return response()->json([
