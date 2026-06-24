@@ -3,10 +3,12 @@
 use App\Http\Controllers\Api\AbstractAdminController;
 use App\Http\Controllers\Api\AbstractController;
 use App\Http\Controllers\Api\ActionCountController;
+use App\Http\Controllers\Api\AnnualReportController;
 use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AwardController;
 use App\Http\Controllers\Api\BudgetController;
+use App\Http\Controllers\Api\BudgetMilestoneController;
 use App\Http\Controllers\Api\CalendarController;
 use App\Http\Controllers\Api\CentralEvaluationController;
 use App\Http\Controllers\Api\CollegeController;
@@ -30,9 +32,12 @@ use App\Http\Controllers\Api\FeatureController;
 use App\Http\Controllers\Api\FeedbackController;
 use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\LoginNoticeController;
+use App\Http\Controllers\Api\LookupOptionController;
 use App\Http\Controllers\Api\MidtermEvaluationController;
 use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\ProposalAiScoreController;
 use App\Http\Controllers\Api\ProposalAppealController;
+use App\Http\Controllers\Api\ProposalArchiveController;
 use App\Http\Controllers\Api\ProposalCallController;
 use App\Http\Controllers\Api\ProposalController;
 use App\Http\Controllers\Api\ProposalValidationController;
@@ -40,9 +45,11 @@ use App\Http\Controllers\Api\ProposalWizardController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\RepositoryController;
 use App\Http\Controllers\Api\ResearcherHubController;
+use App\Http\Controllers\Api\ResearchImpactController;
 use App\Http\Controllers\Api\ResearchOutputController;
 use App\Http\Controllers\Api\ResourceController;
 use App\Http\Controllers\Api\ReviewController;
+use App\Http\Controllers\Api\ReviewerMatchController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\SettlementController;
@@ -112,6 +119,9 @@ Route::prefix('v1')->group(function () {
     Route::get('/colleges/public', [CollegeController::class, 'publicList']);
     Route::get('/colleges/{id}/departments/public', [CollegeController::class, 'publicDepartments']);
     Route::get('/thematic-areas/public', [ThematicAreaController::class, 'publicIndex']);
+
+    // Lookup options — active values for forms (no auth needed for proposal create)
+    Route::get('/lookup-options/active', [LookupOptionController::class, 'active']);
     Route::get('/external-funds/opportunities/public', [EFOpportunityController::class, 'publicIndex']);
 
     // ── Authenticated — 300 requests per minute per user ─────────────────────
@@ -158,6 +168,13 @@ Route::prefix('v1')->group(function () {
         Route::post('/thematic-areas', [ThematicAreaController::class, 'store']);
         Route::put('/thematic-areas/{id}', [ThematicAreaController::class, 'update']);
         Route::delete('/thematic-areas/{id}', [ThematicAreaController::class, 'destroy']);
+
+        // Lookup options admin CRUD
+        Route::get('/lookup-options', [LookupOptionController::class, 'index']);
+        Route::post('/lookup-options', [LookupOptionController::class, 'store']);
+        Route::put('/lookup-options/{option}', [LookupOptionController::class, 'update']);
+        Route::delete('/lookup-options/{option}', [LookupOptionController::class, 'destroy']);
+        Route::post('/lookup-options/reorder', [LookupOptionController::class, 'reorder']);
 
         // Colleges
         Route::get('/colleges', [CollegeController::class, 'index']);
@@ -435,6 +452,24 @@ Route::prefix('v1')->group(function () {
             Route::put('/research-outputs/{id}', [ResearchOutputController::class, 'update']);
             Route::delete('/research-outputs/{id}', [ResearchOutputController::class, 'destroy']);
 
+            // Research impact tracker
+            Route::get('/research-impacts', [ResearchImpactController::class, 'index']);
+            Route::post('/research-impacts', [ResearchImpactController::class, 'store']);
+            Route::put('/research-impacts/{researchImpact}', [ResearchImpactController::class, 'update']);
+            Route::delete('/research-impacts/{researchImpact}', [ResearchImpactController::class, 'destroy']);
+
+            // AI scoring, reviewer matching, proposal cloning
+            Route::get('/proposals/{proposal}/ai-score', [ProposalAiScoreController::class, 'show']);
+            Route::post('/proposals/{proposal}/ai-score/generate', [ProposalAiScoreController::class, 'generate']);
+            Route::get('/proposals/{proposal}/reviewer-suggestions', [ReviewerMatchController::class, 'suggestions']);
+            Route::post('/proposals/{proposal}/clone', [ProposalController::class, 'clone']);
+
+            // Budget milestones
+            Route::get('/proposals/{proposalId}/milestones', [BudgetMilestoneController::class, 'index']);
+            Route::post('/proposals/{proposalId}/milestones', [BudgetMilestoneController::class, 'store']);
+            Route::put('/proposals/{proposalId}/milestones/{budgetMilestone}', [BudgetMilestoneController::class, 'update']);
+            Route::delete('/proposals/{proposalId}/milestones/{budgetMilestone}', [BudgetMilestoneController::class, 'destroy']);
+
             // Repository admin management
             Route::get('/admin/repository/stats', [RepositoryController::class, 'adminStats']);
             Route::get('/admin/repository/publishable', [RepositoryController::class, 'publishableProposals']);
@@ -523,6 +558,13 @@ Route::prefix('v1')->group(function () {
         // Action counts (nav badges)
         Route::get('/action-counts', [ActionCountController::class, 'index']);
 
+        // Annual report
+        Route::get('/annual-report/preview', [AnnualReportController::class, 'preview']);
+        Route::get('/annual-report/download', [AnnualReportController::class, 'download']);
+
+        Route::get('/proposal-archive', [ProposalArchiveController::class, 'index']);
+        Route::get('/proposal-archive/documents/{documentId}/download', [ProposalArchiveController::class, 'downloadDocument']);
+
         // ── File uploads — 60 per minute per user ─────────────────────────────
         Route::middleware('throttle:60,1')->group(function () {
             Route::post('/proposals/{id}/documents', [ProposalWizardController::class, 'uploadDocument']);
@@ -532,4 +574,5 @@ Route::prefix('v1')->group(function () {
     // Calendar export — outside auth:sanctum so browser downloads work without Authorization header.
     // The controller authenticates via query ?token= param.
     Route::get('/calendar/export', [CalendarController::class, 'export']);
+    Route::get('/calendar/events', [CalendarController::class, 'events']);
 });

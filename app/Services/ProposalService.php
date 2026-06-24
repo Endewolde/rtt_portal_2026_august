@@ -263,6 +263,12 @@ class ProposalService
         foreach ($coInvestigators as $coI) {
             $coUser = User::findOrFail($coI['user_id']);
 
+            if ($coUser->status !== 'active') {
+                throw new \InvalidArgumentException(
+                    "{$coUser->name}'s account is inactive and cannot be added as a co-investigator."
+                );
+            }
+
             $contrib = $coI['contribution_percentage'] ?? ($count > 0 ? round(80 / $count, 2) : 0);
 
             ProposalMember::create([

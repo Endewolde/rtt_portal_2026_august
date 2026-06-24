@@ -521,6 +521,16 @@ class ReviewController extends Controller
             ], 422);
         }
 
+        $reviewer = User::find($request->reviewer_id);
+        if (! $reviewer || $reviewer->status !== 'active') {
+            return response()->json([
+                'data' => null,
+                'message' => 'This user account is inactive and cannot be assigned as a reviewer.',
+                'errors' => [],
+                'meta' => [],
+            ], 422);
+        }
+
         $isTeamMember = ProposalMember::where('proposal_id', $id)
             ->where('user_id', $request->reviewer_id)
             ->where('status', 'active')
@@ -561,9 +571,8 @@ class ReviewController extends Controller
             'due_date' => $request->due_date ?? now()->addDays(14)->toDateString(),
         ]);
 
-        $reviewer = User::find($request->reviewer_id);
+        $reviewType = $proposal->status === 'under_open_defence' ? 'Open Defence' : 'Blind Review';
         if ($reviewer) {
-            $reviewType = $proposal->status === 'under_open_defence' ? 'Open Defence' : 'Blind Review';
             $data = [
                 'tracker_number' => $proposal->tracker_number,
                 'proposal_title' => $proposal->title,

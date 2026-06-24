@@ -52,6 +52,18 @@ class ReviewAssignmentService
             );
         }
 
+        $inactiveReviewers = User::whereIn('id', $reviewerIds)
+            ->where('status', '!=', 'active')
+            ->pluck('name')
+            ->toArray();
+
+        if (! empty($inactiveReviewers)) {
+            throw new \InvalidArgumentException(
+                'The following users have inactive accounts and cannot be assigned as reviewers: '
+                .implode(', ', $inactiveReviewers)
+            );
+        }
+
         $memberUserIds = DB::table('proposal_members')
             ->where('proposal_id', $proposal->id)
             ->where('status', 'active')

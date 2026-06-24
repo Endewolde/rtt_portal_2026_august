@@ -76,7 +76,10 @@ class UserController extends Controller
             }
         }
 
-        if ($isAdmin && ($status = $request->query('status'))) {
+        // Non-admin searches (co-investigator lookup) must only see active users.
+        if (! $isAdmin) {
+            $query->where('status', 'active');
+        } elseif ($status = $request->query('status')) {
             $query->where('status', $status);
         }
 

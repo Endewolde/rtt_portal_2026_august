@@ -11,13 +11,14 @@ import {
     FolderOpen, EyeOff, Presentation, ClipboardList,
     BadgeDollarSign, Trophy, Archive, ListChecks, ShieldCheck,
     User, ChevronDown, ChevronUp, Lock, Clock, UserX,
-    CalendarDays, Banknote, Landmark, MessageSquareHeart, LogIn,
+    CalendarDays, Banknote, Landmark, MessageSquareHeart, LogIn, Scale, ScrollText, Milestone, FileBarChart2, FolderSearch,
 } from 'lucide-react'
 import NotificationBell from '../Components/NotificationBell'
 import FeedbackPopup from '../Components/FeedbackPopup'
 import ProfileCompleteModal from '../Components/ProfileCompleteModal'
 import SwitchLoginModal from '../Components/SwitchLoginModal'
 import ConfirmDialog from '../Components/ConfirmDialog'
+import CommandPalette from '../Components/CommandPalette'
 import { useToast } from '../Components/Toast'
 import { useAuth } from '../hooks/useAuth'
 import { useFeature } from '../hooks/useFeature'
@@ -50,6 +51,7 @@ const ROUTE_PERMISSIONS = [
     ['/admin/reviewer-workload',   _A],
     ['/admin/resources',           _A],
     ['/admin/appeals',             [..._A, ..._OR]],
+    ['/admin/grant-letters',       [..._A, ..._OR]],
     ['/admin/validation-queue',    [..._A, ..._OR]],
     ['/admin/central-evaluation',  [..._A, ..._OR]],
     ['/admin/funding',             [..._A, ..._OR]],
@@ -193,10 +195,11 @@ const LIGHT = {
     logoSub:         'text-gray-400',
     scrollbar:       'scrollbar-thumb-gray-200',
     separator:       'border-t border-gray-100',
+    groupDivider:    'bg-gray-100',
     groupLabel:      (a) => a ? 'text-indigo-500' : 'text-gray-400',
-    navItem:         (a) => a ? 'bg-indigo-50 text-indigo-700 font-semibold' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50',
+    navItem:         (a) => a ? 'bg-indigo-600 text-white font-semibold shadow-sm shadow-indigo-200/60' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50/80',
     accent:          'bg-indigo-500',
-    icon:            (a) => a ? 'text-indigo-600' : 'text-gray-400 group-hover:text-gray-700',
+    icon:            (a) => a ? 'text-white/90' : 'text-gray-400 group-hover:text-gray-600',
     footerBorder:    'border-t border-gray-100',
     profileLink:     'hover:bg-gray-50',
     userName:        'text-gray-900',
@@ -215,10 +218,11 @@ const DARK = {
     logoSub:         'text-slate-500',
     scrollbar:       'scrollbar-thumb-slate-700/50',
     separator:       'border-t border-white/10',
+    groupDivider:    'bg-white/7',
     groupLabel:      (a) => a ? 'text-indigo-400' : 'text-slate-500',
-    navItem:         (a) => a ? 'bg-white/10 text-white font-semibold' : 'text-slate-400 hover:text-slate-100 hover:bg-white/5',
+    navItem:         (a) => a ? 'bg-white/20 text-white font-semibold shadow-sm' : 'text-slate-400 hover:text-slate-100 hover:bg-white/5',
     accent:          'bg-indigo-400',
-    icon:            (a) => a ? 'text-indigo-400' : 'text-slate-500 group-hover:text-slate-300',
+    icon:            (a) => a ? 'text-white' : 'text-slate-500 group-hover:text-slate-300',
     footerBorder:    'border-t border-white/10',
     profileLink:     'hover:bg-white/5',
     userName:        'text-white',
@@ -242,7 +246,7 @@ const ICONS = {
     FolderOpen, EyeOff, Presentation, ClipboardList,
     BadgeDollarSign, Trophy, Archive, ListChecks, ShieldCheck,
     Globe, CalendarDays, Banknote, Landmark,
-    FlaskConical, Brain, MessageSquareHeart,
+    FlaskConical, Brain, MessageSquareHeart, Scale, ScrollText, Milestone, FileBarChart2, FolderSearch,
     BuildingOffice: Building2,
 }
 
@@ -467,6 +471,7 @@ export default function AppLayout({ children, breadcrumb }) {
     }
     const { hasFeature, hasSubFeature } = useFeature()
     const counts    = useActionCounts()
+    const [paletteOpen, setPaletteOpen] = useState(false)
     const [collapsed, setCollapsed] = useState(false)
     const [mobileOpen, setMobileOpen] = useState(false)
     const [unreadNotifications, setUnreadNotifications] = useState(0)
@@ -501,6 +506,18 @@ export default function AppLayout({ children, breadcrumb }) {
             window.removeEventListener('online',  goOnline)
             window.removeEventListener('offline', goOffline)
         }
+    }, [])
+
+    // Global ⌘K / Ctrl+K shortcut for command palette
+    useEffect(() => {
+        const handler = (e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+                e.preventDefault()
+                setPaletteOpen(v => !v)
+            }
+        }
+        window.addEventListener('keydown', handler)
+        return () => window.removeEventListener('keydown', handler)
     }, [])
 
     // All appearance / general settings come from the Inertia shared props
@@ -590,8 +607,9 @@ export default function AppLayout({ children, breadcrumb }) {
         {
             group: 'Main',
             items: [
-                { label: 'Dashboard', href: '/dashboard', icon: 'LayoutDashboard', show: true },
-                { label: 'My Research Hub', href: '/researcher-hub', icon: 'Brain', show: true },
+                { label: 'Dashboard',       href: '/dashboard',      icon: 'LayoutDashboard', show: true },
+                { label: 'My Research Hub', href: '/researcher-hub', icon: 'Brain',           show: true },
+                { label: 'Calendar',        href: '/calendar',       icon: 'CalendarDays',    show: true },
             ],
         },
         {
@@ -639,7 +657,11 @@ export default function AppLayout({ children, breadcrumb }) {
                     badge: c => c.validation_queue,
                 },
                 {
-                    label: 'Appeals', href: '/admin/appeals', icon: 'MessageSquare',
+                    label: 'Appeals', href: '/admin/appeals', icon: 'Scale',
+                    show: hasAnyRole([...ALL_ADMIN, ...OFFICER_ROLES]),
+                },
+                {
+                    label: 'Grant Letters', href: '/admin/grant-letters', icon: 'ScrollText',
                     show: hasAnyRole([...ALL_ADMIN, ...OFFICER_ROLES]),
                 },
                 {
@@ -710,6 +732,10 @@ export default function AppLayout({ children, breadcrumb }) {
                     show: perm('settlements.view_any') && hasSubFeature('finance.settlements'),
                     badge: c => c.pending_settlements,
                 },
+                {
+                    label: 'Budget Milestones', href: '/finance/milestones', icon: 'Milestone',
+                    show: perm('budget_requests.view_any') && hasSubFeature('finance.requests'),
+                },
             ],
         },
         {
@@ -734,6 +760,10 @@ export default function AppLayout({ children, breadcrumb }) {
                     show: perm('repository.view_any') && hasSubFeature('repository.view'),
                 },
                 {
+                    label: 'Research Impact', href: '/research-impact', icon: 'TrendingUp',
+                    show: perm('research_outputs.view_any'),
+                },
+                {
                     label: 'Manage Repository', href: '/admin/repository', icon: 'Database',
                     show: hasAnyRole(ALL_ADMIN) && hasSubFeature('repository.manage'),
                 },
@@ -755,12 +785,24 @@ export default function AppLayout({ children, breadcrumb }) {
                     show: hasAnyRole(ALL_ADMIN) && hasSubFeature('reports.college'),
                 },
                 {
+                    label: 'College Dashboard', href: '/reports/college-dashboard', icon: 'Building2',
+                    show: hasRole('college_officer'),
+                },
+                {
                     label: 'Budget Utilization', href: '/reports?type=budget_utilization', icon: 'TrendingDown',
                     show: perm('reports.view_any') && perm('budget_requests.view_any') && hasSubFeature('reports.budget'),
                 },
                 {
                     label: 'Analytics Dashboard', href: '/admin/analytics', icon: 'Brain',
                     show: hasAnyRole(ALL_ADMIN) && hasSubFeature('reports.analytics'),
+                },
+                {
+                    label: 'Annual RTT Report', href: '/reports/annual', icon: 'FileBarChart2',
+                    show: hasAnyRole([...ALL_ADMIN, 'college_officer']) && hasSubFeature('reports.generate'),
+                },
+                {
+                    label: 'Proposal Archive', href: '/admin/proposal-archive', icon: 'FolderSearch',
+                    show: hasAnyRole(['super_admin', 'proposal_archivist']),
                 },
             ],
         },
@@ -816,6 +858,10 @@ export default function AppLayout({ children, breadcrumb }) {
                 {
                     label: 'Thematic Areas', href: '/admin/thematic-areas', icon: 'FlaskConical',
                     show: hasRole('super_admin'),
+                },
+                {
+                    label: 'Dropdown Options', href: '/admin/dropdown-options', icon: 'ListChecks',
+                    show: hasAnyRole(['super_admin', 'admin']),
                 },
                 {
                     label: 'Resources', href: '/admin/resources', icon: 'FolderOpen',
@@ -925,7 +971,7 @@ export default function AppLayout({ children, breadcrumb }) {
                 {/* Nav scroll area */}
                 <nav
                     className={cn(
-                        'flex-1 overflow-y-auto py-2 overflow-x-hidden scrollbar-thin scrollbar-track-transparent',
+                        'flex-1 overflow-y-auto py-3 overflow-x-hidden scrollbar-thin scrollbar-track-transparent',
                         sc.scrollbar
                     )}
                     onClick={() => setMobileOpen(false)}
@@ -937,12 +983,15 @@ export default function AppLayout({ children, breadcrumb }) {
 
                                 {/* Group label */}
                                 {!collapsed ? (
-                                    <p className={cn(
-                                        'px-4 pt-4 pb-1.5 text-[10px] font-semibold uppercase tracking-widest select-none',
-                                        sc.groupLabel(groupIsActive)
-                                    )}>
-                                        {group.group}
-                                    </p>
+                                    <>
+                                        {gi > 0 && <div className={cn('mx-3 my-1 h-px', sc.groupDivider)} />}
+                                        <p className={cn(
+                                            'px-4 pt-3 pb-1.5 text-[10px] font-semibold uppercase tracking-widest select-none',
+                                            sc.groupLabel(groupIsActive)
+                                        )}>
+                                            {group.group}
+                                        </p>
+                                    </>
                                 ) : (
                                     gi > 0 && <div className={cn('mx-3 mt-2 mb-1', sc.separator)} />
                                 )}
@@ -959,19 +1008,11 @@ export default function AppLayout({ children, breadcrumb }) {
                                             href={item.href}
                                             title={collapsed ? item.label : undefined}
                                             className={cn(
-                                                'relative flex items-center gap-2.5 mx-2 px-2.5 py-2 rounded-lg text-sm',
+                                                'relative flex items-center gap-3 mx-2 px-3 py-2.5 rounded-lg text-sm',
                                                 'transition-all duration-150 group',
                                                 sc.navItem(active)
                                             )}
                                         >
-                                            {/* Active left accent */}
-                                            {active && (
-                                                <span className={cn(
-                                                    'absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 rounded-full -ml-2',
-                                                    sc.accent
-                                                )} />
-                                            )}
-
                                             {Icon && (
                                                 <Icon size={15} className={cn(
                                                     'shrink-0 transition-colors',
@@ -1000,11 +1041,14 @@ export default function AppLayout({ children, breadcrumb }) {
                 {/* User footer */}
                 <div className={cn('p-2 shrink-0', sc.footerBorder)} onClick={() => setMobileOpen(false)}>
                     {!collapsed ? (
-                        <div className="flex items-center gap-1">
+                        <div className={cn(
+                            'flex items-center gap-1 p-1 rounded-xl',
+                            isDark ? 'bg-white/6 border border-white/8' : 'bg-gray-50 border border-gray-100'
+                        )}>
                             <Link
                                 href="/profile"
                                 className={cn(
-                                    'flex items-center gap-2.5 flex-1 min-w-0 px-2 py-2 rounded-xl transition-colors group',
+                                    'flex items-center gap-2.5 flex-1 min-w-0 px-1.5 py-1.5 rounded-lg transition-colors group',
                                     sc.profileLink
                                 )}
                             >
@@ -1084,9 +1128,11 @@ export default function AppLayout({ children, breadcrumb }) {
             <div className="flex-1 flex flex-col overflow-hidden min-w-0">
 
                 {/* Top header */}
-                <header className="h-14 bg-white border-b border-gray-100 flex items-center
-                                   justify-between px-4 shrink-0 shadow-[0_1px_3px_rgba(0,0,0,0.04)]">
-                    <div className="flex items-center gap-2 min-w-0">
+                <header className="relative h-14 bg-white border-b border-gray-100 flex items-center
+                                   justify-between px-4 shrink-0 shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
+                    {/* Brand accent line */}
+                    <div className="absolute top-0 inset-x-0 h-0.5 bg-linear-to-r from-indigo-500 via-violet-500 to-indigo-400" />
+                    <div className="flex items-center gap-1.5 min-w-0">
                         {/* Hamburger — mobile only */}
                         <button
                             className="md:hidden p-2 rounded-xl text-gray-500 hover:bg-gray-100 transition-colors shrink-0"
@@ -1095,11 +1141,34 @@ export default function AppLayout({ children, breadcrumb }) {
                         >
                             <Menu size={20} />
                         </button>
-                        <p className="text-sm font-semibold text-gray-700 truncate">
+                        {/* Home crumb — desktop only */}
+                        <Link href="/dashboard"
+                            className="hidden md:flex shrink-0 h-7 w-7 items-center justify-center
+                                       rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50
+                                       transition-colors">
+                            <LayoutDashboard size={14} />
+                        </Link>
+                        {breadcrumb && breadcrumb !== 'Dashboard' && (
+                            <ChevronRight size={12} className="text-gray-300 shrink-0 hidden md:block" />
+                        )}
+                        <p className="text-sm font-semibold text-gray-800 truncate">
                             {breadcrumb ?? 'Dashboard'}
                         </p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                        {/* ⌘K command palette trigger */}
+                        <button
+                            onClick={() => setPaletteOpen(true)}
+                            className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg border border-gray-200
+                                       text-xs text-gray-400 hover:border-indigo-300 hover:text-indigo-500
+                                       bg-gray-50 hover:bg-indigo-50 transition-all"
+                        >
+                            <Search size={12} />
+                            <span>Search</span>
+                            <kbd className="flex items-center gap-0.5 text-[10px] opacity-60">
+                                <span>⌘</span><span>K</span>
+                            </kbd>
+                        </button>
                         <NotificationBell onCountChange={setUnreadNotifications} />
                         {user && (
                             <UserMenu
@@ -1211,6 +1280,8 @@ export default function AppLayout({ children, breadcrumb }) {
                     onCancel={() => setSwitchTarget(null)}
                 />
             )}
+
+            <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
         </div>
     )
 }

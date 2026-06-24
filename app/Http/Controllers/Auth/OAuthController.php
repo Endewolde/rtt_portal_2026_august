@@ -44,6 +44,7 @@ class OAuthController extends Controller
                 ->setHttpClient(new GuzzleClient([
                     'connect_timeout' => 8,
                     'timeout' => 15,
+                    'curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4],
                 ]))
                 ->user();
         } catch (\Exception $e) {
@@ -71,6 +72,10 @@ class OAuthController extends Controller
         }
 
         $user = $this->findOrCreateUser($provider, $socialUser);
+
+        if ($user->status !== 'active') {
+            return redirect('/login?sso_error='.urlencode('Your account has been deactivated. Please contact an administrator.'));
+        }
 
         $user->update([
             'last_login_at' => now(),

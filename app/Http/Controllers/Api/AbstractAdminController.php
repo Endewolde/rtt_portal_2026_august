@@ -118,6 +118,14 @@ class AbstractAdminController extends Controller
         $reviewerId = $request->validate(['reviewer_id' => 'required|uuid|exists:users,id'])['reviewer_id'];
         $reviewer = User::findOrFail($reviewerId);
 
+        if ($reviewer->status !== 'active') {
+            return response()->json([
+                'data' => null,
+                'message' => 'This user account is inactive and cannot be assigned as a reviewer.',
+                'errors' => [],
+            ], 422);
+        }
+
         // Create or reset the review so the reviewer can always submit/override
         $review = ConferenceAbstractReview::updateOrCreate(
             ['abstract_id' => $abstract->id, 'reviewer_id' => $reviewerId],
