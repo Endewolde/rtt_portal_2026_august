@@ -43,8 +43,8 @@ return Application::configure(basePath: dirname(__DIR__))
             fn (Request $request) => $request->is('api/*'),
         );
 
-        // Return JSON 401 for unauthenticated API requests instead of
-        // redirecting to route('login') (which doesn't exist in this SPA).
+        // Return JSON 401 for unauthenticated API requests; redirect web requests
+        // to /login instead of route('login') (named route doesn't exist in this SPA).
         $exceptions->render(function (
             AuthenticationException $_e,
             Request $request
@@ -57,6 +57,8 @@ return Application::configure(basePath: dirname(__DIR__))
                     'meta' => [],
                 ], 401);
             }
+
+            return redirect('/login');
         });
 
         // Custom 429 JSON response for API rate limit hits

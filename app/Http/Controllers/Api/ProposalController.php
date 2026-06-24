@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Models\WorkflowLog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class ProposalController extends Controller
 {
@@ -249,7 +250,7 @@ class ProposalController extends Controller
     {
         $user = $request->user();
 
-        $baseQuery = Proposal::query();
+        $baseQuery = Proposal::query()->whereNotIn('proposals.status', ['draft']);
 
         if ($user->hasRole('college_officer')) {
             $baseQuery->where('proposals.college_id', $user->college_id);
@@ -322,7 +323,6 @@ class ProposalController extends Controller
 
         $byStatus = (clone $baseQuery)
             ->selectRaw('status, COUNT(*) as count')
-            ->whereNotIn('status', ['draft'])
             ->groupBy('status')
             ->pluck('count', 'status');
 
@@ -333,7 +333,7 @@ class ProposalController extends Controller
 
         $totals = [
             'total' => (clone $baseQuery)->count(),
-            'submitted' => (clone $baseQuery)->whereNotIn('status', ['draft'])->count(),
+            'submitted' => (clone $baseQuery)->count(),
             'funded' => (clone $baseQuery)->whereIn('status', ['funded', 'midterm_evaluation', 'completed', 'archived'])->count(),
             'rejected' => (clone $baseQuery)->where('status', 'rejected')->count(),
             'under_review' => (clone $baseQuery)->whereIn('status', ['under_blind_review', 'under_open_defence', 'accepted'])->count(),
@@ -388,5 +388,50 @@ class ProposalController extends Controller
             });
 
         return response()->json(['data' => $history]);
+    }
+
+    public function clone(Request $request, Proposal $proposal): JsonResponse
+    {
+        $user = $request->user();
+
+        if (! $user) {
+            return response()->json(['data' => null, 'message' => 'Unauthenticated.', 'errors' => []], 401);
+        }
+
+        // Only the PI or admins can clone
+        if ($proposal->pi_user_id !== $user->id && ! $user->hasAnyRole(['super_admin', 'admin', 'central_officer'])) {
+            return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
+        }
+
+        $year = date('Y');
+        $suffix = strtoupper(Str::random(4));
+        $trackerNumber = "RTT-{$year}-CLONE-{$suffix}";
+
+        $clone = Proposal::create([
+            'tracker_number' => $trackerNumber,
+            'proposal_call_id' => $request->input('proposal_call_id', $proposal->proposal_call_id),
+            'category' => $proposal->category,
+            'title' => $proposal->title.' (Clone)',
+            'abstract' => $proposal->abstract,
+            'keywords' => $proposal->keywords,
+            'status' => 'draft',
+            'pi_user_id' => $user->id,
+            'college_id' => $proposal->college_id,
+            'department_id' => $proposal->department_id,
+            'academic_year' => $request->input('academic_year', $proposal->academic_year),
+            'focus_area' => $proposal->focus_area,
+            'duration_months' => $proposal->duration_months,
+            'research_type' => $proposal->research_type,
+            'draft_data' => $proposal->draft_data,
+            'current_wizard_step' => $proposal->current_wizard_step,
+            'wizard_completed_steps' => $proposal->wizard_completed_steps,
+            'created_by' => $user->id,
+        ]);
+
+        return response()->json([
+            'data' => $clone->only(['id', 'tracker_number', 'title', 'status']),
+            'message' => 'Proposal cloned successfully.',
+            'errors' => [],
+        ], 201);
     }
 }

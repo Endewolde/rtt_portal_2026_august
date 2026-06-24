@@ -6,8 +6,92 @@ import ViewToggle from '../../Components/ViewToggle'
 import ProposalTable from '../../Components/ProposalTable'
 import { useViewPreference } from '../../hooks/useViewPreference'
 import { useAuth } from '../../hooks/useAuth'
-import { BarChart2, Users, Building, GraduationCap, TrendingUp, Download } from 'lucide-react'
+import { BarChart2, Users, Building, GraduationCap, TrendingUp, Download, ArrowRight } from 'lucide-react'
 import api from '../../lib/api'
+
+// ── Kanban board ──────────────────────────────────────────────────────────────
+
+const KANBAN_COLUMNS = [
+    { key: 'submitted',           label: 'Submitted',        color: 'bg-blue-500',    light: 'bg-blue-50',    text: 'text-blue-700'    },
+    { key: 'validated',           label: 'Validated',        color: 'bg-indigo-500',  light: 'bg-indigo-50',  text: 'text-indigo-700'  },
+    { key: 'under_blind_review',  label: 'Blind Review',     color: 'bg-yellow-500',  light: 'bg-yellow-50',  text: 'text-yellow-700'  },
+    { key: 'blind_review_passed', label: 'Review Passed',    color: 'bg-orange-500',  light: 'bg-orange-50',  text: 'text-orange-700'  },
+    { key: 'under_open_defence',  label: 'Open Defence',     color: 'bg-purple-500',  light: 'bg-purple-50',  text: 'text-purple-700'  },
+    { key: 'accepted',            label: 'Accepted',         color: 'bg-green-500',   light: 'bg-green-50',   text: 'text-green-700'   },
+    { key: 'funded',              label: 'Funded',           color: 'bg-emerald-600', light: 'bg-emerald-50', text: 'text-emerald-700' },
+    { key: 'completed',           label: 'Completed',        color: 'bg-cyan-600',    light: 'bg-cyan-50',    text: 'text-cyan-700'    },
+    { key: 'rejected',            label: 'Rejected',         color: 'bg-red-500',     light: 'bg-red-50',     text: 'text-red-700'     },
+]
+
+function KanbanBoard({ proposals, loading }) {
+    if (loading) {
+        return (
+            <div className="flex gap-4 overflow-x-auto pb-4">
+                {KANBAN_COLUMNS.slice(0, 5).map(col => (
+                    <div key={col.key} className="shrink-0 w-64 bg-gray-50 rounded-xl p-3 animate-pulse">
+                        <div className="h-5 w-24 bg-gray-200 rounded mb-3" />
+                        {[1, 2].map(i => <div key={i} className="h-20 bg-white rounded-lg mb-2 border border-gray-100" />)}
+                    </div>
+                ))}
+            </div>
+        )
+    }
+
+    const grouped = KANBAN_COLUMNS.reduce((acc, col) => {
+        acc[col.key] = proposals.filter(p => p.status === col.key)
+        return acc
+    }, {})
+
+    const activeColumns = KANBAN_COLUMNS.filter(col => grouped[col.key]?.length > 0)
+    const displayCols = activeColumns.length > 0 ? activeColumns : KANBAN_COLUMNS.slice(0, 5)
+
+    return (
+        <div className="flex gap-4 overflow-x-auto pb-6 -mx-1 px-1">
+            {displayCols.map(col => {
+                const cards = grouped[col.key] ?? []
+                return (
+                    <div key={col.key} className="shrink-0 w-64 flex flex-col">
+                        {/* Column header */}
+                        <div className={`flex items-center justify-between px-3 py-2 rounded-xl mb-2 ${col.light}`}>
+                            <div className="flex items-center gap-2">
+                                <div className={`h-2 w-2 rounded-full ${col.color}`} />
+                                <span className={`text-xs font-bold ${col.text}`}>{col.label}</span>
+                            </div>
+                            <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${col.color} text-white`}>
+                                {cards.length}
+                            </span>
+                        </div>
+                        {/* Cards */}
+                        <div className="flex flex-col gap-2 min-h-32">
+                            {cards.length === 0 ? (
+                                <div className="flex items-center justify-center h-20 border-2 border-dashed border-gray-200 rounded-xl">
+                                    <p className="text-xs text-gray-300">Empty</p>
+                                </div>
+                            ) : cards.map(p => (
+                                <Link key={p.id} href={`/proposals/${p.id}`}
+                                    className="block bg-white border border-gray-200 rounded-xl p-3 hover:border-indigo-300 hover:shadow-sm transition-all group">
+                                    <div className="flex items-start justify-between gap-2 mb-2">
+                                        <span className="text-[10px] font-mono font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded shrink-0">
+                                            {p.tracker_number}
+                                        </span>
+                                        <ArrowRight size={11} className="text-gray-300 group-hover:text-indigo-400 transition-colors shrink-0 mt-0.5" />
+                                    </div>
+                                    <p className="text-xs font-semibold text-gray-800 line-clamp-2 mb-2">{p.title}</p>
+                                    {p.pi && (
+                                        <p className="text-[10px] text-gray-400 truncate">PI: {p.pi.name}</p>
+                                    )}
+                                    {p.college && (
+                                        <p className="text-[10px] text-gray-400 truncate">{p.college.name}</p>
+                                    )}
+                                </Link>
+                            ))}
+                        </div>
+                    </div>
+                )
+            })}
+        </div>
+    )
+}
 
 const COLLEGE_COLORS = [
     { bg: 'bg-blue-500',   light: 'bg-blue-50',   text: 'text-blue-700',   border: 'border-blue-200'   },
@@ -52,6 +136,7 @@ export default function ProposalIndex() {
     const isAdmin = hasAnyRole([
         'super_admin', 'admin', 'central_officer',
         'research_officer', 'community_officer', 'technology_officer',
+        'college_officer',
     ])
 
     const [view, setView] = useViewPreference('proposals_index', 'table')
@@ -65,6 +150,7 @@ export default function ProposalIndex() {
     const [colleges, setColleges] = useState([])
     const [showStats, setShowStats] = useState(true)
     const [activeStatTab, setActiveStatTab] = useState('college')
+    const [exporting, setExporting] = useState(false)
 
     useEffect(() => {
         if (user && !isAdmin) { window.location.href = '/my-proposals' }
@@ -105,6 +191,31 @@ export default function ProposalIndex() {
 
     const maxCollegeTotal = Math.max(1, ...(stats?.by_college || []).map(c => c.total))
 
+    const handleExport = async () => {
+        setExporting(true)
+        try {
+            const params = new URLSearchParams(
+                Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== ''))
+            )
+            const token = localStorage.getItem('rtt_token')
+            const res   = await fetch(`/api/v1/reports/proposals/export?${params}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            })
+            if (!res.ok) { error('Export failed. Please try again.'); return }
+            const blob     = await res.blob()
+            const url      = URL.createObjectURL(blob)
+            const a        = document.createElement('a')
+            a.href         = url
+            a.download     = `proposals_${new Date().toISOString().slice(0, 10)}.xlsx`
+            a.click()
+            URL.revokeObjectURL(url)
+        } catch (_) {
+            error('Export failed. Please try again.')
+        } finally {
+            setExporting(false)
+        }
+    }
+
     if (!isAdmin && user) return null
 
     return (
@@ -127,13 +238,13 @@ export default function ProposalIndex() {
                             <BarChart2 size={14} />
                             {showStats ? 'Hide' : 'Show'} Stats
                         </button>
-                        <a
-                            href={`/api/v1/reports/proposals/export?${new URLSearchParams(Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== ''))).toString()}`}
-                            download
-                            className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
+                        <button
+                            onClick={handleExport}
+                            disabled={exporting}
+                            className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50"
                         >
-                            <Download size={14} /> Export CSV
-                        </a>
+                            <Download size={14} /> {exporting ? 'Exporting…' : 'Export Excel'}
+                        </button>
                         <ViewToggle view={view} onChange={setView} />
                     </div>
                 </div>
@@ -443,6 +554,8 @@ export default function ProposalIndex() {
                             </Link>
                         )}
                     />
+                ) : view === 'kanban' ? (
+                    <KanbanBoard proposals={proposals} loading={loading} />
                 ) : (
                     <div>
                         {loading ? (

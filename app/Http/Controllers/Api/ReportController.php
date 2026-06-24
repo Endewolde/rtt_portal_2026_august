@@ -2,13 +2,15 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Exports\ProposalsExport;
 use App\Http\Controllers\Controller;
 use App\Models\Proposal;
 use App\Models\ReportSnapshot;
 use App\Services\ReportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class ReportController extends Controller
 {
@@ -45,8 +47,8 @@ class ReportController extends Controller
         return response()->json(['data' => $snapshot]);
     }
 
-    /** Stream a CSV export of proposals filtered by status, college, category, and academic year. */
-    public function exportProposals(Request $request): StreamedResponse
+    /** Export proposals as an Excel file, filtered by status, college, category, and academic year. */
+    public function exportProposals(Request $request): BinaryFileResponse
     {
         $user = $request->user();
 
@@ -57,7 +59,6 @@ class ReportController extends Controller
         $query = Proposal::with(['pi:id,name,email,gender', 'college:id,name', 'department:id,name'])
             ->whereNull('deleted_at');
 
-        // Scope by role
         if ($user->hasRole('college_officer')) {
             $query->where('college_id', $user->college_id);
         }
@@ -65,14 +66,11 @@ class ReportController extends Controller
             $query->where('category', $request->_category_scope);
         }
 
-        // Filters
         if ($request->filled('status')) {
             $statuses = array_filter(array_map('trim', explode(',', $request->status)));
-            if (count($statuses) === 1) {
-                $query->where('status', $statuses[0]);
-            } else {
-                $query->whereIn('status', $statuses);
-            }
+            count($statuses) === 1
+                ? $query->where('status', $statuses[0])
+                : $query->whereIn('status', $statuses);
         }
         if ($request->filled('college_id')) {
             $query->where('college_id', $request->college_id);
@@ -85,41 +83,8 @@ class ReportController extends Controller
         }
 
         $proposals = $query->orderByDesc('created_at')->get();
+        $filename = 'proposals_'.now()->format('Ymd_His').'.xlsx';
 
-        $filename = 'proposals_export_'.now()->format('Ymd_His').'.csv';
-
-        return response()->streamDownload(function () use ($proposals) {
-            $handle = fopen('php://output', 'w');
-
-            fputcsv($handle, [
-                'Tracker Number', 'Title', 'Category', 'Status',
-                'PI Name', 'PI Email', 'PI Gender',
-                'College', 'Department', 'Academic Year',
-                'Budget Total', 'Submitted At', 'Last Updated',
-            ]);
-
-            foreach ($proposals as $p) {
-                fputcsv($handle, [
-                    $p->tracker_number,
-                    $p->title,
-                    $p->category,
-                    $p->status,
-                    $p->pi?->name,
-                    $p->pi?->email,
-                    $p->pi?->gender,
-                    $p->college?->name,
-                    $p->department?->name,
-                    $p->academic_year,
-                    $p->budgets_sum_amount ?? $p->budgets()->sum('amount'),
-                    $p->created_at?->toDateTimeString(),
-                    $p->updated_at?->toDateTimeString(),
-                ]);
-            }
-
-            fclose($handle);
-        }, $filename, [
-            'Content-Type' => 'text/csv',
-            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
-        ]);
+        return Excel::download(new ProposalsExport($proposals), $filename);
     }
 }
