@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Link } from '@inertiajs/react';
+import { Link, usePage } from '@inertiajs/react';
 import {
     ClipboardCheck, Clock, AlertCircle, Download,
     CheckCircle2, ChevronRight, BookOpen, EyeOff,
-    Presentation, Calendar, Shield,
+    Presentation, Calendar, Shield, Star, ChevronDown, ChevronUp,
+    MessageSquare,
 } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import { useToast } from '../../Components/Toast';
@@ -25,7 +26,7 @@ const TABS = [
         icon: EyeOff,
         color: 'violet',
         description: "Evaluate proposals anonymously without knowing the PI's identity.",
-        filter: a => (a.evaluation_type?.name ?? '').startsWith('blind_review'),
+        filter: a => (a.evaluation_type?.name ?? '').startsWith('blind_review') && a.status !== 'submitted',
     },
     {
         key: 'defence',
@@ -33,7 +34,15 @@ const TABS = [
         icon: Presentation,
         color: 'blue',
         description: 'Attend and score proposals presented in open defence sessions.',
-        filter: a => (a.evaluation_type?.name ?? '').startsWith('open_defence'),
+        filter: a => (a.evaluation_type?.name ?? '').startsWith('open_defence') && a.status !== 'submitted',
+    },
+    {
+        key: 'completed',
+        label: 'Completed',
+        icon: CheckCircle2,
+        color: 'emerald',
+        description: 'Your submitted review scores and recommendations.',
+        filter: a => a.status === 'submitted',
     },
 ];
 
@@ -101,15 +110,143 @@ function StatsRow({ items }) {
     );
 }
 
+function ScoreBar({ score, max }) {
+    const pct = max > 0 ? Math.round((score / max) * 100) : 0;
+    const color = pct >= 80 ? 'bg-emerald-500' : pct >= 60 ? 'bg-blue-500' : pct >= 40 ? 'bg-amber-500' : 'bg-red-400';
+    return (
+        <div className="flex items-center gap-2 flex-1">
+            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+            </div>
+            <span className="text-xs font-semibold text-gray-700 w-10 text-right tabular-nums">{score}/{max}</span>
+        </div>
+    );
+}
+
+function CompletedCard({ assignment }) {
+    const [expanded, setExpanded] = useState(false);
+    const isDefence   = (assignment.evaluation_type?.name ?? '').startsWith('open_defence');
+    const scores      = assignment.scores ?? [];
+    const totalScore  = scores.reduce((s, sc) => s + (sc.score ?? 0), 0);
+    const maxScore    = scores.reduce((s, sc) => s + (sc.evaluation_question?.max_score ?? 0), 0);
+    const pct         = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : null;
+    const recommendation = scores.find(s => s.recommendation)?.recommendation;
+    const comments    = scores.filter(s => s.comment);
+
+    const recColor = recommendation === 'accept'
+        ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+        : recommendation === 'reject'
+            ? 'bg-red-100 text-red-700 border-red-200'
+            : recommendation === 'revise'
+                ? 'bg-amber-100 text-amber-700 border-amber-200'
+                : 'bg-gray-100 text-gray-600 border-gray-200';
+
+    return (
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden border-l-4 border-l-emerald-400">
+            <div className="p-5">
+                <div className="flex items-start gap-4">
+                    {/* Icon */}
+                    <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${isDefence ? 'bg-blue-100' : 'bg-violet-100'}`}>
+                        {isDefence
+                            ? <Presentation size={18} className="text-blue-600" />
+                            : <EyeOff size={18} className="text-violet-600" />
+                        }
+                    </div>
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <span className="font-mono text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
+                                {assignment.proposal?.tracker_number || 'N/A'}
+                            </span>
+                            <span className="text-xs text-gray-400">{isDefence ? 'Open Defence' : 'Blind Review'}</span>
+                            {recommendation && (
+                                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border capitalize ${recColor}`}>
+                                    {recommendation}
+                                </span>
+                            )}
+                        </div>
+                        <h3 className="text-sm font-semibold text-gray-900 leading-snug mb-1">
+                            {assignment.proposal?.title || 'Untitled Proposal'}
+                        </h3>
+                        <p className="text-xs text-gray-400">
+                            Submitted {assignment.submitted_at ? formatDate(assignment.submitted_at) : '—'}
+                            {assignment.proposal?.college?.name && (
+                                <span className="ml-2 text-gray-300">· {assignment.proposal.college.name}</span>
+                            )}
+                        </p>
+                    </div>
+
+                    {/* Score summary */}
+                    <div className="flex flex-col items-end gap-2 shrink-0">
+                        {pct !== null && (
+                            <div className="text-right">
+                                <div className="text-xl font-extrabold text-emerald-600 tabular-nums leading-none">{pct}%</div>
+                                <div className="text-[10px] text-gray-400 mt-0.5">{totalScore}/{maxScore} pts</div>
+                            </div>
+                        )}
+                        <button
+                            onClick={() => setExpanded(v => !v)}
+                            className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-semibold"
+                        >
+                            {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                            {expanded ? 'Hide' : 'Details'}
+                        </button>
+                    </div>
+                </div>
+
+                {/* Expandable score breakdown */}
+                {expanded && scores.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-gray-100 space-y-2.5">
+                        {scores.map((sc, i) => (
+                            <div key={i}>
+                                <div className="flex items-center gap-3">
+                                    <p className="text-xs text-gray-600 flex-1 leading-snug">
+                                        {sc.evaluation_question?.question_text ?? `Question ${i + 1}`}
+                                    </p>
+                                    <ScoreBar score={sc.score ?? 0} max={sc.evaluation_question?.max_score ?? 5} />
+                                </div>
+                                {sc.comment && (
+                                    <div className="flex items-start gap-1.5 mt-1 ml-0 pl-0">
+                                        <MessageSquare size={11} className="text-gray-300 mt-0.5 shrink-0" />
+                                        <p className="text-[11px] text-gray-400 italic leading-snug">{sc.comment}</p>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                        {comments.length === 0 && (
+                            <p className="text-xs text-gray-400 italic">No written comments provided.</p>
+                        )}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function isNewAssignment(assignment) {
+    if (assignment.status !== 'pending') return false;
+    if (!assignment.assigned_at) return false;
+    const hoursOld = (Date.now() - new Date(assignment.assigned_at)) / (1000 * 60 * 60);
+    return hoursOld <= 168; // 7 days
+}
+
 function AssignmentCard({ assignment, tabKey }) {
-    const daysLeft = getDaysRemaining(assignment.due_date);
-    const isDone   = assignment.status === 'submitted';
-    const meta     = STATUS_META[assignment.status] ?? STATUS_META.pending;
-    const stripe   = urgencyStripe(daysLeft, isDone);
+    const daysLeft  = getDaysRemaining(assignment.due_date);
+    const isDone    = assignment.status === 'submitted';
+    const isNew     = isNewAssignment(assignment);
+    const meta      = STATUS_META[assignment.status] ?? STATUS_META.pending;
+    const stripe    = urgencyStripe(daysLeft, isDone);
     const isDefence = tabKey === 'defence';
 
     return (
-        <div className={`bg-white rounded-2xl shadow-sm overflow-hidden transition-shadow hover:shadow-md ${stripe}`}>
+        <div className={`relative bg-white rounded-2xl shadow-sm overflow-hidden transition-shadow hover:shadow-md ${stripe} ${isNew ? 'ring-2 ring-amber-300' : ''}`}>
+            {isNew && (
+                <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-700 text-[11px] font-bold px-2 py-0.5 rounded-full z-10">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                    NEW
+                </div>
+            )}
             <div className="p-5">
                 <div className="flex items-start gap-4">
                     {/* Type icon */}
@@ -181,23 +318,29 @@ function AssignmentCard({ assignment, tabKey }) {
 
 export default function ReviewIndex() {
     const { error } = useToast();
-    const [assignments, setAssignments] = useState([]);
-    const [loading, setLoading]         = useState(true);
-    const [activeTab, setActiveTab]     = useState('blind');
+    const { app_settings } = usePage().props;
+    const [allAssignments, setAllAssignments] = useState([]);
+    const [yearFilter, setYearFilter]         = useState(app_settings?.current_academic_year ?? '');
+    const [loading, setLoading]               = useState(true);
+    const [activeTab, setActiveTab]           = useState('blind');
 
     useEffect(() => {
         api.get('/review-assignments/my')
-            .then(res => setAssignments(res.data?.data ?? []))
+            .then(res => setAllAssignments(res.data?.data ?? []))
             .catch(() => error('Failed to load your review assignments.'))
             .finally(() => setLoading(false));
     }, []);
 
+    const availableYears = [...new Set(allAssignments.map(a => a.proposal?.academic_year).filter(Boolean))].sort().reverse();
+    const assignments    = yearFilter ? allAssignments.filter(a => a.proposal?.academic_year === yearFilter) : allAssignments;
+
     const currentTab  = TABS.find(t => t.key === activeTab);
     const tabItems    = currentTab ? assignments.filter(currentTab.filter) : [];
-    const allTotal    = assignments.length;
+    const allTotal    = allAssignments.length;
 
-    const getCount = tab => assignments.filter(tab.filter).length;
+    const getCount   = tab => assignments.filter(tab.filter).length;
     const getPending = tab => assignments.filter(tab.filter).filter(a => ['pending', 'in_progress', 'accepted'].includes(a.status)).length;
+    const getNew     = tab => assignments.filter(tab.filter).filter(isNewAssignment).length;
 
     if (loading) {
         return (
@@ -229,12 +372,26 @@ export default function ReviewIndex() {
                             </p>
                         </div>
                     </div>
-                    <a
-                        href={`/api/v1/calendar/export?token=${localStorage.getItem('rtt_token') ?? ''}`}
-                        className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-3.5 py-2 rounded-xl transition-colors shrink-0"
-                    >
-                        <Download size={13} /> Export iCal
-                    </a>
+                    <div className="flex items-center gap-2 shrink-0">
+                        {availableYears.length > 1 && (
+                            <select
+                                value={yearFilter}
+                                onChange={e => { setYearFilter(e.target.value); setActiveTab('blind'); }}
+                                className="text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                            >
+                                <option value="">All Years</option>
+                                {availableYears.map(y => (
+                                    <option key={y} value={y}>{y}</option>
+                                ))}
+                            </select>
+                        )}
+                        <a
+                            href={`/api/v1/calendar/export?token=${localStorage.getItem('rtt_token') ?? ''}`}
+                            className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-3.5 py-2 rounded-xl transition-colors"
+                        >
+                            <Download size={13} /> Export iCal
+                        </a>
+                    </div>
                 </div>
 
                 {/* ── Empty state (no assignments at all) ──────────────────── */}
@@ -256,8 +413,9 @@ export default function ReviewIndex() {
                         {/* ── Tabs ─────────────────────────────────────────── */}
                         <div className="flex gap-2 p-1 bg-gray-100 rounded-2xl w-fit">
                             {TABS.map(tab => {
-                                const count   = getCount(tab);
-                                const pending = getPending(tab);
+                                const count    = getCount(tab);
+                                const pending  = getPending(tab);
+                                const newCount = getNew(tab);
                                 const isActive = activeTab === tab.key;
                                 const Icon = tab.icon;
 
@@ -271,20 +429,30 @@ export default function ReviewIndex() {
                                                 : 'text-gray-500 hover:text-gray-700'
                                         }`}
                                     >
-                                        <Icon size={15} className={isActive ? (tab.color === 'violet' ? 'text-violet-600' : 'text-blue-600') : 'text-gray-400'} />
+                                        <Icon size={15} className={isActive
+                                            ? tab.color === 'violet' ? 'text-violet-600'
+                                                : tab.color === 'emerald' ? 'text-emerald-600'
+                                                : 'text-blue-600'
+                                            : 'text-gray-400'} />
                                         {tab.label}
                                         {count > 0 && (
                                             <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${
                                                 isActive
-                                                    ? tab.color === 'violet'
-                                                        ? 'bg-violet-100 text-violet-700'
-                                                        : 'bg-blue-100 text-blue-700'
+                                                    ? tab.color === 'violet'  ? 'bg-violet-100 text-violet-700'
+                                                    : tab.color === 'emerald' ? 'bg-emerald-100 text-emerald-700'
+                                                    : 'bg-blue-100 text-blue-700'
                                                     : 'bg-gray-200 text-gray-600'
                                             }`}>
                                                 {count}
                                             </span>
                                         )}
-                                        {pending > 0 && !isActive && (
+                                        {newCount > 0 && !isActive && (
+                                            <span className="absolute top-1 right-1 flex h-2.5 w-2.5">
+                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+                                            </span>
+                                        )}
+                                        {pending > 0 && !isActive && newCount === 0 && (
                                             <span className="absolute top-1 right-1 w-2 h-2 bg-amber-400 rounded-full" />
                                         )}
                                     </button>
@@ -295,24 +463,36 @@ export default function ReviewIndex() {
                         {/* ── Tab description + context banner ─────────────── */}
                         {currentTab && (
                             <div className={`rounded-2xl border px-5 py-4 flex items-start gap-3 ${
-                                activeTab === 'blind'
-                                    ? 'bg-violet-50 border-violet-200'
-                                    : 'bg-blue-50 border-blue-200'
+                                activeTab === 'blind'    ? 'bg-violet-50 border-violet-200' :
+                                activeTab === 'defence'  ? 'bg-blue-50 border-blue-200' :
+                                                           'bg-emerald-50 border-emerald-200'
                             }`}>
-                                <currentTab.icon size={18} className={activeTab === 'blind' ? 'text-violet-500 mt-0.5 shrink-0' : 'text-blue-500 mt-0.5 shrink-0'} />
+                                <currentTab.icon size={18} className={`mt-0.5 shrink-0 ${
+                                    activeTab === 'blind'   ? 'text-violet-500' :
+                                    activeTab === 'defence' ? 'text-blue-500' :
+                                                              'text-emerald-500'
+                                }`} />
                                 <div>
-                                    <p className={`text-sm font-semibold ${activeTab === 'blind' ? 'text-violet-800' : 'text-blue-800'}`}>
+                                    <p className={`text-sm font-semibold ${
+                                        activeTab === 'blind'   ? 'text-violet-800' :
+                                        activeTab === 'defence' ? 'text-blue-800' :
+                                                                  'text-emerald-800'
+                                    }`}>
                                         {currentTab.label}
                                     </p>
-                                    <p className={`text-xs mt-0.5 ${activeTab === 'blind' ? 'text-violet-600' : 'text-blue-600'}`}>
+                                    <p className={`text-xs mt-0.5 ${
+                                        activeTab === 'blind'   ? 'text-violet-600' :
+                                        activeTab === 'defence' ? 'text-blue-600' :
+                                                                  'text-emerald-600'
+                                    }`}>
                                         {currentTab.description}
                                     </p>
                                 </div>
                             </div>
                         )}
 
-                        {/* ── Stats for current tab ─────────────────────────── */}
-                        {tabItems.length > 0 && <StatsRow items={tabItems} />}
+                        {/* ── Stats (active/pending tabs only) ─────────────── */}
+                        {tabItems.length > 0 && activeTab !== 'completed' && <StatsRow items={tabItems} />}
 
                         {/* ── Empty tab state ────────────────────────────────── */}
                         {tabItems.length === 0 && (
@@ -324,7 +504,7 @@ export default function ReviewIndex() {
                         )}
 
                         {/* ── Assignment cards ────────────────────────────────── */}
-                        {tabItems.length > 0 && (
+                        {tabItems.length > 0 && activeTab !== 'completed' && (
                             <div className="space-y-3">
                                 {tabItems.map(assignment => (
                                     <AssignmentCard
@@ -332,6 +512,15 @@ export default function ReviewIndex() {
                                         assignment={assignment}
                                         tabKey={activeTab}
                                     />
+                                ))}
+                            </div>
+                        )}
+
+                        {/* ── Completed review cards ───────────────────────── */}
+                        {tabItems.length > 0 && activeTab === 'completed' && (
+                            <div className="space-y-3">
+                                {tabItems.map(assignment => (
+                                    <CompletedCard key={assignment.id} assignment={assignment} />
                                 ))}
                             </div>
                         )}

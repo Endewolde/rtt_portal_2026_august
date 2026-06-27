@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
     Users as UsersIcon, Search, Plus, Pencil, Trash2, ShieldCheck,
     UserCheck, UserX, Building2, Calendar, ChevronLeft, ChevronRight,
@@ -6,6 +7,7 @@ import {
     CheckCircle2, XCircle, AlertTriangle, User, Clock,
     Upload, Download, FileDown, FileUp, AlertCircle, CheckCircle,
     FileText, ChevronDown, ChevronUp, ChevronsUpDown, LogIn, TrendingUp, UserPlus, Activity,
+    MoreVertical,
 } from 'lucide-react';
 import { Link } from '@inertiajs/react';
 import AppLayout from '../../Layouts/AppLayout';
@@ -64,7 +66,7 @@ const STATUS_CONFIG = {
 const ROLE_GROUPS = [
     { label: 'Administration', roles: ['admin', 'central_officer', 'super_admin'] },
     { label: 'Research',       roles: ['staff', 'research_officer', 'community_officer', 'technology_officer', 'college_officer'] },
-    { label: 'Operations',     roles: ['finance_officer', 'support_officer', 'guest'] },
+    { label: 'Operations',     roles: ['finance_officer', 'support_officer'] },
 ];
 
 const AVATAR_GRADIENTS = [
@@ -634,6 +636,100 @@ function BulkAssignRoleModal({ count, allRoles, onSave, onClose }) {
     );
 }
 
+// ─── Row action menu (three-dots dropdown) ────────────────────────────────────
+
+function RowMenu({ user, canEditUser, isSuperAdmin, canImpersonate, canManageUsers, currentUser, onEdit, onAssign, onImpersonate, onStatusChange, onDelete }) {
+    const [open, setOpen] = useState(false);
+    const [pos,  setPos]  = useState({ top: 0, right: 0 });
+    const btnRef          = useRef(null);
+    const menuRef         = useRef(null);
+
+    useEffect(() => {
+        if (!open) return;
+        function handle(e) {
+            if (menuRef.current && !menuRef.current.contains(e.target) &&
+                btnRef.current  && !btnRef.current.contains(e.target)) {
+                setOpen(false);
+            }
+        }
+        document.addEventListener('mousedown', handle);
+        return () => document.removeEventListener('mousedown', handle);
+    }, [open]);
+
+    const allRoleNames       = (user.roles ?? []).map(r => typeof r === 'string' ? r : r.name);
+    const isActive           = (user.status ?? 'active') === 'active';
+    const canImpersonateThis = canImpersonate && user.id !== currentUser?.id && !allRoleNames.includes('super_admin') && !allRoleNames.includes('admin');
+    const canManageThis      = canManageUsers && user.id !== currentUser?.id && (isSuperAdmin || !allRoleNames.includes('super_admin')) && (isSuperAdmin || !allRoleNames.includes('admin'));
+
+    const close = () => setOpen(false);
+
+    const items = [
+        { label: 'View Profile',   icon: Eye,         show: true,               href: `/admin/users/${user.id}`,                                                       color: 'text-gray-600 hover:text-indigo-600 hover:bg-indigo-50' },
+        { label: 'Edit',           icon: Pencil,      show: canEditUser,         onClick: () => { onEdit(user); close(); },                                              color: 'text-gray-600 hover:text-blue-600 hover:bg-blue-50' },
+        { label: 'Assign Roles',   icon: ShieldCheck, show: isSuperAdmin,        onClick: () => { onAssign(user); close(); },                                            color: 'text-gray-600 hover:text-indigo-600 hover:bg-indigo-50' },
+        { label: 'Login as User',  icon: LogIn,       show: canImpersonateThis,  onClick: () => { onImpersonate(user); close(); },                                       color: 'text-gray-600 hover:text-emerald-600 hover:bg-emerald-50' },
+        { label: isActive ? 'Deactivate' : 'Activate', icon: isActive ? UserX : UserCheck, show: canManageThis,
+          onClick: () => { onStatusChange({ user, newStatus: isActive ? 'inactive' : 'active' }); close(); },
+          color: isActive ? 'text-gray-600 hover:text-amber-600 hover:bg-amber-50' : 'text-gray-600 hover:text-green-600 hover:bg-green-50' },
+        { label: 'Delete',         icon: Trash2,      show: canManageThis,       onClick: () => { onDelete(user); close(); },                                            color: 'text-red-500 hover:text-red-700 hover:bg-red-50', divider: true },
+    ].filter(i => i.show);
+
+    if (!items.length) return null;
+
+    function handleToggle() {
+        if (!open && btnRef.current) {
+            const rect = btnRef.current.getBoundingClientRect();
+            setPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+        }
+        setOpen(v => !v);
+    }
+
+    return (
+        <div className="flex justify-end">
+            <button
+                ref={btnRef}
+                onClick={handleToggle}
+                className="p-1.5 rounded-lg text-gray-300 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+                title="Actions"
+            >
+                <MoreVertical size={15} />
+            </button>
+            {open && createPortal(
+                <div
+                    ref={menuRef}
+                    style={{ position: 'fixed', top: pos.top, right: pos.right, zIndex: 9999 }}
+                    className="w-44 bg-white rounded-xl shadow-lg border border-gray-100 py-1"
+                >
+                    {items.map((item, i) => (
+                        <div key={i}>
+                            {item.divider && <div className="my-1 border-t border-gray-100" />}
+                            {item.href ? (
+                                <Link
+                                    href={item.href}
+                                    className={`flex items-center gap-2.5 px-3 py-2 text-sm font-medium transition-colors w-full ${item.color}`}
+                                    onClick={close}
+                                >
+                                    <item.icon size={13} />
+                                    {item.label}
+                                </Link>
+                            ) : (
+                                <button
+                                    onClick={item.onClick}
+                                    className={`flex items-center gap-2.5 px-3 py-2 text-sm font-medium transition-colors w-full text-left ${item.color}`}
+                                >
+                                    <item.icon size={13} />
+                                    {item.label}
+                                </button>
+                            )}
+                        </div>
+                    ))}
+                </div>,
+                document.body
+            )}
+        </div>
+    );
+}
+
 // ─── Download helper (blob from axios) ───────────────────────────────────────
 
 async function downloadBlob(axiosPromise, filename) {
@@ -1086,13 +1182,17 @@ export default function AdminUsers() {
     const [colleges, setColleges]           = useState([]);
     const [allRoles, setAllRoles]           = useState(Object.keys(ROLE_LABELS));
     const [loading, setLoading]             = useState(true);
-    const [search, setSearch]               = useState('');
-    const [roleFilter, setRoleFilter]       = useState('');
-    const [statusFilter, setStatusFilter]   = useState('');
-    const [collegeFilter, setCollegeFilter] = useState('');
-    const [stats, setStats]                 = useState(null);
-    const [sortCol, setSortCol]             = useState('name');
-    const [sortDir, setSortDir]             = useState('asc');
+    const [search, setSearch]                     = useState('');
+    const [roleFilter, setRoleFilter]             = useState('');
+    const [statusFilter, setStatusFilter]         = useState('');
+    const [collegeFilter, setCollegeFilter]       = useState('');
+    const [departmentFilter, setDepartmentFilter] = useState('');
+    const [genderFilter, setGenderFilter]         = useState('');
+    const [regMethodFilter, setRegMethodFilter]   = useState('');
+    const [filterDepts, setFilterDepts]           = useState([]);
+    const [stats, setStats]                       = useState(null);
+    const [sortCol, setSortCol]                   = useState('name');
+    const [sortDir, setSortDir]                   = useState('asc');
 
     const [createModal,   setCreateModal]   = useState(false);
     const [editModal,     setEditModal]     = useState(null);
@@ -1117,7 +1217,18 @@ export default function AdminUsers() {
 
     const load = useCallback(() => {
         setLoading(true);
-        get('/users', { search, role: roleFilter, status: statusFilter, college_id: collegeFilter || undefined, sort_by: sortCol, sort_dir: sortDir, page })
+        get('/users', {
+            search,
+            role:                roleFilter || undefined,
+            status:              statusFilter  || undefined,
+            college_id:          collegeFilter || undefined,
+            department_id:       departmentFilter || undefined,
+            gender:              genderFilter  || undefined,
+            registration_method: regMethodFilter || undefined,
+            sort_by:             sortCol,
+            sort_dir:            sortDir,
+            page,
+        })
             .then(r => {
                 const paginator = r.data;
                 setUsers(paginator?.data ?? []);
@@ -1134,9 +1245,21 @@ export default function AdminUsers() {
             })
             .catch(() => error('Failed to load users.'))
             .finally(() => setLoading(false));
-    }, [search, roleFilter, statusFilter, collegeFilter, sortCol, sortDir, page]);
+    }, [search, roleFilter, statusFilter, collegeFilter, departmentFilter, genderFilter, regMethodFilter, sortCol, sortDir, page]);
 
     useEffect(() => { load(); }, [load]);
+
+    // Load departments whenever the college filter changes
+    useEffect(() => {
+        setDepartmentFilter('');
+        if (collegeFilter) {
+            api.get(`/colleges/${collegeFilter}/departments`)
+                .then(r => setFilterDepts(r.data?.data ?? []))
+                .catch(() => setFilterDepts([]));
+        } else {
+            setFilterDepts([]);
+        }
+    }, [collegeFilter]);
 
     useEffect(() => {
         api.get('/colleges').then(r => setColleges(r.data?.data ?? [])).catch(() => {});
@@ -1176,10 +1299,13 @@ export default function AdminUsers() {
         setExporting(true);
         try {
             const params = new URLSearchParams();
-            if (search)        params.set('search', search);
-            if (roleFilter)    params.set('role', roleFilter);
-            if (statusFilter)  params.set('status', statusFilter);
-            if (collegeFilter) params.set('college_id', collegeFilter);
+            if (search)           params.set('search', search);
+            if (roleFilter) params.set('role', roleFilter);
+            if (statusFilter)     params.set('status', statusFilter);
+            if (collegeFilter)    params.set('college_id', collegeFilter);
+            if (departmentFilter) params.set('department_id', departmentFilter);
+            if (genderFilter)     params.set('gender', genderFilter);
+            if (regMethodFilter)  params.set('registration_method', regMethodFilter);
             await downloadBlob(
                 api.get(`/users/export?${params.toString()}`, { responseType: 'blob' }),
                 `users_export_${new Date().toISOString().slice(0, 10)}.csv`
@@ -1188,7 +1314,7 @@ export default function AdminUsers() {
         setExporting(false);
     };
 
-    const hasFilters = search || roleFilter || statusFilter || collegeFilter;
+    const hasFilters = !!(search || roleFilter || statusFilter || collegeFilter || departmentFilter || genderFilter || regMethodFilter);
 
     // ── Bulk selection ────────────────────────────────────────────────────────
     const [selectedIds,    setSelectedIds]    = useState(new Set());
@@ -1346,13 +1472,13 @@ export default function AdminUsers() {
                 </div>
 
                 {/* ── Filters ─────────────────────────────────────────────── */}
-                <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-4">
+                <div className="bg-white border border-gray-100 rounded-2xl shadow-sm p-4 space-y-3">
+                    {/* Row 1: search + college + department */}
                     <div className="flex flex-wrap gap-3 items-center">
                         <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wider shrink-0">
                             <Filter size={12} /> Filters
                         </div>
-
-                        <div className="relative flex-1 min-w-44">
+                        <div className="relative flex-1 min-w-48">
                             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                             <input
                                 value={searchInput}
@@ -1361,16 +1487,26 @@ export default function AdminUsers() {
                                 className="w-full pl-8 pr-4 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 transition-all"
                             />
                         </div>
-
                         <select value={collegeFilter} onChange={e => { setCollegeFilter(e.target.value); setPage(1); }}
                             className="py-2 pl-3 pr-7 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 transition-all text-gray-700">
                             <option value="">All Colleges</option>
                             {colleges.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                         </select>
+                        {filterDepts.length > 0 && (
+                            <select value={departmentFilter} onChange={e => { setDepartmentFilter(e.target.value); setPage(1); }}
+                                className="py-2 pl-3 pr-7 text-sm border border-indigo-200 rounded-xl bg-indigo-50/50 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 transition-all text-gray-700">
+                                <option value="">All Departments</option>
+                                {filterDepts.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                            </select>
+                        )}
+                    </div>
 
+                    {/* Row 2: role + status + gender + registration method */}
+                    <div className="flex flex-wrap gap-3 items-center">
                         <select value={roleFilter} onChange={e => { setRoleFilter(e.target.value); setPage(1); }}
                             className="py-2 pl-3 pr-7 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 transition-all text-gray-700">
                             <option value="">All Roles</option>
+                            <option value="guest">Guest (No Role)</option>
                             {allRoles.filter(r => r !== 'super_admin').map(r => <option key={r} value={r}>{ROLE_LABELS[r] ?? r}</option>)}
                         </select>
 
@@ -1382,8 +1518,30 @@ export default function AdminUsers() {
                             <option value="suspended">Suspended</option>
                         </select>
 
+                        <select value={genderFilter} onChange={e => { setGenderFilter(e.target.value); setPage(1); }}
+                            className="py-2 pl-3 pr-7 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 transition-all text-gray-700">
+                            <option value="">Any Gender</option>
+                            <option value="male">Male</option>
+                            <option value="female">Female</option>
+                            <option value="other">Other</option>
+                        </select>
+
+                        <select value={regMethodFilter} onChange={e => { setRegMethodFilter(e.target.value); setPage(1); }}
+                            className="py-2 pl-3 pr-7 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 transition-all text-gray-700">
+                            <option value="">Any Registration</option>
+                            <option value="self_registered">Self Registered</option>
+                            <option value="admin_created">Admin Created</option>
+                            <option value="imported">Imported</option>
+                            <option value="oauth_google">Google OAuth</option>
+                            <option value="oauth_microsoft">Microsoft OAuth</option>
+                        </select>
+
                         {hasFilters && (
-                            <button onClick={() => { setSearch(''); setSearchInput(''); setRoleFilter(''); setStatusFilter(''); setCollegeFilter(''); setPage(1); }}
+                            <button onClick={() => {
+                                setSearch(''); setSearchInput(''); setRoleFilter(''); setStatusFilter('');
+                                setCollegeFilter(''); setDepartmentFilter(''); setGenderFilter('');
+                                setRegMethodFilter(''); setPage(1);
+                            }}
                                 className="flex items-center gap-1.5 text-xs font-medium text-red-500 hover:text-red-700 px-3 py-2 rounded-xl hover:bg-red-50 transition-colors ml-auto">
                                 <X size={12} /> Clear all
                             </button>
@@ -1456,7 +1614,7 @@ export default function AdminUsers() {
                         <>
                             <div className="overflow-x-auto">
                                 {/* Table header */}
-                                <div className="grid grid-cols-[40px_2.5fr_1.5fr_1.5fr_1fr_1fr_1fr_1.5fr_156px] items-center
+                                <div className="grid grid-cols-[40px_2.5fr_1.5fr_1.5fr_1fr_1fr_1fr_1.5fr_44px] items-center
                                                 gap-4 px-5 py-3 bg-gray-50/80 border-b border-gray-100
                                                 text-[11px] font-semibold text-gray-400 uppercase tracking-wider
                                                 min-w-262.5">
@@ -1485,7 +1643,7 @@ export default function AdminUsers() {
 
                                         return (
                                             <div key={u.id}
-                                                className={`group grid grid-cols-[40px_2.5fr_1.5fr_1.5fr_1fr_1fr_1fr_1.5fr_156px] items-center
+                                                className={`group grid grid-cols-[40px_2.5fr_1.5fr_1.5fr_1fr_1fr_1fr_1.5fr_44px] items-center
                                                            gap-4 px-5 py-3.5 transition-colors min-w-262.5 ${
                                                     selectedIds.has(u.id) ? 'bg-indigo-50' : 'hover:bg-gray-50/60'
                                                 }`}>
@@ -1552,56 +1710,19 @@ export default function AdminUsers() {
                                                 </div>
 
                                                 {/* Actions */}
-                                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <Link href={`/admin/users/${u.id}`}
-                                                        className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                                                        title="View profile">
-                                                        <Eye size={13} />
-                                                    </Link>
-                                                    {canEditUser && (
-                                                    <button onClick={() => setEditModal(u)}
-                                                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                                        title="Edit user">
-                                                        <Pencil size={13} />
-                                                    </button>
-                                                    )}
-                                                    {isSuperAdmin && (
-                                                        <button onClick={() => setAssignModal(u)}
-                                                            className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                                                            title="Assign roles">
-                                                            <ShieldCheck size={13} />
-                                                        </button>
-                                                    )}
-                                                    {canImpersonate && u.id !== currentUser?.id && !allRoleNames.includes('super_admin') && !allRoleNames.includes('admin') && (
-                                                        <button onClick={() => setImpersonateTarget(u)}
-                                                            className="p-1.5 text-gray-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
-                                                            title="Login as this user">
-                                                            <LogIn size={13} />
-                                                        </button>
-                                                    )}
-                                                    {canManageUsers && u.id !== currentUser?.id && (isSuperAdmin || !allRoleNames.includes('super_admin')) && (isSuperAdmin || !allRoleNames.includes('admin')) && (
-                                                        <>
-                                                            {(u.status ?? 'active') === 'active' ? (
-                                                                <button onClick={() => setStatusConfirm({ user: u, newStatus: 'inactive' })}
-                                                                    className="p-1.5 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-                                                                    title="Deactivate">
-                                                                    <UserX size={13} />
-                                                                </button>
-                                                            ) : (
-                                                                <button onClick={() => setStatusConfirm({ user: u, newStatus: 'active' })}
-                                                                    className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                                                                    title="Activate">
-                                                                    <UserCheck size={13} />
-                                                                </button>
-                                                            )}
-                                                            <button onClick={() => setDeleteConfirm(u)}
-                                                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                                title="Delete user">
-                                                                <Trash2 size={13} />
-                                                            </button>
-                                                        </>
-                                                    )}
-                                                </div>
+                                                <RowMenu
+                                                    user={u}
+                                                    canEditUser={canEditUser}
+                                                    isSuperAdmin={isSuperAdmin}
+                                                    canImpersonate={canImpersonate}
+                                                    canManageUsers={canManageUsers}
+                                                    currentUser={currentUser}
+                                                    onEdit={setEditModal}
+                                                    onAssign={setAssignModal}
+                                                    onImpersonate={setImpersonateTarget}
+                                                    onStatusChange={setStatusConfirm}
+                                                    onDelete={setDeleteConfirm}
+                                                />
                                             </div>
                                         );
                                     })}

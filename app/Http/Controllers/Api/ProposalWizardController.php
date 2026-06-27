@@ -101,6 +101,16 @@ class ProposalWizardController extends Controller
 
     public function uploadDocument(Request $request, string $id): JsonResponse
     {
+        // PHP silently drops files exceeding upload_max_filesize, causing a misleading
+        // "file required" 422. Detect this by checking whether a large request arrived
+        // with no file attached.
+        if (! $request->hasFile('file') && (int) $request->server('CONTENT_LENGTH', 0) > 500_000) {
+            return response()->json([
+                'message' => 'The file exceeds the maximum upload size allowed by the server (10MB). Please reduce the file size and try again.',
+                'errors' => ['file' => ['File too large. Maximum allowed size is 10MB.']],
+            ], 422);
+        }
+
         $request->validate([
             'file' => ['required', 'file', 'max:10240'],
             'document_type' => ['required', 'string', 'in:proposal_document,budget_spreadsheet,pi_cv,supporting_document,shared_document'],

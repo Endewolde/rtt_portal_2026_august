@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Exceptions\IncompleteProposalException;
 use App\Exceptions\InvalidWizardStepException;
 use App\Exceptions\ProposalNotEditableException;
+use App\Exceptions\WorkflowGuardException;
 use App\Jobs\CheckProposalSimilarityJob;
 use App\Models\College;
 use App\Models\Department;
@@ -183,6 +184,11 @@ class ProposalService
      */
     public function submit(Proposal $proposal, User $pi): Proposal
     {
+        $call = $proposal->proposalCall;
+        if ($call && ($call->status === 'expired' || ($call->end_date && $call->end_date->isPast()))) {
+            throw new WorkflowGuardException('The submission deadline for this proposal call has passed. Your draft has been saved but can no longer be submitted.');
+        }
+
         if (empty(trim($proposal->title ?? ''))) {
             throw new IncompleteProposalException('Proposal title is required.');
         }

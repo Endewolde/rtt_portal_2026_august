@@ -11,7 +11,11 @@ return new class extends Migration
     {
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
-        $role = Role::findByName('central_officer');
+        $role = Role::where('name', 'central_officer')->where('guard_name', 'web')->first();
+
+        if (! $role) {
+            return;
+        }
 
         $missing = [
             'proposal_calls.export',
@@ -42,7 +46,11 @@ return new class extends Migration
     {
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
-        $role = Role::findByName('central_officer');
+        $role = Role::where('name', 'central_officer')->where('guard_name', 'web')->first();
+
+        if (! $role) {
+            return;
+        }
 
         $added = [
             'proposal_calls.export',

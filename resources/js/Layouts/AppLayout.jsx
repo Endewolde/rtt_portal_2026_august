@@ -36,13 +36,18 @@ const _FO = 'finance_officer'
 
 // Maps URL prefix → roles that may access it. Longer paths must come first.
 const ROUTE_PERMISSIONS = [
-    ['/admin/settings',            ['super_admin', 'admin']],
-    ['/admin/public-site',         ['super_admin', 'admin']],
+    // Super-admin only
     ['/admin/roles',               ['super_admin']],
     ['/admin/permissions',         ['super_admin']],
     ['/admin/features',            ['super_admin']],
-    ['/admin/audit-logs',          _A],
+    ['/admin/thematic-areas',      ['super_admin']],
+    ['/admin/dropdown-options',    ['super_admin', 'admin']],
+    ['/admin/proposal-archive',    ['super_admin', 'proposal_archivist']],
+    // Admin-level
+    ['/admin/settings',            ['super_admin', 'admin']],
+    ['/admin/public-site',         ['super_admin', 'admin']],
     ['/admin/system-monitor',      ['super_admin', 'central_officer']],
+    ['/admin/audit-logs',          _A],
     ['/admin/evaluation-criteria', _A],
     ['/admin/similarity-flags',    _A],
     ['/admin/users',               _A],
@@ -50,22 +55,34 @@ const ROUTE_PERMISSIONS = [
     ['/admin/departments',         _A],
     ['/admin/reviewer-workload',   _A],
     ['/admin/resources',           _A],
+    ['/admin/analytics',           _A],
+    ['/admin/login-notices',       _A],
+    ['/admin/feedback',            _A],
+    ['/admin/repository',          _A],
+    ['/admin/assign-reviewers',    _A],
+    ['/admin/review-assignment',   _A],
+    // Admin + officers
     ['/admin/appeals',             [..._A, ..._OR]],
     ['/admin/grant-letters',       [..._A, ..._OR]],
     ['/admin/validation-queue',    [..._A, ..._OR]],
     ['/admin/central-evaluation',  [..._A, ..._OR]],
     ['/admin/funding',             [..._A, ..._OR]],
+    ['/admin/external-funds',      [..._A, ..._OR]],
+    ['/admin/conferences',         [..._A, ..._OR]],
+    ['/admin/abstracts',           [..._A, ..._OR, 'reviewer']],
+    // Admin + college officers
     ['/admin/blind-review',        [..._A, 'college_officer']],
     ['/admin/open-defence',        [..._A, 'college_officer']],
-    ['/admin/awarded',             [..._A, ..._AO, _FO]],
-    ['/admin/completed-archive',   [..._A, ..._AO, _FO]],
-    ['/admin/assign-reviewers',    _A],
-    ['/admin/review-assignment',   _A],
+    // Admin + all officers + finance
+    ['/admin/awarded',             [..._A, ..._OR, 'college_officer', _FO]],
+    ['/admin/completed-archive',   [..._A, ..._OR, 'college_officer', _FO]],
 ]
 
 // Permission-based route access — works for ANY role (including custom roles)
 // that has the corresponding Spatie permission assigned.
 // Longer paths must come before shorter ones so prefix matching works correctly.
+// IMPORTANT: this map is only checked after ROUTE_PERMISSIONS passes (or is absent).
+// Any /admin/* path not in ROUTE_PERMISSIONS is denied by the routeAllowed expression below.
 const ROUTE_PERM_REQUIRED = {
     // Admin panel pages
     '/admin/validation-queue':    'proposals.validate',
@@ -81,19 +98,29 @@ const ROUTE_PERM_REQUIRED = {
     '/admin/colleges':            'colleges.view_any',
     '/admin/departments':         'departments.view_any',
     '/admin/repository':          'repository.view_any',
-    // Content pages
+    // Proposal pages (longer paths before shorter)
     '/proposals/create':          'proposals.create',
     '/my-proposals':              'proposals.submit',
+    '/my-research':               'proposals.submit',
     '/proposals':                 'proposals.view_any',
+    // Reviews
     '/reviews':                   'review_assignments.view_any',
+    // Finance & budget (longer paths first)
     '/budget-allocations':        'budget_allocations.view_any',
     '/budget-requests':           'budget_requests.view_any',
+    '/finance/milestones':        'budget_requests.view_any',
     '/disbursements':             'disbursements.view_any',
     '/settlements':               'settlements.view_any',
+    // Monitoring
     '/midterm-evaluations':       'midterm_evaluations.view_any',
     '/completion-workshops':      'completion_workshops.view_any',
     '/research-outputs':          'research_outputs.view_any',
+    '/research-impact':           'research_outputs.view_any',
+    // Reports (longer paths first)
+    '/reports/college-dashboard': 'reports.view_any',
+    '/reports/annual':            'reports.view_any',
     '/reports':                   'reports.view_any',
+    // Other
     '/complaints':                'complaints.view_any',
 }
 
@@ -189,49 +216,59 @@ function isDarkColor(hex) {
 
 // Class sets for light and dark sidebar backgrounds
 const LIGHT = {
-    border:          'border-r border-gray-100',
-    logoBorder:      'border-b border-gray-100',
-    logoTitle:       'text-gray-900',
-    logoSub:         'text-gray-400',
-    scrollbar:       'scrollbar-thumb-gray-200',
-    separator:       'border-t border-gray-100',
-    groupDivider:    'bg-gray-100',
-    groupLabel:      (a) => a ? 'text-indigo-500' : 'text-gray-400',
-    navItem:         (a) => a ? 'bg-indigo-600 text-white font-semibold shadow-sm shadow-indigo-200/60' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50/80',
-    accent:          'bg-indigo-500',
-    icon:            (a) => a ? 'text-white/90' : 'text-gray-400 group-hover:text-gray-600',
-    footerBorder:    'border-t border-gray-100',
-    profileLink:     'hover:bg-gray-50',
-    userName:        'text-gray-900',
-    userRole:        'text-gray-400',
-    userRoleHover:   'group-hover:text-gray-600',
-    userIcon:        'text-gray-400 group-hover:text-gray-600',
-    logout:          'text-gray-400 hover:text-rose-500 hover:bg-red-50',
-    toggle:          'bg-white border-gray-200 shadow-sm text-gray-400 hover:text-indigo-600 hover:border-indigo-300 hover:shadow-md',
-    avatarRing:      'ring-2 ring-white shadow-sm',
+    border:       'border-r border-gray-100',
+    logoBorder:   'border-b border-gray-100',
+    logoTitle:    'text-gray-900',
+    logoSub:      'text-gray-400',
+    scrollbar:    'scrollbar-thumb-gray-200',
+    separator:    'border-t border-gray-100',
+    groupLabel:   (a) => a ? 'text-indigo-600' : 'text-gray-500',
+    // Active = vivid gradient pill with glow; inactive = ghost
+    navItem:      (a) => a
+        ? 'bg-linear-to-r from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-300/50'
+        : 'text-gray-500 hover:text-gray-900 hover:bg-gray-100/80',
+    icon:         (a) => a
+        ? 'text-white/90'
+        : 'text-gray-400 group-hover:text-indigo-500 transition-colors',
+    // Collapsed active icon square
+    iconSquare:   (a) => a
+        ? 'bg-linear-to-br from-indigo-500 to-violet-600 text-white shadow-md shadow-indigo-300/40'
+        : 'text-gray-400 hover:text-indigo-600 hover:bg-indigo-50/80',
+    footerBorder: 'border-t border-gray-100',
+    profileRow:   'hover:bg-gray-100/70',
+    userName:     'text-gray-900',
+    userRole:     'text-gray-400',
+    logout:       'text-gray-400 hover:text-rose-500 hover:bg-red-50/80',
+    toggle:       'bg-white border-gray-200 shadow-sm text-gray-400 hover:text-indigo-600 hover:border-indigo-300',
+    avatarRing:   'ring-2 ring-white shadow-sm',
+    collapseRow:  'text-gray-400 hover:text-gray-700 hover:bg-gray-100/80',
 }
 
 const DARK = {
-    border:          'border-r border-white/10',
-    logoBorder:      'border-b border-white/10',
-    logoTitle:       'text-white',
-    logoSub:         'text-slate-500',
-    scrollbar:       'scrollbar-thumb-slate-700/50',
-    separator:       'border-t border-white/10',
-    groupDivider:    'bg-white/7',
-    groupLabel:      (a) => a ? 'text-indigo-400' : 'text-slate-500',
-    navItem:         (a) => a ? 'bg-white/20 text-white font-semibold shadow-sm' : 'text-slate-400 hover:text-slate-100 hover:bg-white/5',
-    accent:          'bg-indigo-400',
-    icon:            (a) => a ? 'text-white' : 'text-slate-500 group-hover:text-slate-300',
-    footerBorder:    'border-t border-white/10',
-    profileLink:     'hover:bg-white/5',
-    userName:        'text-white',
-    userRole:        'text-slate-500',
-    userRoleHover:   'group-hover:text-slate-400',
-    userIcon:        'text-slate-500 group-hover:text-slate-400',
-    logout:          'text-slate-500 hover:text-rose-400 hover:bg-white/5',
-    toggle:          'bg-slate-700 border-slate-600 text-slate-400 hover:text-white hover:bg-indigo-600 hover:border-indigo-600 shadow-sm',
-    avatarRing:      'ring-2 ring-white/20',
+    border:       'border-r border-white/7',
+    logoBorder:   'border-b border-white/7',
+    logoTitle:    'text-white',
+    logoSub:      'text-slate-500',
+    scrollbar:    'scrollbar-thumb-slate-700/50',
+    separator:    'border-t border-white/7',
+    groupLabel:   (a) => a ? 'text-indigo-400' : 'text-slate-400',
+    navItem:      (a) => a
+        ? 'bg-linear-to-r from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-500/30'
+        : 'text-slate-400 hover:text-slate-100 hover:bg-white/5',
+    icon:         (a) => a
+        ? 'text-white/90'
+        : 'text-slate-500 group-hover:text-slate-200 transition-colors',
+    iconSquare:   (a) => a
+        ? 'bg-linear-to-br from-indigo-500 to-violet-600 text-white shadow-md shadow-indigo-500/30'
+        : 'text-slate-500 hover:text-white hover:bg-white/8',
+    footerBorder: 'border-t border-white/7',
+    profileRow:   'hover:bg-white/5',
+    userName:     'text-white',
+    userRole:     'text-slate-500',
+    logout:       'text-slate-500 hover:text-rose-400 hover:bg-white/6',
+    toggle:       'bg-white/8 border-white/10 text-slate-400 hover:text-white hover:bg-indigo-500 hover:border-indigo-500/50 shadow-sm',
+    avatarRing:   'ring-2 ring-white/15',
+    collapseRow:  'text-slate-500 hover:text-slate-200 hover:bg-white/5',
 }
 
 // ─── Icon map ─────────────────────────────────────────────────────────────────
@@ -249,6 +286,24 @@ const ICONS = {
     FlaskConical, Brain, MessageSquareHeart, Scale, ScrollText, Milestone, FileBarChart2, FolderSearch,
     BuildingOffice: Building2,
 }
+
+// ─── Group icon map ───────────────────────────────────────────────────────────
+
+const GROUP_ICONS = {
+    'Main':                LayoutDashboard,
+    'Proposals':           FileText,
+    'Review & Evaluation': ClipboardCheck,
+    'Budget':              DollarSign,
+    'Monitoring':          Activity,
+    'Reports':             BarChart2,
+    'User':                Bell,
+    'Events':              CalendarDays,
+    'External Funds':      Banknote,
+    'Administration':      Shield,
+    'Settings':            Settings,
+}
+
+// ─── Role labels ──────────────────────────────────────────────────────────────
 
 const ROLE_LABELS = {
     super_admin:        'Super Admin',
@@ -472,8 +527,26 @@ export default function AppLayout({ children, breadcrumb }) {
     const { hasFeature, hasSubFeature } = useFeature()
     const counts    = useActionCounts()
     const [paletteOpen, setPaletteOpen] = useState(false)
-    const [collapsed, setCollapsed] = useState(false)
+    const [collapsed, setCollapsed] = useState(() => localStorage.getItem('sidebar_collapsed') === 'true')
     const [mobileOpen, setMobileOpen] = useState(false)
+
+    const toggleCollapsed = () => {
+        setCollapsed(v => {
+            const next = !v
+            localStorage.setItem('sidebar_collapsed', String(next))
+            return next
+        })
+    }
+
+    const [expandedGroups, setExpandedGroups] = useState(new Set())
+
+    const toggleGroup = (groupName) => {
+        setExpandedGroups(prev => {
+            const next = new Set(prev)
+            if (next.has(groupName)) { next.delete(groupName) } else { next.add(groupName) }
+            return next
+        })
+    }
     const [unreadNotifications, setUnreadNotifications] = useState(0)
     const [isOnline, setIsOnline] = useState(() => navigator.onLine)
     // authReady gates the route guard — prevents a stale-localStorage "Access Denied"
@@ -574,12 +647,48 @@ export default function AppLayout({ children, breadcrumb }) {
         return () => clearTimeout(t)
     }, [sessionWarning, handleSessionLogout])
 
+    // ── Sidebar group accordion — auto-expand the active group ────────────
+    // Initialize: open only the group containing the current route
+    useEffect(() => {
+        if (authReady) {
+            const path = window.location.pathname
+            const active = navGroups.find(g =>
+                g.items.some(i => path === i.href || path.startsWith(i.href + '/'))
+            )
+            setExpandedGroups(new Set(active ? [active.group] : []))
+        }
+    }, [authReady]) // eslint-disable-line
+
+    // Auto-expand when navigating via Inertia links
+    useEffect(() => {
+        const path = window.location.pathname
+        const active = navGroups.find(g =>
+            g.items.some(i => path === i.href || path.startsWith(i.href + '/'))
+        )
+        if (active) {
+            setExpandedGroups(prev => {
+                if (prev.has(active.group)) return prev
+                return new Set([...prev, active.group])
+            })
+        }
+    }, [url]) // eslint-disable-line
+
     // ── Route permission guard ─────────────────────────────────────────────────
     const currentPath      = url || window.location.pathname
-    const allowedRoles     = getAllowedRoles(currentPath)
-    const requiredPerm     = getRequiredPermission(currentPath)
-    const routeAllowed     = !user || !allowedRoles || hasAnyRole(allowedRoles)
-        || (requiredPerm && hasPermission(requiredPerm))
+    const allowedRoles = getAllowedRoles(currentPath)
+    const requiredPerm = getRequiredPermission(currentPath)
+    // Evaluate in order:
+    // 1. No user yet (auth still loading) → pass through, authReady spinner handles it
+    // 2. Role restriction exists → must satisfy it (plus optional permission OR)
+    // 3. Permission restriction only → must have that permission
+    // 4. No restriction at all, but path is under /admin/ → deny (safety net)
+    // 5. No restriction, non-admin path → allow all authenticated users
+    const routeAllowed = !user
+        || (allowedRoles !== null
+            ? hasAnyRole(allowedRoles) && (requiredPerm === null || hasPermission(requiredPerm))
+            : requiredPerm !== null
+                ? hasPermission(requiredPerm)
+                : !currentPath.startsWith('/admin/'))
 
     const isDark = isDarkColor(sidebarBg)
     const sc     = isDark ? DARK : LIGHT
@@ -636,6 +745,10 @@ export default function AppLayout({ children, breadcrumb }) {
                     label: 'My Proposals', href: '/my-proposals', icon: 'FolderOpen',
                     show: perm('proposals.submit') && hasSubFeature('proposals.my_proposals'),
                     badge: c => c.my_proposals_draft,
+                },
+                {
+                    label: 'Funded Proposals', href: '/my-research', icon: 'Trophy',
+                    show: hasRole('staff'),
                 },
                 {
                     label: 'Awarded Proposals', href: '/admin/awarded', icon: 'Trophy',
@@ -807,7 +920,7 @@ export default function AppLayout({ children, breadcrumb }) {
             ],
         },
         {
-            group: 'User',
+            group: 'Notifications',
             items: [
                 {
                     label: 'Notifications', href: '/notifications', icon: 'Bell',
@@ -934,7 +1047,7 @@ export default function AppLayout({ children, breadcrumb }) {
                 className={cn(
                     // Mobile: off-canvas drawer (fixed, full height, slides in from left)
                     'fixed inset-y-0 left-0 z-50 flex flex-col w-72',
-                    'transition-transform duration-200 ease-in-out',
+                    'transition-all duration-200 ease-in-out',
                     mobileOpen ? 'translate-x-0' : '-translate-x-full',
                     // Desktop: in-flow sidebar, controlled width
                     'md:relative md:inset-auto md:z-auto md:translate-x-0 md:shrink-0',
@@ -962,8 +1075,8 @@ export default function AppLayout({ children, breadcrumb }) {
                     )}
                     {!collapsed && (
                         <div className="min-w-0">
-                            <p className={cn('text-sm font-bold leading-none truncate', sc.logoTitle)}>{systemName}</p>
-                            <p className={cn('text-[10px] mt-0.5 truncate', sc.logoSub)}>{systemTagline}</p>
+                            <p className={cn('text-sm font-extrabold leading-none truncate tracking-tight', sc.logoTitle)}>{systemName}</p>
+                            <p className={cn('text-[10px] mt-0.5 truncate font-semibold', sc.logoSub)}>{systemTagline}</p>
                         </div>
                     )}
                 </div>
@@ -974,82 +1087,175 @@ export default function AppLayout({ children, breadcrumb }) {
                         'flex-1 overflow-y-auto py-3 overflow-x-hidden scrollbar-thin scrollbar-track-transparent',
                         sc.scrollbar
                     )}
-                    onClick={() => setMobileOpen(false)}
                 >
                     {visibleGroups.map((group, gi) => {
                         const groupIsActive = isGroupActive(group)
+                        const isExpanded    = collapsed || expandedGroups.has(group.group)
+
                         return (
-                            <div key={group.group} className={gi > 0 ? 'mt-1' : ''}>
+                            <div key={group.group}>
 
-                                {/* Group label */}
-                                {!collapsed ? (
-                                    <>
-                                        {gi > 0 && <div className={cn('mx-3 my-1 h-px', sc.groupDivider)} />}
-                                        <p className={cn(
-                                            'px-4 pt-3 pb-1.5 text-[10px] font-semibold uppercase tracking-widest select-none',
-                                            sc.groupLabel(groupIsActive)
-                                        )}>
-                                            {group.group}
-                                        </p>
-                                    </>
-                                ) : (
-                                    gi > 0 && <div className={cn('mx-3 mt-2 mb-1', sc.separator)} />
-                                )}
-
-                                {/* Nav items */}
-                                {group.items.map(item => {
-                                    const Icon       = ICONS[item.icon]
-                                    const active     = isActive(item.href)
-                                    const badgeCount = item.badge ? (item.badge(counts) ?? 0) : 0
-
-                                    return (
+                                {/* ── Group header ───────────────────────────────── */}
+                                {(() => {
+                                    const GroupIcon = GROUP_ICONS[group.group]
+                                    return collapsed ? (
+                                        /* Collapsed: group icon as a tooltip trigger */
                                         <Link
-                                            key={item.href}
-                                            href={item.href}
-                                            title={collapsed ? item.label : undefined}
+                                            href={group.items[0]?.href ?? '#'}
+                                            title={group.group}
+                                            onClick={() => setMobileOpen(false)}
+                                            className="relative flex items-center justify-center my-0.5"
+                                        >
+                                            <span className={cn(
+                                                'flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-150 mx-1.5',
+                                                groupIsActive
+                                                    ? isDark ? 'bg-indigo-500/20 text-indigo-400' : 'bg-indigo-50 text-indigo-600'
+                                                    : isDark ? 'text-slate-500 hover:text-slate-300 hover:bg-white/6' : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100/70'
+                                            )}>
+                                                {GroupIcon && <GroupIcon size={15} />}
+                                            </span>
+                                        </Link>
+                                    ) : (
+                                        <button
+                                            onClick={() => toggleGroup(group.group)}
                                             className={cn(
-                                                'relative flex items-center gap-3 mx-2 px-3 py-2.5 rounded-lg text-sm',
-                                                'transition-all duration-150 group',
-                                                sc.navItem(active)
+                                                'group/hdr w-full flex items-center gap-2.5 select-none',
+                                                'mx-2 px-2.5 rounded-lg transition-all duration-150',
+                                                gi > 0 ? 'mt-4 py-1.5' : 'mt-2 py-1.5',
+                                                sc.groupLabel(groupIsActive),
+                                                isDark ? 'hover:bg-white/5' : 'hover:bg-gray-100/60'
                                             )}
                                         >
-                                            {Icon && (
-                                                <Icon size={15} className={cn(
-                                                    'shrink-0 transition-colors',
-                                                    sc.icon(active)
-                                                )} />
+                                            {/* Section icon */}
+                                            {GroupIcon && (
+                                                <span className={cn(
+                                                    'flex h-5 w-5 shrink-0 items-center justify-center rounded-md',
+                                                    groupIsActive
+                                                        ? 'bg-indigo-500/15 text-indigo-500'
+                                                        : isDark ? 'bg-white/6 text-slate-400' : 'bg-gray-100 text-gray-500'
+                                                )}>
+                                                    <GroupIcon size={11} />
+                                                </span>
                                             )}
-
-                                            {!collapsed && (
-                                                <>
-                                                    <span className="flex-1 truncate text-[13px]">{item.label}</span>
-                                                    <NavBadge count={badgeCount} collapsed={false} />
-                                                </>
-                                            )}
-
-                                            {collapsed && badgeCount > 0 && (
-                                                <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-rose-500" />
-                                            )}
-                                        </Link>
+                                            <span className="flex-1 text-left text-[11px] font-semibold uppercase tracking-widest leading-none">
+                                                {group.group}
+                                            </span>
+                                            <ChevronDown
+                                                size={12}
+                                                className={cn(
+                                                    'shrink-0 transition-transform duration-200 ease-in-out',
+                                                    isExpanded ? 'rotate-0' : '-rotate-90',
+                                                    'opacity-60 group-hover/hdr:opacity-100'
+                                                )}
+                                            />
+                                        </button>
                                     )
-                                })}
+                                })()}
+
+                                {/* ── Items (CSS grid height animation) ──────────── */}
+                                <div className={cn(
+                                    'grid transition-all duration-200 ease-out',
+                                    isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                                )}>
+                                    <div className="min-h-0 overflow-hidden">
+                                        <div className={cn('py-1', collapsed ? 'px-1.5' : 'px-2')}>
+                                            {group.items.map(item => {
+                                                const Icon       = ICONS[item.icon]
+                                                const active     = isActive(item.href)
+                                                const badgeCount = item.badge ? (item.badge(counts) ?? 0) : 0
+
+                                                /* Collapsed: centered icon square */
+                                                if (collapsed) {
+                                                    return (
+                                                        <Link key={item.href} href={item.href} title={item.label}
+                                                            onClick={() => setMobileOpen(false)}
+                                                            className="relative flex items-center justify-center my-0.5">
+                                                            <span className={cn(
+                                                                'flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-150',
+                                                                sc.iconSquare(active)
+                                                            )}>
+                                                                {Icon && <Icon size={16} />}
+                                                            </span>
+                                                            {badgeCount > 0 && (
+                                                                <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-rose-500" />
+                                                            )}
+                                                        </Link>
+                                                    )
+                                                }
+
+                                                /* Expanded: clean full-width row, no icon bg on inactive */
+                                                return (
+                                                    <Link key={item.href} href={item.href}
+                                                        onClick={() => setMobileOpen(false)}
+                                                        className={cn(
+                                                            'group flex items-center gap-3 rounded-xl px-3 py-2 mb-px',
+                                                            'transition-all duration-150',
+                                                            sc.navItem(active)
+                                                        )}>
+
+                                                        {/* Active: icon in frosted pill. Inactive: bare icon */}
+                                                        {Icon && (
+                                                            active ? (
+                                                                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-white/20">
+                                                                    <Icon size={13} className="text-white/90" />
+                                                                </span>
+                                                            ) : (
+                                                                <Icon size={15} className={cn('shrink-0', sc.icon(false))} />
+                                                            )
+                                                        )}
+
+                                                        <span className={cn(
+                                                            'flex-1 truncate text-[13px] leading-snug',
+                                                            active ? 'font-semibold tracking-tight' : 'font-medium'
+                                                        )}>
+                                                            {item.label}
+                                                        </span>
+
+                                                        <NavBadge count={badgeCount} collapsed={false} />
+                                                    </Link>
+                                                )
+                                            })}
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         )
                     })}
                 </nav>
+
+                {/* In-sidebar collapse toggle — desktop only */}
+                <div className={cn('hidden md:block shrink-0 px-2 py-2', sc.separator)}>
+                    {collapsed ? (
+                        <button onClick={toggleCollapsed} title="Expand sidebar"
+                            className={cn(
+                                'flex h-9 w-9 mx-auto items-center justify-center rounded-xl transition-all duration-150',
+                                sc.collapseRow
+                            )}>
+                            <ChevronRight size={15} />
+                        </button>
+                    ) : (
+                        <button onClick={toggleCollapsed} title="Collapse sidebar"
+                            className={cn(
+                                'group flex w-full items-center gap-3 rounded-xl px-3 py-2 transition-all duration-150',
+                                sc.collapseRow
+                            )}>
+                            <ChevronLeft size={15} className="shrink-0" />
+                            <span className="flex-1 text-left text-[13px] font-medium">Collapse Sidebar</span>
+                        </button>
+                    )}
+                </div>
 
                 {/* User footer */}
                 <div className={cn('p-2 shrink-0', sc.footerBorder)} onClick={() => setMobileOpen(false)}>
                     {!collapsed ? (
                         <div className={cn(
                             'flex items-center gap-1 p-1 rounded-xl',
-                            isDark ? 'bg-white/6 border border-white/8' : 'bg-gray-50 border border-gray-100'
+                            isDark ? 'bg-white/5 border border-white/7' : 'bg-gray-50/80 border border-gray-100'
                         )}>
-                            <Link
-                                href="/profile"
+                            <Link href="/profile"
                                 className={cn(
-                                    'flex items-center gap-2.5 flex-1 min-w-0 px-1.5 py-1.5 rounded-lg transition-colors group',
-                                    sc.profileLink
+                                    'group flex items-center gap-2.5 flex-1 min-w-0 px-1.5 py-1.5 rounded-lg transition-colors',
+                                    sc.profileRow
                                 )}
                             >
                                 <div className={cn(
@@ -1067,11 +1273,10 @@ export default function AppLayout({ children, breadcrumb }) {
                                     <p className={cn('text-xs font-semibold truncate leading-tight', sc.userName)}>
                                         {user?.name}
                                     </p>
-                                    <p className={cn('text-[10px] truncate capitalize transition-colors', sc.userRole, sc.userRoleHover)}>
+                                    <p className={cn('text-[10px] truncate capitalize', sc.userRole)}>
                                         {roleLabel}
                                     </p>
                                 </div>
-                                <User size={10} className={cn('shrink-0 transition-colors', sc.userIcon)} />
                             </Link>
                             <button onClick={logout} title="Sign out"
                                 className={cn('p-2 rounded-xl transition-colors shrink-0', sc.logout)}>
@@ -1083,7 +1288,7 @@ export default function AppLayout({ children, breadcrumb }) {
                             <Link href="/profile" title="My Profile"
                                 className={cn(
                                     'flex w-full items-center justify-center py-2 rounded-xl transition-colors',
-                                    sc.profileLink
+                                    sc.profileRow
                                 )}>
                                 <div className={cn(
                                     `h-7 w-7 rounded-full bg-linear-to-br ${gradient}`,
@@ -1107,9 +1312,10 @@ export default function AppLayout({ children, breadcrumb }) {
                     )}
                 </div>
 
-                {/* Collapse toggle — desktop only */}
+                {/* Collapse toggle — desktop only, floating edge button */}
                 <button
-                    onClick={() => setCollapsed(v => !v)}
+                    onClick={toggleCollapsed}
+                    title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
                     className={cn(
                         'hidden md:flex absolute -right-3 top-13.5 z-20',
                         'h-6 w-6 rounded-full border items-center justify-center',
@@ -1117,15 +1323,12 @@ export default function AppLayout({ children, breadcrumb }) {
                         sc.toggle
                     )}
                 >
-                    {collapsed
-                        ? <ChevronRight size={11} />
-                        : <ChevronLeft size={11} />
-                    }
+                    {collapsed ? <ChevronRight size={11} /> : <ChevronLeft size={11} />}
                 </button>
             </aside>
 
             {/* ── Main area ─────────────────────────────────────────────────── */}
-            <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+            <div className="flex-1 flex flex-col overflow-hidden min-w-0 transition-all duration-200">
 
                 {/* Top header */}
                 <header className="relative h-14 bg-white border-b border-gray-100 flex items-center

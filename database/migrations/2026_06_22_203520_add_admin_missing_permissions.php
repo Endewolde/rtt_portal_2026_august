@@ -11,7 +11,11 @@ return new class extends Migration
     {
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
-        $role = Role::findByName('admin');
+        $role = Role::where('name', 'admin')->where('guard_name', 'web')->first();
+
+        if (! $role) {
+            return;
+        }
 
         $missing = [
             'proposals.review', 'proposals.track',
@@ -50,7 +54,11 @@ return new class extends Migration
     {
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
 
-        $role = Role::findByName('admin');
+        $role = Role::where('name', 'admin')->where('guard_name', 'web')->first();
+
+        if (! $role) {
+            return;
+        }
 
         $role->revokePermissionTo([
             'proposals.review', 'proposals.track',
