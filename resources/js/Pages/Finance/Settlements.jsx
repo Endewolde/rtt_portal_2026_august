@@ -29,8 +29,8 @@ export default function Settlements() {
     const user = (() => { try { return JSON.parse(localStorage.getItem('rtt_user') || '{}') } catch { return {} } })()
     const roles = (user.roles || []).map(r => typeof r === 'string' ? r : r.name)
     const isPI = roles.some(r => ['pi', 'staff'].includes(r))
-    const isCollegeOfficer = roles.some(r => ['college_admin', 'college_officer'].includes(r))
-    const isFinance = roles.some(r => ['super_admin', 'central_office', 'finance',
+    const isCollegeOfficer = roles.some(r => ['college_officer'].includes(r))
+    const isFinance = roles.some(r => ['super_admin', 'admin', 'central_officer', 'finance_officer',
         'research_officer', 'community_officer', 'technology_officer'].includes(r))
 
     useEffect(() => {
@@ -55,7 +55,7 @@ export default function Settlements() {
             setStats(statsRes.data?.data || {})
             setPendingRequests(pendingRes.data?.data || [])
 
-            if (isPI && (pendingRes.data?.data || []).length > 0) {
+            if ((isPI || isCollegeOfficer) && (pendingRes.data?.data || []).length > 0) {
                 setActiveTab('pending')
             } else if (isFinance) {
                 setActiveTab('pending_finance')
@@ -83,7 +83,7 @@ export default function Settlements() {
     }
 
     const TABS = [
-        { key: 'pending',         label: '📋 Submit Settlement',  count: pendingRequests.length,            show: isPI },
+        { key: 'pending',         label: '📋 Submit Settlement',  count: pendingRequests.length,            show: isPI || isCollegeOfficer },
         { key: 'pending_college', label: '🏛 Verify (College)',   count: pendingCollegeVerification.length, show: isCollegeOfficer || isFinance },
         { key: 'pending_finance', label: '✅ Finalize (Finance)',  count: pendingFinanceVerification.length, show: isFinance },
         { key: 'all',             label: '📊 All Settlements',    count: settlements.length,                show: true },
@@ -541,26 +541,57 @@ function SettlementCard({ settlement, onRefresh, canVerifyCollege, canVerifyFina
 
             {/* Actions */}
             <div className="pt-2 border-t border-gray-100 space-y-3">
-                <div className="flex gap-2">
-                    {canVerifyCollege && settlement.status === 'submitted' && noteMode !== 'college' && (
-                        <button
-                            onClick={() => { setNoteMode('college'); setNoteText('') }}
-                            className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm
-                                       font-medium hover:bg-purple-700"
-                        >
-                            🏛 Verify (College)
-                        </button>
-                    )}
+                <div className="flex flex-wrap gap-2 items-center">
+                    {(() => {
+                        const midtermEvals = settlement.budget_request?.proposal?.midterm_evaluations ?? []
+                        const midtermReported = midtermEvals.some(e =>
+                            ['scored', 'completed'].includes(e.status)
+                        )
 
-                    {canVerifyFinance && settlement.status === 'college_verified' && noteMode !== 'finance' && (
-                        <button
-                            onClick={() => { setNoteMode('finance'); setNoteText('') }}
-                            className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm
-                                       font-medium hover:bg-green-700"
-                        >
-                            ✅ Finalize (Finance)
-                        </button>
-                    )}
+                        return (
+                            <>
+                                {/* Step 1 — College Verify */}
+                                {canVerifyCollege && settlement.status === 'submitted' && noteMode !== 'college' && (
+                                    midtermReported ? (
+                                        <button
+                                            onClick={() => { setNoteMode('college'); setNoteText('') }}
+                                            className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm
+                                                       font-medium hover:bg-purple-700"
+                                        >
+                                            🏛 Verify (College)
+                                        </button>
+                                    ) : (
+                                        <div title="Mid-Term M&E meeting must be held and scored first"
+                                            className="flex items-center gap-1.5 px-4 py-2 bg-amber-50 border
+                                                       border-amber-200 text-amber-700 rounded-lg text-sm font-medium
+                                                       cursor-not-allowed select-none">
+                                            🔒 College Verify — awaiting Mid-Term M&E scoring
+                                        </div>
+                                    )
+                                )}
+
+                                {/* Step 2 — Finance Finalize (active only after college verified) */}
+                                {canVerifyFinance && settlement.status === 'college_verified' && noteMode !== 'finance' && (
+                                    <button
+                                        onClick={() => { setNoteMode('finance'); setNoteText('') }}
+                                        className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm
+                                                   font-medium hover:bg-green-700"
+                                    >
+                                        ✅ Finalize (Finance)
+                                    </button>
+                                )}
+
+                                {/* Finance step locked — waiting for college */}
+                                {canVerifyFinance && settlement.status === 'submitted' && (
+                                    <div title="College must verify before Finance can finalize"
+                                        className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 text-gray-400
+                                                   rounded-lg text-sm font-medium cursor-not-allowed select-none">
+                                        🔒 Finalize (Finance) — awaiting college verification
+                                    </div>
+                                )}
+                            </>
+                        )
+                    })()}
 
                     {settlement.status === 'finance_verified' && (
                         budgetExhausted ? (

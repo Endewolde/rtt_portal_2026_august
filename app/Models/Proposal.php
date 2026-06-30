@@ -37,6 +37,16 @@ class Proposal extends Model
         'focus_area',
         'duration_months',
         'research_type',
+        'ethical_clearance_required',
+        'ethical_clearance_number',
+        'status_entered_at',
+        'contract_signed_at',
+        'contract_signed_by',
+        'contract_document_path',
+        'contract_status',
+        'contract_submitted_at',
+        'contract_submitted_by',
+        'contract_rejection_reason',
         'submitted_at',
         'validated_at',
         'rejected_at',
@@ -47,6 +57,10 @@ class Proposal extends Model
     protected $casts = [
         'wizard_completed_steps' => 'array',
         'draft_data' => 'array',
+        'ethical_clearance_required' => 'boolean',
+        'status_entered_at' => 'datetime',
+        'contract_signed_at' => 'datetime',
+        'contract_submitted_at' => 'datetime',
         'submitted_at' => 'datetime',
         'validated_at' => 'datetime',
         'rejected_at' => 'datetime',
@@ -136,5 +150,10 @@ class Proposal extends Model
     public function repositoryRecord(): HasOne
     {
         return $this->hasOne(RepositoryRecord::class);
+    }
+
+    public function similarityScores(): HasMany
+    {
+        return $this->hasMany(SimilarityScore::class);
     }
 }

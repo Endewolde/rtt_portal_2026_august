@@ -21,7 +21,7 @@ class AppSettingsSeeder extends Seeder
             ['key' => 'date_format',           'value' => 'DD/MM/YYYY',           'type' => 'select',   'group' => 'general'],
             ['key' => 'time_format',           'value' => '24h',                  'type' => 'select',   'group' => 'general'],
             ['key' => 'currency_format',       'value' => 'ETB',                  'type' => 'string',   'group' => 'general'],
-            ['key' => 'current_academic_year', 'value' => '2026-2027',            'type' => 'string',   'group' => 'general'],
+            ['key' => 'current_academic_year', 'value' => '2026-2027',            'type' => 'select',   'group' => 'general'],
 
             // Authentication & Security
             ['key' => 'password_min_length',          'value' => '8',      'type' => 'number',   'group' => 'security'],

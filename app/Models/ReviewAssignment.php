@@ -12,7 +12,9 @@ class ReviewAssignment extends Model
     use HasUuids;
 
     protected $primaryKey = 'id';
+
     public $incrementing = false;
+
     protected $keyType = 'string';
 
     protected $fillable = [
@@ -25,12 +27,14 @@ class ReviewAssignment extends Model
         'due_date',
         'submitted_at',
         'is_external',
+        'coi_declared_at',
     ];
 
     protected $casts = [
-        'assigned_at'  => 'datetime',
+        'assigned_at' => 'datetime',
         'submitted_at' => 'datetime',
-        'is_external'  => 'boolean',
+        'coi_declared_at' => 'datetime',
+        'is_external' => 'boolean',
     ];
 
     public function proposal(): BelongsTo

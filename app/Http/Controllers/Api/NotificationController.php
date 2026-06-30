@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Services\NotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -12,11 +13,48 @@ class NotificationController extends Controller
 {
     public function __construct(private NotificationService $service) {}
 
+    /**
+     * Paginated list of all notifications (read + unread).
+     * Pass ?unread=1 to filter to unread only.
+     */
     public function index(Request $request): JsonResponse
     {
-        $notifications = $this->service->getUnread($request->user(), 20);
+        $user = $request->user();
+        $perPage = min((int) $request->get('per_page', 20), 50);
 
-        return response()->json(['data' => $notifications]);
+        $query = DB::table('notifications')
+            ->where('notifiable_type', User::class)
+            ->where('notifiable_id', $user->id)
+            ->orderByDesc('created_at');
+
+        if ($request->boolean('unread')) {
+            $query->whereNull('read_at');
+        }
+
+        $paginated = $query->paginate($perPage);
+
+        $items = collect($paginated->items())->map(function ($n) {
+            $n->data = is_string($n->data) ? json_decode($n->data, true) : $n->data;
+
+            return $n;
+        });
+
+        $unreadCount = DB::table('notifications')
+            ->where('notifiable_type', User::class)
+            ->where('notifiable_id', $user->id)
+            ->whereNull('read_at')
+            ->count();
+
+        return response()->json([
+            'data' => $items,
+            'meta' => [
+                'total' => $paginated->total(),
+                'current_page' => $paginated->currentPage(),
+                'last_page' => $paginated->lastPage(),
+                'per_page' => $paginated->perPage(),
+                'unread_count' => $unreadCount,
+            ],
+        ]);
     }
 
     public function markAsRead(Request $request): JsonResponse
@@ -26,14 +64,43 @@ class NotificationController extends Controller
         return response()->json(['message' => 'Notifications marked as read.']);
     }
 
+    public function markAllAsRead(Request $request): JsonResponse
+    {
+        $this->service->markAsRead($request->user(), []);
+
+        return response()->json(['message' => 'All notifications marked as read.']);
+    }
+
     public function unreadCount(Request $request): JsonResponse
     {
         $count = DB::table('notifications')
-            ->where('notifiable_type', \App\Models\User::class)
+            ->where('notifiable_type', User::class)
             ->where('notifiable_id', $request->user()->id)
             ->whereNull('read_at')
             ->count();
 
         return response()->json(['data' => ['count' => $count]]);
+    }
+
+    public function destroy(Request $request, string $id): JsonResponse
+    {
+        DB::table('notifications')
+            ->where('id', $id)
+            ->where('notifiable_type', User::class)
+            ->where('notifiable_id', $request->user()->id)
+            ->delete();
+
+        return response()->json(['message' => 'Notification deleted.']);
+    }
+
+    public function destroyRead(Request $request): JsonResponse
+    {
+        DB::table('notifications')
+            ->where('notifiable_type', User::class)
+            ->where('notifiable_id', $request->user()->id)
+            ->whereNotNull('read_at')
+            ->delete();
+
+        return response()->json(['message' => 'Read notifications cleared.']);
     }
 }

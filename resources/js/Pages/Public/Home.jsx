@@ -1,9 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { Link, usePage } from '@inertiajs/react';
 import {
-    ArrowRight, Search, ChevronRight, ChevronDown, Globe,
+    ArrowRight, Search, ChevronRight, ChevronLeft, ChevronDown, Globe,
     FileText, CheckSquare, Award, BookOpen, BarChart2, Shield,
-    Calendar, Clock, HelpCircle,
+    Calendar, Clock, HelpCircle, TrendingUp, Users, Layers,
 } from 'lucide-react';
 import {
     PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
@@ -67,7 +67,7 @@ function StatCounter({ label, value, enabled, color }) {
 // ─── Donut chart with center label ────────────────────────────────────────────
 
 const CHART_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#8b5cf6'];
-const CHART_LABELS = ['Proposals (Year)', 'Funded Projects', 'Colleges', 'Publications'];
+const CHART_LABELS = ['Proposals (Year)', 'Funded Projects', 'Colleges', 'Departments'];
 
 function StatsDonut({ stats, primaryColor, academicYear }) {
     const { ref, inView } = useInView();
@@ -76,7 +76,7 @@ function StatsDonut({ stats, primaryColor, academicYear }) {
         stats.total_proposals,
         stats.funded,
         stats.colleges,
-        stats.publications,
+        stats.departments,
     ].map(v => parseInt(String(v ?? 0).replace(/\D/g, ''), 10));
 
     const hasData = raw.some(v => v > 0);
@@ -89,7 +89,7 @@ function StatsDonut({ stats, primaryColor, academicYear }) {
         academicYear ? `${academicYear} Proposals` : 'Proposals (Year)',
         academicYear ? `${academicYear} Funded` : 'Funded Projects',
         'Colleges',
-        'Publications',
+        'Departments',
     ];
 
     const data = labels.map((name, i) => ({
@@ -408,6 +408,367 @@ function FaqItem({ item, open, onToggle, primaryColor }) {
     );
 }
 
+// ─── Hero Stat Card ───────────────────────────────────────────────────────────
+
+function HeroStatCard({ stat, label, color, icon, inView, secondaryStats }) {
+    const num      = parseInt(String(stat ?? 0).replace(/\D/g, ''), 10);
+    const animated = useCountUp(num, inView && num > 0, 1400);
+    const radius   = 44;
+    const circ     = 2 * Math.PI * radius;
+    const offset   = inView ? circ * 0.28 : circ;
+
+    return (
+        <div className="relative rounded-3xl overflow-hidden border border-white/10 p-7 backdrop-blur-xl"
+            style={{ background: 'rgba(255,255,255,0.045)' }}>
+            {/* Corner glow */}
+            <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full blur-3xl opacity-35 pointer-events-none transition-all duration-700"
+                style={{ background: color }} />
+
+            {/* Icon badge */}
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl mb-5 text-xl"
+                style={{ background: `${color}22`, border: `1.5px solid ${color}35` }}>
+                {icon}
+            </div>
+
+            {/* Stat + ring row */}
+            <div className="flex items-center justify-between gap-4 mb-1">
+                <div>
+                    <div className="text-5xl font-extrabold text-white tabular-nums tracking-tight leading-none">
+                        {num > 0 ? animated.toLocaleString() : '—'}
+                    </div>
+                    <div className="text-sm font-semibold mt-2 transition-colors duration-700" style={{ color }}>
+                        {label}
+                    </div>
+                </div>
+                <svg width="80" height="80" viewBox="0 0 110 110" className="shrink-0">
+                    <circle cx="55" cy="55" r={radius} fill="none"
+                        stroke="rgba(255,255,255,0.07)" strokeWidth="9" />
+                    <circle cx="55" cy="55" r={radius} fill="none"
+                        stroke={color} strokeWidth="9" strokeLinecap="round"
+                        strokeDasharray={circ}
+                        strokeDashoffset={offset}
+                        style={{
+                            transition: 'stroke-dashoffset 1.4s cubic-bezier(.16,1,.3,1)',
+                            transform: 'rotate(-90deg)',
+                            transformOrigin: '55px 55px',
+                        }}
+                    />
+                    <text x="55" y="60" textAnchor="middle" fill="rgba(255,255,255,0.5)"
+                        fontSize="11" fontWeight="600" fontFamily="monospace">
+                        {inView ? Math.round((num > 0 ? 0.72 : 0) * 100) + '%' : '0%'}
+                    </text>
+                </svg>
+            </div>
+
+            {/* Divider */}
+            <div className="my-5 h-px" style={{ background: `linear-gradient(90deg, ${color}50, transparent 80%)` }} />
+
+            {/* Secondary stats */}
+            <div className="grid grid-cols-2 gap-3">
+                {secondaryStats.map((s, i) => (
+                    <div key={i} className="rounded-xl px-3.5 py-3 border border-white/5"
+                        style={{ background: 'rgba(255,255,255,0.03)' }}>
+                        <div className="text-xl font-bold text-white tabular-nums">
+                            {parseInt(String(s.value ?? 0)) > 0 ? parseInt(String(s.value ?? 0)).toLocaleString() : '—'}
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-0.5 font-medium">{s.label}</div>
+                    </div>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+// ─── Hero Slider ──────────────────────────────────────────────────────────────
+
+const SLIDE_STAT_KEYS   = ['total_proposals', 'funded', 'colleges', 'departments', 'total_proposals', 'funded'];
+const SLIDE_STAT_LABELS = ['Proposals This Year', 'Funded Projects', 'Participating Colleges', 'Departments Engaged', 'Proposals Submitted', 'Funded Projects'];
+const SLIDE_DEFAULT_COLORS = ['', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4'];
+const SLIDE_DEFAULT_ICONS  = ['🔬', '💰', '⚖️', '🏛️', '📊', '🌐'];
+const SLIDE_DEFAULT_EYEBROWS = ['Research Platform', 'Research Funding', 'Peer Evaluation', 'Research Lifecycle', 'Research Impact', 'Global Reach'];
+const SLIDE_DEFAULT_HEADINGS   = ['Accelerate Your', 'Unlock Research', 'Rigorous & Fair', 'End-to-End', 'Measure Your', 'Expand Your'];
+const SLIDE_DEFAULT_HIGHLIGHTS = ['Research Journey', 'Funding Opportunities', 'Peer Review Process', 'Research Support', 'Research Impact', 'Research Network'];
+const SLIDE_DEFAULT_SUBTITLES  = [
+    'Submit proposals, collaborate with peers, and manage grants — all in one platform built for academic excellence.',
+    'Competitive grants, milestone-based disbursements, and award letters to fuel your research ambitions.',
+    'Expert blind review, open defence scoring, and central committee evaluation — transparent and objective.',
+    'From ethics clearance to midterm evaluation and project closure — comprehensive institutional support.',
+    'Track outcomes, measure impact, and showcase your research achievements across the institution.',
+    'Connect with international partners, co-investigators, and funding bodies worldwide.',
+];
+
+function HeroSlider({ stats, primaryColor, heroBg, orgName, ctaPrimary, ctaSecondary, s }) {
+    const slideCount = Math.min(6, Math.max(1, parseInt(s['slider_slide_count'] || 4)));
+    const SLIDES = Array.from({ length: slideCount }, (_, i) => i + 1).map((n, i) => {
+        const k = f => s[`slider_slide_${n}_${f}`];
+        const color = k('color') || SLIDE_DEFAULT_COLORS[i] || primaryColor;
+        return {
+            eyebrow:   k('eyebrow')   || (i === 0 ? `${orgName} · Research Platform` : SLIDE_DEFAULT_EYEBROWS[i]),
+            heading:   k('heading')   || SLIDE_DEFAULT_HEADINGS[i],
+            highlight: k('highlight') || SLIDE_DEFAULT_HIGHLIGHTS[i],
+            subtitle:  k('subtitle')  || SLIDE_DEFAULT_SUBTITLES[i],
+            cta1: { text: k('cta1_text') || (i === 0 ? ctaPrimary || 'Explore Open Calls' : 'View Open Calls'),
+                    href: k('cta1_href') || '/proposal-calls/public' },
+            cta2: { text: k('cta2_text') || (i === 0 ? ctaSecondary || 'Track Proposal' : 'Track Proposal'),
+                    href: k('cta2_href') || '/tracker' },
+            color,
+            icon:     k('icon')     || SLIDE_DEFAULT_ICONS[i],
+            image:    k('image')    || '',
+            statKey:  SLIDE_STAT_KEYS[i],
+            statLabel: stats.academic_year && i === 0
+                ? `${stats.academic_year} Proposals`
+                : SLIDE_STAT_LABELS[i],
+        };
+    });
+
+    const [current, setCurrent]   = useState(0);
+    const [progress, setProgress] = useState(0);
+    const [paused, setPaused]     = useState(false);
+    const { ref: statsRef, inView: statsInView } = useInView(0.2);
+
+    const slide = SLIDES[current];
+
+    const goTo = (idx) => {
+        setCurrent(idx);
+        setProgress(0);
+    };
+
+    // Auto-advance + progress bar
+    useEffect(() => {
+        if (paused) return;
+        setProgress(0);
+        const start = performance.now();
+        let raf;
+        const DURATION = 5800;
+        const tick = (now) => {
+            const p = Math.min((now - start) / DURATION, 1);
+            setProgress(p * 100);
+            if (p < 1) {
+                raf = requestAnimationFrame(tick);
+            } else {
+                setCurrent(prev => (prev + 1) % SLIDES.length);
+            }
+        };
+        raf = requestAnimationFrame(tick);
+        return () => cancelAnimationFrame(raf);
+    }, [current, paused]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const allStatsMeta = [
+        { key: 'total_proposals', value: stats.total_proposals, label: 'Proposals'       },
+        { key: 'funded',          value: stats.funded,          label: 'Funded Projects'  },
+        { key: 'colleges',        value: stats.colleges,        label: 'Colleges'         },
+        { key: 'departments',     value: stats.departments,     label: 'Departments'      },
+    ];
+    const secondaryStats = allStatsMeta.filter(s => s.key !== slide.statKey).slice(0, 2);
+
+    return (
+        <section
+            className="relative overflow-hidden"
+            style={{ background: heroBg }}
+            onMouseEnter={() => setPaused(true)}
+            onMouseLeave={() => setPaused(false)}
+        >
+            <style>{`
+                @keyframes heroSlideUp {
+                    from { opacity: 0; transform: translateY(26px); }
+                    to   { opacity: 1; transform: translateY(0);    }
+                }
+                @keyframes orbDriftA {
+                    0%,100% { transform: translate(0,0) scale(1);          }
+                    40%     { transform: translate(40px,-50px) scale(1.1);  }
+                    70%     { transform: translate(-20px,25px) scale(0.95); }
+                }
+                @keyframes orbDriftB {
+                    0%,100% { transform: translate(0,0) scale(1) rotate(0deg);   }
+                    50%     { transform: translate(-50px,35px) scale(1.12) rotate(12deg); }
+                }
+                @keyframes orbDriftC {
+                    0%,100% { transform: translate(0,0) scale(1);          }
+                    60%     { transform: translate(30px,40px) scale(0.9);   }
+                }
+                .hero-animate { animation: heroSlideUp 0.6s cubic-bezier(.16,1,.3,1) both; }
+                .orb-a { animation: orbDriftA 10s ease-in-out infinite; }
+                .orb-b { animation: orbDriftB 14s ease-in-out infinite; }
+                .orb-c { animation: orbDriftC  8s ease-in-out infinite; }
+            `}</style>
+
+            {/* ── Background: image (with overlay) or animated gradient ── */}
+            <div className="absolute inset-0 pointer-events-none overflow-hidden transition-all duration-700">
+                {slide.image ? (
+                    <>
+                        {/* Full-bleed photo */}
+                        <img
+                            key={slide.image}
+                            src={slide.image}
+                            alt=""
+                            className="absolute inset-0 w-full h-full object-cover transition-opacity duration-700"
+                        />
+                        {/* Dark gradient overlay for text readability */}
+                        <div className="absolute inset-0"
+                            style={{ background: 'linear-gradient(120deg, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.45) 60%, rgba(0,0,0,0.25) 100%)' }} />
+                        {/* Subtle color tint to keep slide accent visible */}
+                        <div className="absolute inset-0 opacity-20 transition-all duration-700"
+                            style={{ background: `radial-gradient(ellipse at 20% 50%, ${slide.color}88, transparent 60%)` }} />
+                    </>
+                ) : (
+                    <>
+                        <div className="orb-a absolute -top-40 -left-40 w-175 h-175 rounded-full blur-3xl opacity-20 transition-all duration-1000"
+                            style={{ background: `radial-gradient(circle, ${slide.color}cc, transparent 65%)` }} />
+                        <div className="orb-b absolute -bottom-48 -right-48 w-150 h-150 rounded-full blur-3xl opacity-18 transition-all duration-1000"
+                            style={{ background: `radial-gradient(circle, ${slide.color}99, transparent 65%)` }} />
+                        <div className="orb-c absolute top-1/4 right-1/4 w-72 h-72 rounded-full blur-2xl opacity-12 transition-all duration-1000"
+                            style={{ background: `radial-gradient(circle, ${slide.color}77, transparent 65%)` }} />
+                    </>
+                )}
+                {/* Dot matrix (both modes) */}
+                <div className="absolute inset-0 opacity-[0.035]"
+                    style={{
+                        backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.7) 1px, transparent 1px)',
+                        backgroundSize: '30px 30px',
+                    }} />
+                {/* Top accent line */}
+                <div className="absolute top-0 left-0 right-0 h-px transition-all duration-700"
+                    style={{ background: `linear-gradient(90deg, transparent, ${slide.color}70, transparent)` }} />
+            </div>
+
+            {/* ── Slide content ── */}
+            <div className="relative z-10 max-w-7xl mx-auto px-6 lg:px-8 pt-20 pb-8 lg:pt-28 lg:pb-10">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+
+                    {/* Left — text */}
+                    <div key={`left-${current}`}>
+                        {/* Eyebrow */}
+                        <div className="hero-animate inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full mb-7
+                                        border border-white/10 bg-white/5 backdrop-blur-sm"
+                            style={{ animationDelay: '0ms' }}>
+                            <span className="w-2 h-2 rounded-full animate-pulse transition-colors duration-700"
+                                style={{ background: slide.color }} />
+                            <span className="text-xs font-semibold text-white/55">{slide.eyebrow}</span>
+                        </div>
+
+                        {/* Heading */}
+                        <h1 className="hero-animate text-4xl sm:text-5xl lg:text-[3.25rem] font-extrabold leading-[1.1]
+                                       tracking-tight text-white mb-5"
+                            style={{ animationDelay: '70ms' }}>
+                            {slide.heading}
+                            <br />
+                            <span className="bg-clip-text text-transparent transition-all duration-700"
+                                style={{ backgroundImage: `linear-gradient(130deg, ${slide.color}, ${slide.color}88 60%, #e2e8f0)` }}>
+                                {slide.highlight}
+                            </span>
+                        </h1>
+
+                        {/* Subtitle */}
+                        <p className="hero-animate text-base text-slate-400 leading-relaxed mb-9 max-w-lg"
+                            style={{ animationDelay: '150ms' }}>
+                            {slide.subtitle}
+                        </p>
+
+                        {/* CTAs */}
+                        <div className="hero-animate flex flex-wrap gap-3 mb-12"
+                            style={{ animationDelay: '230ms' }}>
+                            <a href={slide.cta1.href}
+                                className="inline-flex items-center gap-2 px-7 py-3.5 rounded-xl text-sm font-bold
+                                           text-white shadow-xl transition-all duration-200 hover:scale-105"
+                                style={{ background: `linear-gradient(135deg, ${slide.color}, ${slide.color}bb)`,
+                                         boxShadow: `0 8px 30px ${slide.color}40` }}>
+                                {slide.cta1.text} <ArrowRight size={15} />
+                            </a>
+                            <a href={slide.cta2.href}
+                                className="inline-flex items-center gap-2 px-7 py-3.5 rounded-xl text-sm font-semibold
+                                           text-white/65 border border-white/15 bg-white/5 backdrop-blur-sm
+                                           transition-all duration-200 hover:bg-white/10 hover:text-white">
+                                {slide.cta2.text}
+                            </a>
+                        </div>
+
+                        {/* Navigation */}
+                        <div className="hero-animate flex items-center gap-5" style={{ animationDelay: '310ms' }}>
+                            {/* Dots */}
+                            <div className="flex items-center gap-2">
+                                {SLIDES.map((_, i) => (
+                                    <button key={i} onClick={() => goTo(i)}
+                                        className="rounded-full transition-all duration-400 hover:opacity-80"
+                                        style={{
+                                            width:      i === current ? '30px' : '8px',
+                                            height:     '8px',
+                                            background: i === current ? slide.color : 'rgba(255,255,255,0.22)',
+                                        }}
+                                    />
+                                ))}
+                            </div>
+
+                            {/* Arrows */}
+                            <div className="flex items-center gap-2">
+                                <button onClick={() => goTo((current - 1 + SLIDES.length) % SLIDES.length)}
+                                    className="w-9 h-9 rounded-full border border-white/15 bg-white/5 backdrop-blur-sm
+                                               flex items-center justify-center text-white/50 transition-all
+                                               hover:bg-white/12 hover:text-white/80">
+                                    <ChevronLeft size={16} />
+                                </button>
+                                <button onClick={() => goTo((current + 1) % SLIDES.length)}
+                                    className="w-9 h-9 rounded-full border border-white/15 bg-white/5 backdrop-blur-sm
+                                               flex items-center justify-center text-white/50 transition-all
+                                               hover:bg-white/12 hover:text-white/80">
+                                    <ChevronRight size={16} />
+                                </button>
+                                <span className="text-xs text-white/25 ml-1 tabular-nums font-mono">
+                                    {String(current + 1).padStart(2, '0')} / {String(SLIDES.length).padStart(2, '0')}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Right — stat card */}
+                    <div key={`card-${current}`} className="flex justify-center lg:justify-end">
+                        <div className="hero-animate w-full max-w-sm" style={{ animationDelay: '100ms' }}>
+                            <HeroStatCard
+                                stat={stats[slide.statKey]}
+                                label={slide.statLabel}
+                                color={slide.color}
+                                icon={slide.icon}
+                                inView={true}
+                                secondaryStats={secondaryStats}
+                            />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* ── Bottom stats bar ── */}
+            <div ref={statsRef} className="relative z-10 max-w-7xl mx-auto px-6 lg:px-8 pb-10">
+                <div className="border border-white/8 rounded-2xl px-6 py-5 backdrop-blur-xl"
+                    style={{ background: 'rgba(255,255,255,0.035)' }}>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-white/8">
+                        {[
+                            { value: stats.total_proposals, label: stats.academic_year ? `${stats.academic_year} Proposals` : 'Proposals', color: primaryColor,  icon: <FileText  size={13} /> },
+                            { value: stats.funded,          label: 'Funded Projects',    color: '#10b981', icon: <Award     size={13} /> },
+                            { value: stats.colleges,        label: 'Colleges',           color: '#f59e0b', icon: <Layers    size={13} /> },
+                            { value: stats.departments,     label: 'Departments',        color: '#8b5cf6', icon: <Users     size={13} /> },
+                        ].map((s, i) => (
+                            <div key={i} className={`flex items-center gap-4 ${i > 0 ? 'pl-6' : ''} ${i < 3 ? 'pr-6' : ''}`}>
+                                <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
+                                    style={{ background: `${s.color}20`, color: s.color }}>
+                                    {s.icon}
+                                </div>
+                                <StatCounter label={s.label} value={s.value} enabled={statsInView} color={s.color} />
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            {/* Progress bar */}
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white/5">
+                <div className="h-full" style={{ width: `${progress}%`, background: slide.color, transition: 'width 0.1s linear' }} />
+            </div>
+
+            {/* Page fade to next section */}
+            <div className="h-12" style={{ background: 'linear-gradient(to bottom, transparent, rgb(249 250 251))' }} />
+        </section>
+    );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function Home() {
@@ -448,8 +809,6 @@ export default function Home() {
         desc:  s[`public_step_${i + 1}_desc`]  || d.desc,
     }));
 
-    const { ref: heroRef, inView: heroVisible } = useInView();
-
     useEffect(() => {
         const now = new Date();
         get('/proposal-calls')
@@ -470,84 +829,16 @@ export default function Home() {
     return (
         <PublicLayout>
 
-            {/* ── Hero ──────────────────────────────────────────────────────── */}
-            <section style={{
-                background: `linear-gradient(135deg, ${heroBg} 0%, ${heroBg}ee 55%, ${primaryColor}18 100%)`,
-            }}>
-                {/* Top decorative line */}
-                <div className="h-px w-full" style={{ background: `linear-gradient(90deg, transparent, ${primaryColor}60, transparent)` }} />
-
-                <div className="max-w-7xl mx-auto px-6 lg:px-8 py-16 lg:py-24">
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-14 items-center">
-
-                        {/* Left ── text */}
-                        <div>
-                            {/* Eyebrow */}
-                            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full mb-7
-                                            border border-white/10 bg-white/5 backdrop-blur-sm">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                                <span className="text-xs font-semibold text-white/60">{badge}</span>
-                            </div>
-
-                            {/* Heading */}
-                            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold leading-[1.1]
-                                           tracking-tight text-white mb-5">
-                                {heading}
-                                <br />
-                                <span className="bg-clip-text text-transparent"
-                                    style={{ backgroundImage: `linear-gradient(135deg, ${primaryColor}, #a78bfa 60%, #38bdf8)` }}>
-                                    {highlight}
-                                </span>
-                            </h1>
-
-                            {/* Subtitle */}
-                            <p className="text-base text-slate-400 leading-relaxed mb-9 max-w-lg">{subtitle}</p>
-
-                            {/* CTAs */}
-                            <div className="flex flex-wrap gap-3 mb-10">
-                                <a href="/proposal-calls/public"
-                                    className="inline-flex items-center gap-2 px-7 py-3 rounded-xl text-sm font-bold
-                                               text-white shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-2xl"
-                                    style={{ background: `linear-gradient(135deg, ${primaryColor}, ${primaryColor}cc)` }}>
-                                    {ctaPrimary} <ArrowRight size={16} />
-                                </a>
-                                <a href="/tracker"
-                                    className="inline-flex items-center gap-2 px-7 py-3 rounded-xl text-sm font-semibold
-                                               text-white border border-white/15 bg-white/5 backdrop-blur-sm
-                                               transition-all duration-200 hover:bg-white/10">
-                                    <Search size={15} /> {ctaSecondary}
-                                </a>
-                            </div>
-
-                            {/* Inline stat counters */}
-                            <div ref={heroRef} className="grid grid-cols-2 gap-5">
-                                <StatCounter
-                                    label={stats.academic_year ? `${stats.academic_year} Proposals` : 'Proposals This Year'}
-                                    value={stats.total_proposals}
-                                    enabled={heroVisible}
-                                    color={primaryColor} />
-                                <StatCounter
-                                    label={stats.academic_year ? `${stats.academic_year} Funded` : 'Funded Projects'}
-                                    value={stats.funded} enabled={heroVisible} color="#10b981" />
-                                <StatCounter label="Colleges"        value={stats.colleges}     enabled={heroVisible} color="#f59e0b" />
-                                <StatCounter label="Publications"    value={stats.publications} enabled={heroVisible} color="#8b5cf6" />
-                            </div>
-                        </div>
-
-                        {/* Right ── donut chart */}
-                        <div className="flex justify-center lg:justify-end">
-                            <div className="w-full max-w-sm">
-                                <StatsDonut stats={stats} primaryColor={primaryColor} academicYear={stats.academic_year} />
-                            </div>
-                        </div>
-
-                    </div>
-                </div>
-
-                {/* Bottom fade */}
-                <div className="h-12"
-                    style={{ background: 'linear-gradient(to bottom, transparent, rgb(249 250 251))' }} />
-            </section>
+            {/* ── Hero Slider ───────────────────────────────────────────────── */}
+            <HeroSlider
+                stats={stats}
+                primaryColor={primaryColor}
+                heroBg={heroBg}
+                orgName={orgName}
+                ctaPrimary={ctaPrimary}
+                ctaSecondary={ctaSecondary}
+                s={s}
+            />
 
             {/* ── Open Calls ────────────────────────────────────────────────── */}
             {showCalls && (

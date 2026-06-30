@@ -14,6 +14,7 @@ enum Feature: string
     case Complaints = 'complaints';
     case ExternalFunds = 'external_funds';
     case Events = 'events';
+    case Workflow = 'workflow';
 
     public function label(): string
     {
@@ -28,6 +29,7 @@ enum Feature: string
             self::Complaints => 'Complaint Handling',
             self::ExternalFunds => 'External Funds',
             self::Events => 'Conferences & Events',
+            self::Workflow => 'Workflow Enhancements',
         };
     }
 
@@ -44,6 +46,7 @@ enum Feature: string
             self::Complaints => 'Complaint submission, escalation, and resolution tracking',
             self::ExternalFunds => 'Manage external grants, funding agencies, applications, awards, budgets, and expenditures',
             self::Events => 'Conferences, abstract submissions, and event management',
+            self::Workflow => 'Optional workflow enhancements: co-PI acceptance, COI checks, SLA tracking, ethical clearance, and more',
         };
     }
 }

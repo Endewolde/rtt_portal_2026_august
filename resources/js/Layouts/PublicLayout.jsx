@@ -588,31 +588,59 @@ export default function PublicLayout({ children }) {
             <div className="sticky top-0 z-50 bg-white shadow-sm">
 
                 {/* ── Top utility bar (dark slim strip) — hidden after scroll ── */}
-                <div className={`text-xs hidden md:block overflow-hidden transition-all duration-300 ${scrolled ? 'max-h-0' : 'max-h-8'}`}
-                     style={{ backgroundColor: topbarBg, color: topbarText }}>
-                    <div className="max-w-7xl mx-auto px-6 flex items-center justify-between h-8">
-                        <span className="flex items-center gap-1 font-medium" style={{ color: topbarText }}>
-                            {headerTagline}
-                        </span>
-                        <div className="flex items-center gap-4">
+                <div className={`text-xs hidden md:block overflow-hidden transition-all duration-300 ${scrolled ? 'max-h-0' : 'max-h-9'}`}
+                     style={{ backgroundColor: topbarBg }}>
+                    <div className="max-w-7xl mx-auto px-6 flex items-center justify-between h-9">
+
+                        {/* Left — tagline with pulsing dot */}
+                        <div className="flex items-center gap-2.5">
+                            <span className="relative flex h-1.5 w-1.5 shrink-0">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-60"
+                                    style={{ backgroundColor: primaryColor }} />
+                                <span className="relative inline-flex rounded-full h-1.5 w-1.5"
+                                    style={{ backgroundColor: primaryColor }} />
+                            </span>
+                            <span className="font-medium tracking-wide" style={{ color: topbarText }}>
+                                {headerTagline}
+                            </span>
+                        </div>
+
+                        {/* Right — links */}
+                        <div className="flex items-center gap-1">
                             <Link
                                 href="/download"
-                                className="flex items-center gap-1.5 transition-opacity font-medium hover:opacity-75"
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-md transition-all hover:bg-white/10 font-medium"
                                 style={{ color: topbarText }}
                             >
-                                <Download size={11} />
+                                <Download size={10} />
                                 Downloads
                             </Link>
-                            <span className="w-px h-3 opacity-30" style={{ backgroundColor: topbarText }} />
+                            <span className="w-px h-3 mx-1 opacity-20" style={{ backgroundColor: topbarText }} />
                             {token ? (
-                                <Link href="/dashboard" className="transition-opacity hover:opacity-75" style={{ color: topbarText }}>
-                                    Dashboard
+                                <Link href="/dashboard"
+                                    className="flex items-center gap-1 px-2.5 py-1 rounded-md font-medium transition-all hover:bg-white/10"
+                                    style={{ color: topbarText }}>
+                                    Dashboard <ArrowRight size={10} />
                                 </Link>
                             ) : (
                                 <>
-                                    <Link href="/login"    className="transition-opacity hover:opacity-75" style={{ color: topbarText }}>Sign In</Link>
-                                    <span className="opacity-30" style={{ color: topbarText }}>|</span>
-                                    <Link href="/register" className="transition-opacity hover:opacity-75" style={{ color: topbarText }}>Register</Link>
+                                    <Link href="/login"
+                                        className="px-2.5 py-1 rounded-md font-medium transition-all hover:bg-white/10"
+                                        style={{ color: topbarText }}>
+                                        Sign In
+                                    </Link>
+                                    <Link href="/register"
+                                        className="px-2.5 py-1 rounded-md font-semibold transition-all"
+                                        style={{
+                                            color: topbarBg,
+                                            backgroundColor: topbarText,
+                                            opacity: 0.9,
+                                        }}
+                                        onMouseEnter={e => e.currentTarget.style.opacity = '1'}
+                                        onMouseLeave={e => e.currentTarget.style.opacity = '0.9'}
+                                    >
+                                        Register
+                                    </Link>
                                 </>
                             )}
                         </div>

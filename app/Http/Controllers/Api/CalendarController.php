@@ -62,14 +62,10 @@ class CalendarController extends Controller
             });
 
         // Reviewers — review assignment due dates
-        if ($user->hasAnyRole(['reviewer', 'super_admin', 'admin', 'central_officer'])) {
+        if ($user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer'])) {
             $assignmentQuery = ReviewAssignment::with('proposal:id,tracker_number,title')
                 ->whereIn('status', ['pending', 'in_progress'])
                 ->whereNotNull('due_date');
-
-            if ($user->hasRole('reviewer')) {
-                $assignmentQuery->where('reviewer_id', $user->id);
-            }
 
             $assignmentQuery->get(['id', 'proposal_id', 'due_date', 'assigned_at'])
                 ->each(function ($a) use ($cal) {
@@ -116,5 +112,89 @@ class CalendarController extends Controller
                 'Content-Disposition' => 'attachment; filename="rtt-calendar.ics"',
             ]
         );
+    }
+
+    public function events(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $month = (int) ($request->query('month', now()->month));
+        $year = (int) ($request->query('year', now()->year));
+        $from = Carbon::create($year, $month, 1)->startOfMonth();
+        $to = Carbon::create($year, $month, 1)->endOfMonth();
+
+        $events = collect();
+
+        // Proposal call deadlines
+        ProposalCall::whereBetween('end_date', [$from, $to])
+            ->get(['id', 'title', 'end_date', 'category'])
+            ->each(fn ($c) => $events->push([
+                'id' => 'call-'.$c->id,
+                'type' => 'call',
+                'label' => 'Deadline: '.$c->title,
+                'date' => $c->end_date->toDateString(),
+                'color' => 'blue',
+                'url' => '/proposal-calls',
+            ]));
+
+        // External fund deadlines
+        ExternalFundOpportunity::where('status', 'open')
+            ->whereBetween('deadline', [$from, $to])
+            ->get(['id', 'title', 'deadline'])
+            ->each(fn ($o) => $events->push([
+                'id' => 'fund-'.$o->id,
+                'type' => 'fund',
+                'label' => 'Fund Deadline: '.$o->title,
+                'date' => Carbon::parse($o->deadline)->toDateString(),
+                'color' => 'amber',
+                'url' => '/admin/external-funds',
+            ]));
+
+        // Review due dates (officers/admins)
+        if ($user?->hasAnyRole(['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer'])) {
+            ReviewAssignment::with('proposal:id,tracker_number')
+                ->whereIn('status', ['pending', 'in_progress'])
+                ->whereNotNull('due_date')
+                ->whereBetween('due_date', [$from, $to])
+                ->get()
+                ->each(fn ($a) => $events->push([
+                    'id' => 'review-'.$a->id,
+                    'type' => 'review',
+                    'label' => 'Review Due: '.($a->proposal?->tracker_number ?? '?'),
+                    'date' => Carbon::parse($a->due_date)->toDateString(),
+                    'color' => 'purple',
+                    'url' => '/reviews',
+                ]));
+        }
+
+        // Defence sessions
+        DefenceSession::with('proposal:id,tracker_number,pi_user_id')
+            ->where('status', 'scheduled')
+            ->whereBetween('scheduled_date', [$from, $to])
+            ->get()
+            ->filter(fn ($d) => $user?->hasAnyRole(['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer', 'college_officer'])
+                || $d->proposal?->pi_user_id === $user?->id
+            )
+            ->each(fn ($d) => $events->push([
+                'id' => 'defence-'.$d->id,
+                'type' => 'defence',
+                'label' => 'Defence: '.($d->proposal?->tracker_number ?? '?'),
+                'date' => $d->scheduled_date->toDateString(),
+                'color' => 'green',
+                'url' => '/admin/open-defence',
+                'time' => $d->scheduled_time ? Carbon::parse($d->scheduled_time)->format('H:i') : null,
+                'venue' => $d->venue,
+            ]));
+
+        return response()->json([
+            'data' => $events->groupBy('date')->map(fn ($g) => $g->values())->toArray(),
+            'message' => 'Calendar events retrieved.',
+            'errors' => [],
+            'meta' => [
+                'month' => $month,
+                'year' => $year,
+                'days_in_month' => $from->daysInMonth,
+                'first_weekday' => $from->dayOfWeek, // 0=Sun
+            ],
+        ]);
     }
 }

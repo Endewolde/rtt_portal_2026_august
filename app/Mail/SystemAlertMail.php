@@ -2,16 +2,13 @@
 
 namespace App\Mail;
 
-use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
+use Illuminate\Mail\Mailables\Address;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
-use Illuminate\Queue\SerializesModels;
 
 class SystemAlertMail extends Mailable
 {
-    use Queueable, SerializesModels;
-
     public function __construct(
         public readonly object $user,
         public readonly string $alertType,
@@ -29,7 +26,10 @@ class SystemAlertMail extends Mailable
             ? "[RTT] Anomaly Detected: {$this->alertMessage}"
             : "[RTT] System Alert ({$severityLabel}): {$this->alertMessage}";
 
-        return new Envelope(subject: $subject);
+        return new Envelope(
+            to: [new Address($this->user->email, $this->user->name)],
+            subject: $subject,
+        );
     }
 
     public function content(): Content

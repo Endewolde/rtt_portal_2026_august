@@ -298,6 +298,54 @@ class ReviewController extends Controller
         return response()->json(['data' => null, 'message' => 'Question deleted.', 'errors' => [], 'meta' => []]);
     }
 
+    public function proposalReviewResults(string $id, Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $proposal = Proposal::with(['reviewAssignments.scores.evaluationQuestion'])->findOrFail($id);
+
+        $isOwner = $user->id === $proposal->pi_user_id
+            || $proposal->members()->where('user_id', $user->id)->where('status', 'active')->exists();
+        $isStaff = $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'research_officer',
+            'community_officer', 'technology_officer', 'college_officer']);
+
+        if (! $isOwner && ! $isStaff) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
+        }
+
+        $submitted = $proposal->reviewAssignments->filter(fn ($a) => $a->status === 'submitted');
+
+        $reviews = $submitted->map(function ($assignment) {
+            $scores = $assignment->scores;
+            $avgScore = $scores->isNotEmpty() ? round($scores->avg('score'), 1) : null;
+            $recommendation = $scores->whereNotNull('recommendation')->last()?->recommendation;
+
+            $comments = $scores->map(fn ($s) => [
+                'question' => $s->evaluationQuestion?->question_text ?? null,
+                'comment' => $s->comment,
+                'score' => $s->score,
+            ])->filter(fn ($c) => $c['comment'])->values();
+
+            return [
+                'overall_score' => $avgScore,
+                'recommendation' => $recommendation,
+                'comments' => $comments,
+            ];
+        })->values();
+
+        $overallAvg = $reviews->whereNotNull('overall_score')->avg('overall_score');
+
+        return response()->json([
+            'data' => [
+                'total_reviews' => $proposal->reviewAssignments->count(),
+                'submitted_reviews' => $submitted->count(),
+                'average_score' => $overallAvg ? round($overallAvg, 1) : null,
+                'reviews' => $reviews,
+            ],
+            'message' => '',
+            'errors' => [],
+        ]);
+    }
+
     public function proposalReviewList(Request $request): JsonResponse
     {
         $rawStatus = $request->input('status', 'under_blind_review');
@@ -318,6 +366,10 @@ class ReviewController extends Controller
         // College officers only see their own college's proposals
         if ($request->_college_scope) {
             $query->where('college_id', $request->_college_scope);
+        }
+
+        if ($request->filled('academic_year')) {
+            $query->where('academic_year', $request->academic_year);
         }
 
         return response()->json(['data' => $query->get(), 'message' => '', 'errors' => [], 'meta' => []]);
@@ -653,7 +705,11 @@ class ReviewController extends Controller
 
     public function myAssignments(Request $request): JsonResponse
     {
-        $assignments = ReviewAssignment::with(['proposal.college', 'evaluationType'])
+        $assignments = ReviewAssignment::with([
+            'proposal.college',
+            'evaluationType',
+            'scores.evaluationQuestion',
+        ])
             ->where('reviewer_id', $request->user()->id)
             ->orderByDesc('assigned_at')
             ->get()
@@ -707,5 +763,87 @@ class ReviewController extends Controller
         }
 
         return response()->json(['data' => $data]);
+    }
+
+    public function declareCoi(string $id, Request $request): JsonResponse
+    {
+        $assignment = ReviewAssignment::findOrFail($id);
+
+        if ($assignment->reviewer_id !== $request->user()->id) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.'], 403);
+        }
+
+        if ($assignment->coi_declared_at) {
+            return response()->json(['data' => $assignment, 'message' => 'COI already declared.']);
+        }
+
+        $assignment->update(['coi_declared_at' => now()]);
+
+        return response()->json(['data' => $assignment->fresh(), 'message' => 'Conflict of interest declaration recorded.']);
+    }
+
+    public function respondInvitation(string $id, Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'response' => ['required', 'in:accepted,declined'],
+        ]);
+
+        $member = ProposalMember::with(['proposal.pi', 'user'])->findOrFail($id);
+
+        if ($member->user_id !== $request->user()->id) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.'], 403);
+        }
+
+        if ($member->invitation_status !== 'pending') {
+            return response()->json(['data' => null, 'message' => 'Invitation already responded to.'], 422);
+        }
+
+        $member->update([
+            'invitation_status' => $validated['response'],
+            'invitation_responded_at' => now(),
+        ]);
+
+        $response = $validated['response'];
+        $coPI = $member->user;
+        $proposal = $member->proposal;
+        $pi = $proposal?->pi;
+        $verb = $response === 'accepted' ? 'accepted' : 'declined';
+        $verbLabel = $response === 'accepted' ? 'Accepted' : 'Declined';
+
+        // Notify PI via email
+        if ($pi && $pi->email) {
+            $emailData = [
+                'recipient' => $pi,
+                'message' => "{$coPI->name} has {$verb} their co-investigator invitation on proposal \"{$proposal->title}\" ({$proposal->tracker_number}).",
+            ];
+
+            try {
+                SendRawMailJob::dispatchSync(
+                    view('emails.notifications.generic', $emailData)->render(),
+                    $pi->email,
+                    $pi->name,
+                    "Co-Investigator Invitation {$verbLabel} — {$proposal->tracker_number}"
+                );
+            } catch (\Exception $e) {
+                Log::warning("Could not send co-PI response email to PI {$pi->id}: {$e->getMessage()}");
+            }
+        }
+
+        // In-app notification to PI
+        if ($pi) {
+            try {
+                StoreInAppNotificationJob::dispatchSync($pi->id, 'co_pi_response', [
+                    'co_pi_name' => $coPI->name,
+                    'response' => $response,
+                    'proposal_id' => $proposal->id,
+                    'tracker_number' => $proposal->tracker_number,
+                    'proposal_title' => $proposal->title,
+                ]);
+            } catch (\Exception $e) {
+                Log::warning("Could not send co-PI in-app notification to PI {$pi->id}: {$e->getMessage()}");
+            }
+        }
+
+        return response()->json(['data' => $member->fresh(), 'message' => 'Invitation response recorded.']);
     }
 }

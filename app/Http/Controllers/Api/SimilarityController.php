@@ -11,21 +11,39 @@ class SimilarityController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $flags = SimilarityScore::with([
-            'proposal:id,tracker_number,title,status,college_id',
+        $query = SimilarityScore::with([
+            'proposal:id,tracker_number,title,status,college_id,category,abstract',
             'proposal.college:id,name',
-            'similarProposal:id,tracker_number,title',
-        ])
-            ->when($request->boolean('flagged_only'), fn ($q) => $q->where('flagged', true))
-            ->orderByDesc('score')
-            ->orderByDesc('checked_at')
-            ->paginate(25);
+            'similarProposal:id,tracker_number,title,status,abstract',
+        ]);
+
+        if ($request->boolean('flagged_only')) {
+            $query->where('flagged', true);
+        }
+
+        if ($request->filled('min_score')) {
+            $query->where('score', '>=', (float) $request->input('min_score'));
+        }
+
+        if ($request->filled('category')) {
+            $query->whereHas('proposal', fn ($q) => $q->where('category', $request->input('category')));
+        }
+
+        $flags = $query->orderByDesc('score')->orderByDesc('checked_at')->paginate(25);
+
+        $summary = [
+            'total' => SimilarityScore::count(),
+            'flagged' => SimilarityScore::where('flagged', true)->count(),
+            'critical' => SimilarityScore::where('score', '>=', 0.80)->count(),
+            'avg_score' => round((float) SimilarityScore::avg('score') * 100, 1),
+        ];
 
         return response()->json([
-            'data'    => $flags,
+            'data' => $flags,
+            'summary' => $summary,
             'message' => '',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ]);
     }
 }

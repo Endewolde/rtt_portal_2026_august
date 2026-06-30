@@ -78,11 +78,29 @@ class FeatureController extends Controller
         ]);
     }
 
+    /** Workflow sub-feature slugs that must be off until the admin explicitly enables them. */
+    private const WORKFLOW_DEFAULTS_DISABLED = [
+        'workflow.co_pi_acceptance',
+        'workflow.coi_declaration',
+        'workflow.budget_revision',
+        'workflow.no_cost_extension',
+        'workflow.sla_tracking',
+        'workflow.ethical_clearance',
+        'workflow.proposal_templates',
+        'workflow.closure_checklist',
+    ];
+
     /** Get the list of explicitly disabled sub-features. */
     public function getDisabledSubFeatures(): JsonResponse
     {
         $stored = AppSetting::where('key', 'disabled_sub_features')->value('value');
-        $disabled = $stored ? (json_decode($stored, true) ?? []) : [];
+
+        if ($stored === null) {
+            // First-time: all workflow sub-features are off by default.
+            $disabled = self::WORKFLOW_DEFAULTS_DISABLED;
+        } else {
+            $disabled = json_decode($stored, true) ?? [];
+        }
 
         return response()->json([
             'data' => $disabled,

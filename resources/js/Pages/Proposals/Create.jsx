@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import {
     Clock, AlertCircle, CheckCircle2, ChevronRight, FileText,
     Users, DollarSign, Upload, Eye, Send, Megaphone, ArrowLeft,
-    Building2, BookOpen, Info, Save, Calendar, Hash,
+    Building2, Info, Save, Pencil,
 } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import TrackerNumberDisplay from '../../Components/TrackerNumberDisplay';
@@ -11,6 +11,7 @@ import Step5Documents, { DOC_TYPES } from './Steps/Step5Documents';
 import { post, get } from '../../lib/api';
 import api from '../../lib/api';
 import { useAuth } from '../../hooks/useAuth';
+import { useFeature } from '../../hooks/useFeature';
 import { useToast } from '../../Components/Toast';
 import RoleRestrictedModal from '../../Components/RoleRestrictedModal';
 
@@ -104,59 +105,29 @@ function StepSidebar({ currentStep, completedSteps, onGoTo }) {
 
 // ─── Category-specific field configs ─────────────────────────────────────────
 
-const FOCUS_AREA_OPTIONS = {
-    research: [
-        'Agriculture & Food Systems',
-        'Health & Biomedical Sciences',
-        'Education & Social Sciences',
-        'Engineering & Technology',
-        'Environmental & Climate Sciences',
-        'Economics & Business',
-        'Natural Sciences',
-        'Humanities & Arts',
-        'Other',
-    ],
-    community_engagement: [
-        'Health & Well-being',
-        'Agriculture & Food Security',
-        'Education & Literacy',
-        'Environmental Conservation',
-        'Women Empowerment',
-        'Youth Development',
-        'Poverty Reduction',
-        'Infrastructure & Sanitation',
-        'Other',
-    ],
-    technology_transfer: [
-        'Product Innovation',
-        'Process Innovation',
-        'Service Innovation',
-        'Knowledge & Technology Transfer',
-        'Intellectual Property Commercialisation',
-        'Industry-University Collaboration',
-        'Digital Transformation',
-        'Other',
-    ],
+const FOCUS_AREA_FALLBACK = {
+    research:             ['Agriculture & Food Systems', 'Health & Biomedical Sciences', 'Engineering & Technology', 'Other'],
+    community_engagement: ['Health & Well-being', 'Education & Literacy', 'Environmental Conservation', 'Other'],
+    technology_transfer:  ['Product Innovation', 'Process Innovation', 'Knowledge & Technology Transfer', 'Other'],
 };
 
-const RESEARCH_TYPE_OPTIONS = [
-    'Basic Research',
-    'Applied Research',
-    'Experimental Development',
-    'Clinical Research',
-    'Action Research',
-    'Review / Meta-analysis',
-];
+const RESEARCH_TYPE_FALLBACK = ['Basic Research', 'Applied Research', 'Experimental Development', 'Clinical Research', 'Action Research', 'Review / Meta-analysis'];
 
 const DURATION_OPTIONS = [3, 6, 9, 12, 18, 24, 30, 36, 48, 60];
 
 // ─── Step 1 — Basic Info ──────────────────────────────────────────────────────
 
-function Step1({ data, onChange, errors, category }) {
+function Step1({ data, onChange, errors, category, lookupOptions }) {
     const abstractLen  = (data.abstract ?? '').length;
     const abstractOk   = abstractLen >= 100;
-    const focusOptions = FOCUS_AREA_OPTIONS[category] ?? FOCUS_AREA_OPTIONS.research;
     const isResearch   = category === 'research';
+    const { hasSubFeature } = useFeature();
+
+    const groupKey     = category === 'community_engagement' ? 'community_focus_area'
+                       : category === 'technology_transfer'  ? 'technology_focus_area'
+                       : 'research_focus_area';
+    const focusOptions        = lookupOptions?.[groupKey] ?? FOCUS_AREA_FALLBACK[category] ?? FOCUS_AREA_FALLBACK.research;
+    const researchTypeOptions = lookupOptions?.research_type ?? RESEARCH_TYPE_FALLBACK;
 
     const inputCls = (key) =>
         `w-full rounded-xl border px-4 py-3 text-sm focus:outline-none focus:ring-2 ${
@@ -256,7 +227,7 @@ function Step1({ data, onChange, errors, category }) {
                                 className={inputCls('research_type')}
                             >
                                 <option value="">Select research type…</option>
-                                {RESEARCH_TYPE_OPTIONS.map(opt => (
+                                {researchTypeOptions.map(opt => (
                                     <option key={opt} value={opt}>{opt}</option>
                                 ))}
                             </select>
@@ -286,6 +257,37 @@ function Step1({ data, onChange, errors, category }) {
                     </div>
                 </div>
             </div>
+
+            {/* Ethical Clearance — only shown when feature is enabled */}
+            {hasSubFeature('workflow.ethical_clearance') && (
+                <div className="mt-6 border border-amber-200 bg-amber-50 rounded-xl p-4 space-y-3">
+                    <p className="text-sm font-semibold text-amber-800">Ethical Clearance</p>
+                    <div className="flex items-center gap-3">
+                        <input
+                            id="ec-required"
+                            type="checkbox"
+                            checked={data.ethical_clearance_required ?? false}
+                            onChange={e => onChange({ ...data, ethical_clearance_required: e.target.checked, ethical_clearance_number: e.target.checked ? (data.ethical_clearance_number ?? '') : '' })}
+                            className="h-4 w-4 rounded border-gray-300 text-amber-600"
+                        />
+                        <label htmlFor="ec-required" className="text-sm text-gray-700">
+                            This proposal requires ethical clearance approval
+                        </label>
+                    </div>
+                    {data.ethical_clearance_required && (
+                        <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">Clearance Reference Number</label>
+                            <input
+                                type="text"
+                                placeholder="e.g. EC-2026-00123"
+                                value={data.ethical_clearance_number ?? ''}
+                                onChange={e => onChange({ ...data, ethical_clearance_number: e.target.value })}
+                                className="w-full rounded-lg border border-amber-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                            />
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
@@ -434,248 +436,413 @@ function Step4({ items, onChange, rowErrors }) {
 // ─── Step 6 — Preview ─────────────────────────────────────────────────────────
 
 const AVATAR_COLORS = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-orange-500', 'bg-pink-500', 'bg-teal-500'];
-const getInitials = name => (name ?? '?').split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
+const getInitials   = name => (name ?? '?').split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
 const getAvatarColor = name => AVATAR_COLORS[(name?.charCodeAt(0) ?? 0) % AVATAR_COLORS.length];
 
-function PreviewSection({ index, title, icon: Icon, children }) {
-    return (
-        <section className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-            <div className="flex items-center gap-3 px-6 py-4 border-b border-gray-100">
-                <div className="w-8 h-8 rounded-full bg-gray-900 text-white text-xs font-bold flex items-center justify-center shrink-0">
-                    {index}
-                </div>
-                <Icon size={16} className="text-gray-400 shrink-0" />
-                <h3 className="text-sm font-semibold text-gray-900 tracking-wide uppercase">{title}</h3>
-            </div>
-            <div className="p-6">{children}</div>
-        </section>
-    );
-}
+const CATEGORY_ACCENT = {
+    research:             'border-blue-500',
+    community_engagement: 'border-green-500',
+    technology_transfer:  'border-purple-500',
+};
 
-function SummaryRow({ label, value, complete }) {
+const BAR_COLOR = {
+    Personnel:       'bg-blue-500',
+    Equipment:       'bg-purple-500',
+    Supplies:        'bg-green-500',
+    Travel:          'bg-amber-500',
+    'Indirect Costs':'bg-rose-500',
+    Other:           'bg-gray-400',
+};
+
+function StepSection({ number, title, status, onEdit, children }) {
+    const numBg =
+        status === 'ok'    ? 'bg-green-600'  :
+        status === 'error' ? 'bg-red-500'    :
+                             'bg-blue-600';
+
+    const statusIcon =
+        status === 'ok'    ? <CheckCircle2 size={13} className="text-green-500 shrink-0" /> :
+        status === 'error' ? <AlertCircle  size={13} className="text-red-400  shrink-0" /> :
+        null;
+
     return (
-        <div className="flex items-center justify-between py-2 text-sm">
-            <span className="text-gray-500">{label}</span>
-            <span className={`font-semibold flex items-center gap-1.5 ${complete === false ? 'text-red-500' : 'text-gray-900'}`}>
-                {complete === false && <AlertCircle size={13} />}
-                {complete === true && <CheckCircle2 size={13} className="text-green-500" />}
-                {value}
-            </span>
+        <div className="border border-gray-200 rounded-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100 bg-gray-50/70">
+                <div className="flex items-center gap-3">
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 ${numBg}`}>
+                        {number}
+                    </div>
+                    {statusIcon}
+                    <div>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">Step {number}</p>
+                        <p className="text-sm font-semibold text-gray-800 mt-0.5 leading-none">{title}</p>
+                    </div>
+                </div>
+                {onEdit && (
+                    <button onClick={onEdit} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors">
+                        <Pencil size={11} /> Edit
+                    </button>
+                )}
+            </div>
+            <div className="p-5">{children}</div>
         </div>
     );
 }
 
-function Step6Preview({ stepData, budgetItems, user, category, selectedCall }) {
-    const d           = stepData[0] ?? {};
-    const team        = stepData[2]?.co_investigators ?? [];
-    const totalCo     = team.reduce((s, c) => s + (parseFloat(c.contribution_percentage) || 0), 0);
-    const piContrib   = Math.max(0, 100 - totalCo);
-    const budgetTotal = budgetItems.reduce((s, i) => s + Number(i.amount || 0), 0);
-    const documents   = stepData[4]?.documents ?? {};
-    const docsDone    = DOC_TYPES.filter(dt => documents[dt.key]?.status === 'done').length;
+function Step6Preview({ stepData, budgetItems, user, category, selectedCall, onGoToStep }) {
+    const d            = stepData[0] ?? {};
+    const team         = stepData[2]?.co_investigators ?? [];
+    const totalCo      = team.reduce((s, c) => s + (parseFloat(c.contribution_percentage) || 0), 0);
+    const piContrib    = Math.max(0, 100 - totalCo);
+    const budgetTotal  = budgetItems.reduce((s, i) => s + Number(i.amount || 0), 0);
+    const documents    = stepData[4]?.documents ?? {};
+    const docsDone     = DOC_TYPES.filter(dt => documents[dt.key]?.status === 'done').length;
     const docsRequired = DOC_TYPES.filter(dt => dt.required).length;
+    const missingDocs  = DOC_TYPES.filter(dt => dt.required && documents[dt.key]?.status !== 'done');
 
-    const keywords    = (d.keywords ?? '').split(',').map(k => k.trim()).filter(Boolean);
+    const keywords      = (d.keywords ?? '').split(',').map(k => k.trim()).filter(Boolean);
     const durationLabel = d.duration_months
         ? (d.duration_months < 12
             ? `${d.duration_months} months`
             : `${d.duration_months / 12} year${d.duration_months > 12 ? 's' : ''} (${d.duration_months} months)`)
         : null;
     const categoryLabel = (category ?? '').replace(/_/g, ' ');
+    const accentBorder  = CATEGORY_ACCENT[category] ?? 'border-blue-500';
+
+    const budgetByCategory = budgetItems.reduce((acc, item) => {
+        const cat = item.category || 'Other';
+        acc[cat] = (acc[cat] || 0) + Number(item.amount || 0);
+        return acc;
+    }, {});
+
+    // Readiness issues
+    const issues = [];
+    if (!d.title?.trim())                        issues.push({ msg: 'Proposal title is missing',                                                     step: 0 });
+    if ((d.abstract?.trim().length ?? 0) < 100)  issues.push({ msg: 'Abstract must be at least 100 characters',                                     step: 0 });
+    if (!d.focus_area?.trim())                   issues.push({ msg: 'Focus area is not selected',                                                   step: 0 });
+    if (!d.duration_months)                      issues.push({ msg: 'Duration is not selected',                                                     step: 0 });
+    if (team.length === 0)                       issues.push({ msg: 'At least one co-investigator is required',                                     step: 2 });
+    if (budgetItems.length === 0)                issues.push({ msg: 'No budget items added',                                                         step: 3 });
+    if (missingDocs.length > 0)                  issues.push({ msg: `${missingDocs.length} required document${missingDocs.length > 1 ? 's' : ''} not uploaded`, step: 4 });
+    const isReady = issues.length === 0;
+
+    const step1Status = issues.some(i => i.step === 0) ? 'error' : 'ok';
+    const step3Status = issues.some(i => i.step === 2) ? 'error' : 'ok';
+    const step4Status = issues.some(i => i.step === 3) ? 'error' : 'ok';
+    const step5Status = missingDocs.length > 0          ? 'error' : 'ok';
 
     return (
-        <div className="space-y-6">
-            <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5 text-sm text-blue-700">
-                <Eye size={15} className="shrink-0" />
-                This is exactly what reviewers will see. Check every section carefully — you can still go back and edit before submitting.
-            </div>
+        <div className="space-y-4">
 
-            {/* Letterhead / document header */}
-            <div className="bg-white border border-gray-200 rounded-2xl px-7 py-6 relative overflow-hidden">
-                <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-600 via-indigo-500 to-purple-500" />
-                <div className="flex flex-wrap items-center gap-2 mb-3">
-                    {category && (
-                        <span className="inline-flex items-center gap-1.5 bg-gray-900 text-white text-xs px-2.5 py-1 rounded-full font-medium capitalize">
-                            {categoryLabel}
-                        </span>
-                    )}
-                    {selectedCall?.academic_year && (
-                        <span className="inline-flex items-center gap-1.5 bg-gray-100 text-gray-600 text-xs px-2.5 py-1 rounded-full font-medium">
-                            <Calendar size={11} /> {selectedCall.academic_year}
-                        </span>
-                    )}
-                    {selectedCall?.title && (
-                        <span className="inline-flex items-center gap-1.5 bg-gray-100 text-gray-600 text-xs px-2.5 py-1 rounded-full font-medium">
-                            <Hash size={11} /> {selectedCall.title}
-                        </span>
-                    )}
+            {/* ── Readiness banner ──────────────────────────────────────────── */}
+            {isReady ? (
+                <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3.5">
+                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center shrink-0">
+                        <CheckCircle2 size={16} className="text-green-600" />
+                    </div>
+                    <div>
+                        <p className="text-sm font-semibold text-green-800">All sections complete — ready to submit</p>
+                        <p className="text-xs text-green-600 mt-0.5">Review each step below, then proceed to Step 7 to submit.</p>
+                    </div>
                 </div>
-
-                <h2 className="text-2xl font-bold text-gray-900 leading-snug mb-3">
-                    {d.title || <span className="text-red-400 italic font-normal">No title provided</span>}
-                </h2>
-
-                <p className="text-sm text-gray-600 leading-relaxed mb-4">
-                    {d.abstract || <span className="text-gray-400 italic">No abstract provided</span>}
-                </p>
-
-                <div className="flex flex-wrap gap-2">
-                    {d.focus_area && (
-                        <span className="inline-flex items-center gap-1.5 bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs px-2.5 py-1 rounded-full font-medium">
-                            Focus: {d.focus_area}
-                        </span>
-                    )}
-                    {category === 'research' && d.research_type && (
-                        <span className="inline-flex items-center gap-1.5 bg-violet-50 border border-violet-100 text-violet-700 text-xs px-2.5 py-1 rounded-full font-medium">
-                            Type: {d.research_type}
-                        </span>
-                    )}
-                    {durationLabel && (
-                        <span className="inline-flex items-center gap-1.5 bg-amber-50 border border-amber-100 text-amber-700 text-xs px-2.5 py-1 rounded-full font-medium">
-                            Duration: {durationLabel}
-                        </span>
-                    )}
-                </div>
-
-                {keywords.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-1.5">
-                        {keywords.map(k => (
-                            <span key={k} className="bg-blue-50 text-blue-600 text-xs px-2.5 py-1 rounded-full border border-blue-100 font-medium">{k}</span>
+            ) : (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 pt-3.5 pb-4">
+                    <div className="flex items-center gap-2 mb-3">
+                        <AlertCircle size={15} className="text-amber-600 shrink-0" />
+                        <p className="text-sm font-semibold text-amber-800">
+                            {issues.length} item{issues.length > 1 ? 's' : ''} need{issues.length === 1 ? 's' : ''} attention before submitting
+                        </p>
+                    </div>
+                    <div className="space-y-2">
+                        {issues.map((issue, i) => (
+                            <div key={i} className="flex items-center justify-between gap-4">
+                                <span className="text-xs text-amber-700 flex items-center gap-2">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                                    {issue.msg}
+                                </span>
+                                <button
+                                    onClick={() => onGoToStep?.(issue.step)}
+                                    className="shrink-0 text-xs font-semibold text-amber-800 hover:text-amber-900 underline underline-offset-2 transition-colors"
+                                >
+                                    Fix →
+                                </button>
+                            </div>
                         ))}
                     </div>
-                )}
-            </div>
+                </div>
+            )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
-                {/* Main sections */}
-                <div className="space-y-6">
-                    <PreviewSection index={1} title="Research Team" icon={Users}>
-                        <div className="space-y-2">
-                            {/* PI row */}
-                            <div className="flex items-center justify-between bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
-                                        {getInitials(user?.name)}
-                                    </div>
-                                    <div>
-                                        <p className="text-sm font-semibold text-gray-900">{user?.name}</p>
-                                        <p className="text-xs text-gray-500">{user?.email}</p>
-                                    </div>
-                                </div>
-                                <div className="text-right shrink-0">
-                                    <span className="inline-block text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold">PI</span>
-                                    <p className="text-xs text-gray-500 mt-0.5">{piContrib.toFixed(1)}% contribution</p>
-                                </div>
-                            </div>
-                            {team.length === 0 && (
-                                <p className="text-sm text-red-500 italic px-1">No co-investigators added — required before submission.</p>
-                            )}
-                            {team.map(coI => (
-                                <div key={coI.user_id} className="flex items-center justify-between bg-gray-50 border border-gray-100 rounded-xl px-4 py-3">
-                                    <div className="flex items-center gap-3">
-                                        <div className={`w-9 h-9 rounded-xl ${getAvatarColor(coI.name)} flex items-center justify-center text-white text-xs font-bold shrink-0`}>
-                                            {getInitials(coI.name)}
-                                        </div>
-                                        <div>
-                                            <p className="text-sm font-semibold text-gray-900">{coI.name}</p>
-                                            <p className="text-xs text-gray-500">{coI.email}</p>
-                                            {coI.college_name && <p className="text-xs text-gray-400">{coI.college_name}</p>}
-                                        </div>
-                                    </div>
-                                    <div className="text-right shrink-0">
-                                        <span className="inline-block text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-semibold">Co-PI</span>
-                                        <p className="text-xs text-gray-500 mt-0.5">{coI.contribution_percentage}% contribution</p>
-                                    </div>
-                                </div>
-                            ))}
-                            <div className="flex items-center justify-between px-4 py-2 text-xs text-gray-500">
-                                <span>{team.length + 1} total member{team.length !== 0 ? 's' : ''}</span>
-                                <span>Total contribution: <strong className="text-gray-700">100%</strong></span>
-                            </div>
-                        </div>
-                    </PreviewSection>
-
-                    <PreviewSection index={2} title={`Budget Plan — ETB ${budgetTotal.toLocaleString()}`} icon={DollarSign}>
-                        {budgetItems.length === 0 ? (
-                            <p className="text-sm text-red-400 italic">No budget items added.</p>
-                        ) : (
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm">
-                                    <thead>
-                                        <tr className="border-b border-gray-100">
-                                            {['Category', 'Description', 'Amount (ETB)', 'Justification'].map(h => (
-                                                <th key={h} className="text-left py-2 pr-4 text-xs font-semibold text-gray-400 uppercase tracking-wide">{h}</th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-50">
-                                        {budgetItems.map((item, i) => (
-                                            <tr key={i}>
-                                                <td className="py-2.5 pr-4 font-medium text-gray-700 capitalize">{item.category || '—'}</td>
-                                                <td className="py-2.5 pr-4 text-gray-600">{item.description || '—'}</td>
-                                                <td className="py-2.5 pr-4 font-semibold text-gray-900">{Number(item.amount || 0).toLocaleString()}</td>
-                                                <td className="py-2.5 text-gray-400 text-xs">{item.justification || '—'}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                    <tfoot>
-                                        <tr className="border-t border-gray-200">
-                                            <td colSpan={2} className="py-2.5 pr-4 text-xs font-semibold text-gray-500 uppercase">Total</td>
-                                            <td className="py-2.5 pr-4 font-bold text-gray-900">{budgetTotal.toLocaleString()}</td>
-                                            <td />
-                                        </tr>
-                                    </tfoot>
-                                </table>
-                            </div>
-                        )}
-                    </PreviewSection>
-
-                    <PreviewSection index={3} title="Documents" icon={Upload}>
-                        <div className="space-y-2">
-                            {DOC_TYPES.map(dt => {
-                                const doc = documents[dt.key];
-                                return (
-                                    <div key={dt.key}
-                                        className={`flex items-center gap-3 rounded-xl border px-4 py-2.5 ${
-                                            doc?.status === 'done' ? 'border-green-200 bg-green-50' : 'border-gray-100 bg-gray-50'
-                                        }`}>
-                                        {doc?.status === 'done'
-                                            ? <FileText size={15} className="text-green-600 shrink-0" />
-                                            : <AlertCircle size={15} className="text-gray-300 shrink-0" />
-                                        }
-                                        <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-medium text-gray-800">
-                                                {dt.label}
-                                                {dt.required && <span className="text-red-500 ml-0.5">*</span>}
-                                            </p>
-                                            <p className="text-xs text-gray-500 truncate">
-                                                {doc?.filename ?? (dt.required
-                                                    ? <span className="text-red-400 italic">Not uploaded</span>
-                                                    : <span className="text-gray-400 italic">Not provided (optional)</span>
-                                                )}
-                                            </p>
-                                        </div>
-                                        {doc?.size && <span className="text-xs text-gray-400 shrink-0">{doc.size}</span>}
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </PreviewSection>
+            {/* ── Step 1: Basic Info ────────────────────────────────────────── */}
+            <StepSection number={1} title="Basic Info" status={step1Status} onEdit={() => onGoToStep?.(0)}>
+                {/* Title with category accent */}
+                <div className={`border-l-4 ${accentBorder} pl-4 mb-4`}>
+                    <h3 className="text-base font-bold text-gray-900 leading-snug">
+                        {d.title?.trim() || <span className="text-red-400 italic font-normal text-sm">No title provided</span>}
+                    </h3>
+                    {(selectedCall?.title || selectedCall?.academic_year) && (
+                        <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
+                            <Megaphone size={10} />
+                            {[selectedCall?.title, selectedCall?.academic_year].filter(Boolean).join(' · ')}
+                        </p>
+                    )}
                 </div>
 
-                {/* Sticky summary sidebar */}
-                <aside className="lg:sticky lg:top-6 self-start">
-                    <div className="bg-white border border-gray-200 rounded-2xl p-5">
-                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Submission Summary</p>
-                        <div className="divide-y divide-gray-50">
-                            <SummaryRow label="Team size" value={`${team.length + 1}`} />
-                            <SummaryRow label="Co-investigators" value={team.length} complete={team.length >= 1} />
-                            <SummaryRow label="Budget total" value={`ETB ${budgetTotal.toLocaleString()}`} complete={budgetItems.length > 0} />
-                            <SummaryRow label="Documents" value={`${docsDone}/${DOC_TYPES.length}`} complete={docsDone >= docsRequired} />
+                {/* Meta chips */}
+                <div className="flex flex-wrap gap-2 mb-4">
+                    {category && (
+                        <span className="text-xs px-2.5 py-1 rounded-full bg-gray-900 text-white font-medium capitalize">{categoryLabel}</span>
+                    )}
+                    {d.focus_area ? (
+                        <span className="text-xs px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100 font-medium">{d.focus_area}</span>
+                    ) : (
+                        <span className="text-xs px-2.5 py-1 rounded-full bg-red-50 text-red-500 border border-red-100 font-medium">No focus area</span>
+                    )}
+                    {category === 'research' && d.research_type && (
+                        <span className="text-xs px-2.5 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-100 font-medium">{d.research_type}</span>
+                    )}
+                    {durationLabel ? (
+                        <span className="text-xs px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-100 font-medium flex items-center gap-1">
+                            <Clock size={10} /> {durationLabel}
+                        </span>
+                    ) : (
+                        <span className="text-xs px-2.5 py-1 rounded-full bg-red-50 text-red-500 border border-red-100 font-medium flex items-center gap-1">
+                            <Clock size={10} /> No duration set
+                        </span>
+                    )}
+                </div>
+
+                {/* Abstract */}
+                <div className="mb-3">
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Abstract</p>
+                    <p className="text-sm text-gray-700 leading-relaxed">
+                        {d.abstract?.trim() || <span className="text-red-400 italic">No abstract provided.</span>}
+                    </p>
+                    {d.abstract && d.abstract.trim().length < 100 && (
+                        <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                            <AlertCircle size={11} /> Only {d.abstract.trim().length} of 100 minimum characters
+                        </p>
+                    )}
+                </div>
+
+                {/* Keywords */}
+                {keywords.length > 0 && (
+                    <div>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Keywords</p>
+                        <div className="flex flex-wrap gap-1.5">
+                            {keywords.map(k => (
+                                <span key={k} className="text-xs px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">{k}</span>
+                            ))}
                         </div>
                     </div>
-                </aside>
-            </div>
+                )}
+            </StepSection>
+
+            {/* ── Step 2: Principal Investigator ───────────────────────────── */}
+            <StepSection number={2} title="Principal Investigator" status="ok">
+                <div className="flex items-center gap-4">
+                    <div className="w-11 h-11 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-bold shrink-0">
+                        {getInitials(user?.name)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-900">{user?.name ?? '—'}</p>
+                        <p className="text-xs text-gray-500">{user?.email}</p>
+                        {user?.employee_id && <p className="text-xs text-gray-400 mt-0.5">ID: {user.employee_id}</p>}
+                    </div>
+                    <span className="shrink-0 text-xs px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 font-semibold border border-blue-100">
+                        Principal Investigator
+                    </span>
+                </div>
+            </StepSection>
+
+            {/* ── Step 3: Research Team ─────────────────────────────────────── */}
+            <StepSection number={3} title="Research Team" status={step3Status} onEdit={() => onGoToStep?.(2)}>
+                <div className="space-y-2">
+                    {/* PI row */}
+                    <div className="flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
+                        <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                            {getInitials(user?.name)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-gray-900 truncate">{user?.name}</p>
+                            <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+                        </div>
+                        <div className="shrink-0 text-right">
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold">PI</span>
+                            <p className="text-xs text-gray-400 mt-0.5">{piContrib.toFixed(0)}%</p>
+                        </div>
+                    </div>
+
+                    {team.length === 0 ? (
+                        <div className="flex items-center gap-2 px-4 py-3 rounded-xl border border-dashed border-red-200 bg-red-50">
+                            <AlertCircle size={13} className="text-red-400 shrink-0" />
+                            <p className="text-xs text-red-600">No co-investigators added — required before submission.</p>
+                        </div>
+                    ) : team.map(coI => (
+                        <div key={coI.user_id} className="flex items-center gap-3 bg-gray-50 border border-gray-100 rounded-xl px-4 py-3">
+                            <div className={`w-9 h-9 rounded-full ${getAvatarColor(coI.name)} flex items-center justify-center text-white text-xs font-bold shrink-0`}>
+                                {getInitials(coI.name)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-gray-900 truncate">{coI.name}</p>
+                                <p className="text-xs text-gray-500 truncate">{coI.email}</p>
+                                {coI.college_name && <p className="text-xs text-gray-400 truncate">{coI.college_name}</p>}
+                            </div>
+                            <div className="shrink-0 text-right">
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-semibold">Co-PI</span>
+                                <p className="text-xs text-gray-400 mt-0.5">{coI.contribution_percentage}%</p>
+                            </div>
+                        </div>
+                    ))}
+
+                    {team.length > 0 && (
+                        <div className="pt-1">
+                            <div className="flex h-2 rounded-full overflow-hidden gap-px bg-gray-100">
+                                <div className="bg-blue-500 transition-all" style={{ width: `${piContrib}%` }} title={`PI: ${piContrib.toFixed(0)}%`} />
+                                {team.map((coI, i) => (
+                                    <div
+                                        key={coI.user_id}
+                                        className={`transition-all ${AVATAR_COLORS[i % AVATAR_COLORS.length]}`}
+                                        style={{ width: `${coI.contribution_percentage}%` }}
+                                        title={`${coI.name}: ${coI.contribution_percentage}%`}
+                                    />
+                                ))}
+                            </div>
+                            <p className="text-xs text-gray-400 mt-1.5">{team.length + 1} members · contributions total 100%</p>
+                        </div>
+                    )}
+                </div>
+            </StepSection>
+
+            {/* ── Step 4: Budget Plan ───────────────────────────────────────── */}
+            <StepSection
+                number={4}
+                title={budgetTotal > 0 ? `Budget Plan — ETB ${budgetTotal.toLocaleString()}` : 'Budget Plan'}
+                status={step4Status}
+                onEdit={() => onGoToStep?.(3)}
+            >
+                {budgetItems.length === 0 ? (
+                    <div className="flex items-center gap-2 px-4 py-3 rounded-xl border border-dashed border-red-200 bg-red-50">
+                        <AlertCircle size={13} className="text-red-400 shrink-0" />
+                        <p className="text-xs text-red-600">No budget items added — required before submission.</p>
+                    </div>
+                ) : (
+                    <div className="space-y-5">
+                        {/* Category breakdown */}
+                        <div className="space-y-2.5">
+                            {Object.entries(budgetByCategory)
+                                .sort(([, a], [, b]) => b - a)
+                                .map(([cat, amount]) => {
+                                    const pct = budgetTotal > 0 ? (amount / budgetTotal) * 100 : 0;
+                                    const bar = BAR_COLOR[cat] ?? 'bg-gray-400';
+                                    return (
+                                        <div key={cat}>
+                                            <div className="flex items-center justify-between text-xs mb-1">
+                                                <span className="text-gray-600 font-medium">{cat}</span>
+                                                <span className="text-gray-500">
+                                                    ETB {amount.toLocaleString()}
+                                                    <span className="text-gray-400 ml-1">({pct.toFixed(1)}%)</span>
+                                                </span>
+                                            </div>
+                                            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                                <div className={`h-full rounded-full transition-all duration-500 ${bar}`} style={{ width: `${pct}%` }} />
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                        </div>
+
+                        {/* Items table */}
+                        <div className="border border-gray-100 rounded-xl overflow-hidden">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="bg-gray-50 border-b border-gray-100">
+                                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">Category</th>
+                                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">Description</th>
+                                        <th className="text-right px-4 py-2.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">ETB</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-50">
+                                    {budgetItems.map((item, i) => (
+                                        <tr key={i} className="hover:bg-gray-50/60 transition-colors">
+                                            <td className="px-4 py-2.5 font-medium text-gray-700">{item.category || '—'}</td>
+                                            <td className="px-4 py-2.5 text-gray-600">
+                                                <div>{item.description || '—'}</div>
+                                                {item.justification && (
+                                                    <div className="text-xs text-gray-400 mt-0.5">{item.justification}</div>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-2.5 font-semibold text-gray-900 text-right">
+                                                {Number(item.amount || 0).toLocaleString()}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                                <tfoot>
+                                    <tr className="bg-gray-50 border-t border-gray-200">
+                                        <td colSpan={2} className="px-4 py-2.5 text-xs font-bold text-gray-600 uppercase tracking-wide">
+                                            Total · {budgetItems.length} item{budgetItems.length !== 1 ? 's' : ''}
+                                        </td>
+                                        <td className="px-4 py-2.5 font-bold text-gray-900 text-right">
+                                            {budgetTotal.toLocaleString()}
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                )}
+            </StepSection>
+
+            {/* ── Step 5: Documents ─────────────────────────────────────────── */}
+            <StepSection number={5} title="Documents" status={step5Status} onEdit={() => onGoToStep?.(4)}>
+                <div className="space-y-2">
+                    {missingDocs.length > 0 && (
+                        <div className="flex items-start gap-2.5 bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-3">
+                            <AlertCircle size={14} className="text-red-500 shrink-0 mt-0.5" />
+                            <div>
+                                <p className="text-xs font-semibold text-red-700">Required documents missing</p>
+                                <p className="text-xs text-red-600 mt-0.5">
+                                    {missingDocs.map(dt => dt.label).join(', ')} must be uploaded before submitting.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+                    {DOC_TYPES.map(dt => {
+                        const doc      = documents[dt.key];
+                        const uploaded = doc?.status === 'done';
+                        return (
+                            <div
+                                key={dt.key}
+                                className={`flex items-center gap-3 rounded-xl border px-4 py-2.5 ${
+                                    uploaded    ? 'border-green-200 bg-green-50'
+                                    : dt.required ? 'border-red-200 bg-red-50'
+                                    :               'border-gray-100 bg-gray-50'
+                                }`}
+                            >
+                                {uploaded
+                                    ? <CheckCircle2 size={15} className="text-green-500 shrink-0" />
+                                    : dt.required
+                                    ? <AlertCircle  size={15} className="text-red-400 shrink-0" />
+                                    : <FileText     size={15} className="text-gray-300 shrink-0" />
+                                }
+                                <div className="flex-1 min-w-0">
+                                    <p className={`text-sm font-medium ${uploaded ? 'text-gray-800' : dt.required ? 'text-red-700' : 'text-gray-500'}`}>
+                                        {dt.label}
+                                        {dt.required && !uploaded && <span className="text-red-500 ml-0.5">*</span>}
+                                    </p>
+                                    <p className="text-xs text-gray-400 truncate">
+                                        {doc?.filename ?? (dt.required ? 'Not uploaded' : 'Optional — not provided')}
+                                    </p>
+                                </div>
+                                {doc?.size && <span className="text-xs text-gray-400 shrink-0">{doc.size}</span>}
+                            </div>
+                        );
+                    })}
+                    <p className="text-xs text-gray-400 pt-1">
+                        {docsDone} of {DOC_TYPES.length} uploaded · {docsRequired} required
+                    </p>
+                </div>
+            </StepSection>
         </div>
     );
 }
@@ -834,6 +1001,12 @@ export default function ProposalCreate() {
 
     const [step1Errors, setStep1Errors]       = useState({});
     const [budgetRowErrors, setBudgetRowErrors] = useState({});
+    const [lookupOptions, setLookupOptions]   = useState(null);
+
+    // Load lookup options for dropdowns
+    useEffect(() => {
+        get('/lookup-options/active').then(r => setLookupOptions(r.data ?? null)).catch(() => {});
+    }, []);
 
     // Load active calls
     useEffect(() => {
@@ -870,6 +1043,7 @@ export default function ProposalCreate() {
                         college_name:            m.user?.college?.name ?? '',
                         department_name:         m.user?.department?.name ?? '',
                         contribution_percentage: Number(m.contribution_percentage) || 0,
+                        invitation_status:       m.invitation_status ?? 'accepted',
                     }));
 
                 const restoredBudgetItems = (p.budgets ?? []).map(b => ({
@@ -1061,7 +1235,7 @@ export default function ProposalCreate() {
 
     const renderStep = () => {
         switch (step) {
-            case 0: return <Step1 data={stepData[0]} onChange={handleStep1Change} errors={step1Errors} category={category} />;
+            case 0: return <Step1 data={stepData[0]} onChange={handleStep1Change} errors={step1Errors} category={category} lookupOptions={lookupOptions} />;
             case 1: return <Step2 user={user} />;
             case 2: return (
                 <Step3CoInvestigators
@@ -1073,7 +1247,7 @@ export default function ProposalCreate() {
             );
             case 3: return <Step4 items={budgetItems} onChange={handleBudgetChange} rowErrors={budgetRowErrors} />;
             case 4: return <Step5Documents proposalId={proposalId} onComplete={handleStepComplete} initialUploads={stepData[4]?.documents} />;
-            case 5: return <Step6Preview stepData={stepData} budgetItems={budgetItems} user={user} category={category} selectedCall={selectedCall} />;
+            case 5: return <Step6Preview stepData={stepData} budgetItems={budgetItems} user={user} category={category} selectedCall={selectedCall} onGoToStep={setStep} />;
             case 6: return (
                 <Step7Submit
                     proposalId={proposalId}

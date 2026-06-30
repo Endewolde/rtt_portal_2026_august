@@ -3,7 +3,7 @@ import { Link } from '@inertiajs/react';
 import {
     DollarSign, Plus, ChevronDown, ChevronUp, CheckCircle2,
     Clock, Send, XCircle, CreditCard, FileCheck, AlertCircle,
-    LayoutGrid, TableProperties, X, Info, Pencil, Trash2,
+    LayoutGrid, TableProperties, X, Info, Pencil, Trash2, Banknote, Trophy,
 } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import ViewToggle from '../../Components/ViewToggle';
@@ -18,14 +18,15 @@ import api from '../../lib/api';
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG = {
-    draft:                { label: 'Draft',              cls: 'bg-gray-100 text-gray-600',     icon: Clock       },
-    pending_signatures:   { label: 'Pending Signatures', cls: 'bg-yellow-100 text-yellow-700', icon: Clock       },
-    submitted:            { label: 'Submitted',          cls: 'bg-blue-100 text-blue-700',     icon: Send        },
-    under_college_review: { label: 'Under Review',       cls: 'bg-purple-100 text-purple-700', icon: Clock       },
-    approved:             { label: 'Approved',           cls: 'bg-green-100 text-green-700',   icon: CheckCircle2},
-    rejected:             { label: 'Rejected',           cls: 'bg-red-100 text-red-700',       icon: XCircle     },
-    disbursed:            { label: 'Disbursed',          cls: 'bg-teal-100 text-teal-700',     icon: CreditCard  },
-    settled:              { label: 'Settled',            cls: 'bg-slate-100 text-slate-600',   icon: FileCheck   },
+    draft:              { label: 'Draft',                  cls: 'bg-gray-100 text-gray-600',      icon: Clock        },
+    pending_signatures: { label: 'Pending Signatures',     cls: 'bg-yellow-100 text-yellow-700',  icon: Clock        },
+    submitted:          { label: 'Awaiting College Review', cls: 'bg-blue-100 text-blue-700',     icon: Send         },
+    college_approved:   { label: 'College Approved',       cls: 'bg-indigo-100 text-indigo-700',  icon: CheckCircle2 },
+    finance_returned:   { label: 'Returned by Finance',    cls: 'bg-orange-100 text-orange-700',  icon: XCircle      },
+    rejected:           { label: 'Rejected',               cls: 'bg-red-100 text-red-700',        icon: XCircle      },
+    approved:           { label: 'Finance Approved',       cls: 'bg-green-100 text-green-700',    icon: CheckCircle2 },
+    disbursed:          { label: 'Disbursed',              cls: 'bg-teal-100 text-teal-700',      icon: CreditCard   },
+    settled:            { label: 'Settled',                cls: 'bg-slate-100 text-slate-600',    icon: FileCheck    },
 };
 
 const BUDGET_CATEGORIES = [
@@ -35,11 +36,14 @@ const BUDGET_CATEGORIES = [
 ];
 
 const STATUS_TABS = [
-    { key: 'all',      label: 'All' },
-    { key: 'pending',  label: 'Pending',   match: ['draft', 'pending_signatures', 'submitted', 'under_college_review'] },
-    { key: 'approved', label: 'Approved',  match: ['approved'] },
-    { key: 'disbursed',label: 'Disbursed', match: ['disbursed'] },
-    { key: 'settled',  label: 'Settled',   match: ['settled'] },
+    { key: 'all',             label: 'All' },
+    { key: 'pending',         label: 'Pending',          match: ['draft', 'pending_signatures', 'submitted'] },
+    { key: 'college_review',  label: 'College Review',   match: ['submitted', 'finance_returned'] },
+    { key: 'finance_review',  label: 'Finance Review',   match: ['college_approved', 'approved'] },
+    { key: 'approved',        label: 'Approved',         match: ['approved'] },
+    { key: 'rejected',        label: 'Rejected',         match: ['rejected', 'finance_returned'] },
+    { key: 'disbursed',       label: 'Disbursed',        match: ['disbursed'] },
+    { key: 'settled',         label: 'Settled',          match: ['settled'] },
 ];
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
@@ -664,11 +668,122 @@ function EditModal({ request, onClose, onSuccess }) {
 
 // ─── Card component ───────────────────────────────────────────────────────────
 
+function NotesModal({ title, placeholder, onConfirm, onClose, confirmLabel, confirmCls }) {
+    const [notes, setNotes] = useState('');
+    return (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-base font-semibold text-gray-900">{title}</h3>
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
+                </div>
+                <textarea
+                    value={notes}
+                    onChange={e => setNotes(e.target.value)}
+                    placeholder={placeholder}
+                    rows={4}
+                    className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none mb-4"
+                    autoFocus
+                />
+                <div className="flex gap-3">
+                    <button onClick={onClose}
+                        className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 font-medium">
+                        Cancel
+                    </button>
+                    <button onClick={() => notes.trim().length >= 10 && onConfirm(notes)}
+                        disabled={notes.trim().length < 10}
+                        className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50 transition-colors ${confirmCls}`}>
+                        {confirmLabel}
+                    </button>
+                </div>
+                {notes.trim().length < 10 && notes.length > 0 && (
+                    <p className="text-xs text-red-500 mt-2 text-center">Please provide at least 10 characters.</p>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function DisburseModal({ request, onClose, onSuccess }) {
+    const { error, success } = useToast();
+    const [amount,        setAmount]        = useState('');
+    const [transactionId, setTransactionId] = useState('');
+    const [chequeNumber,  setChequeNumber]  = useState('');
+    const [notes,         setNotes]         = useState('');
+    const [saving,        setSaving]        = useState(false);
+
+    const submit = async () => {
+        if (!amount || parseFloat(amount) <= 0) return error('Enter a valid amount.');
+        setSaving(true);
+        try {
+            await api.post(`/budget-requests/${request.id}/disburse`, {
+                amount: parseFloat(amount),
+                transaction_id: transactionId || undefined,
+                cheque_number: chequeNumber || undefined,
+                notes: notes || undefined,
+            });
+            success('Funds disbursed. PI and members have been notified.');
+            onSuccess();
+        } catch (e) {
+            error(e.response?.data?.message ?? 'Disbursement failed.');
+        }
+        setSaving(false);
+    };
+
+    const inp = 'w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300';
+
+    return (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+                <div className="bg-linear-to-r from-emerald-500 to-teal-500 rounded-t-2xl px-6 py-5 flex items-center justify-between">
+                    <div>
+                        <h2 className="text-lg font-bold text-white">Record Disbursement</h2>
+                        <p className="text-emerald-100 text-sm mt-0.5">{request.proposal?.tracker_number} · {formatCurrency(request.total_amount)} approved</p>
+                    </div>
+                    <button onClick={onClose} className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white"><X size={16} /></button>
+                </div>
+                <div className="p-6 space-y-4">
+                    <div>
+                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">Amount Disbursed <span className="text-red-500">*</span></label>
+                        <input type="number" min="0.01" step="0.01" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} className={inp} />
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">Transaction / Reference ID</label>
+                        <input type="text" placeholder="Optional" value={transactionId} onChange={e => setTransactionId(e.target.value)} className={inp} />
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">Cheque Number</label>
+                        <input type="text" placeholder="Optional" value={chequeNumber} onChange={e => setChequeNumber(e.target.value)} className={inp} />
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">Notes</label>
+                        <textarea rows={2} placeholder="Optional notes…" value={notes} onChange={e => setNotes(e.target.value)} className={inp + ' resize-none'} />
+                    </div>
+                    <div className="flex gap-3 pt-2">
+                        <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-700 hover:bg-gray-50">Cancel</button>
+                        <button onClick={submit} disabled={saving || !amount}
+                            className="flex-1 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold disabled:opacity-50">
+                            {saving ? 'Recording…' : 'Record Disbursement'}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 function RequestCard({ request, userId, isOfficer, isAdmin, onRefresh }) {
     const { error, success } = useToast();
     const { confirm, Dialog } = useConfirm();
-    const [expanded,   setExpanded]   = useState(false);
-    const [showEdit,   setShowEdit]   = useState(false);
+    const { hasRole, hasAnyRole } = useAuth();
+    const [expanded,        setExpanded]        = useState(false);
+    const [showEdit,        setShowEdit]        = useState(false);
+    const [rejectModal,     setRejectModal]     = useState(false);
+    const [finReturnModal,  setFinReturnModal]  = useState(false);
+    const [showDisburse,    setShowDisburse]    = useState(false);
+
+    const isCollegeOfficer  = hasRole('college_officer');
+    const isFinanceOfficer  = hasAnyRole(['finance_officer', 'super_admin', 'admin', 'central_officer']);
 
     const sigs        = request.signatures ?? [];
     const signed      = sigs.filter(s => s.status === 'signed').length;
@@ -676,10 +791,19 @@ function RequestCard({ request, userId, isOfficer, isAdmin, onRefresh }) {
     const mySig       = sigs.find(s => s.user_id === userId);
     const canSign     = mySig?.status === 'pending';
     const canSubmit   = allSigned && ['draft', 'pending_signatures'].includes(request.status);
-    const canApprove  = isAdmin && request.status === 'submitted';
     const canEdit     = ['draft', 'pending_signatures'].includes(request.status)
                         && request.requested_by?.id === userId
                         && !allSigned;
+
+    // College officer: approve or reject submitted / finance_returned
+    const canCollegeApprove = isCollegeOfficer && ['submitted', 'finance_returned'].includes(request.status);
+    const canCollegeReject  = isCollegeOfficer && ['submitted', 'finance_returned'].includes(request.status);
+
+    // Finance officer: approve or return college_approved
+    const canFinanceApprove = isFinanceOfficer && request.status === 'college_approved';
+    const canFinanceReturn  = isFinanceOfficer && request.status === 'college_approved';
+    // Finance officer or college officer: disburse on approved requests
+    const canDisburse       = (isFinanceOfficer || isCollegeOfficer) && request.status === 'approved';
 
     const handleDelete = async () => {
         const ok = await confirm({
@@ -703,6 +827,24 @@ function RequestCard({ request, userId, isOfficer, isAdmin, onRefresh }) {
         if (!ok) return;
         try { await apiCall(); success(successMsg); onRefresh(); }
         catch (e) { error(e.response?.data?.message ?? `${label} failed.`); }
+    };
+
+    const doReject = async (notes) => {
+        try {
+            await api.post(`/budget-requests/${request.id}/reject`, { notes });
+            success('Budget request rejected. PI and members notified.');
+            setRejectModal(false);
+            onRefresh();
+        } catch (e) { error(e.response?.data?.message ?? 'Rejection failed.'); }
+    };
+
+    const doFinanceReturn = async (notes) => {
+        try {
+            await api.post(`/budget-requests/${request.id}/finance-return`, { notes });
+            success('Budget request returned to college officer with notes.');
+            setFinReturnModal(false);
+            onRefresh();
+        } catch (e) { error(e.response?.data?.message ?? 'Return failed.'); }
     };
 
     return (
@@ -784,6 +926,67 @@ function RequestCard({ request, userId, isOfficer, isAdmin, onRefresh }) {
                         </div>
                     )}
 
+                    {/* Collection banner — shown to PI/members when approved */}
+                    {request.status === 'approved' && !isFinanceOfficer && !isCollegeOfficer && (
+                        <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-4 flex items-start gap-3">
+                            <div className="w-9 h-9 bg-green-100 rounded-full flex items-center justify-center shrink-0">
+                                <Trophy size={16} className="text-green-600" />
+                            </div>
+                            <div>
+                                <p className="text-sm font-bold text-green-800">Budget Approved — Ready to Collect</p>
+                                <p className="text-xs text-green-700 mt-0.5">
+                                    Your budget of <span className="font-semibold">{formatCurrency(request.total_amount)}</span> has been approved by Finance.
+                                    Please visit the finance office to collect your funds.
+                                </p>
+                                {request.approved_at && (
+                                    <p className="text-xs text-green-600 mt-1">Approved on {formatDate(request.approved_at)}</p>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Disbursements */}
+                    {(request.disbursements ?? []).length > 0 && (
+                        <div>
+                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Disbursements</p>
+                            <div className="space-y-2">
+                                {request.disbursements.map((d, i) => (
+                                    <div key={i} className="flex items-center justify-between bg-teal-50 border border-teal-100 rounded-xl px-3 py-2.5">
+                                        <div className="flex items-center gap-2">
+                                            <Banknote size={14} className="text-teal-600" />
+                                            <div>
+                                                <span className="text-sm font-semibold text-teal-900">{formatCurrency(d.amount)}</span>
+                                                {d.transaction_id && <span className="text-xs text-teal-600 ml-2">Ref: {d.transaction_id}</span>}
+                                                {d.cheque_number && <span className="text-xs text-teal-600 ml-2">Cheque: {d.cheque_number}</span>}
+                                            </div>
+                                        </div>
+                                        <span className="text-xs text-teal-600">{formatDate(d.created_at)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Feedback banners */}
+                    {request.status === 'finance_returned' && request.finance_notes && (
+                        <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3">
+                            <p className="text-xs font-bold text-orange-700 uppercase tracking-wide mb-1">Finance Officer Notes</p>
+                            <p className="text-sm text-orange-800">{request.finance_notes}</p>
+                        </div>
+                    )}
+                    {request.status === 'rejected' && request.rejection_reason && (
+                        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+                            <p className="text-xs font-bold text-red-700 uppercase tracking-wide mb-1">Rejection Reason</p>
+                            <p className="text-sm text-red-800">{request.rejection_reason}</p>
+                        </div>
+                    )}
+                    {request.college_review_notes && ['college_approved', 'approved'].includes(request.status) && (
+                        <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3">
+                            <p className="text-xs font-bold text-indigo-700 uppercase tracking-wide mb-1">College Officer Notes</p>
+                            <p className="text-sm text-indigo-800">{request.college_review_notes}</p>
+                        </div>
+                    )}
+
                     {/* Actions */}
                     <div className="flex flex-wrap gap-2 pt-1 border-t border-gray-100">
                         {canSign && (
@@ -793,33 +996,62 @@ function RequestCard({ request, userId, isOfficer, isAdmin, onRefresh }) {
                             </button>
                         )}
                         {canSubmit && (
-                            <button onClick={() => act('Submit for Review', () => api.post(`/budget-requests/${request.id}/submit`), 'Submitted for review.')}
+                            <button onClick={() => act('Submit for Review', () => api.post(`/budget-requests/${request.id}/submit`), 'Submitted for college review.')}
                                 className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700">
-                                <Send size={12} /> Submit for Review
+                                <Send size={12} /> Submit for College Review
                             </button>
                         )}
-                        {canApprove && (
-                            <button onClick={() => act('Approve', () => api.post(`/budget-requests/${request.id}/approve`), 'Approved.')}
+
+                        {/* College officer: approve → college_approved */}
+                        {canCollegeApprove && (
+                            <button onClick={() => act('College Approve', () => api.post(`/budget-requests/${request.id}/approve`), 'Approved by college. Forwarded to Finance.')}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700">
+                                <CheckCircle2 size={12} /> College Approve
+                            </button>
+                        )}
+                        {/* College officer: reject → rejected + notify PI */}
+                        {canCollegeReject && (
+                            <button onClick={() => setRejectModal(true)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700">
+                                <XCircle size={12} /> Reject
+                            </button>
+                        )}
+
+                        {/* Finance officer: approve → approved (final) */}
+                        {canFinanceApprove && (
+                            <button onClick={() => act('Finance Approve', () => api.post(`/budget-requests/${request.id}/approve`), 'Finance approved. PI and members notified to collect funds.')}
                                 className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded-lg hover:bg-emerald-700">
-                                <CheckCircle2 size={12} /> Approve
+                                <CheckCircle2 size={12} /> Finance Approve
                             </button>
                         )}
+                        {/* Finance officer: return → finance_returned + notify college */}
+                        {canFinanceReturn && (
+                            <button onClick={() => setFinReturnModal(true)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 text-white text-xs font-semibold rounded-lg hover:bg-orange-600">
+                                <XCircle size={12} /> Return to College
+                            </button>
+                        )}
+
+                        {/* Finance officer: record disbursement on approved requests */}
+                        {canDisburse && (
+                            <button onClick={() => setShowDisburse(true)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white text-xs font-semibold rounded-lg hover:bg-teal-700">
+                                <Banknote size={12} /> Disburse Funds
+                            </button>
+                        )}
+
                         <Link href={`/budget-requests/${request.id}`}
                             className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 text-gray-700 text-xs font-medium rounded-lg hover:bg-white">
                             View Details →
                         </Link>
                         {canEdit && (
                             <>
-                                <button
-                                    onClick={() => setShowEdit(true)}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 border border-amber-300 text-amber-700 bg-amber-50 text-xs font-medium rounded-lg hover:bg-amber-100"
-                                >
+                                <button onClick={() => setShowEdit(true)}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 border border-amber-300 text-amber-700 bg-amber-50 text-xs font-medium rounded-lg hover:bg-amber-100">
                                     <Pencil size={12} /> Edit
                                 </button>
-                                <button
-                                    onClick={handleDelete}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 border border-red-200 text-red-600 bg-red-50 text-xs font-medium rounded-lg hover:bg-red-100"
-                                >
+                                <button onClick={handleDelete}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 border border-red-200 text-red-600 bg-red-50 text-xs font-medium rounded-lg hover:bg-red-100">
                                     <Trash2 size={12} /> Remove
                                 </button>
                             </>
@@ -835,6 +1067,37 @@ function RequestCard({ request, userId, isOfficer, isAdmin, onRefresh }) {
                     onSuccess={() => { setShowEdit(false); onRefresh(); }}
                 />
             )}
+
+            {rejectModal && (
+                <NotesModal
+                    title="Reject Budget Request"
+                    placeholder="Explain the reason for rejection so the PI can correct and resubmit…"
+                    confirmLabel="Reject & Notify PI"
+                    confirmCls="bg-red-600 hover:bg-red-700"
+                    onConfirm={doReject}
+                    onClose={() => setRejectModal(false)}
+                />
+            )}
+
+            {finReturnModal && (
+                <NotesModal
+                    title="Return to College Officer"
+                    placeholder="Provide notes for the college officer explaining what needs to be addressed…"
+                    confirmLabel="Return with Notes"
+                    confirmCls="bg-orange-500 hover:bg-orange-600"
+                    onConfirm={doFinanceReturn}
+                    onClose={() => setFinReturnModal(false)}
+                />
+            )}
+
+            {showDisburse && (
+                <DisburseModal
+                    request={request}
+                    onClose={() => setShowDisburse(false)}
+                    onSuccess={() => { setShowDisburse(false); onRefresh(); }}
+                />
+            )}
+
             <Dialog />
         </div>
     );
@@ -843,13 +1106,13 @@ function RequestCard({ request, userId, isOfficer, isAdmin, onRefresh }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function BudgetRequests() {
-    const { user, hasAnyRole } = useAuth();
+    const { user, hasRole, hasAnyRole } = useAuth();
     const { success, error }   = useToast();
     const [view, setView]      = useViewPreference('budget_requests', 'card');
 
-    const isPI     = hasAnyRole(['pi', 'staff']);
-    const isAdmin  = hasAnyRole(['super_admin', 'central_office', 'finance',
-                                 'college_officer', 'college_admin',
+    const isPI     = hasRole('staff');
+    const isAdmin  = hasAnyRole(['super_admin', 'central_officer', 'finance_officer',
+                                 'college_officer', 'support_officer',
                                  'research_officer', 'community_officer', 'technology_officer']);
 
     const [requests,        setRequests]        = useState([]);
@@ -1007,7 +1270,7 @@ export default function BudgetRequests() {
                                         key={r.id}
                                         request={r}
                                         userId={user?.id}
-                                        isOfficer={isAdmin && !hasAnyRole(['super_admin', 'central_office', 'finance'])}
+                                        isOfficer={isAdmin && !hasAnyRole(['super_admin', 'central_officer', 'finance_officer'])}
                                         isAdmin={isAdmin}
                                         onRefresh={load}
                                     />

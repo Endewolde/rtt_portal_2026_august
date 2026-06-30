@@ -19,6 +19,7 @@ class DatabaseSeeder extends Seeder
             UserSeeder::class,
             FormTemplateSeeder::class,
             AppSettingsSeeder::class,
+            LookupOptionSeeder::class,
         ]);
     }
 }

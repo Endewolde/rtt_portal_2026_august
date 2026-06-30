@@ -9,6 +9,7 @@ use App\Models\Department;
 use App\Models\NotificationPreference;
 use App\Models\Proposal;
 use App\Models\User;
+use App\Services\User360Service;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -85,6 +86,22 @@ class UserController extends Controller
 
         if ($isAdmin && ($collegeId = $request->query('college_id'))) {
             $query->where('college_id', $collegeId);
+        }
+
+        if ($isAdmin && ($departmentId = $request->query('department_id'))) {
+            $query->where('department_id', $departmentId);
+        }
+
+        if ($isAdmin && ($gender = $request->query('gender')) && in_array($gender, ['male', 'female', 'other'], true)) {
+            $query->where('gender', $gender);
+        }
+
+        if ($isAdmin && ($regMethod = $request->query('registration_method'))) {
+            $query->where('registration_method', $regMethod);
+        }
+
+        if ($isAdmin && $request->query('no_role') === '1') {
+            $query->doesntHave('roles');
         }
 
         $perPage = $isAdmin ? 25 : 10;
@@ -948,7 +965,10 @@ class UserController extends Controller
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
-        $request->validate(['roles' => 'required|array']);
+        $request->validate([
+            'roles' => 'required|array',
+            'roles.*' => 'string|exists:roles,name',
+        ]);
         $user = User::findOrFail($id);
         $user->syncRoles($request->roles);
 
@@ -986,8 +1006,47 @@ class UserController extends Controller
         ]);
     }
 
+    /** Unified chronological activity timeline for a user. */
+    public function activityTimeline(string $id, User360Service $service): JsonResponse
+    {
+        $user = User::findOrFail($id);
+
+        return response()->json([
+            'data' => $service->buildTimeline($user),
+            'message' => '',
+            'errors' => [],
+        ]);
+    }
+
+    /** Daily audit-log activity counts for the last 365 days (heatmap). */
+    public function activityHeatmap(string $id, User360Service $service): JsonResponse
+    {
+        $user = User::findOrFail($id);
+
+        return response()->json([
+            'data' => $service->buildHeatmap($user),
+            'message' => '',
+            'errors' => [],
+        ]);
+    }
+
+    /** Complete 360° profile — aggregates every relationship this user has across the system. */
+    public function profile360(string $id, User360Service $service): JsonResponse
+    {
+        $user = User::with(['college', 'department', 'roles'])->findOrFail($id);
+
+        return response()->json([
+            'data' => array_merge(
+                ['user' => $user],
+                $service->build($user),
+            ),
+            'message' => '',
+            'errors' => [],
+        ]);
+    }
+
     /** Funding history for a PI — shows all proposals where user is PI, grouped for the funding page warning. */
-    public function proposalHistory(string $id, Request $request): JsonResponse
+    public function proposalHistory(string $id): JsonResponse
     {
         $pi = User::findOrFail($id);
 

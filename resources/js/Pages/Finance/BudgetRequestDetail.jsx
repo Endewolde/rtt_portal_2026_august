@@ -5,9 +5,7 @@ import {
     FileCheck, ArrowLeft, AlertCircle, ChevronRight, Info,
 } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
-import ConfirmDialog from '../../Components/ConfirmDialog';
 import { useAuth } from '../../hooks/useAuth';
-import { useConfirm } from '../../hooks/useConfirm';
 import { useToast } from '../../Components/Toast';
 import { formatDate, formatDateTime, formatCurrency } from '../../lib/utils';
 import api from '../../lib/api';
@@ -19,19 +17,22 @@ const STATUS_CONFIG = {
     pending_signatures:   { label: 'Pending Signatures', cls: 'bg-yellow-100 text-yellow-700', icon: Clock,        step: 1 },
     submitted:            { label: 'Submitted',          cls: 'bg-blue-100 text-blue-700',     icon: Send,         step: 2 },
     under_college_review: { label: 'Under Review',       cls: 'bg-purple-100 text-purple-700', icon: Clock,        step: 2 },
-    approved:             { label: 'Approved',           cls: 'bg-green-100 text-green-700',   icon: CheckCircle2, step: 3 },
+    finance_returned:     { label: 'Returned by Finance', cls: 'bg-orange-100 text-orange-700', icon: XCircle,     step: 2 },
+    college_approved:     { label: 'College Approved',   cls: 'bg-indigo-100 text-indigo-700', icon: CheckCircle2, step: 3 },
+    approved:             { label: 'Finance Approved',   cls: 'bg-green-100 text-green-700',   icon: CheckCircle2, step: 4 },
     rejected:             { label: 'Rejected',           cls: 'bg-red-100 text-red-700',       icon: XCircle,      step: 2 },
-    disbursed:            { label: 'Disbursed',          cls: 'bg-teal-100 text-teal-700',     icon: CreditCard,   step: 4 },
-    settled:              { label: 'Settled',            cls: 'bg-slate-100 text-slate-600',   icon: FileCheck,    step: 5 },
+    disbursed:            { label: 'Disbursed',          cls: 'bg-teal-100 text-teal-700',     icon: CreditCard,   step: 5 },
+    settled:              { label: 'Settled',            cls: 'bg-slate-100 text-slate-600',   icon: FileCheck,    step: 6 },
 };
 
 const TIMELINE_STEPS = [
-    { key: 'draft',     label: 'Created',    icon: DollarSign   },
-    { key: 'signed',    label: 'Signed',     icon: CheckCircle2 },
-    { key: 'submitted', label: 'Submitted',  icon: Send         },
-    { key: 'approved',  label: 'Approved',   icon: CheckCircle2 },
-    { key: 'disbursed', label: 'Disbursed',  icon: CreditCard   },
-    { key: 'settled',   label: 'Settled',    icon: FileCheck    },
+    { key: 'draft',            label: 'Created',          icon: DollarSign   },
+    { key: 'signed',           label: 'Signed',           icon: CheckCircle2 },
+    { key: 'submitted',        label: 'Submitted',        icon: Send         },
+    { key: 'college_approved', label: 'College Approved', icon: CheckCircle2 },
+    { key: 'approved',         label: 'Finance Approved', icon: CheckCircle2 },
+    { key: 'disbursed',        label: 'Disbursed',        icon: CreditCard   },
+    { key: 'settled',          label: 'Settled',          icon: FileCheck    },
 ];
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
@@ -142,10 +143,10 @@ export default function BudgetRequestDetail() {
     const id               = url.split('/').pop();
     const { user, hasAnyRole } = useAuth();
     const { success, error }   = useToast();
-    const { confirm, Dialog }  = useConfirm();
 
     const [request,    setRequest]    = useState(null);
     const [loading,    setLoading]    = useState(true);
+    const [acting,     setActing]     = useState(false);
     const [showRefuse, setShowRefuse] = useState(false);
 
     const load = () => {
@@ -158,17 +159,21 @@ export default function BudgetRequestDetail() {
 
     useEffect(() => { load(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const isAdmin = hasAnyRole([
-        'super_admin', 'central_office', 'finance',
-        'college_officer', 'college_admin',
-        'research_officer', 'community_officer', 'technology_officer',
-    ]);
+    const isCollegeOfficer = hasAnyRole(['super_admin', 'admin', 'central_officer', 'college_officer']);
+    const isFinanceOfficer = hasAnyRole(['super_admin', 'admin', 'central_officer', 'finance_officer', 'support_officer']);
 
-    const act = async (label, apiCall, msg, variant = 'default') => {
-        const ok = await confirm({ title: `${label}?`, confirmLabel: label, variant });
-        if (!ok) return;
-        try { await apiCall(); success(msg); load(); }
-        catch (e) { error(e.response?.data?.message ?? `${label} failed.`); }
+    const act = async (apiCall, successMsg) => {
+        if (acting) return;
+        setActing(true);
+        try {
+            const res = await apiCall();
+            setRequest(res.data?.data ?? res.data);
+            success(successMsg);
+        } catch (e) {
+            error(e.response?.data?.message ?? 'Action failed.');
+        } finally {
+            setActing(false);
+        }
     };
 
     if (loading) return (
@@ -194,9 +199,10 @@ export default function BudgetRequestDetail() {
     const allSigned = signed === sigs.length && sigs.length > 0;
     const mySig     = sigs.find(s => s.user_id === user?.id);
     const canSign   = mySig?.status === 'pending';
-    const canSubmit = allSigned && ['draft', 'pending_signatures'].includes(request.status);
-    const canApprove = isAdmin && request.status === 'submitted';
-    const canDisburse = isAdmin && request.status === 'approved';
+    const canSubmit         = allSigned && ['draft', 'pending_signatures'].includes(request.status);
+    const canCollegeApprove = isCollegeOfficer && ['submitted', 'finance_returned'].includes(request.status);
+    const canFinanceApprove = isFinanceOfficer && request.status === 'college_approved';
+    const canDisburse       = isFinanceOfficer && request.status === 'approved';
 
     return (
         <AppLayout breadcrumb={`Budget Requests / ${request.proposal?.tracker_number ?? id}`}>
@@ -377,15 +383,30 @@ export default function BudgetRequestDetail() {
                             <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-3">Actions</p>
 
                             {canSubmit && (
-                                <button onClick={() => act('Submit for Review', () => api.post(`/budget-requests/${id}/submit`), 'Submitted for review.')}
-                                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700">
-                                    <Send size={14} /> Submit for Review
+                                <button
+                                    onClick={() => act(() => api.post(`/budget-requests/${id}/submit`), 'Submitted for review.')}
+                                    disabled={acting}
+                                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-700 disabled:opacity-60">
+                                    {acting ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <Send size={14} />}
+                                    Submit for Review
                                 </button>
                             )}
-                            {canApprove && (
-                                <button onClick={() => act('Approve', () => api.post(`/budget-requests/${id}/approve`), 'Budget request approved.')}
-                                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-700 text-white text-sm font-semibold rounded-xl hover:bg-blue-800">
-                                    <CheckCircle2 size={14} /> Approve Request
+                            {canCollegeApprove && (
+                                <button
+                                    onClick={() => act(() => api.post(`/budget-requests/${id}/approve`), 'Budget request approved by college.')}
+                                    disabled={acting}
+                                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-700 text-white text-sm font-semibold rounded-xl hover:bg-blue-800 disabled:opacity-60">
+                                    {acting ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <CheckCircle2 size={14} />}
+                                    Approve Request
+                                </button>
+                            )}
+                            {canFinanceApprove && (
+                                <button
+                                    onClick={() => act(() => api.post(`/budget-requests/${id}/approve`), 'Finance approval confirmed.')}
+                                    disabled={acting}
+                                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-green-700 text-white text-sm font-semibold rounded-xl hover:bg-green-800 disabled:opacity-60">
+                                    {acting ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <CheckCircle2 size={14} />}
+                                    Finance Approve
                                 </button>
                             )}
                             {canDisburse && (
@@ -401,11 +422,12 @@ export default function BudgetRequestDetail() {
                                 </Link>
                             )}
 
-                            {!canSubmit && !canApprove && !canDisburse && request.status !== 'disbursed' && (
+                            {!canSubmit && !canCollegeApprove && !canFinanceApprove && !canDisburse && request.status !== 'disbursed' && (
                                 <div className="flex items-start gap-2 bg-gray-50 rounded-xl p-3 text-xs text-gray-500">
                                     <Info size={13} className="shrink-0 mt-0.5" />
-                                    {request.status === 'approved' ? 'Waiting for Finance to disburse funds.' :
-                                     request.status === 'settled'  ? 'This request has been fully settled.' :
+                                    {request.status === 'college_approved' ? 'Waiting for Finance Officer to approve.' :
+                                     request.status === 'approved'         ? 'Waiting for Finance to disburse funds.' :
+                                     request.status === 'settled'          ? 'This request has been fully settled.' :
                                      'No actions available at this stage.'}
                                 </div>
                             )}
@@ -429,7 +451,6 @@ export default function BudgetRequestDetail() {
                     onDone={() => { setShowRefuse(false); success('Signature refused.'); load(); }}
                 />
             )}
-            <Dialog />
         </AppLayout>
     );
 }

@@ -19,6 +19,7 @@ import ProfileCompleteModal from '../Components/ProfileCompleteModal'
 import SwitchLoginModal from '../Components/SwitchLoginModal'
 import ConfirmDialog from '../Components/ConfirmDialog'
 import CommandPalette from '../Components/CommandPalette'
+import PendingInvitationsModal from '../Components/PendingInvitationsModal'
 import { useToast } from '../Components/Toast'
 import { useAuth } from '../hooks/useAuth'
 import { useFeature } from '../hooks/useFeature'
@@ -920,16 +921,6 @@ export default function AppLayout({ children, breadcrumb }) {
             ],
         },
         {
-            group: 'Notifications',
-            items: [
-                {
-                    label: 'Notifications', href: '/notifications', icon: 'Bell',
-                    show: true,
-                    badge: c => c.unread_notifications,
-                },
-            ],
-        },
-        {
             group: 'Events',
             items: [
                 {
@@ -1372,7 +1363,7 @@ export default function AppLayout({ children, breadcrumb }) {
                                 <span>⌘</span><span>K</span>
                             </kbd>
                         </button>
-                        <NotificationBell onCountChange={setUnreadNotifications} />
+                        <NotificationBell key={user?.id} onCountChange={setUnreadNotifications} />
                         {user && (
                             <UserMenu
                                 user={user}
@@ -1485,6 +1476,11 @@ export default function AppLayout({ children, breadcrumb }) {
             )}
 
             <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+
+            {/* Pending co-PI invitation modal — only for staff when feature is on */}
+            {authReady && hasSubFeature('workflow.co_pi_acceptance') && hasRole('staff') && (
+                <PendingInvitationsModal userId={user?.id} />
+            )}
         </div>
     )
 }

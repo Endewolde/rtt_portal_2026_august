@@ -2,11 +2,9 @@
 
 use App\Models\Award;
 use App\Models\BudgetAllocation;
-use App\Models\BudgetRequest;
 use App\Models\BudgetSettlement;
 use App\Models\College;
 use App\Models\Department;
-use App\Models\FormSignature;
 use App\Models\FormTemplate;
 use App\Models\Proposal;
 use App\Models\ProposalCall;
@@ -34,13 +32,18 @@ beforeEach(function () {
 function sett_makeBase(): array
 {
     $college = College::create(['name' => 'Sett College '.rand(), 'code' => 'ST'.rand(10, 99)]);
-    $dept    = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'SD2'.rand(10, 99)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'SD2'.rand(10, 99)]);
 
-    $central       = User::factory()->create(); $central->assignRole('central_officer');
-    $pi            = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]); $pi->assignRole('pi');
-    $coI           = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]); $coI->assignRole('pi');
-    $collegeAdmin  = User::factory()->create(); $collegeAdmin->assignRole('college_officer');
-    $finance       = User::factory()->create(); $finance->assignRole('finance_officer');
+    $central = User::factory()->create();
+    $central->assignRole('central_officer');
+    $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
+    $pi->assignRole('pi');
+    $coI = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
+    $coI->assignRole('pi');
+    $collegeAdmin = User::factory()->create();
+    $collegeAdmin->assignRole('college_officer');
+    $finance = User::factory()->create();
+    $finance->assignRole('finance_officer');
 
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research',
@@ -50,11 +53,13 @@ function sett_makeBase(): array
     ]);
 
     $proposal = Proposal::create([
-        'tracker_number'   => 'TRK-'.rand(100000, 999999),
+        'tracker_number' => 'TRK-'.rand(100000, 999999),
         'proposal_call_id' => $call->id, 'category' => 'research',
-        'title'            => 'Sett Proposal', 'status' => 'funded',
-        'pi_user_id'       => $pi->id, 'college_id' => $college->id,
-        'department_id'    => $dept->id, 'academic_year' => '2026', 'created_by' => $pi->id,
+        'title' => 'Sett Proposal', 'status' => 'funded',
+        'pi_user_id' => $pi->id, 'college_id' => $college->id,
+        'department_id' => $dept->id, 'academic_year' => '2026', 'created_by' => $pi->id,
+        'contract_status' => 'approved', 'contract_signed_at' => now(),
+        'contract_signed_by' => $central->id,
     ]);
 
     ProposalMember::create([
@@ -68,26 +73,26 @@ function sett_makeBase(): array
 
     // Award the proposal so its budget pool exists
     Award::create([
-        'proposal_id'     => $proposal->id,
-        'awarded_amount'  => 200000.00,
-        'approved_by'     => $central->id,
-        'approved_at'     => now(),
+        'proposal_id' => $proposal->id,
+        'awarded_amount' => 200000.00,
+        'approved_by' => $central->id,
+        'approved_at' => now(),
         'grant_reference' => 'GR-SETT-'.rand(1000, 9999),
     ]);
 
     // Create an approved budget allocation so PI can submit budget requests
     BudgetAllocation::create([
-        'college_id'        => $college->id,
-        'proposal_id'       => $proposal->id,
-        'fiscal_year'       => '2026',
-        'total_amount'      => 200000.00,
-        'allocated_amount'  => 0,
+        'college_id' => $college->id,
+        'proposal_id' => $proposal->id,
+        'fiscal_year' => '2026',
+        'total_amount' => 200000.00,
+        'allocated_amount' => 0,
         'remaining_balance' => 200000.00,
-        'allocation_type'   => 'proposal',
-        'status'            => 'approved',
-        'approved_by'       => $central->id,
-        'approved_at'       => now(),
-        'allocated_by'      => $central->id,
+        'allocation_type' => 'proposal',
+        'status' => 'approved',
+        'approved_by' => $central->id,
+        'approved_at' => now(),
+        'allocated_by' => $central->id,
     ]);
 
     return [$proposal, $pi, $coI, $collegeAdmin, $finance];
@@ -98,7 +103,7 @@ function sett_makeDisbursedRequest(array $base): array
     [$proposal, $pi, $coI, $collegeAdmin, $finance] = $base;
 
     $template = FormTemplate::where('name', 'Research Budget Request')->first();
-    $items    = [['category' => 'Personnel', 'description' => 'RA', 'amount' => 50000, 'justification' => null]];
+    $items = [['category' => 'Personnel', 'description' => 'RA', 'amount' => 50000, 'justification' => null]];
 
     $request = app(BudgetRequestService::class)->create($proposal, $template->id, $items, $pi);
 
@@ -159,7 +164,7 @@ test('finance can finalize college_verified settlement', function () {
 
     $settlementService = app(BudgetSettlementService::class);
     $settlement = $settlementService->submitSettlement($request, $pi, ['total_spent' => 50000, 'unspent_amount' => 0]);
-    $verified   = $settlementService->verifySettlement($settlement, $collegeAdmin, 'Verified');
+    $verified = $settlementService->verifySettlement($settlement, $collegeAdmin, 'Verified');
 
     $finalized = $settlementService->finalizeSettlement($verified, $finance, 'Finalized');
 
@@ -176,7 +181,7 @@ test('cannot finalize without college verification first', function () {
         ->submitSettlement($request, $pi, ['total_spent' => 50000, 'unspent_amount' => 0]);
 
     expect(fn () => app(BudgetSettlementService::class)->finalizeSettlement($settlement, $finance, 'Skip'))
-        ->toThrow(\Exception::class, 'college-verified');
+        ->toThrow(Exception::class, 'college-verified');
 });
 
 test('after finalization status = finance_verified', function () {
@@ -184,10 +189,10 @@ test('after finalization status = finance_verified', function () {
     [$proposal, $pi, $coI, $collegeAdmin, $finance] = $base;
     [$request] = sett_makeDisbursedRequest($base);
 
-    $svc        = app(BudgetSettlementService::class);
+    $svc = app(BudgetSettlementService::class);
     $settlement = $svc->submitSettlement($request, $pi, ['total_spent' => 50000, 'unspent_amount' => 0]);
-    $verified   = $svc->verifySettlement($settlement, $collegeAdmin, 'OK');
-    $finalized  = $svc->finalizeSettlement($verified, $finance, 'Done');
+    $verified = $svc->verifySettlement($settlement, $collegeAdmin, 'OK');
+    $finalized = $svc->finalizeSettlement($verified, $finance, 'Done');
 
     expect($finalized->fresh()->status)->toBe('finance_verified');
 });
@@ -197,9 +202,9 @@ test('after finalization budget_request status = settled', function () {
     [$proposal, $pi, $coI, $collegeAdmin, $finance] = $base;
     [$request] = sett_makeDisbursedRequest($base);
 
-    $svc        = app(BudgetSettlementService::class);
+    $svc = app(BudgetSettlementService::class);
     $settlement = $svc->submitSettlement($request, $pi, ['total_spent' => 50000, 'unspent_amount' => 0]);
-    $verified   = $svc->verifySettlement($settlement, $collegeAdmin, 'OK');
+    $verified = $svc->verifySettlement($settlement, $collegeAdmin, 'OK');
     $svc->finalizeSettlement($verified, $finance, 'Done');
 
     expect($request->fresh()->status)->toBe('settled');
@@ -210,11 +215,11 @@ test('full round lifecycle: create→sign→submit→approve→disburse→settle
     [$proposal, $pi, $coI, $collegeAdmin, $finance] = $base;
 
     $template = FormTemplate::where('name', 'Research Budget Request')->first();
-    $items    = [['category' => 'Personnel', 'description' => 'RA', 'amount' => 50000, 'justification' => null]];
-    $brqSvc   = app(BudgetRequestService::class);
-    $sigSvc   = app(SignatureService::class);
-    $disbSvc  = app(DisbursementService::class);
-    $svc      = app(BudgetSettlementService::class);
+    $items = [['category' => 'Personnel', 'description' => 'RA', 'amount' => 50000, 'justification' => null]];
+    $brqSvc = app(BudgetRequestService::class);
+    $sigSvc = app(SignatureService::class);
+    $disbSvc = app(DisbursementService::class);
+    $svc = app(BudgetSettlementService::class);
 
     // Round 1
     $r1 = $brqSvc->create($proposal, $template->id, $items, $pi);
@@ -231,7 +236,7 @@ test('full round lifecycle: create→sign→submit→approve→disburse→settle
     expect($r1->status)->toBe('disbursed');
 
     $settlement = $svc->submitSettlement($r1, $pi, ['total_spent' => 50000, 'unspent_amount' => 0]);
-    $verified   = $svc->verifySettlement($settlement, $collegeAdmin, 'Good');
+    $verified = $svc->verifySettlement($settlement, $collegeAdmin, 'Good');
     $svc->finalizeSettlement($verified, $finance, 'Complete');
     $r1 = $r1->fresh();
     expect($r1->status)->toBe('settled');

@@ -4,7 +4,7 @@ import { createRoot } from 'react-dom/client';
 import ToastProvider from './Components/Toast';
 
 createInertiaApp({
-    title: (title) => `${title} — RTT Platform`,
+    title: (title) => `${title} RTT Portal`,
     resolve: (name) => {
         const pages = import.meta.glob('./Pages/**/*.jsx', { eager: true });
         return pages[`./Pages/${name}.jsx`];

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\CompletionWorkshop;
 use App\Models\Proposal;
+use App\Models\WorkshopQuestion;
 use App\Services\CompletionWorkshopService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -24,7 +25,7 @@ class CompletionWorkshopController extends Controller
             'scheduledBy:id,name',
         ])->orderByDesc('scheduled_date');
 
-        if ($user->hasRole('college_officer') || $user->hasRole('college_officer') ||
+        if ($user->hasRole('college_officer') ||
             ($user->hasRole('support_officer') && $user->college_id)) {
             $query->whereHas('proposal', fn ($q) => $q->where('college_id', $user->college_id));
         } elseif ($user->hasRole('research_officer')) {
@@ -34,19 +35,17 @@ class CompletionWorkshopController extends Controller
         } elseif ($user->hasRole('technology_officer')) {
             $query->whereHas('proposal', fn ($q) => $q->where('category', 'technology_transfer'));
         } elseif (! $user->hasAnyRole(['super_admin', 'central_officer', 'support_officer'])) {
-            $query->whereHas('proposal', fn ($q) =>
-                $q->where('pi_user_id', $user->id)
-                  ->orWhereHas('members', fn ($sq) =>
-                      $sq->where('user_id', $user->id)->where('status', 'active')
-                  )
+            $query->whereHas('proposal', fn ($q) => $q->where('pi_user_id', $user->id)
+                ->orWhereHas('members', fn ($sq) => $sq->where('user_id', $user->id)->where('status', 'active')
+                )
             );
         }
 
         return response()->json([
-            'data'    => $query->get(),
+            'data' => $query->get(),
             'message' => '',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ]);
     }
 
@@ -66,7 +65,8 @@ class CompletionWorkshopController extends Controller
     /**
      * Proposals eligible for a completion workshop:
      *   - status = 'midterm_evaluation'
-     *   - Has a scored midterm evaluation with recommendation = 'continue'
+     *   - Passed midterm (recommendation = 'continue', status = scored/completed)
+     *   - Final financial settlement (round 2+) is finance_verified
      *   - No existing scheduled or completed workshop
      */
     public function eligibleProposals(Request $request): JsonResponse
@@ -74,16 +74,19 @@ class CompletionWorkshopController extends Controller
         $user = $request->user();
 
         $query = Proposal::where('status', 'midterm_evaluation')
-            ->whereHas('midtermEvaluations', fn ($q) =>
-                $q->where('recommendation', 'continue')->where('status', 'scored')
+            ->whereHas('midtermEvaluations', fn ($q) => $q->where('recommendation', 'continue')
+                ->whereIn('status', ['scored', 'completed'])
             )
-            ->whereDoesntHave('completionWorkshop', fn ($q) =>
-                $q->whereIn('status', ['scheduled', 'completed'])
+            ->whereHas('budgetRequests', fn ($q) => $q->where('funding_round', '>=', 2)
+                ->whereHas('settlement', fn ($sq) => $sq->where('status', 'finance_verified')
+                )
+            )
+            ->whereDoesntHave('completionWorkshop', fn ($q) => $q->whereIn('status', ['scheduled', 'completed'])
             )
             ->with(['pi:id,name,email', 'college:id,name'])
             ->orderBy('tracker_number');
 
-        if ($user->hasRole('college_officer') || $user->hasRole('college_officer')) {
+        if ($user->hasRole('college_officer')) {
             $query->where('college_id', $user->college_id);
         } elseif ($user->hasRole('research_officer')) {
             $query->where('category', 'research');
@@ -94,10 +97,10 @@ class CompletionWorkshopController extends Controller
         }
 
         return response()->json([
-            'data'    => $query->get(['id', 'tracker_number', 'title', 'pi_user_id', 'college_id', 'category', 'duration_months']),
+            'data' => $query->get(['id', 'tracker_number', 'title', 'pi_user_id', 'college_id', 'category', 'duration_months']),
             'message' => '',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ]);
     }
 
@@ -105,9 +108,9 @@ class CompletionWorkshopController extends Controller
     {
         $request->validate([
             'proposal_id' => 'required|uuid|exists:proposals,id',
-            'date'        => 'required|date|after_or_equal:today',
-            'time'        => 'required|date_format:H:i',
-            'venue'       => 'required|string|max:300',
+            'date' => 'required|date|after_or_equal:today',
+            'time' => 'required|date_format:H:i',
+            'venue' => 'required|string|max:300',
             'online_link' => 'nullable|url|max:500',
         ]);
 
@@ -121,10 +124,10 @@ class CompletionWorkshopController extends Controller
             );
 
             return response()->json([
-                'data'    => $workshop->load(['proposal:id,tracker_number,title', 'scheduledBy:id,name']),
+                'data' => $workshop->load(['proposal:id,tracker_number,title', 'scheduledBy:id,name']),
                 'message' => 'Completion workshop scheduled. PI has been notified.',
-                'errors'  => [],
-                'meta'    => [],
+                'errors' => [],
+                'meta' => [],
             ], 201);
         } catch (\Exception $e) {
             return response()->json(['data' => null, 'message' => $e->getMessage(), 'errors' => [], 'meta' => []], 422);
@@ -137,9 +140,9 @@ class CompletionWorkshopController extends Controller
     public function bulkSchedule(Request $request): JsonResponse
     {
         $request->validate([
-            'date'        => 'required|date|after_or_equal:today',
-            'time'        => 'required|date_format:H:i',
-            'venue'       => 'required|string|max:300',
+            'date' => 'required|date|after_or_equal:today',
+            'time' => 'required|date_format:H:i',
+            'venue' => 'required|string|max:300',
             'online_link' => 'nullable|url|max:500',
         ]);
 
@@ -147,20 +150,23 @@ class CompletionWorkshopController extends Controller
         $data = $request->only('date', 'time', 'venue', 'online_link');
 
         $query = Proposal::where('status', 'midterm_evaluation')
-            ->whereHas('midtermEvaluations', fn ($q) =>
-                $q->where('recommendation', 'continue')->where('status', 'scored')
+            ->whereHas('midtermEvaluations', fn ($q) => $q->where('recommendation', 'continue')
+                ->whereIn('status', ['scored', 'completed'])
             )
-            ->whereDoesntHave('completionWorkshop', fn ($q) =>
-                $q->whereIn('status', ['scheduled', 'completed'])
+            ->whereHas('budgetRequests', fn ($q) => $q->where('funding_round', '>=', 2)
+                ->whereHas('settlement', fn ($sq) => $sq->where('status', 'finance_verified')
+                )
+            )
+            ->whereDoesntHave('completionWorkshop', fn ($q) => $q->whereIn('status', ['scheduled', 'completed'])
             );
 
-        if ($user->hasRole('college_officer') || $user->hasRole('college_officer')) {
+        if ($user->hasRole('college_officer')) {
             $query->where('college_id', $user->college_id);
         }
 
         $proposals = $query->get();
         $scheduled = 0;
-        $skipped   = 0;
+        $skipped = 0;
 
         foreach ($proposals as $proposal) {
             try {
@@ -172,21 +178,21 @@ class CompletionWorkshopController extends Controller
         }
 
         return response()->json([
-            'data'    => ['scheduled' => $scheduled, 'skipped' => $skipped],
+            'data' => ['scheduled' => $scheduled, 'skipped' => $skipped],
             'message' => "{$scheduled} completion workshop(s) scheduled for your college.",
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ], 201);
     }
 
     public function storeEvidence(Request $request, string $id): JsonResponse
     {
         $request->validate([
-            'remarks'            => 'nullable|string',
+            'remarks' => 'nullable|string',
             'presentation_files' => 'nullable|array',
-            'photos'             => 'nullable|array',
-            'videos'             => 'nullable|array',
-            'final_report_path'  => 'nullable|string',
+            'photos' => 'nullable|array',
+            'videos' => 'nullable|array',
+            'final_report_path' => 'nullable|string',
         ]);
 
         $workshop = CompletionWorkshop::findOrFail($id);
@@ -220,10 +226,10 @@ class CompletionWorkshopController extends Controller
             );
 
             return response()->json([
-                'data'    => $proposal,
+                'data' => $proposal,
                 'message' => 'Workshop finalized. Proposal is now completed and queued for archival.',
-                'errors'  => [],
-                'meta'    => [],
+                'errors' => [],
+                'meta' => [],
             ]);
         } catch (\Exception $e) {
             return response()->json(['data' => null, 'message' => $e->getMessage(), 'errors' => [], 'meta' => []], 422);
@@ -240,10 +246,10 @@ class CompletionWorkshopController extends Controller
         $workshop->update(['status' => $request->status]);
 
         return response()->json([
-            'data'    => $workshop->fresh(),
+            'data' => $workshop->fresh(),
             'message' => 'Workshop status updated.',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ]);
     }
 
@@ -255,34 +261,117 @@ class CompletionWorkshopController extends Controller
         ]);
 
         $workshop = CompletionWorkshop::findOrFail($id);
-        $path     = $request->file('file')->store("completion-workshops/{$id}/{$request->type}", 'private');
+        $path = $request->file('file')->store("completion-workshops/{$id}/{$request->type}", 'private');
 
         if ($request->type === 'report') {
             $workshop->update(['final_report_path' => $path]);
         } else {
-            $field   = match ($request->type) {
+            $field = match ($request->type) {
                 'presentation' => 'presentation_files',
-                'photo'        => 'photos',
-                'video'        => 'videos',
+                'photo' => 'photos',
+                'video' => 'videos',
             };
             $current = $workshop->{$field} ?? [];
             $workshop->update([$field => [...$current, $path]]);
         }
 
         return response()->json([
-            'data'    => ['path' => $path, 'filename' => $request->file('file')->getClientOriginalName()],
+            'data' => ['path' => $path, 'filename' => $request->file('file')->getClientOriginalName()],
             'message' => 'File uploaded.',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ]);
+    }
+
+    public function getQuestions(string $id): JsonResponse
+    {
+        $workshop = CompletionWorkshop::findOrFail($id);
+
+        $questions = $workshop->questions()
+            ->with([
+                'user:id,name',
+                'answeredBy:id,name',
+            ])
+            ->get();
+
+        return response()->json(['data' => $questions, 'message' => '', 'errors' => [], 'meta' => []]);
+    }
+
+    public function postQuestion(Request $request, string $id): JsonResponse
+    {
+        $workshop = CompletionWorkshop::findOrFail($id);
+
+        if (! in_array($workshop->status, ['scheduled', 'completed'])) {
+            return response()->json(['message' => 'Questions can only be posted for scheduled or completed workshops.', 'errors' => [], 'data' => null, 'meta' => []], 422);
+        }
+
+        $validated = $request->validate([
+            'question' => ['required', 'string', 'max:2000'],
+        ]);
+
+        $question = WorkshopQuestion::create([
+            'workshop_id' => $workshop->id,
+            'user_id' => $request->user()->id,
+            'question' => $validated['question'],
+        ]);
+
+        $question->load(['user:id,name', 'answeredBy:id,name']);
+
+        return response()->json(['data' => $question, 'message' => 'Question posted.', 'errors' => [], 'meta' => []], 201);
+    }
+
+    public function answerQuestion(Request $request, string $id, string $questionId): JsonResponse
+    {
+        $workshop = CompletionWorkshop::with(['proposal:id,pi_user_id'])->findOrFail($id);
+        $question = WorkshopQuestion::where('workshop_id', $id)->findOrFail($questionId);
+        $user = $request->user();
+
+        $isPI = $workshop->proposal?->pi_user_id === $user->id;
+        $isOfficer = $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'college_officer',
+            'research_officer', 'community_officer', 'technology_officer', 'support_officer']);
+
+        if (! $isPI && ! $isOfficer) {
+            abort(403, 'Only the PI or an officer can answer questions.');
+        }
+
+        $validated = $request->validate([
+            'answer' => ['required', 'string', 'max:5000'],
+        ]);
+
+        $question->update([
+            'answer' => $validated['answer'],
+            'answered_by' => $user->id,
+            'answered_at' => now(),
+        ]);
+
+        $question->load(['user:id,name', 'answeredBy:id,name']);
+
+        return response()->json(['data' => $question, 'message' => 'Answer posted.', 'errors' => [], 'meta' => []]);
+    }
+
+    public function deleteQuestion(Request $request, string $id, string $questionId): JsonResponse
+    {
+        $question = WorkshopQuestion::where('workshop_id', $id)->findOrFail($questionId);
+        $user = $request->user();
+
+        $isOwner = $question->user_id === $user->id;
+        $isAdmin = $user->hasAnyRole(['super_admin', 'admin', 'central_officer']);
+
+        if (! $isOwner && ! $isAdmin) {
+            abort(403, 'You can only delete your own questions.');
+        }
+
+        $question->delete();
+
+        return response()->json(['data' => null, 'message' => 'Question deleted.', 'errors' => [], 'meta' => []]);
     }
 
     public function stats(Request $request): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $query = CompletionWorkshop::query();
 
-        if ($user->hasRole('college_officer') || $user->hasRole('college_officer') ||
+        if ($user->hasRole('college_officer') ||
             ($user->hasRole('support_officer') && $user->college_id)) {
             $query->whereHas('proposal', fn ($q) => $q->where('college_id', $user->college_id));
         }
@@ -291,15 +380,15 @@ class CompletionWorkshopController extends Controller
 
         return response()->json([
             'data' => [
-                'total'     => $all->sum(),
+                'total' => $all->sum(),
                 'scheduled' => (int) $all->get('scheduled', 0),
                 'completed' => (int) $all->get('completed', 0),
                 'cancelled' => (int) $all->get('cancelled', 0),
                 'postponed' => (int) $all->get('postponed', 0),
             ],
             'message' => '',
-            'errors'  => [],
-            'meta'    => [],
+            'errors' => [],
+            'meta' => [],
         ]);
     }
 }

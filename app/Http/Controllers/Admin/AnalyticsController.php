@@ -11,8 +11,12 @@ class AnalyticsController extends Controller
 {
     public function index(Request $request)
     {
+        $currentAcademicYear = DB::table('app_settings')
+            ->where('key', 'current_academic_year')
+            ->value('value');
+
         $filters = [
-            'academic_year' => $request->input('academic_year'),
+            'academic_year' => $request->input('academic_year') ?? $currentAcademicYear,
             'college_id' => $request->input('college_id'),
         ];
 

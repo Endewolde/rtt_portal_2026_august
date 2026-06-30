@@ -29,6 +29,9 @@ class ProposalResource extends JsonResource
             'wizard_completed_steps' => $this->wizard_completed_steps,
             'draft_data' => $this->draft_data,
             'submitted_at' => $this->submitted_at,
+            'status_entered_at' => $this->status_entered_at,
+            'ethical_clearance_required' => $this->ethical_clearance_required,
+            'ethical_clearance_number' => $this->ethical_clearance_number,
             'rejection_reason' => $this->rejection_reason,
             'rejected_at' => $this->rejected_at,
             'created_at' => $this->created_at,
@@ -57,6 +60,13 @@ class ProposalResource extends JsonResource
             'proposal_call' => $this->whenLoaded('proposalCall', fn () => new ProposalCallResource($this->proposalCall)),
             'workflow_logs' => $this->whenLoaded('workflowLogs'),
 
+            // Contract — only present for funded proposals
+            'contract_status' => $this->contract_status,
+            'contract_submitted_at' => $this->contract_submitted_at,
+            'contract_signed_at' => $this->contract_signed_at,
+            'contract_document_path' => $this->contract_document_path ? true : false,
+            'contract_rejection_reason' => $this->contract_rejection_reason,
+
             // Award — only present for funded proposals
             'award' => $this->whenLoaded('award', fn () => $this->award ? [
                 'grant_reference' => $this->award->grant_reference,
@@ -64,6 +74,7 @@ class ProposalResource extends JsonResource
                 'approval_notes' => $this->award->approval_notes,
                 'approved_at' => $this->award->approved_at?->toIso8601String(),
                 'approved_by_name' => $this->award->approvedBy?->name,
+                'grant_letter_ready' => (bool) $this->award->grant_letter_path,
             ] : null),
         ];
     }

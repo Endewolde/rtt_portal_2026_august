@@ -10,6 +10,7 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 #[Signature('metrics:collect')]
 #[Description('Collect system and application metrics for the monitoring dashboard')]
@@ -430,7 +431,6 @@ class CollectSystemMetrics extends Command
         }
 
         foreach ($alerts as $alert) {
-            // Respect per-admin preferences
             $notification = new SystemAlertNotification(
                 alertType: $alert['type'],
                 severity: $alert['severity'],
@@ -440,9 +440,13 @@ class CollectSystemMetrics extends Command
             );
 
             foreach ($admins as $admin) {
+                // Skip admins with no email — sending would throw a fatal exception
+                if (empty($admin->email)) {
+                    continue;
+                }
+
                 $prefs = $admin->alert_preferences ?? [];
 
-                // Check if this severity is enabled for this admin
                 $minSeverity = $prefs['min_severity'] ?? 'warning';
                 $severityRank = ['warning' => 1, 'critical' => 2];
                 $alertRank = $severityRank[$alert['severity']] ?? 1;
@@ -459,11 +463,20 @@ class CollectSystemMetrics extends Command
                 }
 
                 Cache::put($cacheKey, 1, 1800);
-                $admin->notify($notification);
+
+                try {
+                    $admin->notify($notification);
+                } catch (\Throwable $e) {
+                    // Log but don't crash the command — a bad email config shouldn't stop metrics collection
+                    Log::warning('Failed to send system alert notification', [
+                        'admin_id' => $admin->id,
+                        'alert_type' => $alert['type'],
+                        'error' => $e->getMessage(),
+                    ]);
+                }
             }
         }
 
-        // Mark all as notified in DB
         DB::table('system_alerts')->where('notified', false)->update(['notified' => true]);
     }
 }

@@ -51,7 +51,7 @@ class BudgetController extends Controller
             'college_officer', 'finance_officer',
             'research_officer', 'community_officer', 'technology_officer'];
 
-        if ($user->hasAnyRole(['college_officer', 'finance_officer']) ||
+        if ($user->hasRole('college_officer') ||
             ($user->hasRole('support_officer') && $user->college_id)) {
             $query->whereHas('proposal', fn ($q) => $q->where('college_id', $user->college_id));
         } elseif ($user->hasRole('research_officer')) {
@@ -761,38 +761,255 @@ class BudgetController extends Controller
         return response()->json(['data' => $signature]);
     }
 
+    /**
+     * College officer: approve submitted/finance_returned → college_approved.
+     * Finance officer / admin: approve college_approved → approved (final).
+     */
     public function approve(string $id, Request $request): JsonResponse
     {
         $user = $request->user();
 
+        $budgetRequest = BudgetRequest::with(['proposal', 'proposal.pi', 'proposal.members.user', 'proposal.college'])->findOrFail($id);
+
+        // ── College officer: first-stage approval ──────────────────────────
+        if ($user->hasRole('college_officer')) {
+            if ($budgetRequest->proposal?->college_id !== $user->college_id) {
+                return response()->json(['message' => 'You can only approve budget requests for proposals in your college.', 'errors' => []], 403);
+            }
+
+            if (! in_array($budgetRequest->status, ['submitted', 'finance_returned'])) {
+                return response()->json(['message' => "Cannot approve a request with status '{$budgetRequest->status}'."], 422);
+            }
+
+            $budgetRequest->update([
+                'status' => 'college_approved',
+                'college_approved_at' => now(),
+                'college_review_notes' => $request->input('notes'),
+            ]);
+
+            AuditLogger::log('budget.college_approved', BudgetRequest::class, $budgetRequest->id, $user->id,
+                ['status' => $budgetRequest->getOriginal('status')], ['status' => 'college_approved']);
+
+            $this->notifyCollegeApproval($budgetRequest->fresh()->load(['proposal.pi', 'proposal.members.user']));
+
+            return response()->json(['data' => $budgetRequest->fresh(), 'message' => 'Budget request approved by college. Forwarded to Finance Officer.']);
+        }
+
+        // ── Finance officer / admin: final approval ────────────────────────
         if (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'finance_officer', 'support_officer'])) {
             return response()->json(['message' => 'You do not have permission to approve budget requests.', 'errors' => []], 403);
         }
-
-        $budgetRequest = BudgetRequest::with(['proposal', 'proposal.pi', 'proposal.members.user'])->findOrFail($id);
 
         if ($user->hasRole('finance_officer') && $budgetRequest->proposal?->college_id !== $user->college_id) {
             return response()->json(['message' => 'You can only approve budget requests for proposals in your college.', 'errors' => []], 403);
         }
 
+        if ($budgetRequest->status !== 'college_approved') {
+            return response()->json(['message' => "Budget request must be college-approved before finance approval. Current status: '{$budgetRequest->status}'."], 422);
+        }
+
         $budgetRequest->update([
             'status' => 'approved',
             'approved_at' => now(),
-            'college_review_notes' => $request->input('notes'),
         ]);
 
-        AuditLogger::log(
-            'budget.request_approved',
-            BudgetRequest::class,
-            $budgetRequest->id,
-            $user->id,
-            ['status' => 'pending'],
-            ['status' => 'approved', 'tracker' => $budgetRequest->proposal?->tracker_number],
-        );
+        AuditLogger::log('budget.request_approved', BudgetRequest::class, $budgetRequest->id, $user->id,
+            ['status' => 'college_approved'], ['status' => 'approved', 'tracker' => $budgetRequest->proposal?->tracker_number]);
 
         $this->notifyBudgetRequestApproved($budgetRequest->fresh()->load(['proposal.pi', 'proposal.members.user']));
 
-        return response()->json(['data' => $budgetRequest->fresh()]);
+        return response()->json(['data' => $budgetRequest->fresh(), 'message' => 'Budget request approved. PI and members have been notified to collect funds.']);
+    }
+
+    /**
+     * College officer: reject submitted/finance_returned → rejected.
+     * Notifies PI and co-investigators with the rejection reason.
+     */
+    public function rejectByCollege(string $id, Request $request): JsonResponse
+    {
+        $request->validate(['notes' => 'required|string|min:10']);
+
+        $user = $request->user();
+
+        if (! $user->hasRole('college_officer')) {
+            return response()->json(['message' => 'Only a college officer can reject budget requests.', 'errors' => []], 403);
+        }
+
+        $budgetRequest = BudgetRequest::with(['proposal', 'proposal.pi', 'proposal.members.user'])->findOrFail($id);
+
+        if ($budgetRequest->proposal?->college_id !== $user->college_id) {
+            return response()->json(['message' => 'You can only reject budget requests for proposals in your college.', 'errors' => []], 403);
+        }
+
+        if (! in_array($budgetRequest->status, ['submitted', 'finance_returned'])) {
+            return response()->json(['message' => "Cannot reject a request with status '{$budgetRequest->status}'."], 422);
+        }
+
+        $budgetRequest->update([
+            'status' => 'rejected',
+            'rejection_reason' => $request->input('notes'),
+        ]);
+
+        AuditLogger::log('budget.college_rejected', BudgetRequest::class, $budgetRequest->id, $user->id,
+            ['status' => $budgetRequest->getOriginal('status')], ['status' => 'rejected']);
+
+        $this->notifyCollegeRejection($budgetRequest->fresh()->load(['proposal.pi', 'proposal.members.user']));
+
+        return response()->json(['data' => $budgetRequest->fresh(), 'message' => 'Budget request rejected. PI and members have been notified.']);
+    }
+
+    /**
+     * Finance officer: return college_approved → finance_returned with notes.
+     * Notifies the college officer.
+     */
+    public function returnByFinance(string $id, Request $request): JsonResponse
+    {
+        $request->validate(['notes' => 'required|string|min:10']);
+
+        $user = $request->user();
+
+        if (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'finance_officer'])) {
+            return response()->json(['message' => 'Only a finance officer can return budget requests.', 'errors' => []], 403);
+        }
+
+        $budgetRequest = BudgetRequest::with(['proposal', 'proposal.pi', 'proposal.members.user'])->findOrFail($id);
+
+        if ($user->hasRole('finance_officer') && $budgetRequest->proposal?->college_id !== $user->college_id) {
+            return response()->json(['message' => 'You can only return budget requests for proposals in your college.', 'errors' => []], 403);
+        }
+
+        if ($budgetRequest->status !== 'college_approved') {
+            return response()->json(['message' => "Can only return a college-approved request. Current status: '{$budgetRequest->status}'."], 422);
+        }
+
+        $budgetRequest->update([
+            'status' => 'finance_returned',
+            'finance_notes' => $request->input('notes'),
+            'finance_returned_at' => now(),
+        ]);
+
+        AuditLogger::log('budget.finance_returned', BudgetRequest::class, $budgetRequest->id, $user->id,
+            ['status' => 'college_approved'], ['status' => 'finance_returned']);
+
+        $this->notifyFinanceReturn($budgetRequest->fresh()->load(['proposal', 'proposal.college']));
+
+        return response()->json(['data' => $budgetRequest->fresh(), 'message' => 'Budget request returned to college officer with notes.']);
+    }
+
+    private function notifyCollegeApproval(BudgetRequest $budgetRequest): void
+    {
+        $proposal = $budgetRequest->proposal;
+        if (! $proposal) {
+            return;
+        }
+
+        // Notify finance officers in this college
+        $financeOfficers = User::role('finance_officer')
+            ->where('college_id', $proposal->college_id)
+            ->get();
+
+        if ($financeOfficers->isEmpty()) {
+            $financeOfficers = User::role(['super_admin', 'admin', 'central_officer'])->get();
+        }
+
+        $data = [
+            'tracker_number' => $proposal->tracker_number,
+            'title' => $proposal->title,
+            'round_number' => $budgetRequest->funding_round,
+            'requested_amount' => $budgetRequest->total_amount,
+            'notes' => $budgetRequest->college_review_notes,
+        ];
+
+        foreach ($financeOfficers as $officer) {
+            if (! $officer->email) {
+                continue;
+            }
+            SendRawMailJob::dispatchSync(
+                "<p>Dear {$officer->name},</p><p>Budget request for <strong>{$proposal->title}</strong> ({$proposal->tracker_number}) — Round {$budgetRequest->funding_round} — has been approved by the college officer and is now awaiting your review.</p><p>Amount requested: ETB ".number_format((float) $budgetRequest->total_amount, 2).'</p>',
+                $officer->email,
+                $officer->name,
+                "Budget Request Awaiting Finance Approval — {$proposal->tracker_number}"
+            );
+            try {
+                StoreInAppNotificationJob::dispatchSync($officer->id, 'budget_request_approved', $data);
+            } catch (\Exception) {
+            }
+        }
+    }
+
+    private function notifyCollegeRejection(BudgetRequest $budgetRequest): void
+    {
+        $proposal = $budgetRequest->proposal;
+        if (! $proposal) {
+            return;
+        }
+
+        $data = [
+            'tracker_number' => $proposal->tracker_number,
+            'title' => $proposal->title,
+            'round_number' => $budgetRequest->funding_round,
+            'notes' => $budgetRequest->rejection_reason,
+        ];
+
+        $recipients = collect();
+        if ($proposal->pi) {
+            $recipients->push($proposal->pi);
+        }
+        $proposal->members
+            ->where('role', 'co_investigator')
+            ->where('status', 'active')
+            ->each(fn ($m) => $m->user && $recipients->push($m->user));
+
+        foreach ($recipients->unique('id') as $user) {
+            if (! $user->email) {
+                continue;
+            }
+            SendRawMailJob::dispatchSync(
+                "<p>Dear {$user->name},</p><p>Your budget request for <strong>{$proposal->title}</strong> ({$proposal->tracker_number}) — Round {$budgetRequest->funding_round} — has been <strong>rejected</strong> by the college officer.</p><p><strong>Reason:</strong> {$budgetRequest->rejection_reason}</p><p>Please review the feedback, make the necessary corrections, and resubmit when ready.</p>",
+                $user->email,
+                $user->name,
+                "Budget Request Rejected — {$proposal->tracker_number}"
+            );
+            try {
+                StoreInAppNotificationJob::dispatchSync($user->id, 'budget_request_approved', $data);
+            } catch (\Exception) {
+            }
+        }
+    }
+
+    private function notifyFinanceReturn(BudgetRequest $budgetRequest): void
+    {
+        $proposal = $budgetRequest->proposal;
+        if (! $proposal) {
+            return;
+        }
+
+        $collegeOfficers = User::role('college_officer')
+            ->where('college_id', $proposal->college_id)
+            ->get();
+
+        $data = [
+            'tracker_number' => $proposal->tracker_number,
+            'title' => $proposal->title,
+            'round_number' => $budgetRequest->funding_round,
+            'notes' => $budgetRequest->finance_notes,
+        ];
+
+        foreach ($collegeOfficers as $officer) {
+            if (! $officer->email) {
+                continue;
+            }
+            SendRawMailJob::dispatchSync(
+                "<p>Dear {$officer->name},</p><p>The budget request for <strong>{$proposal->title}</strong> ({$proposal->tracker_number}) — Round {$budgetRequest->funding_round} — has been <strong>returned</strong> by the Finance Officer with the following notes:</p><p><strong>Finance Notes:</strong> {$budgetRequest->finance_notes}</p><p>Please review and take appropriate action (approve again or reject to PI).</p>",
+                $officer->email,
+                $officer->name,
+                "Budget Request Returned by Finance — {$proposal->tracker_number}"
+            );
+            try {
+                StoreInAppNotificationJob::dispatchSync($officer->id, 'budget_request_approved', $data);
+            } catch (\Exception) {
+            }
+        }
     }
 
     private function notifyBudgetRequestApproved(BudgetRequest $budgetRequest): void
@@ -852,10 +1069,6 @@ class BudgetController extends Controller
         $request->validate(['amount' => 'required|numeric|min:0.01']);
 
         $budgetRequest = BudgetRequest::with('proposal')->findOrFail($id);
-
-        if ($user->hasRole('finance_officer') && $budgetRequest->proposal?->college_id !== $user->college_id) {
-            return response()->json(['message' => 'You can only disburse funds for proposals in your college.', 'errors' => []], 403);
-        }
 
         $disbursement = $this->disbursementService->disburse(
             $budgetRequest, (float) $request->amount, $request->only(['transaction_id', 'cheque_number', 'notes']), $request->user()

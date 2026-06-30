@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Models\WorkflowLog;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class ProposalController extends Controller
@@ -160,7 +161,18 @@ class ProposalController extends Controller
             ->with($loads)
             ->orderByDesc('updated_at')
             ->get()
-            ->map($map);
+            ->map(function ($p) use ($user, $map) {
+                $membership = $p->members
+                    ->where('user_id', $user->id)
+                    ->where('role', 'co_investigator')
+                    ->where('status', 'active')
+                    ->first();
+
+                return array_merge($map($p), [
+                    'my_invitation_status' => $membership?->invitation_status ?? 'accepted',
+                    'my_proposal_member_id' => $membership?->id,
+                ]);
+            });
 
         return response()->json([
             'data' => ['as_pi' => $asPI, 'as_co_pi' => $asCoPi],
@@ -344,6 +356,16 @@ class ProposalController extends Controller
             'draft' => (clone $baseQuery)->where('proposals.status', 'draft')->count(),
         ];
 
+        $currentAcademicYear = DB::table('app_settings')
+            ->where('key', 'current_academic_year')
+            ->value('value') ?? date('Y').'-'.(date('Y') + 1);
+
+        $availableYears = Proposal::whereNull('deleted_at')
+            ->whereNotNull('academic_year')
+            ->distinct()
+            ->orderByDesc('academic_year')
+            ->pluck('academic_year');
+
         return response()->json([
             'data' => [
                 'totals' => $totals,
@@ -352,6 +374,8 @@ class ProposalController extends Controller
                 'by_gender' => $byGender,
                 'by_status' => $byStatus,
                 'by_category' => $byCategory,
+                'current_academic_year' => $currentAcademicYear,
+                'available_years' => $availableYears,
             ],
             'message' => '',
             'errors' => [],

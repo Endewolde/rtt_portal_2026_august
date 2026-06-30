@@ -79,17 +79,19 @@ class RepositoryService
         $reviewerMap = [];
         $reviewerCounter = 'A';
 
-        $anonymizedHistory = $history->map(function ($log) use (&$reviewerMap, &$reviewerCounter) {
+        $reviewerIds = $proposal->reviewAssignments()->pluck('reviewer_id')->flip();
+
+        $anonymizedHistory = $history->map(function ($log) use (&$reviewerMap, &$reviewerCounter, $reviewerIds, $proposal) {
             $actor = User::find($log->actor_id);
             $actorLabel = 'System';
 
             if ($actor) {
-                if ($actor->hasRole('reviewer')) {
+                if ($reviewerIds->has($actor->id)) {
                     if (! isset($reviewerMap[$actor->id])) {
                         $reviewerMap[$actor->id] = 'Reviewer '.$reviewerCounter++;
                     }
                     $actorLabel = $reviewerMap[$actor->id];
-                } elseif ($actor->hasRole('pi')) {
+                } elseif ($actor->id === $proposal->pi_user_id) {
                     $actorLabel = 'Principal Investigator';
                 } else {
                     $actorLabel = 'RTT Office';

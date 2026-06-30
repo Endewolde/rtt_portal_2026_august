@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
-import { Link, usePage } from '@inertiajs/react';
+import { Link, usePage, router } from '@inertiajs/react';
 import {
     ClipboardCheck, Clock, AlertCircle, Download,
     CheckCircle2, ChevronRight, BookOpen, EyeOff,
     Presentation, Calendar, Shield, Star, ChevronDown, ChevronUp,
-    MessageSquare,
+    MessageSquare, Loader2, ShieldAlert,
 } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import AppLayout from '../../Layouts/AppLayout';
 import { useToast } from '../../Components/Toast';
+import { useFeature } from '../../hooks/useFeature';
 import api from '../../lib/api';
 import { formatDate, getCategoryLabel } from '../../lib/utils';
 
@@ -231,13 +233,110 @@ function isNewAssignment(assignment) {
     return hoursOld <= 168; // 7 days
 }
 
-function AssignmentCard({ assignment, tabKey }) {
+function CoiDeclarationModal({ assignment, onDeclared, onClose }) {
+    const { error } = useToast();
+    const [confirmed, setConfirmed] = useState(false);
+    const [declaring, setDeclaring] = useState(false);
+
+    const handleProceed = async () => {
+        setDeclaring(true);
+        try {
+            await api.post(`/review-assignments/${assignment.id}/declare-coi`);
+            onDeclared();
+        } catch (err) {
+            error(err?.response?.data?.message ?? 'Failed to record declaration.');
+        } finally {
+            setDeclaring(false);
+        }
+    };
+
+    return createPortal(
+        <div className="fixed inset-0 z-9999 flex items-center justify-center p-4">
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+            <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+                <div className="bg-linear-to-r from-violet-600 to-indigo-600 px-6 py-5">
+                    <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
+                            <ShieldAlert size={20} className="text-white" />
+                        </div>
+                        <div>
+                            <h2 className="text-base font-bold text-white">Conflict of Interest Declaration</h2>
+                            <p className="text-xs text-white/80 mt-0.5">Required before accessing this review</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="p-6 space-y-4">
+                    <div className="bg-violet-50 border border-violet-200 rounded-xl p-4">
+                        <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide mb-1">Proposal</p>
+                        <p className="text-sm font-semibold text-gray-900">
+                            {assignment.proposal?.tracker_number} — {assignment.proposal?.title || 'Untitled'}
+                        </p>
+                    </div>
+
+                    <p className="text-sm text-gray-600 leading-relaxed">
+                        Before proceeding, you must declare whether you have any conflict of interest with this proposal or its investigators.
+                    </p>
+
+                    <label className="flex items-start gap-3 cursor-pointer group">
+                        <input
+                            type="checkbox"
+                            checked={confirmed}
+                            onChange={e => setConfirmed(e.target.checked)}
+                            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-violet-600 cursor-pointer"
+                        />
+                        <span className="text-sm text-gray-700 group-hover:text-gray-900 leading-relaxed">
+                            I confirm that I have <strong>no conflict of interest</strong> with this proposal and that I can review it fairly and objectively.
+                        </span>
+                    </label>
+
+                    <div className="flex gap-3 pt-2">
+                        <button
+                            onClick={handleProceed}
+                            disabled={!confirmed || declaring}
+                            className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-violet-600 text-white rounded-xl text-sm font-semibold hover:bg-violet-700 disabled:opacity-50 transition-colors"
+                        >
+                            {declaring ? <Loader2 size={15} className="animate-spin" /> : <ShieldAlert size={15} />}
+                            Declare &amp; Proceed
+                        </button>
+                        <button
+                            onClick={onClose}
+                            className="px-5 py-2.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>,
+        document.body
+    );
+}
+
+function AssignmentCard({ assignment, tabKey, onCoiDeclared }) {
     const daysLeft  = getDaysRemaining(assignment.due_date);
     const isDone    = assignment.status === 'submitted';
     const isNew     = isNewAssignment(assignment);
     const meta      = STATUS_META[assignment.status] ?? STATUS_META.pending;
     const stripe    = urgencyStripe(daysLeft, isDone);
     const isDefence = tabKey === 'defence';
+    const { hasSubFeature } = useFeature();
+
+    const [showCoiModal, setShowCoiModal] = useState(false);
+    const needsCoiDeclaration = hasSubFeature('workflow.coi_declaration') && !assignment.coi_declared_at;
+
+    const handleScoreClick = (e) => {
+        if (needsCoiDeclaration) {
+            e.preventDefault();
+            setShowCoiModal(true);
+        }
+    };
+
+    const handleCoiDeclared = () => {
+        setShowCoiModal(false);
+        onCoiDeclared(assignment.id);
+        router.visit(`/reviews/${assignment.id}/score`);
+    };
 
     return (
         <div className={`relative bg-white rounded-2xl shadow-sm overflow-hidden transition-shadow hover:shadow-md ${stripe} ${isNew ? 'ring-2 ring-amber-300' : ''}`}>
@@ -298,6 +397,7 @@ function AssignmentCard({ assignment, tabKey }) {
                         ) : (
                             <Link
                                 href={`/reviews/${assignment.id}/score`}
+                                onClick={handleScoreClick}
                                 className={`inline-flex items-center gap-1.5 px-4 py-2 text-white rounded-xl text-xs font-semibold transition-colors shadow-sm ${
                                     isDefence
                                         ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-200'
@@ -312,6 +412,14 @@ function AssignmentCard({ assignment, tabKey }) {
                     </div>
                 </div>
             </div>
+
+            {showCoiModal && (
+                <CoiDeclarationModal
+                    assignment={assignment}
+                    onDeclared={handleCoiDeclared}
+                    onClose={() => setShowCoiModal(false)}
+                />
+            )}
         </div>
     );
 }
@@ -323,6 +431,12 @@ export default function ReviewIndex() {
     const [yearFilter, setYearFilter]         = useState(app_settings?.current_academic_year ?? '');
     const [loading, setLoading]               = useState(true);
     const [activeTab, setActiveTab]           = useState('blind');
+
+    const handleCoiDeclared = (assignmentId) => {
+        setAllAssignments(prev => prev.map(a =>
+            a.id === assignmentId ? { ...a, coi_declared_at: new Date().toISOString() } : a
+        ));
+    };
 
     useEffect(() => {
         api.get('/review-assignments/my')
@@ -511,6 +625,7 @@ export default function ReviewIndex() {
                                         key={assignment.id}
                                         assignment={assignment}
                                         tabKey={activeTab}
+                                        onCoiDeclared={handleCoiDeclared}
                                     />
                                 ))}
                             </div>

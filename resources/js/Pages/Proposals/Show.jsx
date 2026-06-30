@@ -1,17 +1,35 @@
 import { useState, useEffect, useRef } from 'react';
 import { usePage, Link, router } from '@inertiajs/react';
-import { UserCheck, Calendar, Award, CheckCircle, RotateCcw, XCircle, ExternalLink, AlertCircle, ChevronDown, ChevronUp, ArrowUpCircle, MessageSquare, PlusCircle, Pencil, Trash2, Upload, FileText, Eye } from 'lucide-react';
+import { UserCheck, Calendar, Award, CheckCircle, RotateCcw, XCircle, ExternalLink, AlertCircle, ChevronDown, ChevronUp, ArrowUpCircle, MessageSquare, PlusCircle, Pencil, Trash2, Upload, FileText, Eye, Sparkles, RefreshCw, Star } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import StatusBadge from '../../Components/StatusBadge';
 import TrackerNumberDisplay from '../../Components/TrackerNumberDisplay';
 import ProposalTimeline from '../../Components/ProposalTimeline';
 import api, { get, post, put, del } from '../../lib/api';
 import { useAuth } from '../../hooks/useAuth';
+import { useFeature } from '../../hooks/useFeature';
 import { formatDate, formatCurrency, getCategoryLabel } from '../../lib/utils';
 import { useToast } from '../../Components/Toast';
 import { downloadFile } from '../../lib/download';
 
-const TABS = ['Overview', 'Team', 'Budget', 'Documents', 'History', 'Complaints'];
+const TABS = ['Overview', 'Team', 'Budget', 'Documents', 'History', 'Reviews', 'Complaints'];
+
+function SlaIndicator({ enteredAt, status }) {
+    const daysInStage = Math.floor((Date.now() - new Date(enteredAt).getTime()) / 86400000);
+    const isOverdue = daysInStage > 14 && !['funded', 'rejected', 'completed', 'archived', 'draft'].includes(status);
+    if (!isOverdue) return null;
+    return (
+        <div className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-lg bg-red-50 border border-red-200 text-red-700">
+            <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
+            Overdue — {daysInStage} days in {status.replace(/_/g, ' ')} stage
+        </div>
+    );
+}
+
+const REVIEW_VISIBLE_STATUSES = [
+    'blind_review_passed', 'under_open_defence', 'funded', 'midterm_evaluation',
+    'completed', 'archived', 'rejected',
+];
 
 const FUNDED_STATUSES = ['funded', 'midterm_evaluation', 'completed', 'archived'];
 const COLLEGE_COMPLAINT_STATUSES = ['under_blind_review', 'under_open_defence'];
@@ -791,10 +809,419 @@ function AppealModal({ proposal, onSave, onClose }) {
     );
 }
 
+// ─── AI Score Panel ────────────────────────────────────────────────────────────
+
+function ScoreDot({ score }) {
+    const color = score >= 8 ? 'bg-green-500' : score >= 5 ? 'bg-amber-400' : 'bg-red-400';
+    return (
+        <div className="flex items-center gap-1.5">
+            <div className="flex gap-0.5">
+                {[...Array(10)].map((_, i) => (
+                    <div key={i} className={`h-1.5 w-1.5 rounded-full ${i < score ? color : 'bg-gray-200'}`} />
+                ))}
+            </div>
+            <span className="text-xs font-bold text-gray-700">{score}/10</span>
+        </div>
+    );
+}
+
+function AiScorePanel({ proposalId }) {
+    const [score, setScore] = useState(null);
+    const [loading, setLoading] = useState(false);
+    const [generating, setGenerating] = useState(false);
+    const [open, setOpen] = useState(false);
+    const panelRef = useRef(null);
+    const toast = useToast();
+
+    const load = async () => {
+        setLoading(true);
+        try {
+            const r = await get(`/proposals/${proposalId}/ai-score`);
+            setScore(r.data ?? null);
+        } catch {}
+        finally { setLoading(false); }
+    };
+
+    const generate = async () => {
+        setGenerating(true);
+        try {
+            const r = await post(`/proposals/${proposalId}/ai-score/generate`);
+            setScore(r.data ?? null);
+            setOpen(true);
+            toast.success('AI scoring complete. Scroll down to see results.');
+            setTimeout(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+        } catch (e) {
+            toast.error(e?.response?.data?.message ?? 'AI scoring failed.');
+        } finally { setGenerating(false); }
+    };
+
+    useEffect(() => { load(); }, [proposalId]);
+
+    const toggleOpen = () => { if (!score) generate(); else setOpen(o => !o); };
+
+    const DIMENSIONS = [
+        { key: 'clarity_score', label: 'Clarity' },
+        { key: 'feasibility_score', label: 'Feasibility' },
+        { key: 'budget_alignment_score', label: 'Budget' },
+        { key: 'innovation_score', label: 'Innovation' },
+        { key: 'completeness_score', label: 'Completeness' },
+    ];
+
+    return (
+        <div ref={panelRef} className="bg-violet-50 border border-violet-200 rounded-xl overflow-hidden">
+            <button onClick={toggleOpen} disabled={generating} className="w-full flex items-center justify-between px-4 py-3 hover:bg-violet-100/60 transition-colors disabled:cursor-wait">
+                <div className="flex items-center gap-2">
+                    <Sparkles size={14} className={generating ? 'text-violet-400 animate-pulse' : 'text-violet-600'} />
+                    <span className="text-xs font-bold text-violet-800">
+                        {generating ? 'Analyzing proposal with AI…' : 'AI Pre-screening Score'}
+                    </span>
+                    {!generating && score?.overall_score != null && (
+                        <span className="text-xs font-bold text-violet-600 bg-violet-100 px-2 py-0.5 rounded-full">
+                            {score.overall_score}/10
+                        </span>
+                    )}
+                </div>
+                <div className="flex items-center gap-2">
+                    {generating && <RefreshCw size={12} className="animate-spin text-violet-500" />}
+                    {!score && !loading && !generating && (
+                        <span className="text-[11px] font-semibold text-violet-600">Score now →</span>
+                    )}
+                    {score && !generating && (open ? <ChevronUp size={13} className="text-violet-500" /> : <ChevronDown size={13} className="text-violet-500" />)}
+                </div>
+            </button>
+
+            {/* Loading skeleton while generating */}
+            {generating && (
+                <div className="px-4 pb-4 border-t border-violet-200 pt-3 space-y-3">
+                    <div className="h-8 bg-violet-200/60 rounded-lg animate-pulse" />
+                    <div className="grid grid-cols-2 gap-2">
+                        {[...Array(5)].map((_, i) => (
+                            <div key={i} className="space-y-1.5">
+                                <div className="h-2 w-16 bg-violet-200/60 rounded animate-pulse" />
+                                <div className="h-2 w-24 bg-violet-200/60 rounded animate-pulse" />
+                            </div>
+                        ))}
+                    </div>
+                    <div className="space-y-1.5">
+                        <div className="h-2 w-20 bg-violet-200/60 rounded animate-pulse" />
+                        <div className="h-2 w-full bg-violet-200/60 rounded animate-pulse" />
+                        <div className="h-2 w-4/5 bg-violet-200/60 rounded animate-pulse" />
+                    </div>
+                </div>
+            )}
+
+            {!generating && open && score?.status === 'completed' && (
+                <div className="px-4 pb-4 space-y-3 border-t border-violet-200 pt-3">
+                    {score.summary && (
+                        <p className="text-xs text-violet-700 leading-relaxed bg-violet-100/50 rounded-lg px-3 py-2">
+                            {score.summary}
+                        </p>
+                    )}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {DIMENSIONS.map(d => score[d.key] != null && (
+                            <div key={d.key}>
+                                <p className="text-[10px] font-semibold text-violet-600 mb-1 uppercase tracking-wide">{d.label}</p>
+                                <ScoreDot score={score[d.key]} />
+                            </div>
+                        ))}
+                    </div>
+                    {score.strengths && (
+                        <div>
+                            <p className="text-[10px] font-semibold text-green-700 uppercase tracking-wide mb-1">Strengths</p>
+                            <p className="text-xs text-gray-600">{score.strengths}</p>
+                        </div>
+                    )}
+                    {score.weaknesses && (
+                        <div>
+                            <p className="text-[10px] font-semibold text-red-600 uppercase tracking-wide mb-1">Weaknesses</p>
+                            <p className="text-xs text-gray-600">{score.weaknesses}</p>
+                        </div>
+                    )}
+                    {score.recommendations && (
+                        <div>
+                            <p className="text-[10px] font-semibold text-amber-700 uppercase tracking-wide mb-1">Recommendations</p>
+                            <p className="text-xs text-gray-600">{score.recommendations}</p>
+                        </div>
+                    )}
+                    <button onClick={generate} disabled={generating}
+                        className="flex items-center gap-1.5 text-[11px] font-semibold text-violet-600 hover:text-violet-800 mt-1">
+                        {generating ? <RefreshCw size={10} className="animate-spin" /> : <RefreshCw size={10} />}
+                        Re-score
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function ReviewResultsTab({ proposalId, isVisible, isStaff, proposalStatus }) {
+    const [results, setResults] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const reviewsReleased = REVIEW_VISIBLE_STATUSES.includes(proposalStatus);
+
+    useEffect(() => {
+        if (!isVisible || (!isStaff && !reviewsReleased)) { setLoading(false); return; }
+        get(`/proposals/${proposalId}/review-results`)
+            .then(r => setResults(r.data ?? null))
+            .catch(() => {})
+            .finally(() => setLoading(false));
+    }, [proposalId, isVisible, isStaff, reviewsReleased]);
+
+    if (!isVisible) {
+        return (
+            <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3.5">
+                <span className="text-amber-500 text-base mt-0.5">🔒</span>
+                <div>
+                    <p className="text-sm font-semibold text-amber-700">Review results are not visible to your role</p>
+                    <p className="text-xs text-amber-600 mt-0.5">Review outcomes are shared with the proposal team after the review phase is complete.</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (!isStaff && !reviewsReleased) {
+        return (
+            <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3.5">
+                <span className="text-blue-500 text-base mt-0.5">ℹ️</span>
+                <div>
+                    <p className="text-sm font-semibold text-blue-700">Review in progress</p>
+                    <p className="text-xs text-blue-600 mt-0.5">Review results will be available once the blind review phase is complete.</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (loading) {
+        return (
+            <div className="space-y-3 animate-pulse">
+                {[...Array(3)].map((_, i) => <div key={i} className="h-16 bg-gray-100 rounded-lg" />)}
+            </div>
+        );
+    }
+
+    if (!results || results.total_reviews === 0) {
+        return <p className="text-sm text-gray-400">No review results available yet.</p>;
+    }
+
+    const { total_reviews, submitted_reviews, average_score, reviews } = results;
+
+    return (
+        <div className="space-y-5">
+            {/* Summary row */}
+            <div className="grid grid-cols-3 gap-3">
+                <div className="bg-gray-50 rounded-xl px-4 py-3 text-center">
+                    <p className="text-2xl font-bold text-gray-800 tabular-nums">{submitted_reviews}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Reviews Submitted</p>
+                </div>
+                <div className="bg-gray-50 rounded-xl px-4 py-3 text-center">
+                    <p className="text-2xl font-bold text-gray-800 tabular-nums">{total_reviews}</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Total Assigned</p>
+                </div>
+                {average_score != null && (
+                    <div className="bg-indigo-50 rounded-xl px-4 py-3 text-center">
+                        <p className="text-2xl font-bold text-indigo-700 tabular-nums">{average_score}/10</p>
+                        <p className="text-xs text-indigo-500 mt-0.5">Avg. Score</p>
+                    </div>
+                )}
+            </div>
+
+            {/* Per-review cards (anonymized) */}
+            {reviews.length > 0 && (
+                <div className="space-y-3">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Review Feedback</p>
+                    {reviews.map((rv, i) => (
+                        <div key={i} className="border border-gray-200 rounded-xl overflow-hidden">
+                            <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-100">
+                                <span className="text-xs font-semibold text-gray-600">Reviewer {i + 1}</span>
+                                {rv.overall_score != null && (
+                                    <span className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full">
+                                        {rv.overall_score}/10
+                                    </span>
+                                )}
+                                {rv.recommendation && (
+                                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                                        rv.recommendation === 'approve' ? 'bg-green-100 text-green-700' :
+                                        rv.recommendation === 'reject'  ? 'bg-red-100 text-red-700' :
+                                        'bg-amber-100 text-amber-700'
+                                    }`}>
+                                        {rv.recommendation === 'approve' ? 'Approve' : rv.recommendation === 'reject' ? 'Reject' : 'Revise'}
+                                    </span>
+                                )}
+                            </div>
+                            {rv.comments?.length > 0 && (
+                                <div className="px-4 py-3 space-y-2">
+                                    {rv.comments.map((c, j) => c.comment && (
+                                        <div key={j}>
+                                            {c.question && <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-0.5">{c.question}</p>}
+                                            <p className="text-xs text-gray-700 leading-relaxed">{c.comment}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function ContractUploadSection({ proposal, onUploaded }) {
+    const { success, error } = useToast();
+    const [uploading, setUploading] = useState(false);
+    const [removing, setRemoving] = useState(false);
+    const [pdfUrl, setPdfUrl] = useState(null);
+    const [showPdf, setShowPdf] = useState(true);
+    const fileRef = useRef(null);
+    const blobRef = useRef(null);
+
+    const loadPdf = () => {
+        const token = localStorage.getItem('rtt_token');
+        fetch(`/api/v1/proposals/${proposal.id}/contract/download`, {
+            headers: { Authorization: `Bearer ${token}` },
+        })
+            .then(r => r.ok ? r.blob() : null)
+            .then(blob => {
+                if (!blob) return;
+                if (blobRef.current) URL.revokeObjectURL(blobRef.current);
+                blobRef.current = URL.createObjectURL(blob);
+                setPdfUrl(blobRef.current);
+            })
+            .catch(() => {});
+    };
+
+    useEffect(() => {
+        if (proposal.contract_document_path) loadPdf();
+        return () => { if (blobRef.current) URL.revokeObjectURL(blobRef.current); };
+    }, []);
+
+    const upload = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        setUploading(true);
+        try {
+            const fd = new FormData();
+            fd.append('file', file);
+            await api.post(`/proposals/${proposal.id}/contract/submit`, fd, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
+            loadPdf();
+            success('Contract submitted for review. You will be notified once it is approved.');
+            onUploaded();
+        } catch (e) {
+            error(e.response?.data?.message ?? 'Failed to submit contract.');
+        }
+        setUploading(false);
+        e.target.value = '';
+    };
+
+    const status = proposal.contract_status;
+    const canReplace = status === 'pending' || status === 'rejected';
+    const canRemove  = status === 'pending' || status === 'rejected';
+
+    const remove = async () => {
+        setRemoving(true);
+        try {
+            await api.delete(`/proposals/${proposal.id}/contract`);
+            if (blobRef.current) URL.revokeObjectURL(blobRef.current);
+            blobRef.current = null;
+            setPdfUrl(null);
+            onUploaded();
+        } catch (e) {
+            error(e.response?.data?.message ?? 'Failed to remove contract.');
+        }
+        setRemoving(false);
+    };
+
+    return (
+        <div className="mt-4 rounded-lg border bg-white border-gray-200 overflow-hidden">
+            <div className="px-4 py-3 space-y-2">
+                {/* Header row */}
+                <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
+                        <FileText size={13} /> Research Contract
+                    </p>
+                    <div className="flex items-center gap-2">
+                        {canReplace && (
+                            <button onClick={() => fileRef.current?.click()} disabled={uploading || removing}
+                                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50">
+                                <Upload size={11} /> {uploading ? 'Uploading…' : 'Replace'}
+                            </button>
+                        )}
+                        {canRemove && (
+                            <button onClick={remove} disabled={removing || uploading}
+                                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50">
+                                <Trash2 size={11} /> {removing ? 'Removing…' : 'Remove'}
+                            </button>
+                        )}
+                        {pdfUrl && (
+                            <button onClick={() => setShowPdf(v => !v)}
+                                className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
+                                <Eye size={11} /> {showPdf ? 'Hide' : 'Show'}
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                {status === 'approved' && (
+                    <div className="flex items-center gap-2 text-sm text-emerald-700">
+                        <CheckCircle size={14} />
+                        <span>Contract approved on {formatDate(proposal.contract_signed_at)}. You may now submit your budget request.</span>
+                    </div>
+                )}
+
+                {status === 'pending' && (
+                    <div className="flex items-center gap-2 text-sm text-blue-700">
+                        <Upload size={14} className="shrink-0" />
+                        <span>Contract submitted and under review. You will be notified once approved.</span>
+                    </div>
+                )}
+
+                {status === 'rejected' && (
+                    <div className="flex items-start gap-2 text-sm text-red-700">
+                        <AlertCircle size={14} className="shrink-0 mt-0.5" />
+                        <div>
+                            <p className="font-medium">Contract was returned for correction.</p>
+                            {proposal.contract_rejection_reason && (
+                                <p className="text-xs text-red-600 mt-0.5">{proposal.contract_rejection_reason}</p>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {!status && (
+                    <div className="space-y-2">
+                        <p className="text-sm text-gray-600">
+                            Please upload the signed research contract (PDF). An officer will review and approve it before you can submit your first budget request.
+                        </p>
+                        <button onClick={() => fileRef.current?.click()} disabled={uploading}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                            <Upload size={12} /> {uploading ? 'Uploading…' : 'Upload Signed Contract PDF'}
+                        </button>
+                    </div>
+                )}
+
+                <input ref={fileRef} type="file" accept=".pdf" className="hidden" onChange={upload} />
+            </div>
+
+            {pdfUrl && showPdf && (
+                <div className="border-t border-gray-100">
+                    <iframe
+                        src={pdfUrl}
+                        className="w-full h-96 block"
+                        title="Submitted contract"
+                    />
+                </div>
+            )}
+        </div>
+    );
+}
+
 export default function ProposalShow() {
     const { url } = usePage();
     const id = url.split('/')[2];
     const { user, hasAnyRole } = useAuth();
+    const { hasSubFeature } = useFeature();
     const toast = useToast();
 
     const [proposal, setProposal] = useState(null);
@@ -807,8 +1234,8 @@ export default function ProposalShow() {
     const [appeal, setAppeal] = useState(null);
     const [showAppealModal, setShowAppealModal] = useState(false);
 
-    const isAdmin    = hasAnyRole(['super_admin', 'central_office']);
-    const isOfficer  = hasAnyRole(['college_officer', 'college_admin', 'research_officer', 'community_officer', 'technology_officer']);
+    const isAdmin    = hasAnyRole(['super_admin', 'admin', 'central_officer']);
+    const isOfficer  = hasAnyRole(['college_officer', 'research_officer', 'community_officer', 'technology_officer']);
 
     const load = () => {
         setLoading(true);
@@ -891,7 +1318,16 @@ export default function ProposalShow() {
                                 <span><strong>College:</strong> {proposal.college?.name ?? '—'}</span>
                                 <span><strong>Year:</strong> {proposal.academic_year ?? '—'}</span>
                                 <span><strong>Submitted:</strong> {formatDate(proposal.submitted_at)}</span>
+                                {hasSubFeature('workflow.ethical_clearance') && proposal.ethical_clearance_required && (
+                                    <span className="inline-flex items-center gap-1 text-amber-700 font-medium">
+                                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500 inline-block" />
+                                        EC: {proposal.ethical_clearance_number || 'Clearance Required'}
+                                    </span>
+                                )}
                             </div>
+                            {hasSubFeature('workflow.sla_tracking') && proposal.status_entered_at && (
+                                <SlaIndicator enteredAt={proposal.status_entered_at} status={proposal.status} />
+                            )}
                         </div>
                         <StatusBadge status={proposal.status} size="lg" />
                     </div>
@@ -936,22 +1372,13 @@ export default function ProposalShow() {
                                     <p className="text-xs font-medium text-emerald-600 uppercase">Awarded Amount</p>
                                     <p className="text-sm font-bold text-emerald-800">{formatCurrency(proposal.award.awarded_amount)}</p>
                                 </div>
-                                <div className="ml-auto">
-                                    <button
-                                        onClick={() =>
-                                            downloadFile(
-                                                `/proposals/${proposal.id}/award-letter/download`,
-                                                `Award-Letter-${proposal.award.grant_reference}.pdf`
-                                            ).catch(() => {})
-                                        }
-                                        className="flex items-center gap-1.5 px-3 py-2 bg-emerald-700 text-white text-xs font-medium rounded-lg hover:bg-emerald-800 transition-colors"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                                        Download Award Letter
-                                    </button>
-                                </div>
                             </div>
                         </div>
+                    )}
+
+                    {/* Contract upload — PI only, funded proposals */}
+                    {proposal.status === 'funded' && user?.id === proposal.pi_user_id && (
+                        <ContractUploadSection proposal={proposal} onUploaded={() => router.reload({ only: ['proposal'] })} />
                     )}
 
                     {/* Workflow actions */}
@@ -961,6 +1388,11 @@ export default function ProposalShow() {
                         </div>
                     )}
                 </div>
+
+                {/* AI Score — officers and admins */}
+                {(isAdmin || isOfficer) && (
+                    <AiScorePanel proposalId={proposal.id} />
+                )}
 
                 {/* Tabs */}
                 <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -1112,6 +1544,15 @@ export default function ProposalShow() {
                             ) : (
                                 <ProposalTimeline history={history} currentStatus={proposal.status} />
                             )
+                        )}
+
+                        {activeTab === 'Reviews' && (
+                            <ReviewResultsTab
+                                proposalId={id}
+                                isVisible={isProposalMember || isAdmin || isOfficer}
+                                isStaff={isAdmin || isOfficer}
+                                proposalStatus={proposal.status}
+                            />
                         )}
 
                         {activeTab === 'Complaints' && (

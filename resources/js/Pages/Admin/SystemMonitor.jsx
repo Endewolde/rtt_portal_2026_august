@@ -62,8 +62,10 @@ const SEVERITY = {
 
 // ─── Ring Gauge ──────────────────────────────────────────────────────────────
 
-function RingGauge({ value, label, icon: Icon, meta, size = 120 }) {
-    const h = HEALTH[healthOf(value)]
+function RingGauge({ value, label, icon: Icon, meta, size = 120, invertHealth = false }) {
+    const h = HEALTH[invertHealth
+        ? (value == null ? 'unknown' : value >= 99 ? 'good' : value >= 95 ? 'moderate' : value >= 85 ? 'warning' : 'critical')
+        : healthOf(value)]
     const r = 44
     const circ = 2 * Math.PI * r
     const pct = value != null ? Math.min(100, Math.max(0, value)) : 0
@@ -598,7 +600,8 @@ export default function SystemMonitor() {
                         <RingGauge
                             value={a.requests_5m > 0 ? Math.round((a.requests_5m - a.failed_5m) / a.requests_5m * 100) : (a.requests_5m === 0 ? 100 : null)}
                             label="Success Rate" icon={CheckCircle2}
-                            meta={`${a.requests_5m ?? 0} req / 5 min`} />
+                            meta={`${a.requests_5m ?? 0} req / 5 min`}
+                            invertHealth />
                     </div>
 
                     {/* App stat cards */}

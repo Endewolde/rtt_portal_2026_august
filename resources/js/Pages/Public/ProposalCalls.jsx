@@ -75,7 +75,7 @@ export default function ProposalCalls() {
                     <div className="inline-flex items-center gap-2 bg-white/10 border border-white/20 text-white/80
                                     text-xs font-semibold px-3 py-1.5 rounded-full mb-5 backdrop-blur-sm">
                         <Sparkles size={11} className="text-indigo-300" />
-                        Wolkite University — Research &amp; Technology Transfer
+                       Built for academic excellence — Research &amp; Technology Transfer
                     </div>
 
                     <h1 className="text-4xl sm:text-5xl font-extrabold text-white tracking-tight mb-4 leading-tight">

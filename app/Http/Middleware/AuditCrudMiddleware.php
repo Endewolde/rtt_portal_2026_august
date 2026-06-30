@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
@@ -224,9 +225,13 @@ class AuditCrudMiddleware
             return null;
         }
 
-        // Truncate very long text fields to keep logs readable
+        // Truncate very long text fields and replace file objects with metadata
         array_walk_recursive($body, function (&$value) {
-            if (is_string($value) && mb_strlen($value) > 500) {
+            if ($value instanceof UploadedFile) {
+                $value = '[file: '.$value->getClientOriginalName().']';
+            } elseif (is_object($value)) {
+                $value = '[object]';
+            } elseif (is_string($value) && mb_strlen($value) > 500) {
                 $value = mb_substr($value, 0, 500).'…';
             }
         });

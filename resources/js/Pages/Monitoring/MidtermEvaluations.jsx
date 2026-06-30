@@ -205,13 +205,14 @@ function FilePickerRow({ label, hint, file, onFile, onClear }) {
 
 function SubmitReportModal({ evaluation, onClose, onSuccess }) {
     const { error, success } = useToast()
+    const isEdit = evaluation.status === 'report_submitted'
     const [form, setForm] = useState({
-        progress_summary:                 '',
-        financial_utilization_percentage: '',
-        publications_count:               '0',
-        challenges:                       '',
-        milestones_achieved:              '',
-        milestones_missed:                '',
+        progress_summary:                 evaluation.progress_summary ?? '',
+        financial_utilization_percentage: evaluation.financial_utilization_percentage?.toString() ?? '',
+        publications_count:               evaluation.publications_count?.toString() ?? '0',
+        challenges:                       evaluation.challenges ?? '',
+        milestones_achieved:              evaluation.milestones_achieved ?? '',
+        milestones_missed:                evaluation.milestones_missed ?? '',
     })
     const [progressFile,  setProgressFile]  = useState(null)
     const [financialFile, setFinancialFile] = useState(null)
@@ -251,7 +252,7 @@ function SubmitReportModal({ evaluation, onClose, onSuccess }) {
                 {/* Header */}
                 <div className="bg-linear-to-r from-amber-500 to-orange-500 rounded-t-2xl px-6 py-5 flex items-center justify-between">
                     <div>
-                        <h2 className="text-lg font-bold text-white">Submit Midterm Report</h2>
+                        <h2 className="text-lg font-bold text-white">{isEdit ? 'Edit Midterm Report' : 'Submit Midterm Report'}</h2>
                         <p className="text-amber-100 text-xs mt-0.5">
                             {evaluation.proposal?.tracker_number} · {evaluation.proposal?.title}
                         </p>
@@ -352,7 +353,7 @@ function SubmitReportModal({ evaluation, onClose, onSuccess }) {
                     </button>
                     <button onClick={submit} disabled={saving}
                         className="flex-1 px-4 py-2.5 bg-amber-500 text-white rounded-xl text-sm font-semibold hover:bg-amber-600 disabled:opacity-50 transition-colors">
-                        {saving ? 'Submitting…' : 'Submit Report'}
+                        {saving ? 'Saving…' : isEdit ? 'Update Report' : 'Submit Report'}
                     </button>
                 </div>
             </div>
@@ -526,7 +527,7 @@ function EvaluationCard({ evaluation, isPI, isOfficer, onRefresh }) {
     const [showScore,   setShowScore]   = useState(false)
 
     const proposal = evaluation.proposal
-    const canSubmitReport = isPI && evaluation.status === 'scheduled'
+    const canSubmitReport = isPI && ['scheduled', 'report_submitted'].includes(evaluation.status)
     const canScore        = isOfficer && evaluation.status === 'report_submitted'
     const canRescore      = isOfficer && evaluation.status === 'scored'
     const hasReports      = evaluation.progress_report_path || evaluation.financial_report_path
@@ -695,7 +696,7 @@ function EvaluationCard({ evaluation, isPI, isOfficer, onRefresh }) {
                         {canSubmitReport && (
                             <button onClick={() => setShowReport(true)}
                                 className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white text-xs font-semibold rounded-lg hover:bg-amber-600">
-                                <FileText size={12} /> Submit Report
+                                <FileText size={12} /> {evaluation.status === 'report_submitted' ? 'Edit Report' : 'Submit Report'}
                             </button>
                         )}
                         {canScore && (
@@ -735,12 +736,12 @@ function EvaluationCard({ evaluation, isPI, isOfficer, onRefresh }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function MidtermEvaluations() {
-    const { hasAnyRole } = useAuth()
+    const { hasRole, hasAnyRole } = useAuth()
     const { success, error } = useToast()
 
-    const isOfficer = hasAnyRole(['super_admin', 'central_office', 'college_admin', 'college_officer',
+    const isOfficer = hasAnyRole(['super_admin', 'admin', 'central_officer', 'college_officer',
                                    'research_officer', 'community_officer', 'technology_officer'])
-    const isPI      = hasAnyRole(['pi', 'staff'])
+    const isPI      = hasRole('staff')
 
     const [evaluations,     setEvaluations]     = useState([])
     const [fundedProposals, setFundedProposals] = useState([])

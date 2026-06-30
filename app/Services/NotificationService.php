@@ -6,16 +6,17 @@ use App\Jobs\SendEmailNotificationJob;
 use App\Jobs\SendTelegramNotificationJob;
 use App\Jobs\StoreInAppNotificationJob;
 use App\Models\User;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class NotificationService
 {
     /**
      * Send a notification through all channels enabled for this user.
-     * All sends are queued — never synchronous.
+     * In-app storage is synchronous; email/Telegram are queued.
      *
      * @param  string  $event  e.g. 'submission_success'
-     * @param  array   $data   Event-specific payload
+     * @param  array  $data  Event-specific payload
      */
     public function send(string $event, User $recipient, array $data): void
     {
@@ -23,9 +24,9 @@ class NotificationService
             ->where('user_id', $recipient->id)
             ->first();
 
-        $emailEnabled    = $prefs ? (bool) $prefs->email_enabled    : true;
+        $emailEnabled = $prefs ? (bool) $prefs->email_enabled : true;
         $telegramEnabled = $prefs ? (bool) $prefs->telegram_enabled : true;
-        $inAppEnabled    = $prefs ? (bool) $prefs->inapp_enabled    : true;
+        $inAppEnabled = $prefs ? (bool) $prefs->inapp_enabled : true;
 
         if ($emailEnabled && $recipient->email) {
             SendEmailNotificationJob::dispatch($recipient, $event, $data);
@@ -36,7 +37,7 @@ class NotificationService
         }
 
         if ($inAppEnabled) {
-            StoreInAppNotificationJob::dispatch($recipient->id, $event, $data);
+            StoreInAppNotificationJob::dispatchSync($recipient->id, $event, $data);
         }
     }
 
@@ -55,7 +56,7 @@ class NotificationService
     /**
      * Get unread in-app notifications for a user.
      */
-    public function getUnread(User $user, int $limit = 20): \Illuminate\Support\Collection
+    public function getUnread(User $user, int $limit = 20): Collection
     {
         return DB::table('notifications')
             ->where('notifiable_type', User::class)

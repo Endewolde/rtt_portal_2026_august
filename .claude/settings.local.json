@@ -45,7 +45,22 @@
       "Bash(grep -n 'brq_makeFundedProposal\\\\|$template\\\\|$central' /Users/endashaw/real_rtt1/tests/Feature/Finance/BudgetRequestTest.php)",
       "Bash(vendor/bin/pint app/Http/Controllers/Api/BudgetController.php --format agent)",
       "Bash(vendor/bin/pint app/Http/Controllers/Api/ActionCountController.php routes/api.php --format agent)",
-      "Bash(vendor/bin/pint app/Http/Controllers/Api/SettingsController.php app/Models/AppSetting.php database/seeders/AppSettingsSeeder.php --format agent)"
+      "Bash(vendor/bin/pint app/Http/Controllers/Api/SettingsController.php app/Models/AppSetting.php database/seeders/AppSettingsSeeder.php --format agent)",
+      "Bash(vendor/bin/pint app/Http/Controllers/Api/BudgetController.php app/Models/BudgetRequest.php --format agent)",
+      "Bash(vendor/bin/pint --dirty --format agent app/Http/Controllers/Api/UserController.php database/seeders/RolePermissionSeeder.php)",
+      "Bash(vendor/bin/pint --dirty --format agent app/Http/Controllers/Api/ReviewController.php routes/api.php)",
+      "Bash(xargs ls)",
+      "Bash(vendor/bin/pint database/migrations/2026_06_22_203520_add_admin_missing_permissions.php database/migrations/2026_06_22_203117_add_central_officer_missing_permissions.php --format agent)",
+      "Bash(vendor/bin/pint app/Enums/Feature.php app/Models/Proposal.php app/Models/ProposalMember.php app/Services/ProposalService.php app/Http/Controllers/Api/ReviewController.php database/migrations/2026_06_27_222732_add_workflow_feature_fields.php database/migrations/2026_06_27_222732_add_invitation_status_to_proposal_members.php database/migrations/2026_06_27_222732_add_coi_declared_to_review_assignments.php routes/api.php --format agent)",
+      "Bash(vendor/bin/pint app/Http/Controllers/Api/FeatureController.php app/Services/ProposalService.php --format agent)",
+      "Bash(vendor/bin/pint app/Services/NotificationService.php --format agent)",
+      "Bash(vendor/bin/pint app/Http/Controllers/Api/CompletionWorkshopController.php --format agent)",
+      "Bash(vendor/bin/pint app/Models/WorkshopQuestion.php app/Models/CompletionWorkshop.php app/Models/ResearchOutput.php app/Http/Controllers/Api/CompletionWorkshopController.php app/Http/Controllers/Api/ResearchOutputController.php database/migrations/2026_06_28_192028_create_workshop_questions_table.php database/migrations/2026_06_28_192028_add_approval_status_to_research_outputs_table.php --format agent)",
+      "Bash(vendor/bin/pint app/Http/Controllers/Api/ResearchOutputController.php --format agent)",
+      "Bash(grep -A2 -B2 '$disk->download\\\\|Storage.*download' /Users/endashaw/real_rtt1/app/Http/Controllers/Api/ProposalArchiveController.php)",
+      "Bash(node --input-type=module --eval ' *)",
+      "Bash(node -e ' *)",
+      "Bash(grep -n 'uuid\\\\|bigIncrement\\\\|$table->id\\\\|unsignedBigInteger' /Users/endashaw/real_rtt1/database/migrations/2014_10_12_000000_create_users_table.php /Users/endashaw/real_rtt1/database/migrations/2019_12_14_000001_create_personal_access_tokens_table.php)"
     ]
   },
   "enableAllProjectMcpServers": true,

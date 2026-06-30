@@ -23,6 +23,17 @@ class ResearchOutput extends Model
         'title',
         'description',
         'recorded_by',
+        'status',
+        'review_notes',
+        'verified_by',
+        'verified_at',
+        'approved_by',
+        'approved_at',
+    ];
+
+    protected $casts = [
+        'verified_at' => 'datetime',
+        'approved_at' => 'datetime',
     ];
 
     public function proposal(): BelongsTo
@@ -33,6 +44,16 @@ class ResearchOutput extends Model
     public function recordedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'recorded_by');
+    }
+
+    public function verifiedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'verified_by');
+    }
+
+    public function approvedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by');
     }
 
     public function publication(): HasOne

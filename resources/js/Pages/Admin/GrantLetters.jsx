@@ -1,11 +1,22 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import {
     FileText, Printer, Search, ChevronRight, BadgeDollarSign,
-    User, RefreshCw, Layers, CheckCircle, Lock, Unlock, Download,
+    User, RefreshCw, Layers, CheckCircle, Lock, Unlock, Download, Save,
 } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import api from '../../lib/api';
-import { usePage } from '@inertiajs/react';
+import { usePage, router } from '@inertiajs/react';
+import { useToast } from '../../Components/Toast';
+
+const TEMPLATE_KEY   = 'rtt_grant_letter_template';
+const LAST_PROP_KEY  = 'rtt_grant_letter_last';
+
+function loadSavedTemplate() {
+    try { return JSON.parse(localStorage.getItem(TEMPLATE_KEY) ?? 'null') ?? {}; } catch { return {}; }
+}
+function saveTemplateToStorage(overrides) {
+    try { localStorage.setItem(TEMPLATE_KEY, JSON.stringify({ ...overrides, savedAt: new Date().toISOString() })); } catch {}
+}
 
 // ── Pure helpers ──────────────────────────────────────────────────────────────
 
@@ -256,6 +267,7 @@ const LetterCanvas = memo(
 
 export default function GrantLetters() {
     const appSettings = usePage().props.app_settings ?? {};
+    const { success, error: toastError } = useToast();
 
     const [head, setHead] = useState({
         orgName:        appSettings.organization_name ?? 'Wolaita Sodo University',
@@ -275,15 +287,44 @@ export default function GrantLetters() {
     const [selected, setSelected]       = useState(null);
     const [currentHtml, setCurrentHtml] = useState(null);
 
+    const [canvasKey, setCanvasKey]               = useState(0);
     const [templateLocked, setTemplateLocked]     = useState(false);
     const [bulkProposals, setBulkProposals]       = useState([]);
     const [bulkLoading, setBulkLoading]           = useState(false);
     const [lockedHead, setLockedHead]             = useState(null);
     const [lockedOverrides, setLockedOverrides]   = useState(null);
 
-    const canvasDomRef  = useRef(null);
-    const logoInputRef  = useRef(null);
-    const stampInputRef = useRef(null);
+    // Template overrides — source of truth for signatory / CC / fileNo.
+    // Lazy-initialized from localStorage so it's ready synchronously on mount.
+    const [savedTemplate, setSavedTemplate] = useState(loadSavedTemplate);
+
+    const canvasDomRef      = useRef(null);
+    const logoInputRef      = useRef(null);
+    const stampInputRef     = useRef(null);
+    const autoSelectedRef   = useRef(false);
+    const templateSaveTimer = useRef(null);
+
+    // Capture DOM state right before any Inertia navigation so edits are never lost.
+    useEffect(() => {
+        const off = router.on('before', () => {
+            const dom = canvasDomRef.current;
+            if (!dom) return;
+            const get = f => dom.querySelector(`[data-field="${f}"]`)?.innerText?.trim() ?? '';
+            const overrides = {
+                signatoryName:  get('signatoryName'),
+                signatoryTitle: get('signatoryTitle') || 'Vice President, Research and Technology Transfer',
+                date:           get('date') || todayFormatted(),
+                fileNo:         get('fileNo'),
+                cc:             get('cc').split('\n').map(s => s.replace(/^•\s*/, '').trim()).filter(Boolean),
+            };
+            if (overrides.signatoryName || overrides.fileNo || overrides.cc.length) {
+                saveTemplateToStorage(overrides);
+                setSavedTemplate(overrides);
+            }
+        });
+        return off;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // Load funded proposals
     useEffect(() => {
@@ -303,6 +344,21 @@ export default function GrantLetters() {
             .finally(() => setLoadingList(false));
     }, []);
 
+    // Auto-restore last selected proposal after proposals load
+    useEffect(() => {
+        if (proposals.length === 0 || autoSelectedRef.current) return;
+        try {
+            const lastId = localStorage.getItem(LAST_PROP_KEY);
+            if (!lastId) return;
+            const p = proposals.find(item => item.id === lastId);
+            if (p) {
+                autoSelectedRef.current = true;
+                selectProposal(p);
+            }
+        } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [proposals]);
+
     // Wire logo + stamp click handlers whenever the canvas remounts (new proposal)
     const handleCanvasMount = useCallback(domNode => {
         canvasDomRef.current = domNode;
@@ -314,6 +370,28 @@ export default function GrantLetters() {
         if (stampArea) {
             stampArea.addEventListener('click', () => stampInputRef.current?.click());
         }
+
+        // Auto-save template fields on every edit, debounced 600 ms.
+        // setSavedTemplate is a stable React setter — safe to capture in useCallback([]) closure.
+        let saveTimer;
+        const autoSave = () => {
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(() => {
+                const get = f => domNode.querySelector(`[data-field="${f}"]`)?.innerText?.trim() ?? '';
+                const overrides = {
+                    signatoryName:  get('signatoryName'),
+                    signatoryTitle: get('signatoryTitle') || 'Vice President, Research and Technology Transfer',
+                    date:           get('date') || todayFormatted(),
+                    fileNo:         get('fileNo'),
+                    cc:             get('cc').split('\n').map(s => s.replace(/^•\s*/, '').trim()).filter(Boolean),
+                };
+                if (overrides.signatoryName || overrides.fileNo || overrides.cc.length) {
+                    saveTemplateToStorage(overrides);
+                    setSavedTemplate(overrides);
+                }
+            }, 600);
+        };
+        domNode.addEventListener('input', autoSave);
     }, []);
 
     const handleLogoFile = e => {
@@ -380,12 +458,17 @@ export default function GrantLetters() {
     };
 
     const selectProposal = async p => {
+        try { localStorage.setItem(LAST_PROP_KEY, p.id); } catch {}
         let full = p;
         try {
             const r = await api.get(`/proposals/${p.id}`);
             full = { ...p, ...(r.data?.data ?? {}), award: p.award ?? r.data?.data?.award };
         } catch {}
         const data = buildData(full, head);
+        if (savedTemplate.signatoryName)  data.signatoryName  = savedTemplate.signatoryName;
+        if (savedTemplate.signatoryTitle) data.signatoryTitle = savedTemplate.signatoryTitle;
+        if (savedTemplate.fileNo)         data.fileNo         = savedTemplate.fileNo;
+        if (savedTemplate.cc?.length)     data.cc             = savedTemplate.cc;
         setSelected(full);
         setCurrentHtml(generateLetterHtml(data, head));
         setTemplateLocked(false);
@@ -418,22 +501,76 @@ export default function GrantLetters() {
         return { capturedHead, overrides };
     };
 
-    const lockTemplate = async () => {
-        const { capturedHead, overrides } = captureDomTemplate();
-        setLockedHead(capturedHead);
-        setLockedOverrides(overrides);
-        setTemplateLocked(true);
+    const persistOverrides = (overrides) => {
+        saveTemplateToStorage(overrides);
+        setSavedTemplate(overrides);
+    };
 
+    // Update a single template field from the sidebar form; debounce the localStorage write.
+    const updateTemplateField = (field, value) => {
+        const updated = { ...savedTemplate, [field]: value };
+        setSavedTemplate(updated);
+        clearTimeout(templateSaveTimer.current);
+        templateSaveTimer.current = setTimeout(() => saveTemplateToStorage(updated), 400);
+    };
+
+    const saveTemplate = () => {
+        if (!savedTemplate.signatoryName?.trim()) {
+            toastError('Fill in the Signatory Name below before saving.');
+            return;
+        }
+        saveTemplateToStorage(savedTemplate);
+        success('Template saved.');
+    };
+
+    const applyTemplate = () => {
+        if (!selected) return;
+        const data = buildData(selected, head);
+        if (savedTemplate.signatoryName)  data.signatoryName  = savedTemplate.signatoryName;
+        if (savedTemplate.signatoryTitle) data.signatoryTitle = savedTemplate.signatoryTitle;
+        if (savedTemplate.fileNo)         data.fileNo         = savedTemplate.fileNo;
+        if (savedTemplate.date)           data.date           = savedTemplate.date;
+        if (savedTemplate.cc?.length)     data.cc             = savedTemplate.cc;
+        setCurrentHtml(generateLetterHtml(data, head));
+        setCanvasKey(k => k + 1);
+    };
+
+    const lockTemplate = async () => {
+        if (!savedTemplate.signatoryName?.trim()) {
+            toastError('Please save a template with a Signatory Name first, then approve.');
+            return;
+        }
+
+        setLockedOverrides(savedTemplate);
+        setLockedHead(head);
+        setTemplateLocked(true);
         setBulkLoading(true);
-        const full = await Promise.all(
-            proposals.map(p =>
-                api.get(`/proposals/${p.id}`)
-                    .then(r => ({ ...p, ...(r.data?.data ?? {}), award: p.award ?? r.data?.data?.award }))
-                    .catch(() => p),
-            ),
-        );
-        setBulkProposals(full);
-        setBulkLoading(false);
+
+        try {
+            const [full, approveRes] = await Promise.all([
+                Promise.all(
+                    proposals.map(p =>
+                        api.get(`/proposals/${p.id}`)
+                            .then(r => ({ ...p, ...(r.data?.data ?? {}), award: p.award ?? r.data?.data?.award }))
+                            .catch(() => p),
+                    ),
+                ),
+                api.post('/awards/approve-letters', {
+                    signatoryName:  savedTemplate.signatoryName,
+                    signatoryTitle: savedTemplate.signatoryTitle,
+                    fileNo:         savedTemplate.fileNo,
+                    date:           savedTemplate.date,
+                    cc:             savedTemplate.cc ?? [],
+                }),
+            ]);
+            setBulkProposals(full);
+            success(approveRes.data?.message ?? 'Template approved. PIs can now download their award letters.');
+        } catch (e) {
+            toastError(e.response?.data?.message ?? 'Failed to approve letters. Please try again.');
+            setTemplateLocked(false);
+        } finally {
+            setBulkLoading(false);
+        }
     };
 
     // @page owns the paper margins (14mm top, 20mm sides, 28mm bottom).
@@ -586,6 +723,12 @@ export default function GrantLetters() {
                         {currentHtml && !templateLocked && (
                             <>
                                 <button
+                                    onClick={saveTemplate}
+                                    className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
+                                >
+                                    <Save size={14} /> Save Template
+                                </button>
+                                <button
                                     onClick={printSingleLetter}
                                     className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
                                 >
@@ -698,17 +841,74 @@ export default function GrantLetters() {
                             )}
                         </div>
 
-                        {currentHtml && !templateLocked && (
-                            <div className="mt-3 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 space-y-1">
-                                <p className="text-xs font-semibold text-blue-700">Editing tips</p>
-                                <p className="text-xs text-blue-600">• Click any text to edit it — hover to see editable areas highlighted</p>
-                                <p className="text-xs text-blue-600">• Edit letterhead names, address, Amharic text directly on the letter</p>
-                                <p className="text-xs text-blue-600">• Click the seal / logo area to upload a logo image</p>
-                                <p className="text-xs text-blue-600">• Click the stamp circle to upload a stamp image</p>
-                                <p className="text-xs text-blue-600">• Edit footer fax, email, Amharic directly at the bottom</p>
-                                <p className="text-xs text-blue-600">• When satisfied, click "Approve Template" to print all letters</p>
+                        {/* Template fields form — always visible */}
+                        <div className="mt-3 bg-white border border-gray-200 rounded-2xl overflow-hidden">
+                            <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
+                                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Letter Template</span>
+                                {savedTemplate.signatoryName && selected && (
+                                    <button
+                                        onClick={applyTemplate}
+                                        className="text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+                                    >
+                                        Apply to letter ↺
+                                    </button>
+                                )}
                             </div>
-                        )}
+                            <div className="px-4 py-3 space-y-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">Signatory Name <span className="text-red-500">*</span></label>
+                                    <input
+                                        type="text"
+                                        value={savedTemplate.signatoryName ?? ''}
+                                        onChange={e => updateTemplateField('signatoryName', e.target.value)}
+                                        placeholder="e.g. Dr. Tesfaye Lemma"
+                                        className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-slate-400"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">Signatory Title</label>
+                                    <input
+                                        type="text"
+                                        value={savedTemplate.signatoryTitle ?? ''}
+                                        onChange={e => updateTemplateField('signatoryTitle', e.target.value)}
+                                        placeholder="Vice President, Research and Technology Transfer"
+                                        className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-slate-400"
+                                    />
+                                </div>
+                                <div className="flex gap-2">
+                                    <div className="flex-1">
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">File No</label>
+                                        <input
+                                            type="text"
+                                            value={savedTemplate.fileNo ?? ''}
+                                            onChange={e => updateTemplateField('fileNo', e.target.value)}
+                                            placeholder="WSU/RD/…"
+                                            className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-slate-400"
+                                        />
+                                    </div>
+                                    <div className="flex-1">
+                                        <label className="block text-xs font-medium text-gray-600 mb-1">Date</label>
+                                        <input
+                                            type="text"
+                                            value={savedTemplate.date ?? ''}
+                                            onChange={e => updateTemplateField('date', e.target.value)}
+                                            placeholder={todayFormatted()}
+                                            className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-slate-400"
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">CC <span className="text-gray-400">(one per line)</span></label>
+                                    <textarea
+                                        rows={3}
+                                        value={(savedTemplate.cc ?? []).join('\n')}
+                                        onChange={e => updateTemplateField('cc', e.target.value.split('\n').map(s => s.trim()).filter(Boolean))}
+                                        placeholder={"Dean, College of…\nDirectorate of…"}
+                                        className="w-full px-3 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-slate-400 resize-none"
+                                    />
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     {/* Right: A4 letter preview */}
@@ -730,7 +930,7 @@ export default function GrantLetters() {
                                 transition: 'opacity 0.2s',
                             }}>
                                 <LetterCanvas
-                                    key={selected?.id}
+                                    key={`${selected?.id}-${canvasKey}`}
                                     html={currentHtml}
                                     onMount={handleCanvasMount}
                                 />

@@ -10,7 +10,9 @@ use App\Support\AuditLogger;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AwardController extends Controller
@@ -254,47 +256,166 @@ class AwardController extends Controller
         }, 200, $headers);
     }
 
-    public function downloadLetter(string $id): Response
+    /**
+     * Officers bulk-approve grant letters: saves template fields and generates one
+     * PDF per funded proposal, stored on the private disk.
+     */
+    public function approveLetters(Request $request): JsonResponse
     {
-        $proposal = Proposal::with([
-            'pi:id,name,email',
-            'college:id,name',
-            'department:id,name',
-            'proposalCall:id,title',
-        ])->findOrFail($id);
+        $user = $request->user();
 
-        $award = Award::where('proposal_id', $id)
-            ->with('approvedBy:id,name')
-            ->firstOrFail();
+        if (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'college_officer',
+            'research_officer', 'community_officer', 'technology_officer', 'support_officer'])) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
 
-        $universityName = \DB::table('app_settings')->where('key', 'site_name')->value('value')
-            ?? config('app.name');
-        $academicYear = $proposal->academic_year
-            ?? \DB::table('app_settings')->where('key', 'current_academic_year')->value('value')
-            ?? now()->year.'-'.(now()->year + 1);
+        $request->validate([
+            'signatoryName' => 'required|string|max:255',
+            'signatoryTitle' => 'nullable|string|max:255',
+            'fileNo' => 'nullable|string|max:100',
+            'date' => 'nullable|string|max:100',
+            'cc' => 'nullable|array',
+            'cc.*' => 'string',
+        ]);
 
-        $department = $proposal->college?->name ?? '—';
-        $callTitle = $proposal->proposalCall?->title ?? 'Research Grant Call';
-        $letterDate = ($award->approved_at ?? now())->format('d F Y');
-        $returnDeadline = ($award->approved_at ?? now())->addDays(14)->format('d F Y');
-        $formattedAmount = 'ETB '.number_format((float) $award->awarded_amount, 2);
+        $settings = DB::table('app_settings')
+            ->whereIn('key', ['organization_name', 'org_name_amharic', 'org_sub_amharic', 'address', 'fax', 'mail_from_address', 'system_logo'])
+            ->pluck('value', 'key');
 
-        $pdf = Pdf::loadView('pdf.award_letter', [
-            'proposal' => $proposal,
-            'award' => $award,
-            'pi' => $proposal->pi,
-            'department' => $department,
-            'callTitle' => $callTitle,
-            'universityName' => $universityName,
-            'academicYear' => $academicYear,
-            'letterDate' => $letterDate,
-            'returnDeadline' => $returnDeadline,
-            'formattedAmount' => $formattedAmount,
-            'approvedBy' => $award->approvedBy,
-        ])->setPaper('a4', 'portrait');
+        $awards = Award::whereHas('proposal', fn ($q) => $q->where('status', 'funded'))
+            ->with(['proposal.pi:id,name,email', 'proposal.members.user:id,name', 'proposal.college:id,name'])
+            ->get();
+
+        $signatoryTitle = $request->signatoryTitle ?? 'Vice President, Research and Technology Transfer';
+        $letterDate = $request->date ?? now()->format('d F Y');
+        $cc = $request->cc ?? [];
+        $count = 0;
+
+        foreach ($awards as $award) {
+            $proposal = $award->proposal;
+            if (! $proposal) {
+                continue;
+            }
+
+            $amount = (float) $award->awarded_amount;
+            $amountFmt = 'ETB '.number_format($amount, 2).' ('.self::numberToWords($amount).' Ethiopian Birr)';
+            $category = str_replace('_', ' ', $proposal->category ?? '');
+
+            $members = [];
+            if ($proposal->pi) {
+                $members[] = ['name' => $proposal->pi->name, 'role' => 'PI'];
+            }
+            foreach ($proposal->members ?? [] as $m) {
+                if ($m->role === 'co_investigator' && $m->status === 'active' && $m->user) {
+                    $members[] = ['name' => $m->user->name, 'role' => 'Member'];
+                }
+            }
+
+            $pdf = Pdf::loadView('pdf.grant_letter', [
+                'members' => $members,
+                'orgName' => $settings['organization_name'] ?? config('app.name'),
+                'orgNameAmharic' => $settings['org_name_amharic'] ?? '',
+                'orgSubAmharic' => $settings['org_sub_amharic'] ?? '',
+                'address' => $settings['address'] ?? '',
+                'fax' => $settings['fax'] ?? '',
+                'email' => $settings['mail_from_address'] ?? '',
+                'logoUrl' => $settings['system_logo'] ?? null,
+                'signatoryName' => $request->signatoryName,
+                'signatoryTitle' => $signatoryTitle,
+                'fileNo' => $request->fileNo ?? '',
+                'letterDate' => $letterDate,
+                'cc' => $cc,
+                'refNo' => $award->grant_reference,
+                'amountFmt' => $amountFmt,
+                'category' => $category,
+                'body' => $this->buildLetterBody($proposal, $amountFmt, $category, $settings),
+            ])->setPaper('a4', 'portrait');
+
+            $path = 'grant-letters/'.$award->grant_reference.'.pdf';
+            Storage::disk('private')->put($path, $pdf->output());
+
+            $award->update([
+                'grant_letter_approved_at' => now(),
+                'grant_letter_approved_by' => $user->id,
+                'letter_signatory_name' => $request->signatoryName,
+                'letter_signatory_title' => $signatoryTitle,
+                'letter_file_no' => $request->fileNo,
+                'letter_date' => $letterDate,
+                'letter_cc' => json_encode($cc),
+                'grant_letter_path' => $path,
+            ]);
+
+            $count++;
+        }
+
+        return response()->json([
+            'data' => ['count' => $count],
+            'message' => "{$count} grant letter(s) generated and saved. PIs may now download their letters.",
+            'errors' => [],
+            'meta' => [],
+        ]);
+    }
+
+    /**
+     * PI downloads their pre-generated award letter PDF.
+     */
+    public function downloadLetter(Request $request, string $id)
+    {
+        $proposal = Proposal::findOrFail($id);
+
+        if ($request->user()?->id !== $proposal->pi_user_id) {
+            return response()->json(['message' => 'You can only download your own award letter.', 'errors' => []], 403);
+        }
+
+        $award = Award::where('proposal_id', $id)->firstOrFail();
+
+        if (! $award->grant_letter_path || ! Storage::disk('private')->exists($award->grant_letter_path)) {
+            return response()->json(['message' => 'Your award letter has not been generated yet. Please check back later.', 'errors' => []], 403);
+        }
 
         $filename = 'Award-Letter-'.$award->grant_reference.'.pdf';
 
-        return $pdf->download($filename);
+        return Storage::disk('private')->download($award->grant_letter_path, $filename, [
+            'Content-Type' => 'application/pdf',
+        ]);
+    }
+
+    private function buildLetterBody(Proposal $proposal, string $amountFmt, string $category, Collection $settings): string
+    {
+        $orgName = $settings['organization_name'] ?? config('app.name');
+        $title = $proposal->title ?? '';
+
+        return "{$orgName} is pleased to inform you that your {$category} proposal entitled \"{$title}\" has undergone a thorough evaluation and assessment by the Evaluation Management System and is accepted for funding amounting to {$amountFmt} for one year.\n\nThus, we are pleased to inform you that the office of the Vice President for Research and Technology Transfer has approved your proposal for the aforementioned budget grant. Upon completion of the project and when all functional requirements are met, you are required to hand over the system to the university. In the meantime, training, support and maintenance should be provided by the team members whenever deemed necessary by the office of the Vice President for Research and Technology Transfer during the grant period. We wish you success in your research project and look forward to receiving tangible outputs and successful implementation of the project.";
+    }
+
+    private static function numberToWords(float $num): string
+    {
+        $n = (int) round($num);
+        if ($n === 0) {
+            return 'Zero';
+        }
+        $ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+            'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen',
+            'Seventeen', 'Eighteen', 'Nineteen'];
+        $tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+        $convert = function (int $n) use (&$convert, $ones, $tens): string {
+            if ($n < 20) {
+                return $ones[$n];
+            }
+            if ($n < 100) {
+                return $tens[(int) ($n / 10)].($n % 10 ? ' '.$ones[$n % 10] : '');
+            }
+            if ($n < 1000) {
+                return $ones[(int) ($n / 100)].' Hundred'.($n % 100 ? ' and '.$convert($n % 100) : '');
+            }
+            if ($n < 1_000_000) {
+                return $convert((int) ($n / 1000)).' Thousand'.($n % 1000 ? ' '.$convert($n % 1000) : '');
+            }
+
+            return $convert((int) ($n / 1_000_000)).' Million'.($n % 1_000_000 ? ' '.$convert($n % 1_000_000) : '');
+        };
+
+        return $convert($n);
     }
 }

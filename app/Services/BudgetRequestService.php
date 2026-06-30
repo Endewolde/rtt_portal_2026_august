@@ -23,6 +23,7 @@ class BudgetRequestService
      * is not finance_verified.
      *
      * @param  array  $items  Array of {category, description, amount, justification}
+     *
      * @throws PreviousSettlementPendingException
      * @throws \Exception if proposal not funded
      */
@@ -52,7 +53,17 @@ class BudgetRequestService
         }
 
         $completedRounds = BudgetRequest::where('proposal_id', $proposal->id)->count();
-        $isFirstRound    = $completedRounds === 0;
+        $isFirstRound = $completedRounds === 0;
+
+        // Round 1: research contract must be approved before any budget can be requested
+        if ($isFirstRound && $proposal->contract_status !== 'approved') {
+            $hint = match ($proposal->contract_status) {
+                'pending' => 'Your submitted contract is under review. Please wait for officer approval.',
+                'rejected' => 'Your contract submission was rejected. Please resubmit a corrected copy.',
+                default => 'Please upload the signed contract from your proposal page for officer review.',
+            };
+            throw new \Exception("A research contract must be approved before submitting the first budget request. {$hint}");
+        }
 
         // Round 2+: previous settlement must be finance_verified
         if (! $isFirstRound) {
@@ -110,24 +121,24 @@ class BudgetRequestService
             $fundingRound = BudgetRequest::where('proposal_id', $proposal->id)->count() + 1;
 
             $request = BudgetRequest::create([
-                'proposal_id'      => $proposal->id,
+                'proposal_id' => $proposal->id,
                 'form_template_id' => $templateId,
-                'requested_by'     => $pi->id,
-                'total_amount'     => $totalAmount,
-                'status'           => 'draft',
-                'funding_round'    => $fundingRound,
+                'requested_by' => $pi->id,
+                'total_amount' => $totalAmount,
+                'status' => 'draft',
+                'funding_round' => $fundingRound,
             ]);
 
             foreach ($items as $item) {
                 DB::table('budget_request_items')->insert([
-                    'id'                => Str::uuid()->toString(),
+                    'id' => Str::uuid()->toString(),
                     'budget_request_id' => $request->id,
-                    'category'          => $item['category'],
-                    'description'       => $item['description'],
-                    'amount'            => $item['amount'],
-                    'justification'     => $item['justification'] ?? null,
-                    'created_at'        => now(),
-                    'updated_at'        => now(),
+                    'category' => $item['category'],
+                    'description' => $item['description'],
+                    'amount' => $item['amount'],
+                    'justification' => $item['justification'] ?? null,
+                    'created_at' => now(),
+                    'updated_at' => now(),
                 ]);
             }
 
@@ -138,9 +149,9 @@ class BudgetRequestService
             foreach ($members as $member) {
                 FormSignature::create([
                     'budget_request_id' => $request->id,
-                    'user_id'           => $member->user_id,
-                    'role'              => $member->role === 'pi' ? 'pi' : 'co_investigator',
-                    'status'            => 'pending',
+                    'user_id' => $member->user_id,
+                    'role' => $member->role === 'pi' ? 'pi' : 'co_investigator',
+                    'status' => 'pending',
                 ]);
             }
 
@@ -207,7 +218,7 @@ class BudgetRequestService
         }
 
         $request->update([
-            'status'       => 'submitted',
+            'status' => 'submitted',
             'submitted_at' => now(),
         ]);
 

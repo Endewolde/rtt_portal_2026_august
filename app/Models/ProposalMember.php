@@ -11,7 +11,9 @@ class ProposalMember extends Model
     use HasUuids;
 
     protected $primaryKey = 'id';
+
     public $incrementing = false;
+
     protected $keyType = 'string';
 
     protected $fillable = [
@@ -20,6 +22,8 @@ class ProposalMember extends Model
         'role',
         'contribution_percentage',
         'status',
+        'invitation_status',
+        'invitation_responded_at',
         'withdrawal_reason',
         'withdrawn_at',
         'joined_at',
@@ -27,8 +31,9 @@ class ProposalMember extends Model
 
     protected $casts = [
         'contribution_percentage' => 'decimal:2',
-        'withdrawn_at'            => 'datetime',
-        'joined_at'               => 'datetime',
+        'withdrawn_at' => 'datetime',
+        'joined_at' => 'datetime',
+        'invitation_responded_at' => 'datetime',
     ];
 
     public function proposal(): BelongsTo

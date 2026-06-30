@@ -3,7 +3,7 @@ import {
     Puzzle, ShieldCheck, Save, CheckSquare, Square, MinusSquare,
     ChevronDown, ChevronRight, FileText, Search, DollarSign,
     Activity, BarChart, Database, AlertTriangle, AlertCircle,
-    Banknote, CalendarDays, EyeOff,
+    Banknote, CalendarDays, EyeOff, Settings2,
 } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import { get, put } from '../../lib/api';
@@ -116,6 +116,21 @@ const MODULES = [
             { slug: 'events.abstracts',   label: 'Abstracts',   description: 'Abstract submissions and peer review' },
         ],
     },
+    {
+        slug: 'workflow', label: 'Workflow Enhancements', icon: Settings2,
+        description: 'Optional opt-in workflow features — all off by default until you enable them',
+        color: 'slate',
+        subFeatures: [
+            { slug: 'workflow.co_pi_acceptance',  label: 'Co-Investigator Acceptance',     description: 'Require co-PIs to accept their invitation before a proposal can be submitted' },
+            { slug: 'workflow.coi_declaration',   label: 'Conflict of Interest Declaration', description: 'Reviewers must declare any conflict of interest before accessing a proposal' },
+            { slug: 'workflow.budget_revision',   label: 'Budget Revision Requests',        description: 'Allow PIs to request post-award budget revisions with approvals' },
+            { slug: 'workflow.no_cost_extension', label: 'No-Cost Extension',               description: 'Allow PIs to request project timeline extensions at no extra cost' },
+            { slug: 'workflow.sla_tracking',      label: 'SLA / Time-in-Stage Tracking',   description: 'Track how long proposals spend in each workflow stage and flag overdue items' },
+            { slug: 'workflow.ethical_clearance', label: 'Ethical Clearance Tracking',      description: 'Capture ethical clearance approval numbers on research proposals' },
+            { slug: 'workflow.proposal_templates', label: 'Proposal Templates',             description: 'Pre-fill common proposal fields from reusable templates' },
+            { slug: 'workflow.closure_checklist', label: 'Project Closure Checklist',       description: 'Enforce a completion checklist before closing a funded project' },
+        ],
+    },
 ];
 
 const COLOR_MAP = {
@@ -129,6 +144,7 @@ const COLOR_MAP = {
     red:    { badge: 'bg-red-100    text-red-700    border-red-200',    dot: 'bg-red-500',    ring: 'ring-red-300',    header: 'bg-red-50    border-red-100'    },
     cyan:   { badge: 'bg-cyan-100   text-cyan-700   border-cyan-200',   dot: 'bg-cyan-500',   ring: 'ring-cyan-300',   header: 'bg-cyan-50   border-cyan-100'   },
     violet: { badge: 'bg-violet-100 text-violet-700 border-violet-200', dot: 'bg-violet-500', ring: 'ring-violet-300', header: 'bg-violet-50 border-violet-100' },
+    slate:  { badge: 'bg-slate-100  text-slate-700  border-slate-200',  dot: 'bg-slate-500',  ring: 'ring-slate-300',  header: 'bg-slate-50  border-slate-100'  },
 };
 
 // ── Checkbox states ───────────────────────────────────────────────────────────

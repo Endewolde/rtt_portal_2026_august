@@ -20,6 +20,7 @@ class SettlementController extends Controller
             'budgetRequest.proposal.college:id,name',
             'budgetRequest.proposal.pi:id,name,email',
             'budgetRequest.proposal.award:id,proposal_id,awarded_amount',
+            'budgetRequest.proposal.midtermEvaluations:id,proposal_id,status',
             'budgetRequest:id,funding_round,total_amount,proposal_id',
             'submittedBy:id,name,email',
             'collegeVerifiedByUser:id,name',

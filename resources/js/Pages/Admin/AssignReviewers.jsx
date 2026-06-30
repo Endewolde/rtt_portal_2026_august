@@ -3,7 +3,8 @@ import { usePage, router } from '@inertiajs/react';
 import {
     Search, UserCheck, Info, AlertTriangle, SlidersHorizontal,
     X, ChevronLeft, BookOpen, Building2, Users, Microscope,
-    CheckCircle2, RefreshCw, ToggleLeft, ToggleRight,
+    CheckCircle2, RefreshCw, ToggleLeft, ToggleRight, Sparkles,
+    Bell, Calendar,
 } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import StatusBadge from '../../Components/StatusBadge';
@@ -78,6 +79,10 @@ export default function AssignReviewers() {
     const [evalTypes, setEvalTypes]         = useState([]);
     const [colleges, setColleges]           = useState([]);
     const [departments, setDepartments]     = useState([]);
+    const [suggestions, setSuggestions]     = useState([]);
+    const [suggestionsLoading, setSuggestionsLoading] = useState(false);
+    const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+    const [suggestDueDate, setSuggestDueDate]   = useState('');
     const [selected, setSelected]           = useState([]);
     const [evalType, setEvalType]           = useState('');
     const [dueDate, setDueDate]             = useState('');
@@ -111,6 +116,21 @@ export default function AssignReviewers() {
         }).catch(() => {
             setError('Failed to load page data. Please try again.');
         }).finally(() => setLoading(false));
+    }, [id]);
+
+    const fetchSuggestions = useCallback(async () => {
+        if (!id) return;
+        setSuggestionsLoading(true);
+        try {
+            const r = await get(`/proposals/${id}/reviewer-suggestions`);
+            setSuggestions(r.data ?? []);
+            setSuggestionsOpen(true);
+        } catch {
+            setSuggestions([]);
+            setSuggestionsOpen(true);
+        } finally {
+            setSuggestionsLoading(false);
+        }
     }, [id]);
 
     const hasActiveQuery = filters.search.trim().length >= 2 ||
@@ -170,6 +190,10 @@ export default function AssignReviewers() {
         }
         setSubmitting(false);
     };
+
+    // IDs selected specifically from the AI suggestions panel
+    const selectedSuggestionIds = selected.filter(id => suggestions.some(s => s.id === id));
+    const hasSuggestionSelected = suggestionsOpen && selectedSuggestionIds.length > 0;
 
     const selectedReviewers = reviewers.filter(r => selected.includes(r.id));
     const evalTypeLabel     = evalTypes.find(t => t.id === evalType)?.label
@@ -272,6 +296,111 @@ export default function AssignReviewers() {
                                 </div>
                             </div>
                         )}
+
+                        {/* AI Reviewer Suggestions */}
+                        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                            <button
+                                onClick={fetchSuggestions}
+                                disabled={suggestionsLoading}
+                                className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
+                            >
+                                <div className="flex items-center gap-2.5">
+                                    <div className="h-7 w-7 bg-violet-50 rounded-lg flex items-center justify-center">
+                                        <Sparkles size={13} className="text-violet-600" />
+                                    </div>
+                                    <div className="text-left">
+                                        <p className="text-xs font-bold text-gray-700">Smart Reviewer Suggestions</p>
+                                        <p className="text-[10px] text-gray-400">Match by expertise &amp; keywords</p>
+                                    </div>
+                                </div>
+                                {suggestionsLoading
+                                    ? <RefreshCw size={13} className="animate-spin text-gray-400" />
+                                    : <span className="text-[11px] font-semibold text-violet-600">Suggest →</span>
+                                }
+                            </button>
+                            {suggestionsOpen && suggestions.length > 0 && (
+                                <div className="border-t border-gray-100 divide-y divide-gray-50">
+                                    {suggestions.slice(0, 5).map(s => (
+                                        <div key={s.id}
+                                            onClick={() => toggleReviewer(s.id)}
+                                            className={cn(
+                                                'flex items-center gap-3 px-5 py-3 cursor-pointer transition-colors',
+                                                selected.includes(s.id) ? 'bg-indigo-50' : 'hover:bg-gray-50'
+                                            )}>
+                                            <ReviewerAvatar reviewer={s} size="sm" />
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-xs font-semibold text-gray-800 truncate">{s.name}</p>
+                                                {s.matched_terms?.length > 0 && (
+                                                    <p className="text-[10px] text-violet-600 truncate">
+                                                        {s.matched_terms.slice(0, 3).join(', ')}
+                                                    </p>
+                                                )}
+                                            </div>
+                                            <div className={cn(
+                                                'h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors',
+                                                selected.includes(s.id) ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300'
+                                            )}>
+                                                {selected.includes(s.id) && <CheckCircle2 size={10} className="text-white" />}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            {suggestionsOpen && suggestions.length === 0 && (
+                                <div className="border-t border-gray-100 px-5 py-4 text-center">
+                                    <p className="text-xs text-gray-400">No expertise matches found. Use manual search below.</p>
+                                </div>
+                            )}
+
+                            {/* ── Inline due-date + assign when a suggestion is selected ── */}
+                            {hasSuggestionSelected && (
+                                <div className="border-t border-violet-100 bg-violet-50/60 px-5 py-4 space-y-3">
+                                    <div className="flex items-center gap-2">
+                                        <CheckCircle2 size={13} className="text-violet-600 shrink-0" />
+                                        <p className="text-xs font-semibold text-violet-800">
+                                            {selectedSuggestionIds.length} reviewer{selectedSuggestionIds.length > 1 ? 's' : ''} selected from suggestions
+                                        </p>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                                            <Calendar size={10} className="inline mr-1" />
+                                            Review Due Date <span className="text-red-400">*</span>
+                                        </label>
+                                        <input
+                                            type="date"
+                                            value={suggestDueDate || dueDate}
+                                            min={new Date(Date.now() + 86400000).toISOString().slice(0, 10)}
+                                            onChange={e => { setSuggestDueDate(e.target.value); setDueDate(e.target.value); }}
+                                            className="w-full text-sm border border-violet-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-violet-500 bg-white"
+                                        />
+                                    </div>
+
+                                    {!evalType && (
+                                        <div className="flex items-center gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                                            <AlertTriangle size={11} className="shrink-0" />
+                                            Select an evaluation type in Step 1 before assigning.
+                                        </div>
+                                    )}
+
+                                    <button
+                                        onClick={assign}
+                                        disabled={submitting || !evalType || !(suggestDueDate || dueDate)}
+                                        className="w-full flex items-center justify-center gap-2 py-2.5 bg-violet-600 text-white text-xs font-semibold rounded-xl hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+                                    >
+                                        {submitting
+                                            ? <><RefreshCw size={12} className="animate-spin" /> Assigning…</>
+                                            : <><Bell size={12} /> Assign & Notify {selectedSuggestionIds.length} Reviewer{selectedSuggestionIds.length > 1 ? 's' : ''}</>
+                                        }
+                                    </button>
+
+                                    <p className="text-[10px] text-violet-500 text-center flex items-center justify-center gap-1">
+                                        <Bell size={9} />
+                                        Reviewer{selectedSuggestionIds.length > 1 ? 's' : ''} will receive an email with assignment details and due date.
+                                    </p>
+                                </div>
+                            )}
+                        </div>
 
                         {/* Step 1 — Evaluation type */}
                         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-5">

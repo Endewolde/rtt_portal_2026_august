@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Megaphone, Plus, X, Search, Pencil, CheckCircle, XCircle,
     Eye, RefreshCw, Trash2, Upload, FileText, Download, Filter,
-    Settings, AlertCircle,
+    Settings, AlertCircle, GraduationCap, Calendar, Clock,
+    AlignLeft, Users, Tag, ShieldCheck, BookOpen,
 } from 'lucide-react';
 import { Link, usePage } from '@inertiajs/react';
 import AppLayout from '../../Layouts/AppLayout';
@@ -69,12 +70,34 @@ const EMPTY_FORM = {
     guidelines_file: null, guidelines_filename: null,
 };
 
-function generateAcademicYears() {
-    const current = new Date().getFullYear();
-    return Array.from({ length: 4 }, (_, i) => {
-        const start = current + i - 1;
-        return `${start}-${start + 1}`;
-    });
+// ── Small helpers ─────────────────────────────────────────────────────────────
+
+function Field({ label, icon: Icon, required, error, hint, children }) {
+    return (
+        <div>
+            <label className="flex items-center gap-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                {Icon && <Icon size={11} className="text-gray-400" />}
+                {label} {required && <span className="text-red-400 font-bold">*</span>}
+            </label>
+            {children}
+            {hint && !error && <p className="text-xs text-gray-400 mt-1">{hint}</p>}
+            {error && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle size={11} />{error}</p>}
+        </div>
+    );
+}
+
+function input(err) {
+    return `w-full rounded-xl border ${err ? 'border-red-400 bg-red-50/30' : 'border-gray-200'} px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white transition-colors`;
+}
+
+function SectionDivider({ label }) {
+    return (
+        <div className="flex items-center gap-3 pt-1">
+            <div className="flex-1 h-px bg-gray-100" />
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest shrink-0">{label}</span>
+            <div className="flex-1 h-px bg-gray-100" />
+        </div>
+    );
 }
 
 // ── ProposalCallModal ─────────────────────────────────────────────────────────
@@ -93,6 +116,19 @@ function ProposalCallModal({ initial, defaultAcademicYear, onClose, onSaved }) {
 
     const set = (field, value) => setForm((f) => ({ ...f, [field]: value }));
 
+    const statusColor = {
+        active:  { bg: 'bg-green-100',  text: 'text-green-700',  dot: 'bg-green-500'  },
+        draft:   { bg: 'bg-gray-100',   text: 'text-gray-600',   dot: 'bg-gray-400'   },
+        closed:  { bg: 'bg-red-100',    text: 'text-red-700',    dot: 'bg-red-500'    },
+        expired: { bg: 'bg-amber-100',  text: 'text-amber-700',  dot: 'bg-amber-500'  },
+    }[initial?.status] ?? { bg: 'bg-gray-100', text: 'text-gray-600', dot: 'bg-gray-400' };
+
+    // academic year: always from system settings; for edit show stored value if it differs
+    const systemYear   = defaultAcademicYear;
+    const storedYear   = initial?.academic_year;
+    const yearMismatch = isEdit && storedYear && systemYear && storedYear !== systemYear;
+    const displayYear  = isEdit ? (storedYear || systemYear) : systemYear;
+
     // action: false = save only | true = save+activate (new) | 'reactivate' = save+reopen (expired/closed)
     const handleSubmit = async (action = false) => {
         const newErrors = {};
@@ -102,7 +138,6 @@ function ProposalCallModal({ initial, defaultAcademicYear, onClose, onSaved }) {
         if (!form.start_date)       newErrors.start_date    = ['Opening date and time is required'];
         if (!form.end_date)         newErrors.end_date      = ['Deadline is required'];
 
-        // Deadline must be future when activating or reactivating
         if ((action === true || action === 'reactivate') && form.end_date) {
             if (new Date(form.end_date) <= new Date()) {
                 newErrors.end_date = ['Deadline must be in the future to activate this call.'];
@@ -110,10 +145,7 @@ function ProposalCallModal({ initial, defaultAcademicYear, onClose, onSaved }) {
             }
         }
 
-        if (Object.keys(newErrors).length) {
-            setSaveErrors(newErrors);
-            return;
-        }
+        if (Object.keys(newErrors).length) { setSaveErrors(newErrors); return; }
 
         setSaving(true);
         setSaveErrors({});
@@ -133,7 +165,6 @@ function ProposalCallModal({ initial, defaultAcademicYear, onClose, onSaved }) {
             if (isEdit) {
                 const res = await api.put(`/proposal-calls/${initial.id}`, payload);
                 savedCall = res.data?.data ?? res.data;
-
                 if (action === 'reactivate') {
                     await api.post(`/proposal-calls/${initial.id}/reopen`);
                     toast.success('Proposal call updated and reactivated — now accepting applications.', { title: 'Reactivated ✓' });
@@ -143,7 +174,6 @@ function ProposalCallModal({ initial, defaultAcademicYear, onClose, onSaved }) {
             } else {
                 const res = await api.post('/proposal-calls', payload);
                 savedCall = res.data?.data ?? res.data;
-
                 if (action === true && savedCall?.id) {
                     await api.post(`/proposal-calls/${savedCall.id}/activate`);
                     toast.success('Call is now live and accepting applications.');
@@ -152,7 +182,6 @@ function ProposalCallModal({ initial, defaultAcademicYear, onClose, onSaved }) {
                 }
             }
 
-            // Upload guidelines if a file was selected
             const callId = savedCall?.id ?? initial?.id;
             if (guidelinesFile && callId) {
                 const fd = new FormData();
@@ -175,53 +204,66 @@ function ProposalCallModal({ initial, defaultAcademicYear, onClose, onSaved }) {
     };
 
     return (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 flex items-start justify-center p-4 pt-10">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-                    <div className="flex items-center gap-3">
-                        <h2 className="text-lg font-bold text-gray-900">
-                            {isEdit ? 'Edit Proposal Call' : 'New Proposal Call'}
-                        </h2>
-                        {isEdit && initial?.status && (
-                            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
-                                initial.status === 'active'  ? 'bg-green-100 text-green-700' :
-                                initial.status === 'draft'   ? 'bg-gray-100 text-gray-600' :
-                                initial.status === 'closed'  ? 'bg-red-100 text-red-700' :
-                                initial.status === 'expired' ? 'bg-orange-100 text-orange-700' :
-                                'bg-gray-100 text-gray-600'
-                            }`}>
-                                {initial.status}
-                            </span>
-                        )}
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 flex items-start justify-center p-4 pt-8">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden">
+
+                {/* ── Header ── */}
+                <div className={`px-6 py-5 border-b border-gray-100 ${isEdit ? 'bg-gray-50/60' : 'bg-blue-50/40'}`}>
+                    <div className="flex items-start justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                            <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${isEdit ? 'bg-blue-100' : 'bg-blue-600'}`}>
+                                <Megaphone size={18} className={isEdit ? 'text-blue-600' : 'text-white'} />
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <h2 className="text-base font-bold text-gray-900">
+                                        {isEdit ? 'Edit Proposal Call' : 'New Proposal Call'}
+                                    </h2>
+                                    {isEdit && initial?.status && (
+                                        <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full ${statusColor.bg} ${statusColor.text}`}>
+                                            <span className={`h-1.5 w-1.5 rounded-full ${statusColor.dot}`} />
+                                            {initial.status}
+                                        </span>
+                                    )}
+                                </div>
+                                {isEdit && initial?.title && (
+                                    <p className="text-xs text-gray-400 mt-0.5 truncate max-w-sm">{initial.title}</p>
+                                )}
+                            </div>
+                        </div>
+                        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors mt-0.5">
+                            <X size={18} />
+                        </button>
                     </div>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
                 </div>
 
-                <div className="px-6 py-5 space-y-4 max-h-[65vh] overflow-y-auto">
-                    {/* Amber info banner for expired / closed calls */}
+                {/* ── Body ── */}
+                <div className="px-6 py-5 space-y-5 max-h-[65vh] overflow-y-auto">
+
+                    {/* Reactivation banner */}
                     {isEdit && ['expired', 'closed'].includes(initial?.status) && (
-                        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+                        <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3.5">
                             <AlertCircle size={16} className="text-amber-500 shrink-0 mt-0.5" />
                             <div>
-                                <p className="text-sm font-semibold text-amber-800">
-                                    This call is {initial.status}
-                                </p>
-                                <p className="text-sm text-amber-700">
-                                    Update the deadline to a future date and time, then click{' '}
-                                    <strong>Save &amp; Reactivate</strong> to reopen it.
+                                <p className="text-sm font-semibold text-amber-800">This call is {initial.status}</p>
+                                <p className="text-sm text-amber-700 mt-0.5">
+                                    Update the deadline to a future date, then click <strong>Save &amp; Reactivate</strong> to reopen it.
                                 </p>
                             </div>
                         </div>
                     )}
 
-                    <Field label="Title" required error={errors.title?.[0]}>
+                    {/* ── Basic info ── */}
+                    <SectionDivider label="Basic Information" />
+
+                    <Field label="Title" icon={Megaphone} required error={errors.title?.[0]}>
                         <input value={form.title} onChange={(e) => set('title', e.target.value)}
                             placeholder="e.g. Research Grants Round 2026"
                             className={input(errors.title)} />
                     </Field>
 
                     <div className="grid grid-cols-2 gap-4">
-                        <Field label="Category" required error={errors.category?.[0]}>
+                        <Field label="Category" icon={Tag} required error={errors.category?.[0]}>
                             <select value={form.category} onChange={(e) => set('category', e.target.value)}
                                 className={input(errors.category)}>
                                 {CATEGORIES.map((c) => (
@@ -229,100 +271,102 @@ function ProposalCallModal({ initial, defaultAcademicYear, onClose, onSaved }) {
                                 ))}
                             </select>
                         </Field>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Academic Year <span className="text-red-500">*</span>
-                            </label>
-                            {isEdit ? (
-                                <select value={form.academic_year} onChange={(e) => set('academic_year', e.target.value)}
-                                    className={input(errors.academic_year)}>
-                                    <option value="">Select academic year…</option>
-                                    {generateAcademicYears().map((year) => (
-                                        <option key={year} value={year}>{year}</option>
-                                    ))}
-                                </select>
+
+                        {/* ── Academic Year — always from system settings ── */}
+                        <Field
+                            label="Academic Year"
+                            icon={GraduationCap}
+                            required
+                            error={errors.academic_year?.[0]}
+                        >
+                            {displayYear ? (
+                                <div className={`flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 border ${
+                                    yearMismatch ? 'border-amber-200 bg-amber-50' : 'border-gray-200 bg-gray-50'
+                                }`}>
+                                    <GraduationCap size={14} className={yearMismatch ? 'text-amber-500' : 'text-blue-500'} />
+                                    <span className={`text-sm font-semibold flex-1 ${yearMismatch ? 'text-amber-800' : 'text-gray-800'}`}>
+                                        {displayYear}
+                                    </span>
+                                    <span className="flex items-center gap-1 text-[11px] font-medium text-gray-400 shrink-0">
+                                        <Settings size={10} /> System
+                                    </span>
+                                </div>
                             ) : (
-                                <div className="flex items-center gap-2">
-                                    <div className={`flex-1 rounded-lg px-3 py-2.5 text-sm font-medium ${
-                                        defaultAcademicYear
-                                            ? 'border border-gray-200 bg-gray-50 text-gray-700'
-                                            : 'border border-amber-200 bg-amber-50 text-amber-700'
-                                    }`}>
-                                        {defaultAcademicYear || 'Not set — configure in Settings'}
-                                    </div>
-                                    {defaultAcademicYear && (
-                                        <span className="text-xs text-gray-400 flex items-center gap-1 shrink-0">
-                                            <Settings size={12} /> From settings
-                                        </span>
-                                    )}
+                                <div className="flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 border border-amber-300 bg-amber-50">
+                                    <AlertCircle size={14} className="text-amber-500 shrink-0" />
+                                    <span className="text-sm text-amber-700">Not configured</span>
                                 </div>
                             )}
-                            {!defaultAcademicYear && !isEdit && (
-                                <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
-                                    <AlertCircle size={12} />
-                                    Set the current academic year in{' '}
-                                    <a href="/admin/settings" className="underline hover:text-amber-800">Settings</a>{' '}
-                                    first.
+                            {yearMismatch && (
+                                <p className="text-xs text-amber-600 mt-1.5 flex items-center gap-1">
+                                    <AlertCircle size={10} />
+                                    Stored as <strong>{storedYear}</strong>. Current system year is <strong>{systemYear}</strong>.
                                 </p>
                             )}
-                            {errors.academic_year?.[0] && (
-                                <p className="text-red-500 text-xs mt-1">{errors.academic_year[0]}</p>
+                            {!displayYear && (
+                                <p className="text-xs text-amber-600 mt-1.5">
+                                    Set the academic year in{' '}
+                                    <a href="/admin/settings" className="underline font-semibold hover:text-amber-800">Settings</a> first.
+                                </p>
                             )}
-                        </div>
+                        </Field>
                     </div>
 
+                    {/* ── Schedule ── */}
+                    <SectionDivider label="Schedule" />
+
                     <div className="grid grid-cols-2 gap-4">
-                        <Field label="Opening Date & Time" required error={errors.start_date?.[0]}>
-                            <input type="datetime-local" value={form.start_date} onChange={(e) => set('start_date', e.target.value)}
+                        <Field label="Opening Date & Time" icon={Calendar} required error={errors.start_date?.[0]}>
+                            <input type="datetime-local" value={form.start_date}
+                                onChange={(e) => set('start_date', e.target.value)}
                                 className={input(errors.start_date)} />
                         </Field>
-                        <Field label="Application Deadline" required error={errors.end_date?.[0]}>
-                            <input type="datetime-local" value={form.end_date} onChange={(e) => set('end_date', e.target.value)}
+                        <Field label="Application Deadline" icon={Clock} required error={errors.end_date?.[0]}>
+                            <input type="datetime-local" value={form.end_date}
+                                onChange={(e) => set('end_date', e.target.value)}
                                 className={input(errors.end_date)} />
                         </Field>
                     </div>
 
-                    <Field label="Max Proposals per PI" error={errors.max_proposals_per_pi?.[0]}>
+                    <Field label="Max Proposals per PI" icon={Users} error={errors.max_proposals_per_pi?.[0]}
+                        hint="Leave blank for no limit">
                         <input type="number" min="1" value={form.max_proposals_per_pi}
                             onChange={(e) => set('max_proposals_per_pi', e.target.value)}
-                            placeholder="Leave blank for no limit"
+                            placeholder="e.g. 2"
                             className={input(errors.max_proposals_per_pi)} />
                     </Field>
 
-                    <Field label="Description" error={errors.description?.[0]}>
+                    {/* ── Details ── */}
+                    <SectionDivider label="Details" />
+
+                    <Field label="Description" icon={AlignLeft} error={errors.description?.[0]}>
                         <textarea value={form.description} onChange={(e) => set('description', e.target.value)}
                             rows={4} placeholder="Describe the purpose and scope of this call…"
                             className={`${input(errors.description)} resize-none`} />
                     </Field>
 
-                    <Field label="Eligibility Criteria" error={errors.eligibility?.[0]}>
+                    <Field label="Eligibility Criteria" icon={ShieldCheck} error={errors.eligibility?.[0]}>
                         <textarea value={form.eligibility} onChange={(e) => set('eligibility', e.target.value)}
                             rows={3} placeholder="Who is eligible to apply…"
                             className={`${input(errors.eligibility)} resize-none`} />
                     </Field>
 
-                    {/* Guidelines / Brochure upload */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Guidelines / Brochure
-                            <span className="text-gray-400 font-normal ml-1">(PDF, max 10 MB — optional)</span>
-                        </label>
+                    {/* ── Guidelines upload ── */}
+                    <SectionDivider label="Documents" />
 
-                        {/* Existing file indicator */}
+                    <Field label="Guidelines / Brochure" icon={BookOpen} hint="PDF only, max 10 MB — optional">
                         {form.guidelines_filename && !guidelinesFile && (
-                            <div className="flex items-center gap-2 mb-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
-                                <FileText size={14} className="text-blue-500" />
+                            <div className="flex items-center gap-2 mb-2.5 px-3.5 py-2.5 bg-blue-50 border border-blue-200 rounded-xl">
+                                <FileText size={14} className="text-blue-500 shrink-0" />
                                 <span className="text-sm text-blue-700 flex-1 truncate">{form.guidelines_filename}</span>
-                                <button type="button"
-                                    onClick={() => set('guidelines_filename', null)}
-                                    className="text-red-400 hover:text-red-600">
+                                <button type="button" onClick={() => set('guidelines_filename', null)}
+                                    className="text-gray-400 hover:text-red-500 transition-colors">
                                     <X size={14} />
                                 </button>
                             </div>
                         )}
-
                         <div
-                            className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-blue-400 transition-colors cursor-pointer"
+                            className="border-2 border-dashed border-gray-200 rounded-xl p-5 text-center hover:border-blue-400 hover:bg-blue-50/40 transition-colors cursor-pointer"
                             onClick={() => guidelinesInputRef.current?.click()}
                             onDragOver={(e) => e.preventDefault()}
                             onDrop={(e) => {
@@ -334,48 +378,49 @@ function ProposalCallModal({ initial, defaultAcademicYear, onClose, onSaved }) {
                         >
                             {guidelinesFile ? (
                                 <div className="flex items-center justify-center gap-2">
-                                    <FileText size={16} className="text-green-500" />
-                                    <span className="text-sm text-green-700">{guidelinesFile.name}</span>
-                                    <button type="button" onClick={(e) => { e.stopPropagation(); setGuidelinesFile(null); }}>
-                                        <X size={14} className="text-red-400 hover:text-red-600" />
+                                    <FileText size={16} className="text-blue-500" />
+                                    <span className="text-sm text-blue-700 font-medium">{guidelinesFile.name}</span>
+                                    <button type="button" onClick={(e) => { e.stopPropagation(); setGuidelinesFile(null); }}
+                                        className="text-gray-400 hover:text-red-500 transition-colors ml-1">
+                                        <X size={14} />
                                     </button>
                                 </div>
                             ) : (
                                 <div>
-                                    <Upload size={20} className="mx-auto text-gray-400 mb-1" />
-                                    <p className="text-sm text-gray-500">Click or drag PDF here</p>
+                                    <Upload size={22} className="mx-auto text-gray-300 mb-2" />
+                                    <p className="text-sm font-medium text-gray-500">Click or drag PDF here</p>
+                                    <p className="text-xs text-gray-400 mt-0.5">Guidelines, brochure, or call document</p>
                                 </div>
                             )}
                         </div>
                         <input ref={guidelinesInputRef} type="file" accept=".pdf" className="hidden"
                             onChange={(e) => { const f = e.target.files[0]; if (f) setGuidelinesFile(f); }} />
-                    </div>
+                    </Field>
                 </div>
 
-                <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-gray-50 rounded-b-2xl gap-3">
+                {/* ── Footer ── */}
+                <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-gray-50/80 rounded-b-2xl gap-3">
                     <button type="button" onClick={onClose}
-                        className="px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-100">
+                        className="px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-100 font-medium transition-colors">
                         Cancel
                     </button>
-                    <div className="flex gap-3">
-                        {/* Save Changes / Save as Draft — always visible */}
+                    <div className="flex gap-2.5">
                         <button type="button" onClick={() => handleSubmit(false)} disabled={saving}
-                            className="px-5 py-2 rounded-lg border border-blue-300 text-blue-700 text-sm font-medium hover:bg-blue-50 disabled:opacity-50">
-                            {saving ? 'Saving…' : isEdit ? 'Save Changes' : 'Save as Draft'}
+                            className="px-5 py-2.5 rounded-xl border border-blue-300 text-blue-700 text-sm font-semibold hover:bg-blue-50 disabled:opacity-50 transition-colors">
+                            {saving ? <><RefreshCw size={13} className="animate-spin inline mr-1.5" />Saving…</> : isEdit ? 'Save Changes' : 'Save as Draft'}
                         </button>
 
-                        {/* Save & Activate — new calls only */}
                         {!isEdit && (
                             <button type="button" onClick={() => handleSubmit(true)} disabled={saving}
-                                className="px-5 py-2 rounded-lg bg-blue-700 text-white text-sm font-semibold hover:bg-blue-800 disabled:opacity-50">
+                                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 shadow-sm shadow-blue-200 transition-colors">
+                                <CheckCircle size={14} />
                                 {saving ? 'Saving…' : 'Save & Activate'}
                             </button>
                         )}
 
-                        {/* Save & Reactivate — expired or closed calls only */}
                         {isEdit && ['expired', 'closed'].includes(initial?.status) && (
                             <button type="button" onClick={() => handleSubmit('reactivate')} disabled={saving}
-                                className="flex items-center gap-1.5 px-5 py-2 rounded-lg bg-green-600 text-white text-sm font-semibold hover:bg-green-700 disabled:opacity-50">
+                                className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-green-600 text-white text-sm font-semibold hover:bg-green-700 disabled:opacity-50 shadow-sm shadow-green-200 transition-colors">
                                 <RefreshCw size={14} />
                                 {saving ? 'Saving…' : 'Save & Reactivate'}
                             </button>
@@ -387,24 +432,6 @@ function ProposalCallModal({ initial, defaultAcademicYear, onClose, onSaved }) {
     );
 }
 
-// ── Small helpers ─────────────────────────────────────────────────────────────
-
-function Field({ label, required, error, children }) {
-    return (
-        <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-                {label} {required && <span className="text-red-500">*</span>}
-            </label>
-            {children}
-            {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
-        </div>
-    );
-}
-
-function input(err) {
-    return `w-full rounded-lg border ${err ? 'border-red-400' : 'border-gray-300'} px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white`;
-}
-
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function ProposalCallsAdmin() {
@@ -414,7 +441,7 @@ export default function ProposalCallsAdmin() {
 
     // Roles that should see ALL calls (admin endpoint), not just public active ones
     const canSeeAll = hasAnyRole([
-        'super_admin', 'central_office', 'college_admin', 'department_head',
+        'super_admin', 'admin', 'central_officer',
         'research_officer', 'community_officer', 'technology_officer', 'college_officer',
     ]);
     // Roles that can create, edit, activate, close, delete calls
@@ -499,7 +526,7 @@ export default function ProposalCallsAdmin() {
     const handleDelete = async (callId) => {
         const ok = await confirm({
             title:        'Delete this proposal call?',
-            description:  'This action cannot be undone. Only draft calls with no submissions can be deleted.',
+            description:  'This action cannot be undone. Calls with submitted proposals cannot be deleted.',
             confirmLabel: 'Delete',
             variant:      'danger',
         });
@@ -652,14 +679,14 @@ export default function ProposalCallsAdmin() {
                                     </button>
                                 )}
                                 {canManage && c.status === 'draft' && (
-                                    <>
-                                        <button onClick={(e) => { e.stopPropagation(); setConfirmAction({ type: 'activate', call: c }); }} className="p-1.5 text-gray-400 hover:text-green-600 rounded" title="Activate">
-                                            <CheckCircle size={13} />
-                                        </button>
-                                        <button onClick={(e) => { e.stopPropagation(); handleDelete(c.id); }} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors" title="Delete">
-                                            <Trash2 size={13} />
-                                        </button>
-                                    </>
+                                    <button onClick={(e) => { e.stopPropagation(); setConfirmAction({ type: 'activate', call: c }); }} className="p-1.5 text-gray-400 hover:text-green-600 rounded" title="Activate">
+                                        <CheckCircle size={13} />
+                                    </button>
+                                )}
+                                {canManage && c.status !== 'active' && (
+                                    <button onClick={(e) => { e.stopPropagation(); handleDelete(c.id); }} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors" title="Delete">
+                                        <Trash2 size={13} />
+                                    </button>
                                 )}
                                 {canManage && c.status === 'active' && (
                                     <button onClick={(e) => { e.stopPropagation(); setConfirmAction({ type: 'close', call: c }); }} className="p-1.5 text-gray-400 hover:text-red-500 rounded" title="Close">
@@ -734,18 +761,19 @@ export default function ProposalCallsAdmin() {
                                                     </button>
 
                                                     {c.status === 'draft' && (
-                                                        <>
-                                                            <button onClick={() => setConfirmAction({ type: 'activate', call: c })}
-                                                                className="p-1.5 text-gray-400 hover:text-green-600 transition-colors rounded"
-                                                                title="Activate">
-                                                                <CheckCircle size={15} />
-                                                            </button>
-                                                            <button onClick={() => handleDelete(c.id)}
-                                                                className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                                                                title="Delete">
-                                                                <Trash2 size={15} />
-                                                            </button>
-                                                        </>
+                                                        <button onClick={() => setConfirmAction({ type: 'activate', call: c })}
+                                                            className="p-1.5 text-gray-400 hover:text-green-600 transition-colors rounded"
+                                                            title="Activate">
+                                                            <CheckCircle size={15} />
+                                                        </button>
+                                                    )}
+
+                                                    {c.status !== 'active' && (
+                                                        <button onClick={() => handleDelete(c.id)}
+                                                            className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                                            title="Delete">
+                                                            <Trash2 size={15} />
+                                                        </button>
                                                     )}
 
                                                     {c.status === 'active' && (

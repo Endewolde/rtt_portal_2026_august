@@ -648,10 +648,10 @@ export default function Dashboard() {
     }, [])
 
     const roles           = user?.roles?.map(r => typeof r === 'string' ? r : r.name) ?? []
-    const isAdmin         = hasAnyRole(['super_admin', 'central_office', 'research_officer', 'community_officer', 'technology_officer'])
-    const isPI            = hasRole('pi') || hasRole('staff')
-    const isReviewer      = hasRole('reviewer')
-    const isFinance       = hasRole('finance')
+    const isAdmin         = hasAnyRole(['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer'])
+    const isPI            = hasRole('staff')
+    const isReviewer      = false
+    const isFinance       = hasRole('finance_officer')
     const isCollegeOfficer = hasRole('college_officer')
 
     const statusCounts  = widgets.proposals_by_status ?? {}

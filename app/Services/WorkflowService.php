@@ -9,6 +9,7 @@ use App\Exceptions\WorkflowGuardException;
 use App\Models\Proposal;
 use App\Models\User;
 use App\Models\WorkflowTransition;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Request;
 use Illuminate\Support\Str;
@@ -81,34 +82,35 @@ class WorkflowService
                 ->where('id', $proposal->id)
                 ->update([
                     'status' => $toStage,
+                    'status_entered_at' => now(),
                     'updated_at' => now(),
                 ]);
 
             // Step 6: Write immutable workflow_log using direct DB insert
             DB::table('workflow_logs')->insert([
-                'id'          => Str::uuid()->toString(),
+                'id' => Str::uuid()->toString(),
                 'proposal_id' => $proposal->id,
-                'from_stage'  => $fromStage,
-                'action'      => $action,
-                'to_stage'    => $toStage,
-                'actor_id'    => $actor->id,
-                'notes'       => $notes,
-                'metadata'    => $metadata ? json_encode($metadata) : null,
-                'created_at'  => now(),
+                'from_stage' => $fromStage,
+                'action' => $action,
+                'to_stage' => $toStage,
+                'actor_id' => $actor->id,
+                'notes' => $notes,
+                'metadata' => $metadata ? json_encode($metadata) : null,
+                'created_at' => now(),
             ]);
 
             // Step 7: Write audit_log using direct DB insert
             DB::table('audit_logs')->insert([
-                'id'             => Str::uuid()->toString(),
+                'id' => Str::uuid()->toString(),
                 'auditable_type' => Proposal::class,
-                'auditable_id'   => $proposal->id,
-                'event'          => 'proposal.transitioned',
-                'actor_id'       => $actor->id,
-                'old_values'     => json_encode(['status' => $fromStage]),
-                'new_values'     => json_encode(['status' => $toStage, 'action' => $action]),
-                'ip_address'     => Request::ip() ?? '127.0.0.1',
-                'user_agent'     => Request::userAgent() ?? '',
-                'created_at'     => now(),
+                'auditable_id' => $proposal->id,
+                'event' => 'proposal.transitioned',
+                'actor_id' => $actor->id,
+                'old_values' => json_encode(['status' => $fromStage]),
+                'new_values' => json_encode(['status' => $toStage, 'action' => $action]),
+                'ip_address' => Request::ip() ?? '127.0.0.1',
+                'user_agent' => Request::userAgent() ?? '',
+                'created_at' => now(),
             ]);
 
             // Step 8: Fire event
@@ -133,7 +135,7 @@ class WorkflowService
     /**
      * Get all valid next actions for this proposal given this actor.
      */
-    public function availableActions(Proposal $proposal, User $actor): \Illuminate\Support\Collection
+    public function availableActions(Proposal $proposal, User $actor): Collection
     {
         $actorRoles = $actor->getRoleNames()->toArray();
 

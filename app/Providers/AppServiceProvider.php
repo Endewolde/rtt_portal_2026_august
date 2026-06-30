@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\FeatureService;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\ServiceProvider;
 use SocialiteProviders\Azure\AzureExtendSocialite;
 use SocialiteProviders\Manager\SocialiteWasCalled;
@@ -20,6 +21,9 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // Server has no IPv6 — force IPv4 to avoid multi-second retry delays on OAuth calls
+        Http::globalOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]]);
+
         Event::listen(ProposalTransitioned::class, GenerateAwardOnFunding::class);
         Event::listen(ProposalTransitioned::class, SendProposalWorkflowNotifications::class);
         Event::listen(SocialiteWasCalled::class, [AzureExtendSocialite::class, 'handle']);

@@ -307,11 +307,13 @@ export default function Disbursements() {
     const [view, setView]       = useViewPreference('disbursements', 'card');
 
     const isFinance = hasAnyRole([
-        'super_admin', 'central_office', 'finance',
+        'super_admin', 'admin', 'central_officer', 'finance_officer',
         'research_officer', 'community_officer', 'technology_officer',
     ]);
+    const isCollegeOfficer = hasAnyRole(['college_officer']);
+    const canDisburse = isFinance || isCollegeOfficer;
 
-    const [activeTab,       setActiveTab]       = useState(isFinance ? 'pending' : 'disbursed');
+    const [activeTab,       setActiveTab]       = useState(canDisburse ? 'pending' : 'disbursed');
     const [disbursements,   setDisbursements]   = useState([]);
     const [pendingRequests, setPendingRequests] = useState([]);
     const [stats,           setStats]           = useState(null);
@@ -323,7 +325,7 @@ export default function Disbursements() {
         const calls = [
             api.get('/disbursements'),
             api.get('/disbursements/stats'),
-            ...(isFinance ? [api.get('/disbursements/pending')] : []),
+            ...(canDisburse ? [api.get('/disbursements/pending')] : []),
         ];
 
         Promise.all(calls)
@@ -342,7 +344,7 @@ export default function Disbursements() {
     const disbursedTotal    = disbursements.reduce((s, d) => s + parseFloat(d.amount ?? 0), 0);
 
     const TABS = [
-        ...(isFinance ? [{ key: 'pending',   label: 'Pending Disbursement', count: pendingIncomplete.length, amber: true }] : []),
+        ...(canDisburse ? [{ key: 'pending',   label: 'Pending Disbursement', count: pendingIncomplete.length, amber: true }] : []),
         { key: 'disbursed', label: 'Disbursed', count: disbursements.length, amber: false },
     ];
 
@@ -355,7 +357,7 @@ export default function Disbursements() {
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900">Disbursements</h1>
                         <p className="text-sm text-gray-500 mt-1">
-                            {isFinance ? 'Manage fund disbursements for approved budget requests' : 'Track fund disbursements for your proposals'}
+                            {canDisburse ? 'Manage fund disbursements for approved budget requests' : 'Track fund disbursements for your proposals'}
                         </p>
                     </div>
                     <ViewToggle view={view} onChange={setView} />
@@ -401,7 +403,7 @@ export default function Disbursements() {
                                 <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
                             </div>
 
-                        ) : activeTab === 'pending' && isFinance ? (
+                        ) : activeTab === 'pending' && canDisburse ? (
                             pendingIncomplete.length === 0 ? (
                                 <div className="text-center py-12">
                                     <CheckCircle2 size={36} className="mx-auto text-green-400 mb-3" />

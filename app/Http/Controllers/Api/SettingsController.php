@@ -352,15 +352,22 @@ class SettingsController extends Controller
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
+        $sliderKeys = implode(',', array_map(fn ($n) => "slider_slide_{$n}_image", range(1, 4)));
+
         $request->validate([
-            'file' => 'required|image|max:2048',
-            'key' => 'required|string|in:system_logo,favicon',
+            'file' => 'required|image|max:5120|mimes:jpeg,jpg,png,webp',
+            'key' => "required|string|in:system_logo,favicon,{$sliderKeys}",
         ]);
 
-        $path = $request->file('file')->store('assets/branding', 'public');
+        $isSlider = str_starts_with($request->key, 'slider_slide_');
+        $folder = $isSlider ? 'assets/slider' : 'assets/branding';
+        $path = $request->file('file')->store($folder, 'public');
         $url = Storage::url($path);
 
-        AppSetting::where('key', $request->key)->update(['value' => $url, 'updated_by' => $request->user()->id]);
+        AppSetting::updateOrCreate(
+            ['key' => $request->key],
+            ['value' => $url, 'type' => 'string', 'group' => 'public', 'updated_by' => $request->user()->id]
+        );
 
         Cache::forget('inertia_app_settings');
         Cache::forget('blade_app_meta');

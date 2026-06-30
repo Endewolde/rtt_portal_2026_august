@@ -29,11 +29,7 @@ class DashboardService
                 $widgets['budget_utilization_summary'] = $this->budgetUtilizationSummary();
             }
 
-            if ($user->hasRole('reviewer')) {
-                $widgets['reviewer_queue'] = $this->reviewerQueue($user);
-            }
-
-            if ($user->hasRole('pi')) {
+            if ($user->hasRole('staff')) {
                 $widgets['my_proposals'] = $this->myProposals($user);
             }
 

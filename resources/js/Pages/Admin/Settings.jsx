@@ -38,6 +38,12 @@ const SECTIONS = [
     { key: 'public_site', label: 'Public Site',           icon: Globe,     bg: 'bg-emerald-100', text: 'text-emerald-600' },
 ]
 
+// Academic years 2000-2001 → 2059-2060, newest first
+const ACADEMIC_YEAR_OPTIONS = Array.from({ length: 60 }, (_, i) => {
+    const start = 2059 - i;
+    return [`${start}-${start + 1}`, `${start}–${start + 1}`];
+});
+
 // Dropdown options for every `select` type setting
 const SELECT_OPTIONS = {
     default_language:          [['en', 'English'], ['am', 'Amharic (አማርኛ)']],
@@ -58,6 +64,7 @@ const SELECT_OPTIONS = {
     default_user_role:         [['guest', 'Guest'], ['pi', 'Principal Investigator'], ['reviewer', 'Reviewer'], ['staff', 'Staff']],
     account_activation_method: [['email', 'Email Verification'], ['admin', 'Admin Approval'], ['none', 'Instant (no verification)']],
     theme:                     [['light', 'Light'], ['dark', 'Dark']],
+    current_academic_year:     ACADEMIC_YEAR_OPTIONS,
 }
 
 // Human-readable labels for known keys
@@ -114,6 +121,28 @@ const KEY_LABELS = {
     ldap_enabled: 'LDAP Enabled', ldap_host: 'LDAP Host',
     oauth_enabled: 'OAuth Enabled',
     webhook_url: 'Webhook URL',
+    // Public site — hero slider
+    slider_slide_count: 'Number of Slides',
+    slider_slide_1_eyebrow: 'Slide 1 Eyebrow',  slider_slide_1_heading: 'Slide 1 Heading',
+    slider_slide_1_highlight: 'Slide 1 Highlight', slider_slide_1_subtitle: 'Slide 1 Subtitle',
+    slider_slide_1_cta1_text: 'Slide 1 Primary Button', slider_slide_1_cta1_href: 'Slide 1 Primary Link',
+    slider_slide_1_cta2_text: 'Slide 1 Secondary Button', slider_slide_1_cta2_href: 'Slide 1 Secondary Link',
+    slider_slide_1_color: 'Slide 1 Accent Colour', slider_slide_1_icon: 'Slide 1 Icon',
+    slider_slide_2_eyebrow: 'Slide 2 Eyebrow',  slider_slide_2_heading: 'Slide 2 Heading',
+    slider_slide_2_highlight: 'Slide 2 Highlight', slider_slide_2_subtitle: 'Slide 2 Subtitle',
+    slider_slide_2_cta1_text: 'Slide 2 Primary Button', slider_slide_2_cta1_href: 'Slide 2 Primary Link',
+    slider_slide_2_cta2_text: 'Slide 2 Secondary Button', slider_slide_2_cta2_href: 'Slide 2 Secondary Link',
+    slider_slide_2_color: 'Slide 2 Accent Colour', slider_slide_2_icon: 'Slide 2 Icon',
+    slider_slide_3_eyebrow: 'Slide 3 Eyebrow',  slider_slide_3_heading: 'Slide 3 Heading',
+    slider_slide_3_highlight: 'Slide 3 Highlight', slider_slide_3_subtitle: 'Slide 3 Subtitle',
+    slider_slide_3_cta1_text: 'Slide 3 Primary Button', slider_slide_3_cta1_href: 'Slide 3 Primary Link',
+    slider_slide_3_cta2_text: 'Slide 3 Secondary Button', slider_slide_3_cta2_href: 'Slide 3 Secondary Link',
+    slider_slide_3_color: 'Slide 3 Accent Colour', slider_slide_3_icon: 'Slide 3 Icon',
+    slider_slide_4_eyebrow: 'Slide 4 Eyebrow',  slider_slide_4_heading: 'Slide 4 Heading',
+    slider_slide_4_highlight: 'Slide 4 Highlight', slider_slide_4_subtitle: 'Slide 4 Subtitle',
+    slider_slide_4_cta1_text: 'Slide 4 Primary Button', slider_slide_4_cta1_href: 'Slide 4 Primary Link',
+    slider_slide_4_cta2_text: 'Slide 4 Secondary Button', slider_slide_4_cta2_href: 'Slide 4 Secondary Link',
+    slider_slide_4_color: 'Slide 4 Accent Colour', slider_slide_4_icon: 'Slide 4 Icon',
     // Public site
     public_header_tagline:     'Header Tagline',
     public_footer_tagline:     'Footer Tagline',
@@ -461,6 +490,84 @@ function LogoUpload({ settingKey, value, onUploaded }) {
                 )}
             </div>
             <input ref={ref} type="file" accept="image/*,.ico,.svg" className="hidden" onChange={upload} />
+        </div>
+    )
+}
+
+// ─── Hero slider image upload ─────────────────────────────────────────────────
+
+function SlideImageUpload({ slideIndex, currentUrl, onUploaded }) {
+    const inputRef = useRef(null)
+    const [uploading, setUploading] = useState(false)
+    const { success, error } = useToast()
+    const settingKey = `slider_slide_${slideIndex}_image`
+
+    const handleFile = async (file) => {
+        if (!file) return
+        setUploading(true)
+        const fd = new FormData()
+        fd.append('file', file)
+        fd.append('key', settingKey)
+        try {
+            const res = await api.post('/settings/upload-asset', fd, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            })
+            const url = res.data?.data?.url ?? ''
+            onUploaded(settingKey, url)
+            success('Slide image uploaded.')
+        } catch (err) {
+            error(err.response?.data?.message ?? 'Upload failed. Max 5 MB, JPEG/PNG/WebP.')
+        }
+        setUploading(false)
+        if (inputRef.current) inputRef.current.value = ''
+    }
+
+    const handleRemove = async () => {
+        try {
+            await api.put(`/settings/app/${settingKey}`, { value: '' })
+            onUploaded(settingKey, '')
+            success('Slide image removed.')
+        } catch {
+            error('Failed to remove image.')
+        }
+    }
+
+    return (
+        <div className="py-3 border-b border-gray-100">
+            <p className="text-sm font-medium text-gray-900 mb-0.5">Background Image</p>
+            <p className="text-xs text-gray-400 mb-2">
+                Full-screen photo background. Recommended: <span className="font-semibold text-gray-500">1920 × 700 px</span> landscape.
+                Leave empty to use the animated gradient. Max 5 MB · JPEG, PNG, WebP.
+            </p>
+            {currentUrl ? (
+                <div className="relative rounded-xl overflow-hidden border border-gray-200 h-32 group">
+                    <img src={currentUrl} alt="Slide background" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                        <button
+                            onClick={() => inputRef.current?.click()}
+                            disabled={uploading}
+                            className="flex items-center gap-1 px-3 py-1.5 bg-white rounded-lg text-xs font-semibold text-gray-800 hover:bg-gray-100 disabled:opacity-50">
+                            <Upload size={11} /> Replace
+                        </button>
+                        <button
+                            onClick={handleRemove}
+                            className="flex items-center gap-1 px-3 py-1.5 bg-red-600 rounded-lg text-xs font-semibold text-white hover:bg-red-700">
+                            <X size={11} /> Remove
+                        </button>
+                    </div>
+                </div>
+            ) : (
+                <div
+                    onClick={() => !uploading && inputRef.current?.click()}
+                    className="flex flex-col items-center justify-center gap-2 py-6 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/50 transition-all">
+                    {uploading
+                        ? <div className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                        : <Upload size={18} className="text-gray-400" />}
+                    <span className="text-xs text-gray-400">{uploading ? 'Uploading…' : 'Click to upload (1920 × 700 px recommended)'}</span>
+                </div>
+            )}
+            <input ref={inputRef} type="file" accept="image/jpeg,image/jpg,image/png,image/webp" className="hidden"
+                onChange={e => handleFile(e.target.files?.[0])} />
         </div>
     )
 }
@@ -1400,18 +1507,82 @@ function PublicSitePanel({ values, onChange, onSave, isAdmin = false }) {
                 {tf('public_footer_tagline', 'string', 'Secondary text shown at the bottom-right of the footer (e.g. "Research & Technology Transfer Platform").')}
             </div>
 
-            {/* ── Hero content ── */}
+            {/* ── Hero Slider ── */}
             <div className="bg-white border border-gray-200 rounded-2xl px-5 py-2">
                 <div className="flex items-center gap-2 py-3 border-b border-gray-100">
                     <Layout size={15} className="text-emerald-600" />
-                    <h3 className="text-sm font-bold text-gray-800">Hero Section — Text</h3>
+                    <h3 className="text-sm font-bold text-gray-800">Hero Slider</h3>
+                    <p className="text-xs text-gray-400 ml-1">— auto-rotating slides</p>
                 </div>
-                {tf('public_hero_badge',        'string',   'Small chip above the headline.')}
-                {tf('public_hero_heading',       'string',   'First line of the headline (plain text).')}
-                {tf('public_hero_highlight',     'string',   'Second line shown in gradient colour (e.g. "From Idea to Impact").')}
-                {tf('public_hero_subtitle',      'textarea', 'Supporting paragraph below the headline.')}
-                {tf('public_hero_cta_primary',   'string',   'Primary action button label.')}
-                {tf('public_hero_cta_secondary', 'string',   'Secondary action button label.')}
+
+                {/* Slide count picker */}
+                <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                    <div>
+                        <p className="text-sm font-medium text-gray-900">Number of Slides</p>
+                        <p className="text-xs text-gray-400 mt-0.5">How many slides to show on the homepage (1–6)</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        {[1,2,3,4,5,6].map(n => {
+                            const active = parseInt(values['slider_slide_count'] || 4) === n
+                            return (
+                                <button
+                                    key={n}
+                                    onClick={() => { onChange('slider_slide_count', String(n)); save('slider_slide_count', String(n)) }}
+                                    className={`w-8 h-8 rounded-lg text-sm font-bold transition-all ${active
+                                        ? 'bg-emerald-600 text-white shadow-sm'
+                                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                                    {n}
+                                </button>
+                            )
+                        })}
+                    </div>
+                </div>
+
+                {Array.from({ length: parseInt(values['slider_slide_count'] || 4) }, (_, i) => i + 1).map(n => (
+                    <div key={n} className="py-4 border-b border-gray-100 last:border-0 space-y-0">
+                        {/* Slide header */}
+                        <div className="flex items-center gap-2 mb-1">
+                            <span className="inline-flex items-center justify-center w-5 h-5 rounded-md text-white text-[10px] font-bold"
+                                style={{ background: values[`slider_slide_${n}_color`] || '#6366f1' }}>
+                                {n}
+                            </span>
+                            <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">Slide {n}</p>
+                        </div>
+
+                        {/* Image upload */}
+                        <SlideImageUpload
+                            slideIndex={n}
+                            currentUrl={values[`slider_slide_${n}_image`]}
+                            onUploaded={(key, url) => { onChange(key, url) }}
+                        />
+
+                        {/* Text fields */}
+                        {tf(`slider_slide_${n}_eyebrow`,   'string',   'Small badge above the headline (e.g. "Research Funding").')}
+                        {tf(`slider_slide_${n}_heading`,   'string',   'First line of headline (plain text).')}
+                        {tf(`slider_slide_${n}_highlight`, 'string',   'Second line shown in accent colour gradient.')}
+                        {tf(`slider_slide_${n}_subtitle`,  'textarea', 'Supporting paragraph below the headline.')}
+
+                        {/* Buttons */}
+                        <div className="grid grid-cols-2 gap-3 py-2 border-b border-gray-100">
+                            <div>
+                                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Primary Button</p>
+                                {tf(`slider_slide_${n}_cta1_text`, 'string')}
+                                {tf(`slider_slide_${n}_cta1_href`, 'string')}
+                            </div>
+                            <div>
+                                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Secondary Button</p>
+                                {tf(`slider_slide_${n}_cta2_text`, 'string')}
+                                {tf(`slider_slide_${n}_cta2_href`, 'string')}
+                            </div>
+                        </div>
+
+                        {/* Style */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>{tf(`slider_slide_${n}_icon`,  'string', 'Single emoji (e.g. 🔬).')}</div>
+                            <div>{tf(`slider_slide_${n}_color`, 'string', 'Hex accent colour (e.g. #10b981).')}</div>
+                        </div>
+                    </div>
+                ))}
             </div>
 
             {/* ── Navigation ── */}

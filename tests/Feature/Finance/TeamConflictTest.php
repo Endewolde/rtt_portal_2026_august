@@ -31,12 +31,16 @@ beforeEach(function () {
 function conflict_makeProposalWithMembers(): array
 {
     $college = College::create(['name' => 'Conflict College '.rand(), 'code' => 'CC'.rand(10, 99)]);
-    $dept    = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'CF'.rand(10, 99)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'CF'.rand(10, 99)]);
 
-    $central = User::factory()->create(); $central->assignRole('central_officer');
-    $pi      = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]); $pi->assignRole('pi');
-    $coI     = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]); $coI->assignRole('pi');
-    $coI2    = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]); $coI2->assignRole('pi');
+    $central = User::factory()->create();
+    $central->assignRole('central_officer');
+    $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
+    $pi->assignRole('pi');
+    $coI = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
+    $coI->assignRole('pi');
+    $coI2 = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
+    $coI2->assignRole('pi');
 
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research',
@@ -46,11 +50,13 @@ function conflict_makeProposalWithMembers(): array
     ]);
 
     $proposal = Proposal::create([
-        'tracker_number'   => 'TRK-'.rand(100000, 999999),
+        'tracker_number' => 'TRK-'.rand(100000, 999999),
         'proposal_call_id' => $call->id, 'category' => 'research',
-        'title'            => 'Conflict Proposal', 'status' => 'funded',
-        'pi_user_id'       => $pi->id, 'college_id' => $college->id,
-        'department_id'    => $dept->id, 'academic_year' => '2026', 'created_by' => $pi->id,
+        'title' => 'Conflict Proposal', 'status' => 'funded',
+        'pi_user_id' => $pi->id, 'college_id' => $college->id,
+        'department_id' => $dept->id, 'academic_year' => '2026', 'created_by' => $pi->id,
+        'contract_status' => 'approved', 'contract_signed_at' => now(),
+        'contract_signed_by' => $pi->id,
     ]);
 
     ProposalMember::create([
@@ -104,8 +110,8 @@ test('pending signatures invalidated on withdrawal', function () {
     [$proposal, $pi, $coI] = conflict_makeProposalWithMembers();
 
     $template = FormTemplate::first();
-    $items    = [['category' => 'P', 'description' => 'RA', 'amount' => 10000, 'justification' => null]];
-    $request  = app(BudgetRequestService::class)->create($proposal, $template->id, $items, $pi);
+    $items = [['category' => 'P', 'description' => 'RA', 'amount' => 10000, 'justification' => null]];
+    $request = app(BudgetRequestService::class)->create($proposal, $template->id, $items, $pi);
 
     $pendingBefore = FormSignature::where('user_id', $coI->id)
         ->where('status', 'pending')

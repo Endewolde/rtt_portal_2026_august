@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CompletionWorkshop extends Model
 {
@@ -33,11 +34,11 @@ class CompletionWorkshop extends Model
     ];
 
     protected $casts = [
-        'scheduled_date'     => 'date',
-        'final_score'        => 'decimal:2',
+        'scheduled_date' => 'date',
+        'final_score' => 'decimal:2',
         'presentation_files' => 'array',
-        'photos'             => 'array',
-        'videos'             => 'array',
+        'photos' => 'array',
+        'videos' => 'array',
     ];
 
     public function proposal(): BelongsTo
@@ -48,5 +49,10 @@ class CompletionWorkshop extends Model
     public function scheduledBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'scheduled_by');
+    }
+
+    public function questions(): HasMany
+    {
+        return $this->hasMany(WorkshopQuestion::class, 'workshop_id')->orderBy('created_at');
     }
 }

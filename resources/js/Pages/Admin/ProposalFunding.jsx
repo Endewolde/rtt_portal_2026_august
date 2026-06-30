@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from '@inertiajs/react';
-import { BadgeDollarSign, Pencil, RefreshCw, ExternalLink, FileText, ReceiptText, Hash, XCircle } from 'lucide-react';
+import { BadgeDollarSign, Pencil, RefreshCw, ExternalLink, FileText, ReceiptText, Hash, XCircle, AlertTriangle, User, X, CheckCircle, Clock } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import WorkflowBreadcrumb from '../../Components/WorkflowBreadcrumb';
 import ViewToggle from '../../Components/ViewToggle';
@@ -39,6 +39,117 @@ function EditAmountModal({ proposal, onSave, onClose }) {
                         className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-60">
                         {saving ? 'Saving…' : 'Save'}
                     </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+const STATUS_LABELS = {
+    draft: { label: 'Draft', cls: 'bg-gray-100 text-gray-600' },
+    submitted: { label: 'Submitted', cls: 'bg-blue-100 text-blue-700' },
+    validated: { label: 'Validated', cls: 'bg-indigo-100 text-indigo-700' },
+    under_blind_review: { label: 'Blind Review', cls: 'bg-violet-100 text-violet-700' },
+    blind_review_passed: { label: 'BR Passed', cls: 'bg-orange-100 text-orange-700' },
+    under_open_defence: { label: 'Open Defence', cls: 'bg-purple-100 text-purple-700' },
+    accepted: { label: 'Accepted', cls: 'bg-teal-100 text-teal-700' },
+    funded: { label: 'Funded', cls: 'bg-emerald-100 text-emerald-700' },
+    midterm_evaluation: { label: 'Midterm', cls: 'bg-cyan-100 text-cyan-700' },
+    completed: { label: 'Completed', cls: 'bg-green-100 text-green-700' },
+    rejected: { label: 'Rejected', cls: 'bg-red-100 text-red-700' },
+    archived: { label: 'Archived', cls: 'bg-slate-100 text-slate-600' },
+};
+
+function PIHistoryModal({ piId, piName, onClose }) {
+    const [history, setHistory] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        api.get(`/users/${piId}/proposal-history`)
+            .then(r => setHistory(r.data?.data))
+            .catch(() => {})
+            .finally(() => setLoading(false));
+    }, [piId]);
+
+    const s = history?.summary;
+    const hasWarnings = s && (s.funded_active > 1 || s.unsettled_budgets > 0);
+
+    return (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[85vh] flex flex-col">
+                <div className="bg-slate-900 px-6 py-5 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="h-9 w-9 bg-white/10 rounded-xl flex items-center justify-center">
+                            <User size={18} className="text-white" />
+                        </div>
+                        <div>
+                            <h2 className="text-base font-bold text-white">PI Funding History</h2>
+                            <p className="text-xs text-slate-400 mt-0.5">{piName}</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
+                        <X size={18} />
+                    </button>
+                </div>
+
+                <div className="overflow-y-auto flex-1 p-6 space-y-4">
+                    {loading ? (
+                        <div className="flex justify-center py-10">
+                            <div className="h-7 w-7 border-4 border-slate-900 border-t-transparent rounded-full animate-spin" />
+                        </div>
+                    ) : !history ? (
+                        <p className="text-sm text-gray-500 text-center py-6">Failed to load history.</p>
+                    ) : (
+                        <>
+                            {/* Warnings */}
+                            {hasWarnings && (
+                                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-1.5">
+                                    <div className="flex items-center gap-2 mb-2">
+                                        <AlertTriangle size={15} className="text-amber-600" />
+                                        <p className="text-xs font-bold text-amber-800 uppercase tracking-wide">Funding Flags</p>
+                                    </div>
+                                    {s.funded_active > 1 && (
+                                        <p className="text-xs text-amber-700">⚠ This PI has <strong>{s.funded_active}</strong> active funded proposals (including this one).</p>
+                                    )}
+                                    {s.unsettled_budgets > 0 && (
+                                        <p className="text-xs text-amber-700">⚠ <strong>{s.unsettled_budgets}</strong> approved budget request(s) with unverified settlement.</p>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Summary cards */}
+                            <div className="grid grid-cols-4 gap-2">
+                                {[
+                                    { label: 'Total', value: s.total, cls: 'text-gray-700' },
+                                    { label: 'Funded', value: s.funded_active, cls: 'text-emerald-700' },
+                                    { label: 'Pending', value: s.pending_review, cls: 'text-blue-700' },
+                                    { label: 'Rejected', value: s.rejected, cls: 'text-red-700' },
+                                ].map(item => (
+                                    <div key={item.label} className="bg-gray-50 border border-gray-100 rounded-xl p-3 text-center">
+                                        <div className={`text-xl font-bold ${item.cls}`}>{item.value}</div>
+                                        <div className="text-xs text-gray-500 mt-0.5">{item.label}</div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Proposal list */}
+                            <div className="space-y-2">
+                                {history.proposals.map(p => {
+                                    const st = STATUS_LABELS[p.status] ?? { label: p.status, cls: 'bg-gray-100 text-gray-600' };
+                                    return (
+                                        <div key={p.id} className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 flex items-center gap-3">
+                                            <span className="font-mono text-xs font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded shrink-0">{p.tracker_number}</span>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-xs font-medium text-gray-900 truncate">{p.title}</p>
+                                                <p className="text-xs text-gray-400">{p.academic_year}</p>
+                                            </div>
+                                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${st.cls}`}>{st.label}</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </>
+                    )}
                 </div>
             </div>
         </div>
@@ -108,6 +219,7 @@ export default function ProposalFunding() {
     const [loading, setLoading]     = useState(true);
     const [editModal, setEditModal] = useState(null);
     const [revokeModal, setRevokeModal] = useState(null);
+    const [piHistory, setPiHistory] = useState(null); // { id, name }
 
     const load = async () => {
         setLoading(true);
@@ -203,7 +315,15 @@ export default function ProposalFunding() {
                                                 <span className="text-xs text-gray-400">{getCategoryLabel(p.category)}</span>
                                             </div>
                                             <h3 className="text-sm font-semibold text-gray-900 truncate mb-0.5">{p.title}</h3>
-                                            <p className="text-xs text-gray-500">{p.pi?.name} · {p.college?.name}</p>
+                                            <div className="flex items-center gap-2">
+                                                <button
+                                                    onClick={() => setPiHistory({ id: p.pi?.id, name: p.pi?.name })}
+                                                    className="text-xs text-blue-600 hover:text-blue-800 hover:underline font-medium"
+                                                >
+                                                    <User size={10} className="inline mr-0.5" />{p.pi?.name}
+                                                </button>
+                                                <span className="text-xs text-gray-400">· {p.college?.name}</span>
+                                            </div>
                                         </div>
 
                                         {/* Awarded amount badge */}
@@ -271,6 +391,14 @@ export default function ProposalFunding() {
                     proposal={revokeModal}
                     onSave={() => { setRevokeModal(null); load(); }}
                     onClose={() => setRevokeModal(null)}
+                />
+            )}
+
+            {piHistory && (
+                <PIHistoryModal
+                    piId={piHistory.id}
+                    piName={piHistory.name}
+                    onClose={() => setPiHistory(null)}
                 />
             )}
         </AppLayout>

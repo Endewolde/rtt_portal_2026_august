@@ -1,14 +1,23 @@
 import { useState, useEffect } from 'react';
-import { Search, X, UserPlus, Users, Info, AlertCircle } from 'lucide-react';
+import { Search, X, UserPlus, Users, Info, AlertCircle, Clock, CheckCircle2, XCircle } from 'lucide-react';
 import api from '../../../lib/api';
 import { useToast } from '../../../Components/Toast';
+import { useFeature } from '../../../hooks/useFeature';
 
 const COLORS = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-orange-500', 'bg-pink-500', 'bg-teal-500'];
 const getInitials = (name) => name?.split(' ').map((n) => n[0]).join('').toUpperCase().slice(0, 2) ?? '??';
 const getColor   = (name) => COLORS[(name?.charCodeAt(0) ?? 0) % COLORS.length];
 
+function InvitationBadge({ status }) {
+    if (status === 'accepted') return <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-green-100 text-green-700"><CheckCircle2 size={10} /> Accepted</span>;
+    if (status === 'declined') return <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-red-100 text-red-700"><XCircle size={10} /> Declined</span>;
+    return <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-700"><Clock size={10} /> Pending</span>;
+}
+
 export default function Step3CoInvestigators({ proposalId, piUser, onComplete, initialData }) {
     const toast = useToast();
+    const { hasSubFeature } = useFeature();
+    const showInvitationStatus = hasSubFeature('workflow.co_pi_acceptance');
     const [search, setSearch] = useState('');
     const [results, setResults] = useState([]);
     const [searching, setSearching] = useState(false);
@@ -159,7 +168,7 @@ export default function Step3CoInvestigators({ proposalId, piUser, onComplete, i
                     <table className="w-full text-sm">
                         <thead className="bg-gray-50 border-b border-gray-200">
                             <tr>
-                                {['Member', 'College / Dept', 'Role', 'Contribution %', ''].map((h) => (
+                                {['Member', 'College / Dept', 'Role', ...(showInvitationStatus ? ['Invite'] : []), 'Contribution %', ''].map((h) => (
                                     <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
                                 ))}
                             </tr>
@@ -183,6 +192,7 @@ export default function Step3CoInvestigators({ proposalId, piUser, onComplete, i
                                     <td className="px-4 py-3">
                                         <span className="px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">PI</span>
                                     </td>
+                                    {showInvitationStatus && <td className="px-4 py-3"><span className="text-xs text-gray-400">—</span></td>}
                                     <td className="px-4 py-3 text-center">
                                         <span className={`font-semibold ${piContrib < 20 ? 'text-orange-600' : 'text-blue-700'}`}>
                                             {piContrib.toFixed(1)}%
@@ -214,6 +224,11 @@ export default function Step3CoInvestigators({ proposalId, piUser, onComplete, i
                                     <td className="px-4 py-3">
                                         <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">Co-PI</span>
                                     </td>
+                                    {showInvitationStatus && (
+                                        <td className="px-4 py-3">
+                                            <InvitationBadge status={c.invitation_status ?? 'pending'} />
+                                        </td>
+                                    )}
                                     <td className="px-4 py-3 text-center">
                                         <input type="number" min="0" max="100" step="0.5"
                                             value={c.contribution_percentage}

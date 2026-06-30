@@ -21,7 +21,7 @@ function getRoles(user) {
 
 /** True if this user's role allows approving proposals in this category. */
 function canApproveCategory(roles, category) {
-    if (roles.some(r => ['super_admin', 'central_office'].includes(r))) return true
+    if (roles.some(r => ['super_admin', 'admin', 'central_officer'].includes(r))) return true
     if (roles.includes('research_officer')   && category === 'research')              return true
     if (roles.includes('community_officer')  && category === 'community_engagement')  return true
     if (roles.includes('technology_officer') && category === 'technology_transfer')   return true
@@ -338,14 +338,14 @@ export default function BudgetAllocations() {
 
     // Who can approve: central/category officers only (NOT college officers)
     const userCanApproveAny = roles.some(r =>
-        ['super_admin', 'central_office', 'research_officer', 'community_officer', 'technology_officer'].includes(r)
+        ['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer'].includes(r)
     )
     // Who can allocate and approve: central admins + category officers only
     const canAllocate = roles.some(r =>
-        ['super_admin', 'central_office', 'research_officer', 'community_officer', 'technology_officer'].includes(r)
+        ['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer'].includes(r)
     )
     // Who can filter by college: only global admins
-    const isCentral = roles.some(r => ['super_admin', 'central_office'].includes(r))
+    const isCentral = roles.some(r => ['super_admin', 'admin', 'central_officer'].includes(r))
 
     const [proposals,          setProposals]          = useState([])
     const [colleges,           setColleges]           = useState([])
@@ -356,7 +356,7 @@ export default function BudgetAllocations() {
     const [selectedIds,        setSelectedIds]        = useState(new Set())
 
     // Filters
-    const [yearFilter,    setYearFilter]    = useState('')
+    const [yearFilter,    setYearFilter]    = useState(currentAcademicYear)
     const [collegeFilter, setCollegeFilter] = useState('')
 
     // Modals

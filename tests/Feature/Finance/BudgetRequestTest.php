@@ -5,11 +5,11 @@ use App\Models\Award;
 use App\Models\BudgetAllocation;
 use App\Models\BudgetRequest;
 use App\Models\BudgetSettlement;
-use App\Models\MidtermEvaluation;
 use App\Models\College;
 use App\Models\Department;
 use App\Models\FormSignature;
 use App\Models\FormTemplate;
+use App\Models\MidtermEvaluation;
 use App\Models\Proposal;
 use App\Models\ProposalCall;
 use App\Models\ProposalMember;
@@ -33,7 +33,7 @@ beforeEach(function () {
 function brq_makeFundedProposal(): array
 {
     $college = College::create(['name' => 'BRQ College '.rand(), 'code' => 'BR'.rand(10, 99)]);
-    $dept    = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'BD'.rand(10, 99)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'BD'.rand(10, 99)]);
 
     $central = User::factory()->create();
     $central->assignRole('central_officer');
@@ -52,11 +52,13 @@ function brq_makeFundedProposal(): array
     ]);
 
     $proposal = Proposal::create([
-        'tracker_number'   => 'TRK-'.rand(100000, 999999),
+        'tracker_number' => 'TRK-'.rand(100000, 999999),
         'proposal_call_id' => $call->id, 'category' => 'research',
-        'title'            => 'Funded Proposal', 'status' => 'funded',
-        'pi_user_id'       => $pi->id, 'college_id' => $college->id,
-        'department_id'    => $dept->id, 'academic_year' => '2026', 'created_by' => $pi->id,
+        'title' => 'Funded Proposal', 'status' => 'funded',
+        'pi_user_id' => $pi->id, 'college_id' => $college->id,
+        'department_id' => $dept->id, 'academic_year' => '2026', 'created_by' => $pi->id,
+        'contract_status' => 'approved', 'contract_signed_at' => now(),
+        'contract_signed_by' => $central->id,
     ]);
 
     ProposalMember::create([
@@ -72,25 +74,25 @@ function brq_makeFundedProposal(): array
 
     // Award the proposal and create an approved allocation so budget requests can be made
     Award::create([
-        'proposal_id'     => $proposal->id,
-        'awarded_amount'  => 200000.00,
-        'approved_by'     => $central->id,
-        'approved_at'     => now(),
+        'proposal_id' => $proposal->id,
+        'awarded_amount' => 200000.00,
+        'approved_by' => $central->id,
+        'approved_at' => now(),
         'grant_reference' => 'GR-BRQ-'.rand(1000, 9999),
     ]);
 
     BudgetAllocation::create([
-        'college_id'        => $college->id,
-        'proposal_id'       => $proposal->id,
-        'fiscal_year'       => '2026',
-        'total_amount'      => 200000.00,
-        'allocated_amount'  => 0,
+        'college_id' => $college->id,
+        'proposal_id' => $proposal->id,
+        'fiscal_year' => '2026',
+        'total_amount' => 200000.00,
+        'allocated_amount' => 0,
         'remaining_balance' => 200000.00,
-        'allocation_type'   => 'proposal',
-        'status'            => 'approved',
-        'approved_by'       => $central->id,
-        'approved_at'       => now(),
-        'allocated_by'      => $central->id,
+        'allocation_type' => 'proposal',
+        'status' => 'approved',
+        'approved_by' => $central->id,
+        'approved_at' => now(),
+        'allocated_by' => $central->id,
     ]);
 
     $template = FormTemplate::where('name', 'Research Budget Request')->first();
@@ -146,7 +148,7 @@ test('form_signatures created for all active members on creation', function () {
 
 test('funding_round increments correctly on second request', function () {
     [$proposal, $pi, $coI] = brq_makeFundedProposal();
-    $service  = app(BudgetRequestService::class);
+    $service = app(BudgetRequestService::class);
     $template = FormTemplate::first();
 
     $round1 = $service->create($proposal, $template->id, brq_defaultItems(), $pi);
@@ -155,20 +157,20 @@ test('funding_round increments correctly on second request', function () {
     $round1->update(['status' => 'settled']);
     BudgetSettlement::create([
         'budget_request_id' => $round1->id,
-        'submitted_by'      => $pi->id,
-        'status'            => 'finance_verified',
-        'total_spent'       => 50000,
-        'unspent_amount'    => 0,
+        'submitted_by' => $pi->id,
+        'status' => 'finance_verified',
+        'total_spent' => 50000,
+        'unspent_amount' => 0,
     ]);
 
     // PI must pass midterm evaluation to unlock Round 2
     MidtermEvaluation::create([
-        'proposal_id'     => $proposal->id,
+        'proposal_id' => $proposal->id,
         'evaluation_date' => now()->toDateString(),
-        'status'          => 'scored',
-        'scheduled_by'    => $pi->id,
-        'recommendation'  => 'continue',
-        'progress_score'  => 80,
+        'status' => 'scored',
+        'scheduled_by' => $pi->id,
+        'recommendation' => 'continue',
+        'progress_score' => 80,
     ]);
 
     $round2 = $service->create($proposal, $template->id, brq_defaultItems(), $pi);
@@ -179,17 +181,17 @@ test('funding_round increments correctly on second request', function () {
 
 test('cannot create Round 2 if Round 1 settlement is submitted but not finance_verified', function () {
     [$proposal, $pi] = brq_makeFundedProposal();
-    $service  = app(BudgetRequestService::class);
+    $service = app(BudgetRequestService::class);
     $template = FormTemplate::first();
 
     $round1 = $service->create($proposal, $template->id, brq_defaultItems(), $pi);
     $round1->update(['status' => 'disbursed']);
     BudgetSettlement::create([
         'budget_request_id' => $round1->id,
-        'submitted_by'      => $pi->id,
-        'status'            => 'submitted',
-        'total_spent'       => 50000,
-        'unspent_amount'    => 0,
+        'submitted_by' => $pi->id,
+        'status' => 'submitted',
+        'total_spent' => 50000,
+        'unspent_amount' => 0,
     ]);
 
     expect(fn () => $service->create($proposal, $template->id, brq_defaultItems(), $pi))
@@ -198,17 +200,17 @@ test('cannot create Round 2 if Round 1 settlement is submitted but not finance_v
 
 test('cannot create Round 2 if Round 1 settlement is college_verified but not finance_verified', function () {
     [$proposal, $pi] = brq_makeFundedProposal();
-    $service  = app(BudgetRequestService::class);
+    $service = app(BudgetRequestService::class);
     $template = FormTemplate::first();
 
     $round1 = $service->create($proposal, $template->id, brq_defaultItems(), $pi);
     $round1->update(['status' => 'disbursed']);
     BudgetSettlement::create([
         'budget_request_id' => $round1->id,
-        'submitted_by'      => $pi->id,
-        'status'            => 'college_verified',
-        'total_spent'       => 50000,
-        'unspent_amount'    => 0,
+        'submitted_by' => $pi->id,
+        'status' => 'college_verified',
+        'total_spent' => 50000,
+        'unspent_amount' => 0,
     ]);
 
     expect(fn () => $service->create($proposal, $template->id, brq_defaultItems(), $pi))
@@ -217,26 +219,26 @@ test('cannot create Round 2 if Round 1 settlement is college_verified but not fi
 
 test('CAN create Round 2 after Round 1 settlement is finance_verified', function () {
     [$proposal, $pi] = brq_makeFundedProposal();
-    $service  = app(BudgetRequestService::class);
+    $service = app(BudgetRequestService::class);
     $template = FormTemplate::first();
 
     $round1 = $service->create($proposal, $template->id, brq_defaultItems(), $pi);
     $round1->update(['status' => 'settled']);
     BudgetSettlement::create([
         'budget_request_id' => $round1->id,
-        'submitted_by'      => $pi->id,
-        'status'            => 'finance_verified',
-        'total_spent'       => 50000,
-        'unspent_amount'    => 0,
+        'submitted_by' => $pi->id,
+        'status' => 'finance_verified',
+        'total_spent' => 50000,
+        'unspent_amount' => 0,
     ]);
 
     MidtermEvaluation::create([
-        'proposal_id'     => $proposal->id,
+        'proposal_id' => $proposal->id,
         'evaluation_date' => now()->toDateString(),
-        'status'          => 'scored',
-        'scheduled_by'    => $pi->id,
-        'recommendation'  => 'continue',
-        'progress_score'  => 75,
+        'status' => 'scored',
+        'scheduled_by' => $pi->id,
+        'recommendation' => 'continue',
+        'progress_score' => 75,
     ]);
 
     $round2 = $service->create($proposal, $template->id, brq_defaultItems(), $pi);

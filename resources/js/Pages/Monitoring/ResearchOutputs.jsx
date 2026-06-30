@@ -4,7 +4,7 @@ import {
     Plus, X, ChevronRight, FileText, ExternalLink,
     FlaskConical, Layers, Search, Pencil, Trash2,
     Calendar, Building2, BarChart3, TrendingUp,
-    CheckCircle2, AlertCircle, Sparkles,
+    CheckCircle2, AlertCircle, Sparkles, Clock, XCircle, ShieldCheck, ThumbsUp,
 } from 'lucide-react'
 import AppLayout from '../../Layouts/AppLayout'
 import { useAuth } from '../../hooks/useAuth'
@@ -141,10 +141,92 @@ function OutputMetaDetail({ output }) {
     )
 }
 
+// ─── Approval status badge ────────────────────────────────────────────────────
+
+const APPROVAL_STATUS = {
+    pending:  { label: 'Pending Review', color: 'bg-yellow-50 text-yellow-700 border-yellow-200',  icon: Clock },
+    verified: { label: 'Verified',       color: 'bg-blue-50 text-blue-700 border-blue-200',        icon: ShieldCheck },
+    approved: { label: 'Approved',       color: 'bg-green-50 text-green-700 border-green-200',     icon: CheckCircle2 },
+    rejected: { label: 'Rejected',       color: 'bg-red-50 text-red-700 border-red-200',           icon: XCircle },
+}
+
+function ApprovalBadge({ status }) {
+    const cfg  = APPROVAL_STATUS[status] ?? APPROVAL_STATUS.pending
+    const Icon = cfg.icon
+    return (
+        <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border', cfg.color)}>
+            <Icon size={9} />{cfg.label}
+        </span>
+    )
+}
+
+// ─── Verify / Approve inline panel ───────────────────────────────────────────
+
+function ReviewPanel({ output, action, onDone, onCancel }) {
+    const { error } = useToast()
+    const [notes,  setNotes]  = useState('')
+    const [choice, setChoice] = useState(action === 'verify' ? 'verify' : null)
+    const [saving, setSaving] = useState(false)
+
+    const submit = async () => {
+        setSaving(true)
+        try {
+            let res
+            if (action === 'verify') {
+                res = await api.post(`/research-outputs/${output.id}/verify`, { action: choice, review_notes: notes })
+            } else {
+                res = await api.post(`/research-outputs/${output.id}/approve`, { review_notes: notes })
+            }
+            onDone(res.data?.data)
+        } catch (e) {
+            error(e.response?.data?.message ?? 'Action failed.')
+        }
+        setSaving(false)
+    }
+
+    return (
+        <div className="mx-4 mb-4 border border-indigo-100 rounded-xl bg-indigo-50/30 p-4 space-y-3">
+            {action === 'verify' && (
+                <div className="flex gap-2">
+                    {[
+                        { v: 'verify', label: 'Verify', color: 'blue' },
+                        { v: 'reject', label: 'Reject', color: 'red' },
+                    ].map(opt => (
+                        <button key={opt.v} type="button" onClick={() => setChoice(opt.v)}
+                            className={cn(
+                                'flex-1 py-1.5 rounded-lg text-xs font-semibold border-2 transition-all',
+                                choice === opt.v
+                                    ? opt.color === 'blue' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-red-500 bg-red-50 text-red-700'
+                                    : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                            )}>
+                            {opt.label}
+                        </button>
+                    ))}
+                </div>
+            )}
+            <textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)}
+                placeholder="Review notes (optional)…"
+                className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-indigo-400 resize-none bg-white" />
+            <div className="flex gap-2">
+                <button onClick={submit} disabled={saving || (action === 'verify' && !choice)}
+                    className={cn(
+                        'flex items-center gap-1 px-3 py-1.5 text-white text-xs font-semibold rounded-lg disabled:opacity-50',
+                        action === 'approve' || choice === 'verify' ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
+                    )}>
+                    {saving ? '…' : action === 'approve' ? 'Approve' : (choice === 'reject' ? 'Reject' : 'Verify')}
+                </button>
+                <button onClick={onCancel} className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700">Cancel</button>
+            </div>
+        </div>
+    )
+}
+
 // ─── Output card ──────────────────────────────────────────────────────────────
 
-function OutputCard({ output, canEdit, canDelete, onEdit, onDelete }) {
-    const [expanded, setExpanded] = useState(false)
+function OutputCard({ output: initialOutput, canEdit, canDelete, canVerify, canApprove, onEdit, onDelete }) {
+    const [expanded,     setExpanded]     = useState(false)
+    const [reviewAction, setReviewAction] = useState(null)
+    const [output,       setOutput]       = useState(initialOutput)
     const { confirm } = useConfirm()
     const c    = cfg(output.output_type)
     const Icon = c.icon
@@ -156,6 +238,9 @@ function OutputCard({ output, canEdit, canDelete, onEdit, onDelete }) {
     }
 
     const handleEdit = (e) => { e.stopPropagation(); onEdit(output) }
+
+    const showVerify  = canVerify  && output.status === 'pending'
+    const showApprove = canApprove && output.status === 'verified'
 
     return (
         <article className={cn(
@@ -170,6 +255,7 @@ function OutputCard({ output, canEdit, canDelete, onEdit, onDelete }) {
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                         <TypeBadge type={output.output_type} size="xs" />
+                        <ApprovalBadge status={output.status ?? 'pending'} />
                         {output.proposal?.tracker_number && (
                             <span className="font-mono text-[10px] text-gray-400">{output.proposal.tracker_number}</span>
                         )}
@@ -197,7 +283,21 @@ function OutputCard({ output, canEdit, canDelete, onEdit, onDelete }) {
                     )}
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                    {canEdit && (
+                    {showVerify && reviewAction !== 'verify' && (
+                        <button onClick={e => { e.stopPropagation(); setReviewAction('verify') }}
+                            className="flex items-center gap-1 h-7 px-2 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-700 text-[10px] font-semibold transition-colors"
+                            title="Verify">
+                            <ShieldCheck size={11} /> Verify
+                        </button>
+                    )}
+                    {showApprove && reviewAction !== 'approve' && (
+                        <button onClick={e => { e.stopPropagation(); setReviewAction('approve') }}
+                            className="flex items-center gap-1 h-7 px-2 rounded-lg bg-green-50 hover:bg-green-100 text-green-700 text-[10px] font-semibold transition-colors"
+                            title="Approve">
+                            <ThumbsUp size={11} /> Approve
+                        </button>
+                    )}
+                    {canEdit && output.status === 'pending' && (
                         <button onClick={handleEdit}
                             className="h-7 w-7 rounded-lg bg-gray-50 hover:bg-indigo-50 text-gray-400 hover:text-indigo-600 flex items-center justify-center transition-colors"
                             title="Edit">
@@ -214,15 +314,40 @@ function OutputCard({ output, canEdit, canDelete, onEdit, onDelete }) {
                 </div>
             </div>
 
+            {/* Inline review panel */}
+            {reviewAction && (
+                <ReviewPanel
+                    output={output}
+                    action={reviewAction}
+                    onDone={(updated) => { setOutput(updated); setReviewAction(null) }}
+                    onCancel={() => setReviewAction(null)}
+                />
+            )}
+
             {/* Expanded detail */}
             {expanded && (
                 <div className="px-4 pb-4 border-t border-gray-50">
                     <OutputMetaDetail output={output} />
-                    {output.recorded_by?.name && (
-                        <p className="text-[10px] text-gray-300 mt-3">
-                            Recorded by {output.recorded_by.name}
-                        </p>
-                    )}
+                    <div className="mt-3 space-y-1">
+                        {output.recorded_by?.name && (
+                            <p className="text-[10px] text-gray-400">Recorded by {output.recorded_by.name}</p>
+                        )}
+                        {output.verified_by?.name && (
+                            <p className="text-[10px] text-blue-400 flex items-center gap-1">
+                                <ShieldCheck size={9} /> Verified by {output.verified_by.name}
+                                {output.verified_at && ` · ${formatDate(output.verified_at)}`}
+                            </p>
+                        )}
+                        {output.approved_by?.name && (
+                            <p className="text-[10px] text-green-500 flex items-center gap-1">
+                                <CheckCircle2 size={9} /> Approved by {output.approved_by.name}
+                                {output.approved_at && ` · ${formatDate(output.approved_at)}`}
+                            </p>
+                        )}
+                        {output.review_notes && (
+                            <p className="text-[10px] text-gray-500 italic mt-1">Note: {output.review_notes}</p>
+                        )}
+                    </div>
                 </div>
             )}
         </article>
@@ -560,11 +685,14 @@ export default function ResearchOutputs() {
     const [typeFilter, setTypeFilter] = useState('')
     const [search,     setSearch]     = useState('')
 
-    const canAdd    = hasAnyRole(['super_admin', 'central_office', 'college_admin', 'college_officer',
+    const canAdd    = hasAnyRole(['super_admin', 'admin', 'central_officer', 'college_officer',
         'research_officer', 'community_officer', 'technology_officer', 'pi', 'staff'])
-    const canEdit   = hasAnyRole(['super_admin', 'central_office', 'college_admin', 'college_officer',
+    const canEdit   = hasAnyRole(['super_admin', 'admin', 'central_officer', 'college_officer',
         'research_officer', 'community_officer', 'technology_officer', 'pi', 'staff'])
-    const canDelete = hasAnyRole(['super_admin', 'central_office'])
+    const canDelete = hasAnyRole(['super_admin', 'admin', 'central_officer'])
+    const canVerify = hasAnyRole(['super_admin', 'admin', 'central_officer', 'college_officer'])
+    const canApprove = hasAnyRole(['super_admin', 'admin', 'central_officer', 'research_officer',
+        'community_officer', 'technology_officer'])
 
     const load = useCallback(async () => {
         setLoading(true)
@@ -706,6 +834,7 @@ export default function ResearchOutputs() {
                     {filtered.map(o => (
                         <OutputCard key={o.id} output={o}
                             canEdit={canEdit} canDelete={canDelete}
+                            canVerify={canVerify} canApprove={canApprove}
                             onEdit={setModal} onDelete={handleDelete} />
                     ))}
                 </div>

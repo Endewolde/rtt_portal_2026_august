@@ -26,7 +26,7 @@ class MidtermEvaluationController extends Controller
             'scoredBy:id,name',
         ])->orderByDesc('evaluation_date');
 
-        if ($user->hasRole('college_officer') || $user->hasRole('college_officer') ||
+        if ($user->hasRole('college_officer') ||
             ($user->hasRole('support_officer') && $user->college_id)) {
             $query->whereHas('proposal', fn ($q) => $q->where('college_id', $user->college_id));
         } elseif ($user->hasRole('research_officer')) {
@@ -65,7 +65,9 @@ class MidtermEvaluationController extends Controller
 
     /**
      * Proposals eligible for midterm evaluation scheduling:
-     * funded status + at least one finance_verified settlement (Round 1 complete).
+     * funded status + PI has submitted a Round 1 settlement (any stage ≥ submitted).
+     * College verifies the settlement AFTER scoring the M&E — not before — so we only
+     * require the settlement to exist, not to be finance_verified (which would create a deadlock).
      * Scoped to the officer's college for college_officer / college_admin roles.
      */
     public function eligibleProposals(Request $request): JsonResponse
@@ -76,12 +78,12 @@ class MidtermEvaluationController extends Controller
             ->whereExists(fn ($q) => $q->from('budget_settlements')
                 ->join('budget_requests', 'budget_settlements.budget_request_id', '=', 'budget_requests.id')
                 ->whereColumn('budget_requests.proposal_id', 'proposals.id')
-                ->where('budget_settlements.status', 'finance_verified')
+                ->whereIn('budget_settlements.status', ['submitted', 'college_verified', 'finance_verified'])
             )
             ->with(['pi:id,name,email', 'college:id,name'])
             ->orderBy('tracker_number');
 
-        if ($user->hasRole('college_officer') || $user->hasRole('college_officer')) {
+        if ($user->hasRole('college_officer')) {
             $query->where('college_id', $user->college_id);
         } elseif ($user->hasRole('research_officer')) {
             $query->where('category', 'research');
@@ -159,10 +161,10 @@ class MidtermEvaluationController extends Controller
             ->whereExists(fn ($q) => $q->from('budget_settlements')
                 ->join('budget_requests', 'budget_settlements.budget_request_id', '=', 'budget_requests.id')
                 ->whereColumn('budget_requests.proposal_id', 'proposals.id')
-                ->where('budget_settlements.status', 'finance_verified')
+                ->whereIn('budget_settlements.status', ['submitted', 'college_verified', 'finance_verified'])
             );
 
-        if ($user->hasRole('college_officer') || $user->hasRole('college_officer')) {
+        if ($user->hasRole('college_officer')) {
             $query->where('college_id', $user->college_id);
         }
 

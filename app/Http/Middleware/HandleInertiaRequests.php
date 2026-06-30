@@ -91,6 +91,32 @@ class HandleInertiaRequests extends Middleware
                     'public_social_linkedin',
                     'public_social_instagram',
                     'public_social_youtube',
+                    // Hero slider content (slides 1–6)
+                    'slider_slide_count',
+                    'slider_slide_1_eyebrow', 'slider_slide_1_heading', 'slider_slide_1_highlight',
+                    'slider_slide_1_subtitle', 'slider_slide_1_cta1_text', 'slider_slide_1_cta1_href',
+                    'slider_slide_1_cta2_text', 'slider_slide_1_cta2_href', 'slider_slide_1_color',
+                    'slider_slide_1_icon', 'slider_slide_1_image',
+                    'slider_slide_2_eyebrow', 'slider_slide_2_heading', 'slider_slide_2_highlight',
+                    'slider_slide_2_subtitle', 'slider_slide_2_cta1_text', 'slider_slide_2_cta1_href',
+                    'slider_slide_2_cta2_text', 'slider_slide_2_cta2_href', 'slider_slide_2_color',
+                    'slider_slide_2_icon', 'slider_slide_2_image',
+                    'slider_slide_3_eyebrow', 'slider_slide_3_heading', 'slider_slide_3_highlight',
+                    'slider_slide_3_subtitle', 'slider_slide_3_cta1_text', 'slider_slide_3_cta1_href',
+                    'slider_slide_3_cta2_text', 'slider_slide_3_cta2_href', 'slider_slide_3_color',
+                    'slider_slide_3_icon', 'slider_slide_3_image',
+                    'slider_slide_4_eyebrow', 'slider_slide_4_heading', 'slider_slide_4_highlight',
+                    'slider_slide_4_subtitle', 'slider_slide_4_cta1_text', 'slider_slide_4_cta1_href',
+                    'slider_slide_4_cta2_text', 'slider_slide_4_cta2_href', 'slider_slide_4_color',
+                    'slider_slide_4_icon', 'slider_slide_4_image',
+                    'slider_slide_5_eyebrow', 'slider_slide_5_heading', 'slider_slide_5_highlight',
+                    'slider_slide_5_subtitle', 'slider_slide_5_cta1_text', 'slider_slide_5_cta1_href',
+                    'slider_slide_5_cta2_text', 'slider_slide_5_cta2_href', 'slider_slide_5_color',
+                    'slider_slide_5_icon', 'slider_slide_5_image',
+                    'slider_slide_6_eyebrow', 'slider_slide_6_heading', 'slider_slide_6_highlight',
+                    'slider_slide_6_subtitle', 'slider_slide_6_cta1_text', 'slider_slide_6_cta1_href',
+                    'slider_slide_6_cta2_text', 'slider_slide_6_cta2_href', 'slider_slide_6_color',
+                    'slider_slide_6_icon', 'slider_slide_6_image',
                     'self_registration',
                     'registration_email_domain',
                     'public_topbar_text',
@@ -105,12 +131,31 @@ class HandleInertiaRequests extends Middleware
                     return array_column(Feature::cases(), 'value');
                 }
 
-                return json_decode($stored, true) ?? [];
+                // Merge in any Feature cases added after the setting was last saved.
+                // New top-level modules default to enabled so they appear in Feature Management.
+                $saved = json_decode($stored, true) ?? [];
+                $all = array_column(Feature::cases(), 'value');
+
+                return array_values(array_unique(array_merge($saved, $all)));
             }),
             'disabled_sub_features' => Cache::remember('inertia_disabled_sub_features', 300, function () {
                 $stored = AppSetting::where('key', 'disabled_sub_features')->value('value');
 
-                return $stored ? (json_decode($stored, true) ?? []) : [];
+                // When no setting has ever been saved, default workflow sub-features to disabled.
+                if ($stored === null) {
+                    return [
+                        'workflow.co_pi_acceptance',
+                        'workflow.coi_declaration',
+                        'workflow.budget_revision',
+                        'workflow.no_cost_extension',
+                        'workflow.sla_tracking',
+                        'workflow.ethical_clearance',
+                        'workflow.proposal_templates',
+                        'workflow.closure_checklist',
+                    ];
+                }
+
+                return json_decode($stored, true) ?? [];
             }),
         ];
     }

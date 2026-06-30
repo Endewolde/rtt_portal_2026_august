@@ -52,4 +52,21 @@ return [
         'tenant' => env('AZURE_TENANT_ID', 'common'),
     ],
 
+    'anthropic' => [
+        'api_key' => env('ANTHROPIC_API_KEY', ''),
+    ],
+
+    'gemini' => [
+        'api_key' => env('GEMINI_API_KEY', ''),
+    ],
+
+    'groq' => [
+        'api_key' => env('GROQ_API_KEY', ''),
+    ],
+
+    'ai_scoring' => [
+        // 'anthropic' | 'gemini' | 'groq' — or leave blank to auto-detect from whichever key is set
+        'provider' => env('AI_SCORING_PROVIDER', ''),
+    ],
+
 ];

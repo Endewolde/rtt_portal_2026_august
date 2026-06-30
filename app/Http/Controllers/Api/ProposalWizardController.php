@@ -50,6 +50,26 @@ class ProposalWizardController extends Controller
             ], 422);
         }
 
+        // Enforce max proposals per PI for this call
+        if ($call->max_proposals_per_pi) {
+            $existing = Proposal::where('proposal_call_id', $call->id)
+                ->where('pi_user_id', $request->user()->id)
+                ->whereNull('deleted_at')
+                ->count();
+
+            if ($existing >= $call->max_proposals_per_pi) {
+                $limit = $call->max_proposals_per_pi;
+                $noun = $limit === 1 ? 'proposal' : 'proposals';
+
+                return response()->json([
+                    'data' => null,
+                    'message' => "This call limits each PI to {$limit} {$noun}. You have already reached this limit.",
+                    'errors' => [],
+                    'meta' => [],
+                ], 422);
+            }
+        }
+
         try {
             $proposal = $this->service->createDraft($request->user(), $validated['proposal_call_id']);
         } catch (\RuntimeException $e) {

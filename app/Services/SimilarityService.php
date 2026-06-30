@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Proposal;
 use App\Models\User;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -28,16 +29,15 @@ class SimilarityService
             ->where('key', 'similarity_threshold')
             ->value('value') ?? 0.70);
 
-        $corpus          = $this->buildCorpus($proposal, $comparisons);
-        $allIds          = $comparisons->pluck('id')->push($proposal->id)->toArray();
-        $proposalText    = $this->buildText($proposal);
-        $proposalVector  = $this->buildTfIdfVector($proposalText, $allIds, $corpus);
+        $corpus = $this->buildCorpus($proposal, $comparisons);
+        $proposalText = $this->buildText($proposal);
+        $proposalVector = $this->buildTfIdfVector($proposalText, $corpus);
 
         $scores = [];
 
         foreach ($comparisons as $comparison) {
-            $comparisonText   = $this->buildText($comparison);
-            $comparisonVector = $this->buildTfIdfVector($comparisonText, $allIds, $corpus);
+            $comparisonText = $this->buildText($comparison);
+            $comparisonVector = $this->buildTfIdfVector($comparisonText, $corpus);
             $scores[$comparison->id] = $this->cosineSimilarity($proposalVector, $comparisonVector);
         }
 
@@ -47,16 +47,28 @@ class SimilarityService
         foreach ($top5 as $similarProposalId => $score) {
             $flagged = $score >= $threshold;
 
-            DB::table('similarity_scores')->insert([
-                'id'                  => Str::uuid()->toString(),
-                'proposal_id'         => $proposal->id,
-                'similar_proposal_id' => $similarProposalId,
-                'score'               => round($score, 4),
-                'flagged'             => $flagged,
-                'checked_at'          => now(),
-                'created_at'          => now(),
-                'updated_at'          => now(),
-            ]);
+            if ($proposal->id === $similarProposalId) {
+                continue;
+            }
+
+            // Normalize pair so A < B always — prevents bidirectional duplicates during backfill.
+            $pairA = $proposal->id < $similarProposalId ? $proposal->id : $similarProposalId;
+            $pairB = $proposal->id < $similarProposalId ? $similarProposalId : $proposal->id;
+
+            DB::table('similarity_scores')->upsert(
+                [
+                    'id' => Str::uuid()->toString(),
+                    'proposal_id' => $pairA,
+                    'similar_proposal_id' => $pairB,
+                    'score' => round($score, 4),
+                    'flagged' => $flagged,
+                    'checked_at' => now(),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ],
+                ['proposal_id', 'similar_proposal_id'],
+                ['score', 'flagged', 'checked_at', 'updated_at']
+            );
 
             if ($flagged) {
                 $centralOfficer = User::role('central_officer')->first()
@@ -64,10 +76,10 @@ class SimilarityService
 
                 if ($centralOfficer) {
                     app(NotificationService::class)->send('similarity_flagged', $centralOfficer, [
-                        'proposal_id'         => $proposal->id,
-                        'tracker_number'      => $proposal->tracker_number,
+                        'proposal_id' => $proposal->id,
+                        'tracker_number' => $proposal->tracker_number,
                         'similar_proposal_id' => $similarProposalId,
-                        'score'               => round($score * 100, 1).'%',
+                        'score' => round($score * 100, 1).'%',
                     ]);
                 }
             }
@@ -83,7 +95,8 @@ class SimilarityService
         );
     }
 
-    private function buildCorpus(Proposal $proposal, $comparisons): array
+    /** @param Collection<int, Proposal> $comparisons */
+    private function buildCorpus(Proposal $proposal, Collection $comparisons): array
     {
         $corpus = [$proposal->id => $this->buildText($proposal)];
 
@@ -108,13 +121,13 @@ class SimilarityService
         return array_filter($words, fn ($w) => strlen($w) > 2 && ! in_array($w, $stopwords));
     }
 
-    private function buildTfIdfVector(string $text, array $allDocIds, array $corpus): array
+    private function buildTfIdfVector(string $text, array $corpus): array
     {
-        $tokens   = $this->tokenize($text);
+        $tokens = $this->tokenize($text);
         $docCount = count($corpus);
-        $tf       = array_count_values($tokens);
-        $total    = count($tokens) ?: 1;
-        $vector   = [];
+        $tf = array_count_values($tokens);
+        $total = count($tokens) ?: 1;
+        $vector = [];
 
         foreach ($tf as $term => $count) {
             $termFreq = $count / $total;
@@ -126,8 +139,8 @@ class SimilarityService
                 }
             }
 
-            $idf            = log(($docCount + 1) / ($docsWithTerm + 1)) + 1;
-            $vector[$term]  = $termFreq * $idf;
+            $idf = log(($docCount + 1) / ($docsWithTerm + 1)) + 1;
+            $vector[$term] = $termFreq * $idf;
         }
 
         return $vector;
@@ -135,17 +148,17 @@ class SimilarityService
 
     private function cosineSimilarity(array $v1, array $v2): float
     {
-        $allTerms   = array_unique(array_merge(array_keys($v1), array_keys($v2)));
+        $allTerms = array_unique(array_merge(array_keys($v1), array_keys($v2)));
         $dotProduct = 0;
-        $mag1       = 0;
-        $mag2       = 0;
+        $mag1 = 0;
+        $mag2 = 0;
 
         foreach ($allTerms as $term) {
-            $a           = $v1[$term] ?? 0;
-            $b           = $v2[$term] ?? 0;
+            $a = $v1[$term] ?? 0;
+            $b = $v2[$term] ?? 0;
             $dotProduct += $a * $b;
-            $mag1       += $a * $a;
-            $mag2       += $b * $b;
+            $mag1 += $a * $a;
+            $mag2 += $b * $b;
         }
 
         $magnitude = sqrt($mag1) * sqrt($mag2);

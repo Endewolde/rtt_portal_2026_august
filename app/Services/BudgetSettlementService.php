@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\BudgetRequest;
 use App\Models\BudgetSettlement;
+use App\Models\MidtermEvaluation;
 use App\Models\User;
 
 class BudgetSettlementService
@@ -41,6 +42,29 @@ class BudgetSettlementService
         User $collegeOfficer,
         ?string $notes
     ): BudgetSettlement {
+        if ($settlement->status !== 'submitted') {
+            throw new \Exception(
+                'Settlement must be in submitted status before college verification. Current status: '.$settlement->status
+            );
+        }
+
+        $proposalId = $settlement->budgetRequest?->proposal_id
+            ?? $settlement->load('budgetRequest')->budgetRequest?->proposal_id;
+
+        // The Mid-Term M&E meeting must have been held and scored before the
+        // college officer can verify the settlement. Submitting the progress
+        // report alone is not sufficient — the PI must have presented and
+        // justified their budget usage during the actual evaluation session.
+        $midtermScored = MidtermEvaluation::where('proposal_id', $proposalId)
+            ->whereIn('status', ['scored', 'completed'])
+            ->exists();
+
+        if (! $midtermScored) {
+            throw new \Exception(
+                'The Mid-Term Monitoring & Evaluation meeting must be completed and scored before the college officer can verify the settlement. The PI must present and justify their budget usage during the evaluation session first.'
+            );
+        }
+
         $settlement->update([
             'status' => 'college_verified',
             'college_verified_by' => $collegeOfficer->id,

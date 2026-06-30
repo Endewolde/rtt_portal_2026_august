@@ -3,10 +3,8 @@
 use App\Events\AllSignaturesComplete;
 use App\Events\MemberRefusedSignature;
 use App\Exceptions\UnsignedMembersException;
-use App\Models\BudgetRequest;
 use App\Models\College;
 use App\Models\Department;
-use App\Models\FormSignature;
 use App\Models\FormTemplate;
 use App\Models\Proposal;
 use App\Models\ProposalCall;
@@ -33,7 +31,7 @@ beforeEach(function () {
 function sig_makeRequestWithTwoMembers(): array
 {
     $college = College::create(['name' => 'Sig College '.rand(), 'code' => 'SG'.rand(10, 99)]);
-    $dept    = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'SD'.rand(10, 99)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'SD'.rand(10, 99)]);
 
     $central = User::factory()->create();
     $central->assignRole('central_officer');
@@ -52,11 +50,13 @@ function sig_makeRequestWithTwoMembers(): array
     ]);
 
     $proposal = Proposal::create([
-        'tracker_number'   => 'TRK-'.rand(100000, 999999),
+        'tracker_number' => 'TRK-'.rand(100000, 999999),
         'proposal_call_id' => $call->id, 'category' => 'research',
-        'title'            => 'Sig Proposal', 'status' => 'funded',
-        'pi_user_id'       => $pi->id, 'college_id' => $college->id,
-        'department_id'    => $dept->id, 'academic_year' => '2026', 'created_by' => $pi->id,
+        'title' => 'Sig Proposal', 'status' => 'funded',
+        'pi_user_id' => $pi->id, 'college_id' => $college->id,
+        'department_id' => $dept->id, 'academic_year' => '2026', 'created_by' => $pi->id,
+        'contract_status' => 'approved', 'contract_signed_at' => now(),
+        'contract_signed_by' => $central->id,
     ]);
 
     ProposalMember::create([
@@ -71,7 +71,7 @@ function sig_makeRequestWithTwoMembers(): array
     ]);
 
     $template = FormTemplate::where('name', 'Research Budget Request')->first();
-    $items    = [
+    $items = [
         ['category' => 'Personnel', 'description' => 'RA Salary', 'amount' => 30000, 'justification' => null],
     ];
 

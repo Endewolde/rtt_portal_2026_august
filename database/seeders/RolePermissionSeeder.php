@@ -37,11 +37,16 @@ class RolePermissionSeeder extends Seeder
             'complaints' => ['view_any', 'view', 'create', 'update', 'delete'],
             'budget_allocations' => ['view_any', 'view', 'create', 'update', 'delete'],
             'budget_requests' => ['view_any', 'view', 'create', 'update', 'delete', 'export'],
+            'budget_milestones' => ['view_any', 'view', 'create', 'update', 'delete'],
             'disbursements' => ['view_any', 'view', 'create', 'update', 'delete'],
             'settlements' => ['view_any', 'view', 'create', 'update', 'delete'],
             'midterm_evaluations' => ['view_any', 'view', 'create', 'update', 'delete'],
             'completion_workshops' => ['view_any', 'view', 'create', 'update', 'delete'],
             'research_outputs' => ['view_any', 'view', 'create', 'update', 'delete'],
+            'research_impacts' => ['view_any', 'view', 'create', 'update', 'delete'],
+            'proposal_ai_scores' => ['view', 'generate'],
+            'reviewer_match' => ['view'],
+            'lookup_options' => ['view_any', 'view', 'create', 'update', 'delete', 'reorder'],
             'repository' => ['view_any', 'view', 'export'],
             'reports' => ['view_any', 'view', 'create', 'export'],
             'users' => ['view_any', 'view', 'create', 'update', 'delete', 'import', 'impersonate'],
@@ -83,6 +88,7 @@ class RolePermissionSeeder extends Seeder
             'staff',
             'pi',
             'reviewer',
+            'proposal_archivist',
             'guest',
         ];
 
@@ -118,8 +124,8 @@ class RolePermissionSeeder extends Seeder
             'budget_allocations.create', 'budget_allocations.update', 'budget_allocations.delete',
             'budget_requests.view_any', 'budget_requests.view', 'budget_requests.export',
             'budget_requests.create', 'budget_requests.update', 'budget_requests.delete',
-            'disbursements.view_any', 'disbursements.view', 'disbursements.create', 'disbursements.update',
-            'settlements.view_any', 'settlements.view', 'settlements.create', 'settlements.update',
+            'disbursements.view_any', 'disbursements.view', 'disbursements.create', 'disbursements.update', 'disbursements.delete',
+            'settlements.view_any', 'settlements.view', 'settlements.create', 'settlements.update', 'settlements.delete',
             'reports.view_any', 'reports.view', 'reports.create', 'reports.export',
             'awards.view_any', 'awards.view', 'awards.create', 'awards.update',
             'users.view_any', 'users.view', 'users.create', 'users.update',
@@ -141,7 +147,17 @@ class RolePermissionSeeder extends Seeder
             'completion_workshops.create', 'completion_workshops.update', 'completion_workshops.delete',
             'research_outputs.view_any', 'research_outputs.view',
             'research_outputs.create', 'research_outputs.update', 'research_outputs.delete',
+            'research_impacts.view_any', 'research_impacts.view',
+            'research_impacts.create', 'research_impacts.update', 'research_impacts.delete',
+            'budget_milestones.view_any', 'budget_milestones.view',
+            'budget_milestones.create', 'budget_milestones.update', 'budget_milestones.delete',
             'repository.view_any', 'repository.view', 'repository.export',
+            // AI & matching
+            'proposal_ai_scores.view', 'proposal_ai_scores.generate',
+            'reviewer_match.view',
+            // Lookup options management
+            'lookup_options.view_any', 'lookup_options.view',
+            'lookup_options.create', 'lookup_options.update', 'lookup_options.delete', 'lookup_options.reorder',
         ]);
 
         // ── central_officer: cross-college oversight ──────────────────────────
@@ -173,11 +189,20 @@ class RolePermissionSeeder extends Seeder
             'completion_workshops.view_any', 'completion_workshops.view',
             'completion_workshops.create', 'completion_workshops.update',
             'research_outputs.view_any', 'research_outputs.view', 'research_outputs.update',
+            'research_impacts.view_any', 'research_impacts.view',
+            'research_impacts.create', 'research_impacts.update',
+            'budget_milestones.view_any', 'budget_milestones.view',
+            'budget_milestones.create', 'budget_milestones.update',
             // Finance oversight
             'disbursements.view_any', 'disbursements.view',
             'settlements.view_any', 'settlements.view', 'settlements.update',
             // Repository & data
             'repository.view_any', 'repository.view', 'repository.export',
+            // AI & matching
+            'proposal_ai_scores.view', 'proposal_ai_scores.generate',
+            'reviewer_match.view',
+            // Lookup options (read-only for officers)
+            'lookup_options.view_any', 'lookup_options.view',
         ]);
 
         // ── research_officer ─────────────────────────────────────────────────
@@ -202,6 +227,14 @@ class RolePermissionSeeder extends Seeder
             'external_funds.update', 'external_funds.export',
             'external_funds.manage_agencies', 'external_funds.manage_opportunities',
             'external_funds.review', 'external_funds.manage_awards',
+            // Impact & milestones
+            'research_impacts.view_any', 'research_impacts.view',
+            'research_impacts.create', 'research_impacts.update',
+            'budget_milestones.view_any', 'budget_milestones.view',
+            // AI & matching
+            'proposal_ai_scores.view', 'proposal_ai_scores.generate',
+            'reviewer_match.view',
+            'lookup_options.view_any', 'lookup_options.view',
         ]);
 
         // ── community_officer ────────────────────────────────────────────────
@@ -222,6 +255,14 @@ class RolePermissionSeeder extends Seeder
             'reports.view_any', 'reports.view', 'reports.create', 'reports.export',
             'complaints.view_any', 'complaints.view', 'complaints.update',
             'users.view_any', 'users.view',
+            // Impact & milestones
+            'research_impacts.view_any', 'research_impacts.view',
+            'research_impacts.create', 'research_impacts.update',
+            'budget_milestones.view_any', 'budget_milestones.view',
+            // AI & matching
+            'proposal_ai_scores.view', 'proposal_ai_scores.generate',
+            'reviewer_match.view',
+            'lookup_options.view_any', 'lookup_options.view',
         ]);
 
         // ── technology_officer ───────────────────────────────────────────────
@@ -242,6 +283,14 @@ class RolePermissionSeeder extends Seeder
             'reports.view_any', 'reports.view', 'reports.create', 'reports.export',
             'complaints.view_any', 'complaints.view', 'complaints.update',
             'users.view_any', 'users.view',
+            // Impact & milestones
+            'research_impacts.view_any', 'research_impacts.view',
+            'research_impacts.create', 'research_impacts.update',
+            'budget_milestones.view_any', 'budget_milestones.view',
+            // AI & matching
+            'proposal_ai_scores.view', 'proposal_ai_scores.generate',
+            'reviewer_match.view',
+            'lookup_options.view_any', 'lookup_options.view',
         ]);
 
         // ── college_officer: college-scoped management ───────────────────────
@@ -264,6 +313,16 @@ class RolePermissionSeeder extends Seeder
             'complaints.view_any', 'complaints.view', 'complaints.update',
             'departments.view_any', 'departments.view',
             'users.view_any', 'users.view',
+            // Impact (read), AI scoring & reviewer matching
+            'research_impacts.view_any', 'research_impacts.view',
+            'budget_milestones.view_any', 'budget_milestones.view',
+            'proposal_ai_scores.view', 'proposal_ai_scores.generate',
+            'reviewer_match.view',
+            'lookup_options.view_any', 'lookup_options.view',
+            'disbursements.view_any', 'disbursements.view',
+            'disbursements.create', 'disbursements.update',
+            'settlements.view_any', 'settlements.view',
+            'settlements.create', 'settlements.update',
         ]);
 
         // ── finance_officer: college-scoped budget approvals & disbursements ────
@@ -277,6 +336,9 @@ class RolePermissionSeeder extends Seeder
             'complaints.view_any', 'complaints.view',
             'external_funds.view_any', 'external_funds.view',
             'external_funds.manage_awards', 'external_funds.export',
+            // Budget milestones for finance oversight
+            'budget_milestones.view_any', 'budget_milestones.view',
+            'budget_milestones.create', 'budget_milestones.update',
         ]);
 
         // ── support_officer: finance & support tasks ─────────────────────────
@@ -285,6 +347,8 @@ class RolePermissionSeeder extends Seeder
             'disbursements.view_any', 'disbursements.view', 'disbursements.create', 'disbursements.update',
             'settlements.view_any', 'settlements.view', 'settlements.update',
             'budget_allocations.view_any', 'budget_allocations.view',
+            'budget_milestones.view_any', 'budget_milestones.view',
+            'budget_milestones.create', 'budget_milestones.update',
             'reports.view_any', 'reports.view',
             'proposals.view_any', 'proposals.view',
             'complaints.view_any', 'complaints.view',
@@ -305,16 +369,16 @@ class RolePermissionSeeder extends Seeder
             'proposal_calls.view_any', 'proposal_calls.view',
             'budget_requests.view_any', 'budget_requests.view',
             'budget_requests.create', 'budget_requests.update',
+            'budget_milestones.view_any', 'budget_milestones.view',
             'midterm_evaluations.view_any', 'midterm_evaluations.view',
             'completion_workshops.view_any', 'completion_workshops.view',
             'research_outputs.view_any', 'research_outputs.view',
             'research_outputs.create', 'research_outputs.update',
+            'research_impacts.view_any', 'research_impacts.view',
+            'research_impacts.create', 'research_impacts.update',
             'repository.view_any', 'repository.view',
             'complaints.create', 'complaints.view',
         ]);
-
-        // ── guest: login only, no permissions ────────────────────────────────
-        Role::findByName('guest')->syncPermissions([]);
 
         // ── staff: proposal submission & reviews ─────────────────────────────
         Role::findByName('staff')->syncPermissions([
@@ -325,12 +389,21 @@ class RolePermissionSeeder extends Seeder
             'review_assignments.view_any', 'review_assignments.view', 'review_assignments.update',
             'budget_requests.view_any', 'budget_requests.view',
             'budget_requests.create', 'budget_requests.update',
+            'settlements.view_any', 'settlements.view', 'settlements.create',
+            'budget_milestones.view_any', 'budget_milestones.view',
             'midterm_evaluations.view_any', 'midterm_evaluations.view',
             'completion_workshops.view_any', 'completion_workshops.view',
             'research_outputs.view_any', 'research_outputs.view',
             'research_outputs.create', 'research_outputs.update',
+            'research_impacts.view_any', 'research_impacts.view',
+            'research_impacts.create', 'research_impacts.update',
             'repository.view_any', 'repository.view',
             'complaints.create', 'complaints.view',
+        ]);
+
+        // ── proposal_archivist: read-only access to proposals ─────────────────
+        Role::findByName('proposal_archivist')->syncPermissions([
+            'proposals.view_any', 'proposals.view',
         ]);
     }
 }

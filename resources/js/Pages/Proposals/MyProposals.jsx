@@ -3,7 +3,10 @@ import { Link } from '@inertiajs/react';
 import {
     FolderOpen, Pencil, Search, Trophy, AlertCircle,
     Download, Users, DollarSign, FileSignature, Trash2,
+    GitBranch, ChevronDown, ChevronUp, Loader2, Copy,
+    CheckCircle2, XCircle, Clock,
 } from 'lucide-react';
+import ProposalTimeline from '../../Components/ProposalTimeline';
 import { downloadFile } from '../../lib/download';
 import AppLayout from '../../Layouts/AppLayout';
 import StatusBadge from '../../Components/StatusBadge';
@@ -11,7 +14,8 @@ import ViewToggle from '../../Components/ViewToggle';
 import ProposalTable from '../../Components/ProposalTable';
 import { useViewPreference } from '../../hooks/useViewPreference';
 import { useAuth } from '../../hooks/useAuth';
-import api, { del } from '../../lib/api';
+import { useFeature } from '../../hooks/useFeature';
+import api, { del, post } from '../../lib/api';
 import { useToast } from '../../Components/Toast';
 import { useConfirm } from '../../hooks/useConfirm';
 import { formatDate, formatCurrency, getCategoryLabel } from '../../lib/utils';
@@ -19,14 +23,79 @@ import { formatDate, formatCurrency, getCategoryLabel } from '../../lib/utils';
 const REVIEW_STATUSES  = ['submitted', 'validated', 'under_blind_review', 'blind_review_passed', 'under_open_defence', 'accepted'];
 const AWARDED_STATUSES = ['funded', 'midterm_evaluation', 'completed', 'archived'];
 
+// ─── Co-PI invitation banner ──────────────────────────────────────────────────
+
+function InvitationResponseBanner({ proposal, onRespond }) {
+    const [responding, setResponding] = useState(null); // 'accepted' | 'declined'
+
+    const respond = async (response) => {
+        setResponding(response);
+        try {
+            await onRespond(proposal.my_proposal_member_id, response, proposal.id);
+        } finally {
+            setResponding(null);
+        }
+    };
+
+    return (
+        <div className="mb-3 px-3 py-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
+            <div className="flex items-center gap-2">
+                <Clock size={13} className="text-amber-500 shrink-0" />
+                <p className="text-xs font-semibold text-amber-800">Invitation Pending — Your Response Required</p>
+            </div>
+            <p className="text-xs text-amber-700">
+                You have been invited as a co-investigator on this proposal. Please accept or decline to let the PI know.
+            </p>
+            <div className="flex gap-2 pt-0.5">
+                <button
+                    onClick={() => respond('accepted')}
+                    disabled={!!responding}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-semibold hover:bg-green-700 disabled:opacity-50 transition-colors"
+                >
+                    {responding === 'accepted'
+                        ? <Loader2 size={12} className="animate-spin" />
+                        : <CheckCircle2 size={12} />}
+                    Accept
+                </button>
+                <button
+                    onClick={() => respond('declined')}
+                    disabled={!!responding}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-white text-red-600 border border-red-300 rounded-lg text-xs font-semibold hover:bg-red-50 disabled:opacity-50 transition-colors"
+                >
+                    {responding === 'declined'
+                        ? <Loader2 size={12} className="animate-spin" />
+                        : <XCircle size={12} />}
+                    Decline
+                </button>
+            </div>
+        </div>
+    );
+}
+
 // ─── Proposal card ────────────────────────────────────────────────────────────
 
-function ProposalCard({ proposal, isCoPI, userId, pendingBudgetIds, onViewReason, onDelete }) {
+function ProposalCard({ proposal, isCoPI, userId, pendingBudgetIds, onViewReason, onDelete, onClone, onRespond }) {
     const isDraft    = proposal.status === 'draft';
     const isReview   = REVIEW_STATUSES.includes(proposal.status);
     const isAwarded  = AWARDED_STATUSES.includes(proposal.status);
     const isRejected = proposal.status === 'rejected';
     const hasPending = pendingBudgetIds.has(proposal.id);
+
+    const [timelineOpen, setTimelineOpen] = useState(false);
+    const [timelineData, setTimelineData] = useState(null);
+    const [timelineLoading, setTimelineLoading] = useState(false);
+
+    const toggleTimeline = async () => {
+        if (!timelineOpen && !timelineData) {
+            setTimelineLoading(true);
+            try {
+                const r = await api.get(`/proposals/${proposal.id}/workflow-history`);
+                setTimelineData(r.data?.data ?? []);
+            } catch { setTimelineData([]); }
+            finally { setTimelineLoading(false); }
+        }
+        setTimelineOpen(v => !v);
+    };
 
     const membership = (proposal.members ?? []).find(m => m.user_id === userId);
 
@@ -105,6 +174,20 @@ function ProposalCard({ proposal, isCoPI, userId, pendingBudgetIds, onViewReason
                     </div>
                 )}
 
+                {/* Co-PI invitation response */}
+                {isCoPI && proposal.my_invitation_status === 'pending' && onRespond && (
+                    <InvitationResponseBanner
+                        proposal={proposal}
+                        onRespond={onRespond}
+                    />
+                )}
+                {isCoPI && proposal.my_invitation_status === 'declined' && (
+                    <div className="mb-3 flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-xl">
+                        <XCircle size={13} className="text-red-500 shrink-0" />
+                        <p className="text-xs font-medium text-red-700">You declined this co-investigator invitation</p>
+                    </div>
+                )}
+
                 {/* Actions */}
                 <div className="flex flex-wrap gap-2">
                     {/* Draft — only PI can continue or delete */}
@@ -177,12 +260,44 @@ function ProposalCard({ proposal, isCoPI, userId, pendingBudgetIds, onViewReason
                         </button>
                     )}
 
+                    {/* Timeline toggle */}
+                    {!isDraft && (
+                        <button onClick={toggleTimeline}
+                            className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-500 rounded-lg text-xs font-medium hover:bg-gray-50 hover:text-indigo-600 hover:border-indigo-200 transition-colors">
+                            {timelineLoading
+                                ? <Loader2 size={12} className="animate-spin" />
+                                : <GitBranch size={12} />
+                            }
+                            History
+                            {timelineOpen ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                        </button>
+                    )}
+
+                    {/* Clone — available to PI on non-draft proposals */}
+                    {!isCoPI && !isDraft && (
+                        <button onClick={() => onClone(proposal)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-500 rounded-lg text-xs font-medium hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-colors">
+                            <Copy size={12} /> Clone
+                        </button>
+                    )}
+
                     {/* View details — always shown */}
                     <Link href={`/proposals/${proposal.id}`}
                         className="px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-50">
                         View Details
                     </Link>
                 </div>
+
+                {/* Workflow history */}
+                {timelineOpen && (
+                    <div className="mt-4 pt-4 border-t border-gray-100">
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Workflow History</p>
+                        {timelineData?.length > 0
+                            ? <ProposalTimeline history={timelineData} currentStatus={proposal.status} />
+                            : <p className="text-xs text-gray-400 italic">No workflow history recorded yet.</p>
+                        }
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -246,6 +361,47 @@ export default function MyProposals() {
         }
     };
 
+    const { hasSubFeature } = useFeature();
+    const showInvitations = hasSubFeature('workflow.co_pi_acceptance');
+
+    const handleRespondInvitation = async (memberId, response, proposalId) => {
+        try {
+            await post(`/proposal-members/${memberId}/respond-invitation`, { response });
+            setCoProposals(prev => prev.map(p =>
+                p.id === proposalId
+                    ? { ...p, my_invitation_status: response }
+                    : p
+            ));
+            success(response === 'accepted'
+                ? 'You have accepted the co-investigator invitation.'
+                : 'You have declined the co-investigator invitation.');
+        } catch (err) {
+            error(err.response?.data?.message ?? 'Failed to record your response.');
+        }
+    };
+
+    const pendingInvitations = showInvitations
+        ? coProposals.filter(p => p.my_invitation_status === 'pending')
+        : [];
+
+    const handleCloneProposal = async (proposal) => {
+        const ok = await confirm({
+            title:        'Clone this proposal?',
+            description:  `A new draft copy of "${proposal.title}" will be created in your proposals.`,
+            confirmLabel: 'Clone',
+        });
+        if (!ok) return;
+        try {
+            const r = await api.post(`/proposals/${proposal.id}/clone`);
+            const clone = r.data?.data;
+            success(`Proposal cloned as ${clone.tracker_number}. You can find it in your drafts.`);
+            // Re-fetch proposals to show the new clone
+            setMyProposals(prev => [{ ...clone, status: 'draft' }, ...prev]);
+        } catch (err) {
+            error(err.response?.data?.message ?? 'Failed to clone proposal.');
+        }
+    };
+
     const allProposals = [...myProposals, ...coProposals];
     const coProposalIds = new Set(coProposals.map(p => p.id));
     const pendingCount  = pendingBudgetProposalIds.size;
@@ -275,6 +431,23 @@ export default function MyProposals() {
     return (
         <AppLayout breadcrumb="My Proposals">
             <div className="max-w-5xl mx-auto space-y-6">
+
+                {/* Pending invitation alert */}
+                {pendingInvitations.length > 0 && (
+                    <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                        <Clock size={16} className="text-amber-500 shrink-0 mt-0.5" />
+                        <div>
+                            <p className="text-sm font-semibold text-amber-800">
+                                {pendingInvitations.length === 1
+                                    ? 'You have a pending co-investigator invitation'
+                                    : `You have ${pendingInvitations.length} pending co-investigator invitations`}
+                            </p>
+                            <p className="text-xs text-amber-700 mt-0.5">
+                                Switch to the <strong>As Co-PI</strong> tab to accept or decline.
+                            </p>
+                        </div>
+                    </div>
+                )}
 
                 {/* Header */}
                 <div className="flex items-center justify-between gap-4">
@@ -405,6 +578,8 @@ export default function MyProposals() {
                                 pendingBudgetIds={pendingBudgetProposalIds}
                                 onViewReason={setReasonModal}
                                 onDelete={handleDeleteProposal}
+                                onClone={handleCloneProposal}
+                                onRespond={showInvitations ? handleRespondInvitation : null}
                             />
                         ))}
                     </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { router } from '@inertiajs/react';
-import { DollarSign, Plus, Trash2 } from 'lucide-react';
+import { DollarSign, Plus, Trash2, AlertTriangle } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import { get, post } from '../../lib/api';
 import { formatCurrency } from '../../lib/utils';
@@ -18,6 +18,7 @@ export default function BudgetRequestCreate() {
     const [proposals, setProposals] = useState([]);
     const [proposalId, setProposalId] = useState('');
     const [fundingRound, setFundingRound] = useState(1);
+    const selectedProposal = proposals.find(p => p.id === proposalId);
     const [items, setItems] = useState([emptyItem()]);
     const [notes, setNotes] = useState('');
     const [loading, setLoading] = useState(false);
@@ -109,6 +110,18 @@ export default function BudgetRequestCreate() {
                             </select>
                             {errors.proposal_id && (
                                 <p className="text-xs text-red-500 mt-1">{errors.proposal_id[0]}</p>
+                            )}
+                            {selectedProposal && selectedProposal.contract_status !== 'approved' && fundingRound === 1 && (
+                                <div className="mt-2 flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+                                    <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+                                    <span>
+                                        {selectedProposal.contract_status === 'pending'
+                                            ? 'Your contract is under review. Budget requests cannot be submitted until it is approved by an officer.'
+                                            : selectedProposal.contract_status === 'rejected'
+                                            ? 'Your contract submission was returned for correction. Please resubmit from your proposal page.'
+                                            : 'No signed contract has been uploaded yet. Please upload it from your proposal page before submitting a budget request.'}
+                                    </span>
+                                </div>
                             )}
                         </div>
                         <div>

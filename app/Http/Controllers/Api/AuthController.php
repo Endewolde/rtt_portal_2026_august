@@ -148,6 +148,12 @@ class AuthController extends Controller
 
     public function updateProfile(Request $request): JsonResponse
     {
+        $user = $request->user();
+
+        if (! $user) {
+            return response()->json(['message' => 'Unauthenticated.'], 401);
+        }
+
         $validated = $request->validate([
             'name' => ['sometimes', 'string', 'max:255'],
             'phone' => ['sometimes', 'nullable', 'string', 'max:30'],
@@ -160,9 +166,9 @@ class AuthController extends Controller
             'expertise.*' => ['string', 'max:100'],
         ]);
 
-        $request->user()->update($validated);
+        $user->update($validated);
 
-        $user = $request->user()->fresh()->load('roles');
+        $user = $user->fresh()->load('roles');
 
         return response()->json([
             'data' => ['user' => $this->buildUserPayload($user)],

@@ -3,11 +3,12 @@ import {
     Award, CheckCircle2, Clock, X, ChevronRight,
     FileText, Upload, Star, AlertTriangle, Plus,
     Calendar, MapPin, Link, XCircle, PauseCircle,
+    MessageCircle, Send, Reply, Loader2, Paperclip,
 } from 'lucide-react'
 import AppLayout from '../../Layouts/AppLayout'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../Components/Toast'
-import { formatDate, formatCurrency } from '../../lib/utils'
+import { formatDate } from '../../lib/utils'
 import api from '../../lib/api'
 
 // ─── Status config ─────────────────────────────────────────────────────────────
@@ -93,7 +94,6 @@ function ScheduleModal({ eligibleProposals, onClose, onSuccess }) {
                         ))}
                     </div>
 
-                    {/* Individual: proposal selector */}
                     {mode === 'individual' && (
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Proposal (midterm passed) *</label>
@@ -115,7 +115,6 @@ function ScheduleModal({ eligibleProposals, onClose, onSuccess }) {
                         </div>
                     )}
 
-                    {/* College bulk: info box */}
                     {mode === 'college' && (
                         <div className="border border-amber-200 bg-amber-50 rounded-xl px-4 py-3 text-sm text-amber-700">
                             {eligibleProposals.length === 0
@@ -172,6 +171,7 @@ function ScheduleModal({ eligibleProposals, onClose, onSuccess }) {
 function FinalizeModal({ workshop, onClose, onSuccess }) {
     const { error } = useToast()
     const [score,   setScore]   = useState('')
+    const [remarks, setRemarks] = useState('')
     const [saving,  setSaving]  = useState(false)
 
     const submit = async () => {
@@ -179,7 +179,7 @@ function FinalizeModal({ workshop, onClose, onSuccess }) {
         if (isNaN(s) || s < 0 || s > 100) return error('Enter a valid score between 0 and 100.')
         setSaving(true)
         try {
-            await api.post(`/completion-workshops/${workshop.id}/finalize`, { final_score: s })
+            await api.post(`/completion-workshops/${workshop.id}/finalize`, { final_score: s, evaluator_remarks: remarks })
             onSuccess()
         } catch (e) {
             error(e.response?.data?.message ?? 'Failed to finalize workshop.')
@@ -207,6 +207,12 @@ function FinalizeModal({ workshop, onClose, onSuccess }) {
                             onChange={e => setScore(e.target.value)}
                             className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-2xl font-bold text-center focus:outline-none focus:ring-2 focus:ring-green-500"
                             placeholder="0 – 100" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Evaluator Remarks (optional)</label>
+                        <textarea rows={3} value={remarks} onChange={e => setRemarks(e.target.value)}
+                            placeholder="Overall feedback on the presentation…"
+                            className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none" />
                     </div>
                 </div>
                 <div className="flex gap-3 px-6 pb-6">
@@ -285,16 +291,202 @@ function StatusModal({ workshop, onClose, onSuccess }) {
     )
 }
 
-// ─── Workshop card ────────────────────────────────────────────────────────────
+// ─── Q&A thread ───────────────────────────────────────────────────────────────
 
-function WorkshopCard({ workshop, isOfficer, onRefresh }) {
-    const [expanded,      setExpanded]      = useState(false)
-    const [showFinalize,  setShowFinalize]  = useState(false)
-    const [showStatus,    setShowStatus]    = useState(false)
+function QAThread({ workshopId, currentUserId, isPI, isOfficer }) {
+    const { success, error } = useToast()
+    const [questions,    setQuestions]    = useState([])
+    const [loading,      setLoading]      = useState(true)
+    const [newQ,         setNewQ]         = useState('')
+    const [posting,      setPosting]      = useState(false)
+    const [answeringId,  setAnsweringId]  = useState(null)
+    const [answerText,   setAnswerText]   = useState('')
+    const [savingAnswer, setSavingAnswer] = useState(false)
 
-    const proposal = workshop.proposal
-    const canFinalize     = isOfficer && workshop.status === 'scheduled'
-    const canChangeStatus = isOfficer && workshop.status === 'scheduled'
+    useEffect(() => {
+        api.get(`/completion-workshops/${workshopId}/questions`)
+            .then(r => setQuestions(r.data?.data ?? []))
+            .catch(() => {})
+            .finally(() => setLoading(false))
+    }, [workshopId])
+
+    const postQuestion = async () => {
+        if (!newQ.trim()) return
+        setPosting(true)
+        try {
+            const res = await api.post(`/completion-workshops/${workshopId}/questions`, { question: newQ })
+            setQuestions(prev => [...prev, res.data?.data])
+            setNewQ('')
+        } catch (e) {
+            error(e.response?.data?.message ?? 'Failed to post question.')
+        }
+        setPosting(false)
+    }
+
+    const submitAnswer = async (questionId) => {
+        if (!answerText.trim()) return
+        setSavingAnswer(true)
+        try {
+            const res = await api.patch(`/completion-workshops/${workshopId}/questions/${questionId}/answer`, { answer: answerText })
+            setQuestions(prev => prev.map(q => q.id === questionId ? res.data?.data : q))
+            setAnsweringId(null)
+            setAnswerText('')
+            success('Answer posted.')
+        } catch (e) {
+            error(e.response?.data?.message ?? 'Failed to post answer.')
+        }
+        setSavingAnswer(false)
+    }
+
+    const deleteQuestion = async (questionId) => {
+        try {
+            await api.delete(`/completion-workshops/${workshopId}/questions/${questionId}`)
+            setQuestions(prev => prev.filter(q => q.id !== questionId))
+        } catch (e) {
+            error('Failed to delete question.')
+        }
+    }
+
+    return (
+        <div className="border border-blue-100 rounded-xl bg-blue-50/30">
+            <div className="flex items-center gap-2 px-4 py-3 border-b border-blue-100">
+                <MessageCircle size={14} className="text-blue-600" />
+                <span className="text-xs font-semibold text-blue-700">Questions & Discussion</span>
+                {questions.length > 0 && (
+                    <span className="ml-auto text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-bold">
+                        {questions.length}
+                    </span>
+                )}
+            </div>
+
+            <div className="p-4 space-y-3">
+                {loading ? (
+                    <div className="flex items-center justify-center py-4">
+                        <Loader2 size={16} className="animate-spin text-blue-400" />
+                    </div>
+                ) : questions.length === 0 ? (
+                    <p className="text-xs text-gray-400 text-center py-2">
+                        No questions yet. Be the first to ask!
+                    </p>
+                ) : (
+                    <div className="space-y-3">
+                        {questions.map(q => (
+                            <div key={q.id} className="bg-white border border-gray-100 rounded-xl p-3 space-y-2">
+                                {/* Question */}
+                                <div className="flex items-start gap-2">
+                                    <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center text-[10px] font-bold text-indigo-700 shrink-0 mt-0.5">
+                                        {q.user?.name?.[0] ?? '?'}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-1.5 mb-1">
+                                            <span className="text-xs font-semibold text-gray-800">{q.user?.name}</span>
+                                            <span className="text-[10px] text-gray-400">
+                                                {q.created_at ? new Date(q.created_at).toLocaleDateString() : ''}
+                                            </span>
+                                        </div>
+                                        <p className="text-xs text-gray-700 leading-relaxed">{q.question}</p>
+                                    </div>
+                                    {(q.user_id === currentUserId) && !q.answer && (
+                                        <button onClick={() => deleteQuestion(q.id)}
+                                            className="text-gray-300 hover:text-red-400 shrink-0">
+                                            <X size={12} />
+                                        </button>
+                                    )}
+                                </div>
+
+                                {/* Existing answer */}
+                                {q.answer && (
+                                    <div className="ml-8 pl-3 border-l-2 border-green-200">
+                                        <div className="flex items-center gap-1.5 mb-1">
+                                            <Reply size={10} className="text-green-600" />
+                                            <span className="text-[10px] font-semibold text-green-700">{q.answered_by?.name}</span>
+                                            <span className="text-[10px] text-gray-400">answered</span>
+                                        </div>
+                                        <p className="text-xs text-gray-700 leading-relaxed">{q.answer}</p>
+                                    </div>
+                                )}
+
+                                {/* Answer input */}
+                                {(isPI || isOfficer) && !q.answer && answeringId !== q.id && (
+                                    <button onClick={() => { setAnsweringId(q.id); setAnswerText('') }}
+                                        className="ml-8 flex items-center gap-1 text-[10px] text-green-600 hover:text-green-700 font-medium">
+                                        <Reply size={10} /> Answer
+                                    </button>
+                                )}
+                                {answeringId === q.id && (
+                                    <div className="ml-8 space-y-2">
+                                        <textarea
+                                            rows={2}
+                                            value={answerText}
+                                            onChange={e => setAnswerText(e.target.value)}
+                                            placeholder="Type your answer…"
+                                            className="w-full text-xs border border-green-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-green-400 resize-none"
+                                        />
+                                        <div className="flex gap-2">
+                                            <button onClick={() => submitAnswer(q.id)} disabled={savingAnswer || !answerText.trim()}
+                                                className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 disabled:opacity-50">
+                                                {savingAnswer ? <Loader2 size={10} className="animate-spin" /> : <Send size={10} />}
+                                                Post Answer
+                                            </button>
+                                            <button onClick={() => setAnsweringId(null)}
+                                                className="px-3 py-1.5 text-xs text-gray-500 hover:text-gray-700">
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {/* Post new question */}
+                <div className="flex gap-2">
+                    <input
+                        type="text"
+                        value={newQ}
+                        onChange={e => setNewQ(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && !e.shiftKey && postQuestion()}
+                        placeholder="Ask a question or leave a comment…"
+                        className="flex-1 text-xs border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    />
+                    <button onClick={postQuestion} disabled={posting || !newQ.trim()}
+                        className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white text-xs font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-50">
+                        {posting ? <Loader2 size={12} className="animate-spin" /> : <Send size={12} />}
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// ─── File upload strip (for PI/team when workshop is scheduled) ───────────────
+
+function UploadStrip({ workshopId, workshop, onUploaded }) {
+    const { success, error } = useToast()
+    const fileRef = useRef(null)
+    const [uploading, setUploading] = useState(false)
+    const [uploadType, setUploadType] = useState('presentation')
+
+    const handleFile = async (e) => {
+        const file = e.target.files?.[0]
+        if (!file) return
+        setUploading(true)
+        const fd = new FormData()
+        fd.append('file', file)
+        fd.append('type', uploadType)
+        try {
+            await api.post(`/completion-workshops/${workshopId}/upload`, fd, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            })
+            success(`${uploadType === 'report' ? 'Report' : 'Presentation'} uploaded.`)
+            onUploaded()
+        } catch (e) {
+            error(e.response?.data?.message ?? 'Upload failed.')
+        }
+        setUploading(false)
+        e.target.value = ''
+    }
 
     const fileCount = (
         (workshop.presentation_files?.length ?? 0) +
@@ -304,10 +496,71 @@ function WorkshopCard({ workshop, isOfficer, onRefresh }) {
     )
 
     return (
+        <div className="border border-indigo-100 rounded-xl bg-indigo-50/40 p-4">
+            <div className="flex items-center gap-2 mb-3">
+                <Paperclip size={14} className="text-indigo-600" />
+                <span className="text-xs font-semibold text-indigo-700">Upload Your Presentation / Report</span>
+                {fileCount > 0 && (
+                    <span className="ml-auto text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-bold">
+                        {fileCount} file{fileCount !== 1 ? 's' : ''} uploaded
+                    </span>
+                )}
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+                <select value={uploadType} onChange={e => setUploadType(e.target.value)}
+                    className="text-xs border border-indigo-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-400 bg-white">
+                    <option value="presentation">Presentation (PPT/PDF)</option>
+                    <option value="report">Final Report</option>
+                    <option value="photo">Photo</option>
+                </select>
+                <input ref={fileRef} type="file" className="hidden" onChange={handleFile}
+                    accept=".pdf,.ppt,.pptx,.doc,.docx,.jpg,.jpeg,.png" />
+                <button onClick={() => fileRef.current?.click()} disabled={uploading}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50">
+                    {uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+                    {uploading ? 'Uploading…' : 'Choose File'}
+                </button>
+                <span className="text-[10px] text-gray-400">PDF, PPT, PPTX, DOC, DOCX, JPG, PNG · max 50MB</span>
+            </div>
+        </div>
+    )
+}
+
+// ─── Workshop card ────────────────────────────────────────────────────────────
+
+function WorkshopCard({ workshop, isOfficer, currentUserId, onRefresh }) {
+    const [expanded,      setExpanded]      = useState(false)
+    const [showFinalize,  setShowFinalize]  = useState(false)
+    const [showStatus,    setShowStatus]    = useState(false)
+    const [workshopData,  setWorkshopData]  = useState(workshop)
+
+    const proposal  = workshopData.proposal
+    const isPI      = proposal?.pi_user_id === currentUserId
+    const canUpload = (isPI || isOfficer) && workshopData.status === 'scheduled'
+    const canFinalize     = isOfficer && workshopData.status === 'scheduled'
+    const canChangeStatus = isOfficer && workshopData.status === 'scheduled'
+
+    const reloadWorkshop = async () => {
+        try {
+            const res = await api.get(`/completion-workshops/${workshopData.id}`)
+            setWorkshopData(res.data?.data ?? workshopData)
+        } catch {
+            onRefresh()
+        }
+    }
+
+    const fileCount = (
+        (workshopData.presentation_files?.length ?? 0) +
+        (workshopData.photos?.length ?? 0) +
+        (workshopData.videos?.length ?? 0) +
+        (workshopData.final_report_path ? 1 : 0)
+    )
+
+    return (
         <div className={`bg-white border rounded-2xl overflow-hidden hover:shadow-sm transition-shadow ${
-            workshop.status === 'completed' ? 'border-green-200' :
-            workshop.status === 'cancelled' ? 'border-red-200'   :
-            workshop.status === 'postponed' ? 'border-amber-200' : 'border-gray-200'
+            workshopData.status === 'completed' ? 'border-green-200' :
+            workshopData.status === 'cancelled' ? 'border-red-200'   :
+            workshopData.status === 'postponed' ? 'border-amber-200' : 'border-gray-200'
         }`}>
             {/* Card header */}
             <div className="px-5 py-4 flex items-center justify-between cursor-pointer"
@@ -319,10 +572,15 @@ function WorkshopCard({ workshop, isOfficer, onRefresh }) {
                     <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2 mb-0.5">
                             <span className="font-mono text-xs font-bold text-yellow-700">{proposal?.tracker_number}</span>
-                            <StatusBadge status={workshop.status} />
-                            {workshop.final_score != null && (
+                            <StatusBadge status={workshopData.status} />
+                            {workshopData.final_score != null && (
                                 <span className="text-xs px-2 py-0.5 rounded-full font-semibold bg-green-100 text-green-700">
-                                    Score: {workshop.final_score}/100
+                                    Score: {workshopData.final_score}/100
+                                </span>
+                            )}
+                            {fileCount > 0 && (
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 border border-indigo-100">
+                                    <Paperclip size={9} className="inline mr-0.5" />{fileCount}
                                 </span>
                             )}
                         </div>
@@ -330,17 +588,17 @@ function WorkshopCard({ workshop, isOfficer, onRefresh }) {
                         <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 mt-0.5">
                             <span>{proposal?.college?.name}</span>
                             <span>PI: {proposal?.pi?.name}</span>
-                            {workshop.scheduled_date && (
+                            {workshopData.scheduled_date && (
                                 <span className="flex items-center gap-1">
                                     <Calendar size={10} />
-                                    {formatDate(workshop.scheduled_date)}
-                                    {workshop.scheduled_time && ` · ${workshop.scheduled_time.slice(0, 5)}`}
+                                    {formatDate(workshopData.scheduled_date)}
+                                    {workshopData.scheduled_time && ` · ${workshopData.scheduled_time.slice(0, 5)}`}
                                 </span>
                             )}
-                            {workshop.venue && (
+                            {workshopData.venue && (
                                 <span className="flex items-center gap-1">
                                     <MapPin size={10} />
-                                    {workshop.venue}
+                                    {workshopData.venue}
                                 </span>
                             )}
                         </div>
@@ -354,11 +612,11 @@ function WorkshopCard({ workshop, isOfficer, onRefresh }) {
                 <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/50">
 
                     {/* Online link */}
-                    {workshop.online_link && (
+                    {workshopData.online_link && (
                         <div className="flex items-center gap-2 text-sm text-blue-600">
                             <Link size={14} />
-                            <a href={workshop.online_link} target="_blank" rel="noopener noreferrer"
-                                className="hover:underline truncate">{workshop.online_link}</a>
+                            <a href={workshopData.online_link} target="_blank" rel="noopener noreferrer"
+                                className="hover:underline truncate">{workshopData.online_link}</a>
                         </div>
                     )}
 
@@ -385,59 +643,76 @@ function WorkshopCard({ workshop, isOfficer, onRefresh }) {
                     </div>
 
                     {/* Evidence summary */}
-                    {(workshop.presentation_files?.length > 0 || workshop.photos?.length > 0 ||
-                        workshop.videos?.length > 0 || workshop.final_report_path) && (
+                    {(workshopData.presentation_files?.length > 0 || workshopData.photos?.length > 0 ||
+                        workshopData.videos?.length > 0 || workshopData.final_report_path) && (
                         <div className="border border-gray-200 rounded-xl p-3 bg-white space-y-1">
                             <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Evidence Uploaded</p>
-                            {workshop.final_report_path && (
+                            {workshopData.final_report_path && (
                                 <div className="flex items-center gap-2 text-xs text-gray-600">
                                     <FileText size={12} className="text-blue-500" /> Final Report
                                 </div>
                             )}
-                            {workshop.presentation_files?.length > 0 && (
+                            {workshopData.presentation_files?.length > 0 && (
                                 <div className="flex items-center gap-2 text-xs text-gray-600">
                                     <FileText size={12} className="text-purple-500" />
-                                    {workshop.presentation_files.length} Presentation File(s)
+                                    {workshopData.presentation_files.length} Presentation File(s)
                                 </div>
                             )}
-                            {workshop.photos?.length > 0 && (
+                            {workshopData.photos?.length > 0 && (
                                 <div className="flex items-center gap-2 text-xs text-gray-600">
-                                    <FileText size={12} className="text-green-500" /> {workshop.photos.length} Photo(s)
+                                    <FileText size={12} className="text-green-500" /> {workshopData.photos.length} Photo(s)
                                 </div>
                             )}
-                            {workshop.videos?.length > 0 && (
+                            {workshopData.videos?.length > 0 && (
                                 <div className="flex items-center gap-2 text-xs text-gray-600">
-                                    <FileText size={12} className="text-red-500" /> {workshop.videos.length} Video(s)
+                                    <FileText size={12} className="text-red-500" /> {workshopData.videos.length} Video(s)
                                 </div>
                             )}
                         </div>
                     )}
 
+                    {/* Upload strip for PI and officers */}
+                    {canUpload && (
+                        <UploadStrip
+                            workshopId={workshopData.id}
+                            workshop={workshopData}
+                            onUploaded={reloadWorkshop}
+                        />
+                    )}
+
+                    {/* Q&A thread */}
+                    <QAThread
+                        workshopId={workshopData.id}
+                        currentUserId={currentUserId}
+                        isPI={isPI}
+                        isOfficer={isOfficer}
+                    />
+
                     {/* Evaluator remarks */}
-                    {workshop.evaluator_remarks && (
+                    {workshopData.evaluator_remarks && (
                         <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
                             <p className="text-xs font-semibold text-purple-700 mb-0.5">Evaluator Remarks</p>
-                            <p className="text-xs text-purple-600 whitespace-pre-line">{workshop.evaluator_remarks}</p>
+                            <p className="text-xs text-purple-600 whitespace-pre-line">{workshopData.evaluator_remarks}</p>
                         </div>
                     )}
 
                     {/* Completed state */}
-                    {workshop.status === 'completed' && (
+                    {workshopData.status === 'completed' && (
                         <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
                             <CheckCircle2 size={16} className="text-green-600 shrink-0" />
                             <p className="text-sm font-semibold text-green-700">
-                                Workshop completed · Final score: {workshop.final_score}/100 · Archival queued in 30 days
+                                Workshop completed · Final score: {workshopData.final_score}/100 · Archival queued in 30 days
                             </p>
                         </div>
                     )}
 
                     {/* Scheduled by */}
                     <p className="text-xs text-gray-400">
-                        Scheduled by {workshop.scheduled_by_user?.name ?? workshop.scheduledBy?.name ?? '—'}
-                        {workshop.created_at && ` on ${formatDate(workshop.created_at)}`}
+                        Scheduled by {workshopData.scheduled_by_user?.name ?? workshopData.scheduledBy?.name ?? '—'}
+                        {workshopData.created_at && ` on ${formatDate(workshopData.created_at)}`}
                     </p>
 
-                    {/* Actions */}
+                    {/* Officer actions */}
                     {(canFinalize || canChangeStatus) && (
                         <div className="flex flex-wrap gap-2 pt-1 border-t border-gray-100">
                             {canFinalize && (
@@ -459,14 +734,14 @@ function WorkshopCard({ workshop, isOfficer, onRefresh }) {
 
             {showFinalize && (
                 <FinalizeModal
-                    workshop={workshop}
+                    workshop={workshopData}
                     onClose={() => setShowFinalize(false)}
                     onSuccess={() => { setShowFinalize(false); onRefresh() }}
                 />
             )}
             {showStatus && (
                 <StatusModal
-                    workshop={workshop}
+                    workshop={workshopData}
                     onClose={() => setShowStatus(false)}
                     onSuccess={() => { setShowStatus(false); onRefresh() }}
                 />
@@ -478,10 +753,10 @@ function WorkshopCard({ workshop, isOfficer, onRefresh }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function CompletionWorkshops() {
-    const { hasAnyRole } = useAuth()
+    const { hasAnyRole, user } = useAuth()
     const { success, error } = useToast()
 
-    const isOfficer = hasAnyRole(['super_admin', 'central_office', 'college_admin', 'college_officer',
+    const isOfficer = hasAnyRole(['super_admin', 'admin', 'central_officer', 'college_officer',
                                    'research_officer', 'community_officer', 'technology_officer'])
 
     const [workshops,         setWorkshops]         = useState([])
@@ -572,10 +847,11 @@ export default function CompletionWorkshops() {
                     <p className="text-xs font-semibold text-gray-500 uppercase mb-3">Completion Workshop Lifecycle</p>
                     <div className="flex items-center gap-2 overflow-x-auto">
                         {[
-                            { icon: '📊', label: 'Midterm Passed',   desc: '"Continue" recommendation' },
+                            { icon: '📊', label: 'Midterm Passed',    desc: '"Continue" recommendation' },
                             { icon: '📅', label: 'Workshop Scheduled', desc: 'Date, venue & PI notified' },
-                            { icon: '🎤', label: 'Presentation',      desc: 'PI presents final outcomes' },
-                            { icon: '⭐', label: 'Final Score',        desc: 'Officer scores 0–100' },
+                            { icon: '📤', label: 'PI Uploads Slides',  desc: 'PPT / report uploaded' },
+                            { icon: '💬', label: 'Q&A Discussion',     desc: 'Participants ask questions' },
+                            { icon: '⭐', label: 'Final Score',         desc: 'Officer scores 0–100' },
                             { icon: '🗂️', label: 'Archival (30 days)', desc: 'Auto-archived after 30 days' },
                         ].map((s, i) => (
                             <div key={s.label} className="flex items-center gap-2 shrink-0">
@@ -586,7 +862,7 @@ export default function CompletionWorkshops() {
                                     <p className="text-xs font-semibold text-yellow-700">{s.label}</p>
                                     <p className="text-xs text-gray-400">{s.desc}</p>
                                 </div>
-                                {i < 4 && <ChevronRight size={14} className="text-gray-300 shrink-0" />}
+                                {i < 5 && <ChevronRight size={14} className="text-gray-300 shrink-0" />}
                             </div>
                         ))}
                     </div>
@@ -649,6 +925,7 @@ export default function CompletionWorkshops() {
                                 key={w.id}
                                 workshop={w}
                                 isOfficer={isOfficer}
+                                currentUserId={user?.id}
                                 onRefresh={load}
                             />
                         ))}

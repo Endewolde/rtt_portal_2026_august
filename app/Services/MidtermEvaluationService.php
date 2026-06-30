@@ -33,12 +33,12 @@ class MidtermEvaluationService
         }
 
         $evaluation = MidtermEvaluation::create([
-            'proposal_id'     => $proposal->id,
+            'proposal_id' => $proposal->id,
             'evaluation_date' => $evaluationDate->toDateString(),
             'evaluation_time' => $evaluationTime,
-            'venue'           => $venue,
-            'status'          => 'scheduled',
-            'scheduled_by'    => $scheduledBy->id,
+            'venue' => $venue,
+            'status' => 'scheduled',
+            'scheduled_by' => $scheduledBy->id,
         ]);
 
         $this->workflowService->transition(
@@ -51,8 +51,8 @@ class MidtermEvaluationService
         $pi = User::find($proposal->pi_user_id);
         if ($pi) {
             $this->notificationService->send('midterm_scheduled', $pi, [
-                'proposal_id'     => $proposal->id,
-                'tracker_number'  => $proposal->tracker_number,
+                'proposal_id' => $proposal->id,
+                'tracker_number' => $proposal->tracker_number,
                 'evaluation_date' => $evaluationDate->toDateString(),
             ]);
         }
@@ -70,33 +70,37 @@ class MidtermEvaluationService
         User $_pi,
         array $data
     ): MidtermEvaluation {
-        if ($evaluation->status !== 'scheduled') {
+        if (! in_array($evaluation->status, ['scheduled', 'report_submitted'])) {
             throw new \Exception(
-                "Report can only be submitted for scheduled evaluations. Current: {$evaluation->status}"
+                'Report cannot be edited after the evaluation has been scored.'
             );
         }
 
+        $alreadySubmitted = $evaluation->status === 'report_submitted';
+
         $evaluation->update([
-            'status'                           => 'report_submitted',
-            'progress_summary'                 => $data['progress_summary'],
+            'status' => 'report_submitted',
+            'progress_summary' => $data['progress_summary'],
             'financial_utilization_percentage' => $data['financial_utilization_percentage'] ?? null,
-            'publications_count'               => $data['publications_count'] ?? 0,
-            'challenges'                       => $data['challenges'] ?? null,
-            'milestones_achieved'              => $data['milestones_achieved'] ?? null,
-            'milestones_missed'                => $data['milestones_missed'] ?? null,
-            'progress_report_path'             => $data['progress_report_path'] ?? null,
-            'financial_report_path'            => $data['financial_report_path'] ?? null,
+            'publications_count' => $data['publications_count'] ?? 0,
+            'challenges' => $data['challenges'] ?? null,
+            'milestones_achieved' => $data['milestones_achieved'] ?? null,
+            'milestones_missed' => $data['milestones_missed'] ?? null,
+            'progress_report_path' => $data['progress_report_path'] ?? null,
+            'financial_report_path' => $data['financial_report_path'] ?? null,
         ]);
 
-        $collegeOfficer = User::role('college_officer')
-            ->where('college_id', $evaluation->proposal->college_id)
-            ->first();
+        if (! $alreadySubmitted) {
+            $collegeOfficer = User::role('college_officer')
+                ->where('college_id', $evaluation->proposal->college_id)
+                ->first();
 
-        if ($collegeOfficer) {
-            $this->notificationService->send('midterm_report_submitted', $collegeOfficer, [
-                'proposal_id'    => $evaluation->proposal_id,
-                'tracker_number' => $evaluation->proposal->tracker_number,
-            ]);
+            if ($collegeOfficer) {
+                $this->notificationService->send('midterm_report_submitted', $collegeOfficer, [
+                    'proposal_id' => $evaluation->proposal_id,
+                    'tracker_number' => $evaluation->proposal->tracker_number,
+                ]);
+            }
         }
 
         return $evaluation->fresh();
@@ -124,29 +128,29 @@ class MidtermEvaluationService
         }
 
         $evaluation->update([
-            'status'                   => 'scored',
-            'progress_score'           => $scoreData['progress_score'],
+            'status' => 'scored',
+            'progress_score' => $scoreData['progress_score'],
             'college_officer_comments' => $scoreData['comments'],
-            'recommendation'           => $scoreData['recommendation'],
-            'scored_by'                => $collegeOfficer->id,
-            'scored_at'                => now(),
+            'recommendation' => $scoreData['recommendation'],
+            'scored_by' => $collegeOfficer->id,
+            'scored_at' => now(),
         ]);
 
         if ($scoreData['recommendation'] === 'hold') {
-            $pi             = User::find($evaluation->proposal->pi_user_id);
+            $pi = User::find($evaluation->proposal->pi_user_id);
             $centralOfficer = User::role('central_officer')->first();
 
             if ($pi) {
                 $this->notificationService->send('midterm_hold', $pi, [
                     'tracker_number' => $evaluation->proposal->tracker_number,
-                    'reason'         => $scoreData['comments'],
+                    'reason' => $scoreData['comments'],
                 ]);
             }
 
             if ($centralOfficer) {
                 $this->notificationService->send('midterm_hold', $centralOfficer, [
                     'tracker_number' => $evaluation->proposal->tracker_number,
-                    'college'        => $evaluation->proposal->college->name ?? '',
+                    'college' => $evaluation->proposal->college->name ?? '',
                 ]);
             }
         }

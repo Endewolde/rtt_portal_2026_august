@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -15,15 +16,15 @@ class ActionCountController extends Controller
         $userId = $user->id;
         $roles = $user->getRoleNames()->toArray();
 
-        $isSuperAdmin   = in_array('super_admin', $roles);
-        $isCentral      = $isSuperAdmin || in_array('admin', $roles) || in_array('central_officer', $roles);
-        $isResearch     = in_array('research_officer', $roles);
-        $isCommunity    = in_array('community_officer', $roles);
-        $isTechnology   = in_array('technology_officer', $roles);
-        $isOfficer      = $isResearch || $isCommunity || $isTechnology;
+        $isSuperAdmin = in_array('super_admin', $roles);
+        $isCentral = $isSuperAdmin || in_array('admin', $roles) || in_array('central_officer', $roles);
+        $isResearch = in_array('research_officer', $roles);
+        $isCommunity = in_array('community_officer', $roles);
+        $isTechnology = in_array('technology_officer', $roles);
+        $isOfficer = $isResearch || $isCommunity || $isTechnology;
         $isCollegeStaff = in_array('college_officer', $roles);
-        $isFinance      = in_array('support_officer', $roles);
-        $isPI           = in_array('staff', $roles);
+        $isFinance = in_array('support_officer', $roles);
+        $isPI = in_array('staff', $roles);
 
         $officerCategories = [];
         if ($isResearch) {
@@ -128,6 +129,7 @@ class ActionCountController extends Controller
 
         // ── 9. Unread in-app notifications ────────────────────────────────────
         $unreadNotifications = DB::table('notifications')
+            ->where('notifiable_type', User::class)
             ->where('notifiable_id', $userId)
             ->whereNull('read_at')
             ->count();

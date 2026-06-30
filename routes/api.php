@@ -15,6 +15,7 @@ use App\Http\Controllers\Api\CollegeController;
 use App\Http\Controllers\Api\ComplaintController;
 use App\Http\Controllers\Api\CompletionWorkshopController;
 use App\Http\Controllers\Api\ConferenceController;
+use App\Http\Controllers\Api\ContractController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DisbursementController;
 use App\Http\Controllers\Api\ExternalFund\AgencyController as EFAgencyController;
@@ -152,6 +153,9 @@ Route::prefix('v1')->group(function () {
         Route::post('/users/{id}/impersonate', [UserController::class, 'impersonate']);
         Route::get('/users/{id}/academic-info', [UserController::class, 'academicInfo']);
         Route::get('/users/{id}/proposal-history', [UserController::class, 'proposalHistory']);
+        Route::get('/users/{id}/profile-360', [UserController::class, 'profile360']);
+        Route::get('/users/{id}/activity-timeline', [UserController::class, 'activityTimeline']);
+        Route::get('/users/{id}/activity-heatmap', [UserController::class, 'activityHeatmap']);
 
         // Roles and permissions
         Route::get('/roles', [RoleController::class, 'index']);
@@ -341,6 +345,8 @@ Route::prefix('v1')->group(function () {
         Route::delete('/review-assignments/{id}/remove', [ReviewController::class, 'removeReviewer']);
         Route::put('/review-assignments/{id}/reassign', [ReviewController::class, 'reassignReviewer']);
         Route::put('/review-assignments/{id}/extend', [ReviewController::class, 'extendDueDate']);
+        Route::post('/review-assignments/{id}/declare-coi', [ReviewController::class, 'declareCoi']);
+        Route::post('/proposal-members/{id}/respond-invitation', [ReviewController::class, 'respondInvitation']);
 
         // Appeals
         Route::post('/proposals/{id}/appeal', [ProposalAppealController::class, 'store']);
@@ -355,12 +361,20 @@ Route::prefix('v1')->group(function () {
         Route::post('/proposals/{id}/central/reject', [CentralEvaluationController::class, 'centralReject']);
         Route::post('/proposals/{id}/funding/revoke', [CentralEvaluationController::class, 'revokeFunding']);
 
+        // Contract Signing
+        Route::post('/proposals/{id}/contract/submit', [ContractController::class, 'submit']);
+        Route::delete('/proposals/{id}/contract', [ContractController::class, 'remove']);
+        Route::post('/proposals/{id}/contract/approve', [ContractController::class, 'approve']);
+        Route::post('/proposals/{id}/contract/reject', [ContractController::class, 'reject']);
+        Route::get('/proposals/{id}/contract/download', [ContractController::class, 'download']);
+
         // Awards
         Route::get('/proposals/awarded/export', [AwardController::class, 'exportAwarded']);
         Route::post('/proposals/{id}/award', [AwardController::class, 'store']);
         Route::get('/proposals/{id}/award', [AwardController::class, 'show']);
         Route::patch('/proposals/{id}/award', [AwardController::class, 'update']);
         Route::get('/proposals/{id}/award-letter/download', [AwardController::class, 'downloadLetter']);
+        Route::post('/awards/approve-letters', [AwardController::class, 'approveLetters']);
         Route::get('/proposals/{id}/award-details', [AwardController::class, 'show']);
         Route::put('/proposals/{id}/award-details', [AwardController::class, 'update']);
 
@@ -400,6 +414,8 @@ Route::prefix('v1')->group(function () {
             Route::post('/budget-requests/{id}/sign', [BudgetController::class, 'sign']);
             Route::post('/budget-requests/{id}/refuse', [BudgetController::class, 'refuse']);
             Route::post('/budget-requests/{id}/approve', [BudgetController::class, 'approve']);
+            Route::post('/budget-requests/{id}/reject', [BudgetController::class, 'rejectByCollege']);
+            Route::post('/budget-requests/{id}/finance-return', [BudgetController::class, 'returnByFinance']);
             Route::post('/budget-requests/{id}/disburse', [BudgetController::class, 'disburse']);
             Route::post('/budget-requests/{id}/settle', [BudgetController::class, 'submitSettlement']);
 
@@ -442,6 +458,10 @@ Route::prefix('v1')->group(function () {
             Route::post('/completion-workshops/{id}/finalize', [CompletionWorkshopController::class, 'finalizeWorkshop']);
             Route::patch('/completion-workshops/{id}/status', [CompletionWorkshopController::class, 'updateStatus']);
             Route::post('/completion-workshops/{id}/upload', [CompletionWorkshopController::class, 'uploadFile']);
+            Route::get('/completion-workshops/{id}/questions', [CompletionWorkshopController::class, 'getQuestions']);
+            Route::post('/completion-workshops/{id}/questions', [CompletionWorkshopController::class, 'postQuestion']);
+            Route::patch('/completion-workshops/{id}/questions/{questionId}/answer', [CompletionWorkshopController::class, 'answerQuestion']);
+            Route::delete('/completion-workshops/{id}/questions/{questionId}', [CompletionWorkshopController::class, 'deleteQuestion']);
 
             // Research Outputs
             Route::get('/research-outputs/stats', [ResearchOutputController::class, 'stats']);
@@ -451,6 +471,8 @@ Route::prefix('v1')->group(function () {
             Route::get('/research-outputs/{id}', [ResearchOutputController::class, 'show']);
             Route::put('/research-outputs/{id}', [ResearchOutputController::class, 'update']);
             Route::delete('/research-outputs/{id}', [ResearchOutputController::class, 'destroy']);
+            Route::post('/research-outputs/{id}/verify', [ResearchOutputController::class, 'verify']);
+            Route::post('/research-outputs/{id}/approve', [ResearchOutputController::class, 'approve']);
 
             // Research impact tracker
             Route::get('/research-impacts', [ResearchImpactController::class, 'index']);
@@ -461,6 +483,7 @@ Route::prefix('v1')->group(function () {
             // AI scoring, reviewer matching, proposal cloning
             Route::get('/proposals/{proposal}/ai-score', [ProposalAiScoreController::class, 'show']);
             Route::post('/proposals/{proposal}/ai-score/generate', [ProposalAiScoreController::class, 'generate']);
+            Route::get('/proposals/{id}/review-results', [ReviewController::class, 'proposalReviewResults']);
             Route::get('/proposals/{proposal}/reviewer-suggestions', [ReviewerMatchController::class, 'suggestions']);
             Route::post('/proposals/{proposal}/clone', [ProposalController::class, 'clone']);
 
@@ -486,6 +509,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/reports/{id}', [ReportController::class, 'show']);
         });
         Route::get('/reports/proposals/export', [ReportController::class, 'exportProposals']);
+        Route::get('/reports/proposals/stats-pdf', [ReportController::class, 'proposalStatsPdf']);
 
         // ── Complaints module (feature: complaints) ────────────────────────────
         Route::middleware('feature:complaints')->group(function () {
@@ -552,8 +576,11 @@ Route::prefix('v1')->group(function () {
 
         // Notifications
         Route::get('/notifications', [NotificationController::class, 'index']);
-        Route::post('/notifications/read', [NotificationController::class, 'markAsRead']);
         Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']);
+        Route::post('/notifications/read', [NotificationController::class, 'markAsRead']);
+        Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
+        Route::delete('/notifications/read', [NotificationController::class, 'destroyRead']);
+        Route::delete('/notifications/{id}', [NotificationController::class, 'destroy']);
 
         // Action counts (nav badges)
         Route::get('/action-counts', [ActionCountController::class, 'index']);

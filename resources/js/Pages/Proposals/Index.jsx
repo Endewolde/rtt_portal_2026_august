@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Link } from '@inertiajs/react'
+import { Link, usePage } from '@inertiajs/react'
 import AppLayout from '../../Layouts/AppLayout'
 import { useToast } from '../../Components/Toast'
 import ViewToggle from '../../Components/ViewToggle'
 import ProposalTable from '../../Components/ProposalTable'
 import { useViewPreference } from '../../hooks/useViewPreference'
 import { useAuth } from '../../hooks/useAuth'
-import { BarChart2, Users, Building, GraduationCap, TrendingUp, Download, ArrowRight } from 'lucide-react'
+import { BarChart2, Users, Building, GraduationCap, TrendingUp, Download, FileText, ArrowRight } from 'lucide-react'
 import api from '../../lib/api'
 
 // ── Kanban board ──────────────────────────────────────────────────────────────
@@ -51,7 +51,6 @@ function KanbanBoard({ proposals, loading }) {
                 const cards = grouped[col.key] ?? []
                 return (
                     <div key={col.key} className="shrink-0 w-64 flex flex-col">
-                        {/* Column header */}
                         <div className={`flex items-center justify-between px-3 py-2 rounded-xl mb-2 ${col.light}`}>
                             <div className="flex items-center gap-2">
                                 <div className={`h-2 w-2 rounded-full ${col.color}`} />
@@ -61,7 +60,6 @@ function KanbanBoard({ proposals, loading }) {
                                 {cards.length}
                             </span>
                         </div>
-                        {/* Cards */}
                         <div className="flex flex-col gap-2 min-h-32">
                             {cards.length === 0 ? (
                                 <div className="flex items-center justify-center h-20 border-2 border-dashed border-gray-200 rounded-xl">
@@ -77,12 +75,8 @@ function KanbanBoard({ proposals, loading }) {
                                         <ArrowRight size={11} className="text-gray-300 group-hover:text-indigo-400 transition-colors shrink-0 mt-0.5" />
                                     </div>
                                     <p className="text-xs font-semibold text-gray-800 line-clamp-2 mb-2">{p.title}</p>
-                                    {p.pi && (
-                                        <p className="text-[10px] text-gray-400 truncate">PI: {p.pi.name}</p>
-                                    )}
-                                    {p.college && (
-                                        <p className="text-[10px] text-gray-400 truncate">{p.college.name}</p>
-                                    )}
+                                    {p.pi && <p className="text-[10px] text-gray-400 truncate">PI: {p.pi.name}</p>}
+                                    {p.college && <p className="text-[10px] text-gray-400 truncate">{p.college.name}</p>}
                                 </Link>
                             ))}
                         </div>
@@ -131,6 +125,10 @@ const CATEGORY_CONFIG = {
 }
 
 export default function ProposalIndex() {
+    const { app_settings } = usePage().props
+    // current_academic_year is already shared via HandleInertiaRequests — no extra API call needed
+    const currentAcademicYear = app_settings?.current_academic_year || ''
+
     const { error } = useToast()
     const { hasAnyRole, user } = useAuth()
     const isAdmin = hasAnyRole([
@@ -145,34 +143,45 @@ export default function ProposalIndex() {
     const [loading, setLoading] = useState(true)
     const [statsLoading, setStatsLoading] = useState(true)
     const [filters, setFilters] = useState({
-        status: '', category: '', college_id: '', academic_year: '', search: '',
+        status: '', category: '', college_id: '', academic_year: currentAcademicYear, search: '',
     })
     const [colleges, setColleges] = useState([])
+    const [academicYears, setAcademicYears] = useState(currentAcademicYear ? [currentAcademicYear] : [])
     const [showStats, setShowStats] = useState(true)
     const [activeStatTab, setActiveStatTab] = useState('college')
-    const [exporting, setExporting] = useState(false)
+    const [exporting, setExporting]       = useState(false)
+    const [pdfExporting, setPdfExporting] = useState(false)
 
     useEffect(() => {
         if (user && !isAdmin) { window.location.href = '/my-proposals' }
     }, [user, isAdmin])
 
+    // Load college list once
     useEffect(() => {
         api.get('/colleges').then(res => setColleges(res.data?.data || [])).catch(() => {})
-        loadStats()
     }, [])
 
+    // Reload stats whenever the academic year filter changes
+    useEffect(() => {
+        loadStats(filters.academic_year)
+    }, [filters.academic_year])
+
+    // Reload proposals on any filter change
     useEffect(() => {
         loadProposals()
     }, [filters])
 
-    const loadStats = async () => {
+    const loadStats = async (academicYear) => {
         setStatsLoading(true)
         try {
-            const res = await api.get('/proposals/statistics')
-            setStats(res.data?.data || null)
-        } catch (_) {
-            // Stats are optional — don't block the page
-        }
+            const params = academicYear ? { academic_year: academicYear } : {}
+            const res = await api.get('/proposals/statistics', { params })
+            const data = res.data?.data || null
+            setStats(data)
+            if (data?.available_years?.length) {
+                setAcademicYears(data.available_years)
+            }
+        } catch (_) {}
         setStatsLoading(false)
     }
 
@@ -202,17 +211,42 @@ export default function ProposalIndex() {
                 headers: { Authorization: `Bearer ${token}` },
             })
             if (!res.ok) { error('Export failed. Please try again.'); return }
-            const blob     = await res.blob()
-            const url      = URL.createObjectURL(blob)
-            const a        = document.createElement('a')
-            a.href         = url
-            a.download     = `proposals_${new Date().toISOString().slice(0, 10)}.xlsx`
+            const blob = await res.blob()
+            const url  = URL.createObjectURL(blob)
+            const a    = document.createElement('a')
+            a.href     = url
+            a.download = `proposals_${new Date().toISOString().slice(0, 10)}.xlsx`
             a.click()
             URL.revokeObjectURL(url)
         } catch (_) {
             error('Export failed. Please try again.')
         } finally {
             setExporting(false)
+        }
+    }
+
+    const handlePdfExport = async () => {
+        setPdfExporting(true)
+        try {
+            const params = new URLSearchParams(
+                Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== ''))
+            )
+            const token = localStorage.getItem('rtt_token')
+            const res   = await fetch(`/api/v1/reports/proposals/stats-pdf?${params}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            })
+            if (!res.ok) { error('PDF generation failed. Please try again.'); return }
+            const blob = await res.blob()
+            const url  = URL.createObjectURL(blob)
+            const a    = document.createElement('a')
+            a.href     = url
+            a.download = `Proposal-Statistics-${new Date().toISOString().slice(0, 10)}.pdf`
+            a.click()
+            URL.revokeObjectURL(url)
+        } catch (_) {
+            error('PDF generation failed. Please try again.')
+        } finally {
+            setPdfExporting(false)
         }
     }
 
@@ -228,6 +262,7 @@ export default function ProposalIndex() {
                         <h1 className="text-2xl font-bold text-gray-900">All Proposals</h1>
                         <p className="text-sm text-gray-500 mt-1">
                             {stats?.totals?.submitted || 0} submitted proposals
+                            {filters.academic_year && <span className="ml-1 text-indigo-500 font-medium">· {filters.academic_year}</span>}
                         </p>
                     </div>
                     <div className="flex items-center gap-3">
@@ -245,6 +280,14 @@ export default function ProposalIndex() {
                         >
                             <Download size={14} /> {exporting ? 'Exporting…' : 'Export Excel'}
                         </button>
+                        <button
+                            onClick={handlePdfExport}
+                            disabled={pdfExporting}
+                            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50 transition-colors"
+                        >
+                            <FileText size={14} />
+                            {pdfExporting ? 'Generating…' : 'PDF Report'}
+                        </button>
                         <ViewToggle view={view} onChange={setView} />
                     </div>
                 </div>
@@ -256,15 +299,15 @@ export default function ProposalIndex() {
                         {/* Overall totals */}
                         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                             {[
-                                { label: 'Total Submitted', value: stats?.totals?.submitted || 0,                                               icon: '📄', color: 'blue'   },
-                                { label: 'Under Review',    value: stats?.totals?.under_review || 0,                                            icon: '🔍', color: 'purple' },
-                                { label: 'Funded',          value: stats?.totals?.funded || 0,                                                  icon: '🏆', color: 'green'  },
-                                { label: 'Rejected',        value: stats?.totals?.rejected || 0,                                                icon: '❌', color: 'red'    },
-                                { label: 'Draft',           value: (stats?.totals?.total || 0) - (stats?.totals?.submitted || 0),               icon: '✏️', color: 'gray'   },
+                                { label: 'Total Submitted', value: stats?.totals?.submitted || 0,                                           icon: '📄', color: 'blue'   },
+                                { label: 'Under Review',    value: stats?.totals?.under_review || 0,                                        icon: '🔍', color: 'purple' },
+                                { label: 'Funded',          value: stats?.totals?.funded || 0,                                              icon: '🏆', color: 'green'  },
+                                { label: 'Rejected',        value: stats?.totals?.rejected || 0,                                            icon: '❌', color: 'red'    },
+                                { label: 'Draft',           value: stats?.totals?.draft || 0,                                               icon: '✏️', color: 'gray'   },
                             ].map(stat => (
                                 <div key={stat.label} className="bg-white border border-gray-200 rounded-xl p-4 text-center">
                                     <div className="text-2xl mb-1">{stat.icon}</div>
-                                    <div className={`text-2xl font-bold text-${stat.color}-600`}>{stat.value}</div>
+                                    <div className={`text-2xl font-bold text-${stat.color}-600`}>{statsLoading ? '—' : stat.value}</div>
                                     <div className="text-xs text-gray-500 mt-0.5">{stat.label}</div>
                                 </div>
                             ))}
@@ -274,11 +317,11 @@ export default function ProposalIndex() {
                         <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
                             <div className="flex border-b border-gray-200 overflow-x-auto">
                                 {[
-                                    { key: 'college',    label: '🏛 By College',    icon: Building      },
-                                    { key: 'department', label: '📚 By Department', icon: GraduationCap },
-                                    { key: 'gender',     label: '👥 By Gender',     icon: Users         },
-                                    { key: 'status',     label: '📊 By Status',     icon: BarChart2     },
-                                    { key: 'category',   label: '🏷 By Category',   icon: TrendingUp    },
+                                    { key: 'college',    label: '🏛 By College'    },
+                                    { key: 'department', label: '📚 By Department' },
+                                    { key: 'gender',     label: '👥 By Gender'     },
+                                    { key: 'status',     label: '📊 By Status'     },
+                                    { key: 'category',   label: '🏷 By Category'   },
                                 ].map(tab => (
                                     <button
                                         key={tab.key}
@@ -304,42 +347,40 @@ export default function ProposalIndex() {
                                                 {[1, 2, 3].map(i => <div key={i} className="h-16 bg-gray-100 rounded-xl" />)}
                                             </div>
                                         ) : (stats?.by_college || []).length === 0 ? (
-                                            <p className="text-gray-400 text-sm text-center py-4">No data yet.</p>
-                                        ) : (
-                                            (stats?.by_college || []).map((college, i) => {
-                                                const colorSet = COLLEGE_COLORS[i % COLLEGE_COLORS.length]
-                                                const pct = Math.round((college.total / maxCollegeTotal) * 100)
-                                                const fundedPct = college.total > 0 ? Math.round((college.funded / college.total) * 100) : 0
-                                                return (
-                                                    <div key={college.id} className={`border ${colorSet.border} ${colorSet.light} rounded-xl p-4`}>
-                                                        <div className="flex items-center justify-between mb-2">
-                                                            <div className="flex items-center gap-3">
-                                                                <div className={`w-10 h-10 ${colorSet.bg} rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0`}>
-                                                                    {college.code}
-                                                                </div>
-                                                                <div>
-                                                                    <p className={`text-sm font-semibold ${colorSet.text}`}>{college.college_name}</p>
-                                                                    <p className="text-xs text-gray-500">
-                                                                        {college.funded} funded · {college.rejected} rejected · {college.active} active
-                                                                    </p>
-                                                                </div>
+                                            <p className="text-gray-400 text-sm text-center py-4">No data for this year.</p>
+                                        ) : (stats?.by_college || []).map((college, i) => {
+                                            const colorSet  = COLLEGE_COLORS[i % COLLEGE_COLORS.length]
+                                            const pct       = Math.round((college.total / maxCollegeTotal) * 100)
+                                            const fundedPct = college.total > 0 ? Math.round((college.funded / college.total) * 100) : 0
+                                            return (
+                                                <div key={college.id} className={`border ${colorSet.border} ${colorSet.light} rounded-xl p-4`}>
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className={`w-10 h-10 ${colorSet.bg} rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0`}>
+                                                                {college.code}
                                                             </div>
-                                                            <div className="text-right">
-                                                                <span className={`text-2xl font-bold ${colorSet.text}`}>{college.total}</span>
-                                                                <p className="text-xs text-gray-400">proposals</p>
+                                                            <div>
+                                                                <p className={`text-sm font-semibold ${colorSet.text}`}>{college.college_name}</p>
+                                                                <p className="text-xs text-gray-500">
+                                                                    {college.funded} funded · {college.rejected} rejected · {college.active} active
+                                                                </p>
                                                             </div>
                                                         </div>
-                                                        <div className="h-2 bg-white/60 rounded-full overflow-hidden">
-                                                            <div className={`h-full ${colorSet.bg} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
-                                                        </div>
-                                                        <div className="flex gap-4 mt-2 text-xs">
-                                                            <span className="text-green-600">✓ {fundedPct}% funded</span>
-                                                            <span className="text-gray-400">{college.total - college.funded - college.rejected} in progress</span>
+                                                        <div className="text-right">
+                                                            <span className={`text-2xl font-bold ${colorSet.text}`}>{college.total}</span>
+                                                            <p className="text-xs text-gray-400">proposals</p>
                                                         </div>
                                                     </div>
-                                                )
-                                            })
-                                        )}
+                                                    <div className="h-2 bg-white/60 rounded-full overflow-hidden">
+                                                        <div className={`h-full ${colorSet.bg} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
+                                                    </div>
+                                                    <div className="flex gap-4 mt-2 text-xs">
+                                                        <span className="text-green-600">✓ {fundedPct}% funded</span>
+                                                        <span className="text-gray-400">{college.total - college.funded - college.rejected} in progress</span>
+                                                    </div>
+                                                </div>
+                                            )
+                                        })}
                                     </div>
                                 )}
 
@@ -353,7 +394,7 @@ export default function ProposalIndex() {
                                                     {[1, 2, 3, 4, 5].map(i => <div key={i} className="h-12 bg-gray-100 rounded-lg" />)}
                                                 </div>
                                             ) : (stats?.by_department || []).length === 0 ? (
-                                                <p className="text-gray-400 text-sm text-center py-4">No data yet.</p>
+                                                <p className="text-gray-400 text-sm text-center py-4">No data for this year.</p>
                                             ) : (() => {
                                                 const maxDeptTotal = Math.max(1, ...(stats?.by_department || []).map(d => d.total))
                                                 return (stats?.by_department || []).map((dept, i) => (
@@ -391,14 +432,14 @@ export default function ProposalIndex() {
                                                 {[1, 2, 3, 4].map(i => <div key={i} className="h-28 bg-gray-100 rounded-xl" />)}
                                             </div>
                                         ) : (stats?.by_gender || []).length === 0 ? (
-                                            <p className="text-gray-400 text-sm text-center py-4">No data yet.</p>
+                                            <p className="text-gray-400 text-sm text-center py-4">No data for this year.</p>
                                         ) : (
                                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                                                 {(stats?.by_gender || []).map(g => {
-                                                    const config = GENDER_CONFIG[g.gender] || GENDER_CONFIG.not_specified
+                                                    const config      = GENDER_CONFIG[g.gender] || GENDER_CONFIG.not_specified
                                                     const totalGender = (stats?.by_gender || []).reduce((s, x) => s + Number(x.total), 0)
-                                                    const pct = totalGender > 0 ? Math.round((g.total / totalGender) * 100) : 0
-                                                    const fundedPct = g.total > 0 ? Math.round((g.funded / g.total) * 100) : 0
+                                                    const pct         = totalGender > 0 ? Math.round((g.total / totalGender) * 100) : 0
+                                                    const fundedPct   = g.total > 0 ? Math.round((g.funded / g.total) * 100) : 0
                                                     return (
                                                         <div key={g.gender} className={`${config.light} border border-gray-200 rounded-2xl p-5 text-center`}>
                                                             <div className="text-3xl mb-2">{config.icon}</div>
@@ -417,9 +458,9 @@ export default function ProposalIndex() {
                                             </div>
                                         )}
                                         {(stats?.by_gender || []).length > 0 && (() => {
-                                            const male = stats.by_gender.find(g => g.gender === 'male')?.total || 0
-                                            const female = stats.by_gender.find(g => g.gender === 'female')?.total || 0
-                                            const total = Number(male) + Number(female)
+                                            const male      = stats.by_gender.find(g => g.gender === 'male')?.total || 0
+                                            const female    = stats.by_gender.find(g => g.gender === 'female')?.total || 0
+                                            const total     = Number(male) + Number(female)
                                             const femalePct = total > 0 ? Math.round((female / total) * 100) : 0
                                             return (
                                                 <div className={`mt-4 p-4 rounded-xl border text-sm ${
@@ -440,11 +481,17 @@ export default function ProposalIndex() {
                                 {/* BY STATUS */}
                                 {activeStatTab === 'status' && (
                                     <div className="space-y-2">
-                                        {Object.entries(stats?.by_status || {})
+                                        {statsLoading ? (
+                                            <div className="animate-pulse space-y-2">
+                                                {[1, 2, 3].map(i => <div key={i} className="h-10 bg-gray-100 rounded-lg" />)}
+                                            </div>
+                                        ) : Object.entries(stats?.by_status || {}).length === 0 ? (
+                                            <p className="text-gray-400 text-sm text-center py-4">No data for this year.</p>
+                                        ) : Object.entries(stats?.by_status || {})
                                             .sort((a, b) => b[1] - a[1])
                                             .map(([status, count]) => {
                                                 const total = Object.values(stats?.by_status || {}).reduce((s, v) => s + Number(v), 0)
-                                                const pct = total > 0 ? Math.round((count / total) * 100) : 0
+                                                const pct   = total > 0 ? Math.round((count / total) * 100) : 0
                                                 const color = STATUS_COLORS[status] || 'bg-gray-400'
                                                 return (
                                                     <div key={status} className="flex items-center gap-3">
@@ -471,7 +518,13 @@ export default function ProposalIndex() {
                                 {/* BY CATEGORY */}
                                 {activeStatTab === 'category' && (
                                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                                        {Object.entries(stats?.by_category || {}).map(([category, total]) => {
+                                        {statsLoading ? (
+                                            <div className="animate-pulse col-span-3 grid grid-cols-3 gap-4">
+                                                {[1, 2, 3].map(i => <div key={i} className="h-24 bg-gray-100 rounded-xl" />)}
+                                            </div>
+                                        ) : Object.entries(stats?.by_category || {}).length === 0 ? (
+                                            <p className="text-gray-400 text-sm text-center py-4 col-span-3">No data for this year.</p>
+                                        ) : Object.entries(stats?.by_category || {}).map(([category, total]) => {
                                             const config = CATEGORY_CONFIG[category] || { icon: '📋', color: 'bg-gray-500', light: 'bg-gray-50', text: 'text-gray-700' }
                                             return (
                                                 <div key={category} className={`${config.light} border border-gray-200 rounded-xl p-4 text-center`}>
@@ -490,7 +543,7 @@ export default function ProposalIndex() {
 
                 {/* FILTERS */}
                 <div className="bg-white border border-gray-200 rounded-xl p-4">
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
                         <input
                             type="text"
                             placeholder="Search title or tracker..."
@@ -498,6 +551,16 @@ export default function ProposalIndex() {
                             onChange={e => setFilters(p => ({ ...p, search: e.target.value }))}
                             className="col-span-2 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                         />
+                        <select
+                            value={filters.academic_year}
+                            onChange={e => setFilters(p => ({ ...p, academic_year: e.target.value }))}
+                            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+                        >
+                            <option value="">All Years</option>
+                            {academicYears.map(y => (
+                                <option key={y} value={y}>{y}</option>
+                            ))}
+                        </select>
                         <select
                             value={filters.status}
                             onChange={e => setFilters(p => ({ ...p, status: e.target.value }))}

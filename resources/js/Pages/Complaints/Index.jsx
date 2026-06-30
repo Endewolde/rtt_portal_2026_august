@@ -419,9 +419,9 @@ export default function ComplaintsIndex() {
     const { user, hasAnyRole, hasRole } = useAuth();
     const { success, error } = useToast();
 
-    const isCollegeOfficer  = hasRole('college_officer') || hasRole('college_admin');
+    const isCollegeOfficer  = hasRole('college_officer');
     const isCategoryOfficer = hasAnyRole(['research_officer', 'community_officer', 'technology_officer']);
-    const isAdmin           = hasAnyRole(['super_admin', 'central_office']);
+    const isAdmin           = hasAnyRole(['super_admin', 'admin', 'central_officer']);
     const isOfficer         = isCollegeOfficer ? 'college' : isCategoryOfficer ? 'officer' : false;
     const isUser            = !isAdmin && !isCollegeOfficer && !isCategoryOfficer;
 

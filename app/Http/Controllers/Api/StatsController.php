@@ -26,8 +26,8 @@ class StatsController extends Controller
                     ->whereNull('deleted_at')
                     ->where('academic_year', $currentYear)
                     ->count(),
-                'colleges' => DB::table('colleges')->where('status', 'active')->count(),
-                'publications' => DB::table('research_outputs')->where('output_type', 'journal_article')->count(),
+                'colleges' => DB::table('colleges')->where('status', 'active')->where('code', '!=', 'ORTT')->count(),
+                'departments' => DB::table('departments')->count(),
                 'active_calls' => DB::table('proposal_calls')->where('status', 'active')->count(),
                 'academic_year' => $currentYear,
             ],

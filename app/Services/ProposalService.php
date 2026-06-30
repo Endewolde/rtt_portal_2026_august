@@ -6,7 +6,6 @@ use App\Exceptions\IncompleteProposalException;
 use App\Exceptions\InvalidWizardStepException;
 use App\Exceptions\ProposalNotEditableException;
 use App\Exceptions\WorkflowGuardException;
-use App\Jobs\CheckProposalSimilarityJob;
 use App\Models\College;
 use App\Models\Department;
 use App\Models\Proposal;
@@ -23,6 +22,7 @@ class ProposalService
 {
     public function __construct(
         private readonly WorkflowService $workflowService,
+        private readonly FeatureService $featureService,
         private readonly TrackerNumberService $trackerNumberService,
     ) {}
 
@@ -150,6 +150,12 @@ class ProposalService
                     if ($proposal->category === 'research') {
                         $updates['research_type'] = $data['research_type'] ?? null;
                     }
+                    if (array_key_exists('ethical_clearance_required', $data)) {
+                        $updates['ethical_clearance_required'] = (bool) $data['ethical_clearance_required'];
+                        $updates['ethical_clearance_number'] = $data['ethical_clearance_required']
+                            ? ($data['ethical_clearance_number'] ?? null)
+                            : null;
+                    }
                     break;
 
                 case 3:
@@ -187,6 +193,51 @@ class ProposalService
         $call = $proposal->proposalCall;
         if ($call && ($call->status === 'expired' || ($call->end_date && $call->end_date->isPast()))) {
             throw new WorkflowGuardException('The submission deadline for this proposal call has passed. Your draft has been saved but can no longer be submitted.');
+        }
+
+        // Enforce max proposals per PI at submit time too
+        if ($call && $call->max_proposals_per_pi) {
+            $alreadySubmitted = Proposal::where('proposal_call_id', $call->id)
+                ->where('pi_user_id', $pi->id)
+                ->whereNotIn('status', ['draft'])
+                ->whereNull('deleted_at')
+                ->where('id', '!=', $proposal->id)
+                ->count();
+
+            if ($alreadySubmitted >= $call->max_proposals_per_pi) {
+                $limit = $call->max_proposals_per_pi;
+                $noun = $limit === 1 ? 'proposal' : 'proposals';
+                throw new WorkflowGuardException(
+                    "This call limits each PI to {$limit} {$noun}. You already have a submitted proposal for this call."
+                );
+            }
+        }
+
+        // Co-PI acceptance gate (requires workflow.co_pi_acceptance feature)
+        if ($this->featureService->hasFeature('workflow')) {
+            $pendingCoPIs = ProposalMember::where('proposal_id', $proposal->id)
+                ->where('role', 'co_investigator')
+                ->where('status', 'active')
+                ->where('invitation_status', 'pending')
+                ->count();
+
+            if ($pendingCoPIs > 0) {
+                throw new WorkflowGuardException(
+                    "You have {$pendingCoPIs} co-investigator(s) who have not yet accepted their invitation. Please wait for their confirmation before submitting."
+                );
+            }
+
+            $declinedCoPIs = ProposalMember::where('proposal_id', $proposal->id)
+                ->where('role', 'co_investigator')
+                ->where('status', 'active')
+                ->where('invitation_status', 'declined')
+                ->count();
+
+            if ($declinedCoPIs > 0) {
+                throw new WorkflowGuardException(
+                    "{$declinedCoPIs} co-investigator(s) declined their invitation. Please remove or replace them before submitting."
+                );
+            }
         }
 
         if (empty(trim($proposal->title ?? ''))) {
@@ -244,9 +295,9 @@ class ProposalService
         });
 
         try {
-            CheckProposalSimilarityJob::dispatch($submitted->id);
+            app(SimilarityService::class)->check($submitted);
         } catch (\Throwable $e) {
-            Log::warning("Could not dispatch similarity check for proposal {$submitted->id}: {$e->getMessage()}");
+            Log::warning("Could not run similarity check for proposal {$submitted->id}: {$e->getMessage()}");
         }
 
         return $submitted;
@@ -254,6 +305,16 @@ class ProposalService
 
     private function saveCoInvestigators(Proposal $proposal, array $coInvestigators, User $pi): void
     {
+        $incomingUserIds = array_column($coInvestigators, 'user_id');
+
+        // Snapshot existing responded statuses before deactivating
+        $existingStatuses = ProposalMember::where('proposal_id', $proposal->id)
+            ->where('role', 'co_investigator')
+            ->where('status', 'active')
+            ->get()
+            ->keyBy('user_id')
+            ->map(fn ($m) => $m->invitation_status);
+
         ProposalMember::where('proposal_id', $proposal->id)
             ->where('role', '!=', 'pi')
             ->where('status', 'active')
@@ -265,6 +326,7 @@ class ProposalService
 
         $count = count($coInvestigators);
         $totalContrib = 0;
+        $workflowOn = $this->featureService->hasFeature('workflow');
 
         foreach ($coInvestigators as $coI) {
             $coUser = User::findOrFail($coI['user_id']);
@@ -277,12 +339,24 @@ class ProposalService
 
             $contrib = $coI['contribution_percentage'] ?? ($count > 0 ? round(80 / $count, 2) : 0);
 
+            // Preserve the invitation status if the co-PI already responded; only
+            // set 'pending' for new additions (or when the workflow feature is off).
+            $priorStatus = $existingStatuses[$coUser->id] ?? null;
+            if (! $workflowOn) {
+                $invitationStatus = 'accepted';
+            } elseif ($priorStatus === 'accepted' || $priorStatus === 'declined') {
+                $invitationStatus = $priorStatus;
+            } else {
+                $invitationStatus = 'pending';
+            }
+
             ProposalMember::create([
                 'proposal_id' => $proposal->id,
                 'user_id' => $coUser->id,
                 'role' => 'co_investigator',
                 'contribution_percentage' => $contrib,
                 'status' => 'active',
+                'invitation_status' => $invitationStatus,
                 'joined_at' => now(),
             ]);
 

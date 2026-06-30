@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Complaint;
 use App\Models\Proposal;
+use App\Models\User;
 use App\Services\ComplaintService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,7 +16,7 @@ class ComplaintController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $user  = $request->user();
+        $user = $request->user();
         $level = $request->query('level'); // 'college' | 'officer' | null (all)
 
         $query = Complaint::with(['proposal:id,tracker_number,title,category,college_id', 'complainant:id,name']);
@@ -26,14 +27,11 @@ class ComplaintController extends Controller
             // Level 1 only — own college
             $query->where('level', 'college')
                 ->whereHas('proposal', fn ($q) => $q->where('college_id', $user->college_id));
-        } elseif ($user->hasRole('college_officer')) {
-            $query->where('level', 'college')
-                ->whereHas('proposal', fn ($q) => $q->where('college_id', $user->college_id));
         } elseif ($user->hasAnyRole(['research_officer', 'community_officer', 'technology_officer'])) {
             // Level 2 only — own category
             $categoryMap = [
-                'research_officer'   => 'research',
-                'community_officer'  => 'community_engagement',
+                'research_officer' => 'research',
+                'community_officer' => 'community_engagement',
                 'technology_officer' => 'technology_transfer',
             ];
             $category = collect($categoryMap)
@@ -61,11 +59,11 @@ class ComplaintController extends Controller
     public function store(string $id, Request $request): JsonResponse
     {
         $request->validate([
-            'stage'       => 'required|in:blind_review,open_defence',
+            'stage' => 'required|in:blind_review,open_defence',
             'description' => 'required|string|min:50',
         ]);
 
-        $proposal  = Proposal::findOrFail($id);
+        $proposal = Proposal::findOrFail($id);
         $complaint = $this->service->fileCollegeComplaint(
             $proposal,
             $request->user(),
@@ -83,10 +81,10 @@ class ComplaintController extends Controller
     {
         $request->validate([
             'complaint_type' => 'required|in:budget,rejection,other',
-            'description'    => 'required|string|min:50',
+            'description' => 'required|string|min:50',
         ]);
 
-        $proposal  = Proposal::findOrFail($id);
+        $proposal = Proposal::findOrFail($id);
         $complaint = $this->service->fileOfficerComplaint(
             $proposal,
             $request->user(),
@@ -119,14 +117,14 @@ class ComplaintController extends Controller
     public function proposalComplaints(string $id, Request $request): JsonResponse
     {
         $proposal = Proposal::findOrFail($id);
-        $user     = $request->user();
+        $user = $request->user();
 
         $query = Complaint::with(['complainant:id,name', 'resolvedBy:id,name'])
             ->where('proposal_id', $id);
 
         if ($user->hasAnyRole(['super_admin', 'central_officer'])) {
             // See all levels
-        } elseif ($user->hasRole('college_officer') || $user->hasRole('college_officer')) {
+        } elseif ($user->hasRole('college_officer')) {
             $query->where('level', 'college');
         } elseif ($user->hasAnyRole(['research_officer', 'community_officer', 'technology_officer'])) {
             $query->where('level', 'officer');
@@ -151,7 +149,7 @@ class ComplaintController extends Controller
      */
     public function show(string $id, Request $request): JsonResponse
     {
-        $user      = $request->user();
+        $user = $request->user();
         $complaint = Complaint::with([
             'proposal:id,tracker_number,title,category,college_id',
             'complainant:id,name,email',
@@ -175,7 +173,7 @@ class ComplaintController extends Controller
             'description' => 'required|string|min:50',
         ]);
 
-        $user      = $request->user();
+        $user = $request->user();
         $complaint = Complaint::findOrFail($id);
 
         if ($complaint->complainant_id !== $user->id && ! $user->hasAnyRole(['super_admin', 'central_officer'])) {
@@ -197,7 +195,7 @@ class ComplaintController extends Controller
      */
     public function destroy(string $id, Request $request): JsonResponse
     {
-        $user      = $request->user();
+        $user = $request->user();
         $complaint = Complaint::findOrFail($id);
 
         if ($complaint->complainant_id !== $user->id && ! $user->hasAnyRole(['super_admin', 'central_officer'])) {
@@ -216,12 +214,12 @@ class ComplaintController extends Controller
     public function respond(string $id, Request $request): JsonResponse
     {
         $request->validate([
-            'response'   => 'required|string',
+            'response' => 'required|string',
             'resolution' => 'required|in:resolved,dismissed',
         ]);
 
         $complaint = Complaint::findOrFail($id);
-        $resolved  = $this->service->respond(
+        $resolved = $this->service->respond(
             $complaint,
             $request->user(),
             $request->response,
@@ -233,7 +231,7 @@ class ComplaintController extends Controller
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    private function authorizeView(Complaint $complaint, \App\Models\User $user): void
+    private function authorizeView(Complaint $complaint, User $user): void
     {
         if ($user->hasAnyRole(['super_admin', 'central_officer'])) {
             return;
@@ -245,12 +243,13 @@ class ComplaintController extends Controller
                 && optional($complaint->proposal)->college_id === $user->college_id,
                 403
             );
+
             return;
         }
 
         $categoryMap = [
-            'research_officer'   => 'research',
-            'community_officer'  => 'community_engagement',
+            'research_officer' => 'research',
+            'community_officer' => 'community_engagement',
             'technology_officer' => 'technology_transfer',
         ];
         if ($user->hasAnyRole(array_keys($categoryMap))) {
@@ -260,6 +259,7 @@ class ComplaintController extends Controller
                 && optional($complaint->proposal)->category === $category,
                 403
             );
+
             return;
         }
 
