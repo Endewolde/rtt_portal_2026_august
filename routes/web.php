@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AnalyticsController;
 use App\Http\Controllers\Auth\OAuthController;
+use App\Http\Controllers\DocumentController;
 use App\Models\AppSetting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -60,6 +61,7 @@ Route::get('/admin/validation-queue', fn () => Inertia::render('Admin/Validation
 Route::get('/admin/appeals', fn () => Inertia::render('Admin/Appeals'));
 Route::get('/admin/grant-letters', fn () => Inertia::render('Admin/GrantLetters'));
 Route::get('/my-proposals', fn () => Inertia::render('Proposals/MyProposals'));
+Route::get('/my-research', fn () => Inertia::render('Staff/MyResearch'));
 Route::get('/admin/departments', fn () => Inertia::render('Admin/Departments'));
 Route::get('/admin/roles', fn () => Inertia::render('Admin/Roles'));
 Route::get('/admin/permissions', fn () => Inertia::render('Admin/Permissions'));
@@ -109,6 +111,10 @@ Route::get('/research/showcase', fn () => Inertia::render('Public/ResearchShowca
 Route::get('/finance/milestones', fn () => Inertia::render('Finance/BudgetMilestones'));
 Route::get('/notifications', fn () => Inertia::render('Notifications/Index'));
 Route::get('/profile', fn () => Inertia::render('Profile/Edit'));
+
+// ── Document generation ────────────────────────────────────────────────────────
+Route::get('/docs/user-manual', [DocumentController::class, 'userManual'])->name('docs.user-manual');
+Route::get('/docs/product-showcase', [DocumentController::class, 'productShowcase'])->name('docs.product-showcase');
 
 // ── Private file download (signed + time-limited) ─────────────────────────────
 Route::get('/files/download', function (Request $request) {

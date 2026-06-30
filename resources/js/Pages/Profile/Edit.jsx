@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import {
     User, Mail, Phone, CreditCard, Shield, Lock,
     Camera, Save, Eye, EyeOff, CheckCircle2, AlertCircle,
-    Building2, Layers, MessageSquare, ExternalLink, ShieldCheck,
+    Building2, Layers, ExternalLink, ShieldCheck,
     BookOpen, X, GraduationCap,
 } from 'lucide-react'
 import AppLayout from '../../Layouts/AppLayout'
@@ -347,119 +347,6 @@ function ChangePasswordForm() {
     )
 }
 
-// ─── Telegram section ─────────────────────────────────────────────────────────
-
-function TelegramSection({ user }) {
-    const { error } = useToast()
-    const [token, setToken] = useState(null)
-    const [loading, setLoading] = useState(false)
-    const [copied, setCopied] = useState(false)
-
-    const generate = async () => {
-        setLoading(true)
-        setToken(null)
-        try {
-            const res = await api.post('/auth/telegram/generate-token')
-            setToken(res.data?.data?.token ?? null)
-        } catch { error('Failed to generate token.') }
-        setLoading(false)
-    }
-
-    const copy = () => {
-        navigator.clipboard.writeText(token).then(() => {
-            setCopied(true)
-            setTimeout(() => setCopied(false), 2000)
-        })
-    }
-
-    const connected = !!user?.telegram_chat_id
-
-    return (
-        <div className="space-y-4">
-            {/* Status badge */}
-            <div className={`flex items-center gap-3 p-4 rounded-xl ${
-                connected ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-200'
-            }`}>
-                <div className={`h-10 w-10 rounded-xl flex items-center justify-center text-lg ${
-                    connected ? 'bg-green-100' : 'bg-gray-100'
-                }`}>
-                    {connected ? '✅' : '💬'}
-                </div>
-                <div>
-                    <p className="text-sm font-semibold text-gray-800">
-                        {connected ? 'Telegram Connected' : 'Telegram Not Connected'}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                        {connected
-                            ? 'You will receive RTT notifications via Telegram.'
-                            : 'Connect your Telegram account to receive proposal updates and deadline reminders.'}
-                    </p>
-                </div>
-            </div>
-
-            {!connected && (
-                <div className="space-y-4">
-                    {/* How-to steps */}
-                    <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
-                        <p className="text-xs font-bold text-blue-800 uppercase tracking-wide">How to connect</p>
-                        <ol className="space-y-2.5">
-                            {[
-                                <>Open Telegram and search for <a href="https://t.me/rtt_backup_bot" target="_blank" rel="noreferrer" className="font-semibold text-blue-700 underline underline-offset-2">@rtt_backup_bot</a> — or click the link to open it directly.</>,
-                                <>Click <strong>Start</strong> if this is your first time chatting with the bot.</>,
-                                <>Click <strong>Generate Token</strong> below to get a one-time code.</>,
-                                <>Send the token to the bot. Type <code className="bg-blue-100 rounded px-1 font-mono text-[11px]">/link YOUR_TOKEN</code> and press Send.</>,
-                                <>The bot will confirm — your account is linked automatically.</>,
-                            ].map((step, i) => (
-                                <li key={i} className="flex gap-2.5">
-                                    <span className="shrink-0 h-5 w-5 rounded-full bg-blue-200 text-blue-800 flex items-center justify-center text-[10px] font-bold mt-0.5">
-                                        {i + 1}
-                                    </span>
-                                    <span className="text-xs text-blue-700 leading-relaxed">{step}</span>
-                                </li>
-                            ))}
-                        </ol>
-                    </div>
-
-                    {/* Token generation */}
-                    <div className="space-y-2">
-                        <button onClick={generate} disabled={loading}
-                            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white
-                                       rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition-colors">
-                            {loading
-                                ? <><div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Generating…</>
-                                : <><MessageSquare size={14} /> Generate Token</>
-                            }
-                        </button>
-
-                        {token && (
-                            <div className="bg-white border border-blue-200 rounded-xl p-4 space-y-2.5">
-                                <div className="flex items-center justify-between">
-                                    <p className="text-xs font-semibold text-gray-700">Your one-time token</p>
-                                    <span className="text-[10px] text-amber-600 font-medium bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
-                                        Expires in 10 min
-                                    </span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <code className="flex-1 text-sm font-mono bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-gray-900 break-all select-all">
-                                        {token}
-                                    </code>
-                                    <button onClick={copy}
-                                        className="shrink-0 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-xs font-semibold text-gray-600 transition-colors">
-                                        {copied ? 'Copied!' : 'Copy'}
-                                    </button>
-                                </div>
-                                <p className="text-xs text-gray-500">
-                                    Send this to <a href="https://t.me/rtt_backup_bot" target="_blank" rel="noreferrer" className="text-blue-600 font-medium hover:underline">@rtt_backup_bot</a> as: <code className="bg-gray-100 rounded px-1 font-mono text-[11px]">/link {token}</code>
-                                </p>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
-        </div>
-    )
-}
-
 // ─── Security section ─────────────────────────────────────────────────────────
 
 function SecuritySection({ user, onUpdated }) {
@@ -729,11 +616,6 @@ export default function ProfileEdit() {
                     <SecuritySection user={currentUser} onUpdated={handleUpdated} />
                 </Card>
 
-                {/* Telegram */}
-                <Card title="Telegram Integration" icon={MessageSquare}
-                      iconColor="bg-cyan-100 text-cyan-600">
-                    <TelegramSection user={currentUser} onUpdated={handleUpdated} />
-                </Card>
 
             </div>
         </AppLayout>
