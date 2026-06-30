@@ -15,7 +15,7 @@ class SystemMonitorController extends Controller
 {
     public function current(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'central_officer'])) {
+        if (! $request->user()?->can('system_monitor.view_any')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.'], 403);
         }
 
@@ -29,7 +29,7 @@ class SystemMonitorController extends Controller
 
     public function history(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'central_officer'])) {
+        if (! $request->user()?->can('system_monitor.view_any')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.'], 403);
         }
 
@@ -57,7 +57,7 @@ class SystemMonitorController extends Controller
 
     public function requestStats(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'central_officer'])) {
+        if (! $request->user()?->can('system_monitor.view_any')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.'], 403);
         }
 
@@ -121,7 +121,7 @@ class SystemMonitorController extends Controller
 
     public function failedJobs(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'central_officer'])) {
+        if (! $request->user()?->can('system_monitor.view_any')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.'], 403);
         }
 
@@ -206,7 +206,7 @@ class SystemMonitorController extends Controller
 
     public function alerts(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'central_officer'])) {
+        if (! $request->user()?->can('system_monitor.view_any')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.'], 403);
         }
 

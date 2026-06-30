@@ -56,6 +56,7 @@ class RolePermissionSeeder extends Seeder
             'settings' => ['view_any', 'view', 'update', 'manage'],
             'awards' => ['view_any', 'view', 'create', 'update'],
             'audit_logs' => ['view_any', 'view'],
+            'system_monitor' => ['view_any'],
             'features' => ['view_any', 'manage'],
             'external_funds' => [
                 'view_any', 'view', 'create', 'update', 'delete', 'export',
@@ -105,10 +106,10 @@ class RolePermissionSeeder extends Seeder
         $all = Permission::all();
 
         // ── super_admin: everything ───────────────────────────────────────────
-        Role::findByName('super_admin')->syncPermissions($all);
+        Role::findByName('super_admin', 'web')->syncPermissions($all);
 
         // ── admin: site management (users, roles, settings, features) ─────────
-        Role::findByName('admin')->syncPermissions([
+        Role::findByName('admin', 'web')->syncPermissions([
             'proposals.view_any', 'proposals.view', 'proposals.create', 'proposals.update',
             'proposals.delete', 'proposals.export', 'proposals.submit',
             'proposals.validate', 'proposals.assign_reviewer', 'proposals.review', 'proposals.track',
@@ -135,6 +136,7 @@ class RolePermissionSeeder extends Seeder
             'departments.view_any', 'departments.view', 'departments.create', 'departments.update', 'departments.delete',
             'settings.view_any', 'settings.view', 'settings.update', 'settings.manage',
             'audit_logs.view_any', 'audit_logs.view',
+            'system_monitor.view_any',
             'features.view_any', 'features.manage',
             'external_funds.view_any', 'external_funds.view', 'external_funds.create',
             'external_funds.update', 'external_funds.delete', 'external_funds.export',
@@ -161,7 +163,7 @@ class RolePermissionSeeder extends Seeder
         ]);
 
         // ── central_officer: cross-college oversight ──────────────────────────
-        Role::findByName('central_officer')->syncPermissions([
+        Role::findByName('central_officer', 'web')->syncPermissions([
             'proposals.view_any', 'proposals.view', 'proposals.update', 'proposals.export',
             'proposals.validate', 'proposals.assign_reviewer', 'proposals.review',
             'proposal_calls.view_any', 'proposal_calls.view', 'proposal_calls.create',
@@ -179,6 +181,7 @@ class RolePermissionSeeder extends Seeder
             'awards.view_any', 'awards.view', 'awards.create', 'awards.update',
             'users.view_any', 'users.view',
             'audit_logs.view_any', 'audit_logs.view',
+            'system_monitor.view_any',
             'external_funds.view_any', 'external_funds.view', 'external_funds.create',
             'external_funds.update', 'external_funds.export',
             'external_funds.manage_agencies', 'external_funds.manage_opportunities',
@@ -206,7 +209,7 @@ class RolePermissionSeeder extends Seeder
         ]);
 
         // ── research_officer ─────────────────────────────────────────────────
-        Role::findByName('research_officer')->syncPermissions([
+        Role::findByName('research_officer', 'web')->syncPermissions([
             'proposals.view_any', 'proposals.view', 'proposals.update',
             'proposals.validate', 'proposals.assign_reviewer', 'proposals.export',
             'proposal_calls.view_any', 'proposal_calls.view',
@@ -238,7 +241,7 @@ class RolePermissionSeeder extends Seeder
         ]);
 
         // ── community_officer ────────────────────────────────────────────────
-        Role::findByName('community_officer')->syncPermissions([
+        Role::findByName('community_officer', 'web')->syncPermissions([
             'proposals.view_any', 'proposals.view', 'proposals.update',
             'proposals.validate', 'proposals.assign_reviewer', 'proposals.export',
             'proposal_calls.view_any', 'proposal_calls.view',
@@ -266,7 +269,7 @@ class RolePermissionSeeder extends Seeder
         ]);
 
         // ── technology_officer ───────────────────────────────────────────────
-        Role::findByName('technology_officer')->syncPermissions([
+        Role::findByName('technology_officer', 'web')->syncPermissions([
             'proposals.view_any', 'proposals.view', 'proposals.update',
             'proposals.validate', 'proposals.assign_reviewer', 'proposals.export',
             'proposal_calls.view_any', 'proposal_calls.view',
@@ -294,7 +297,7 @@ class RolePermissionSeeder extends Seeder
         ]);
 
         // ── college_officer: college-scoped management ───────────────────────
-        Role::findByName('college_officer')->syncPermissions([
+        Role::findByName('college_officer', 'web')->syncPermissions([
             'proposals.view_any', 'proposals.view', 'proposals.update', 'proposals.export',
             'proposal_calls.view_any', 'proposal_calls.view',
             'reviews.view_any', 'reviews.view', 'reviews.create', 'reviews.update',
@@ -326,7 +329,7 @@ class RolePermissionSeeder extends Seeder
         ]);
 
         // ── finance_officer: college-scoped budget approvals & disbursements ────
-        Role::findByName('finance_officer')->syncPermissions([
+        Role::findByName('finance_officer', 'web')->syncPermissions([
             'proposals.view_any', 'proposals.view',
             'budget_requests.view_any', 'budget_requests.view', 'budget_requests.update', 'budget_requests.export',
             'disbursements.view_any', 'disbursements.view', 'disbursements.create', 'disbursements.update',
@@ -342,7 +345,7 @@ class RolePermissionSeeder extends Seeder
         ]);
 
         // ── support_officer: finance & support tasks ─────────────────────────
-        Role::findByName('support_officer')->syncPermissions([
+        Role::findByName('support_officer', 'web')->syncPermissions([
             'budget_requests.view_any', 'budget_requests.view', 'budget_requests.export',
             'disbursements.view_any', 'disbursements.view', 'disbursements.create', 'disbursements.update',
             'settlements.view_any', 'settlements.view', 'settlements.update',
@@ -355,7 +358,7 @@ class RolePermissionSeeder extends Seeder
         ]);
 
         // ── reviewer: scoped read access for assigned proposals & reviews ────
-        Role::findByName('reviewer')->syncPermissions([
+        Role::findByName('reviewer', 'web')->syncPermissions([
             'proposals.view',
             'reviews.view', 'reviews.create', 'reviews.update',
             'review_assignments.view', 'review_assignments.update',
@@ -363,7 +366,7 @@ class RolePermissionSeeder extends Seeder
         ]);
 
         // ── pi: proposal submission & tracking ────────────────────────────────
-        Role::findByName('pi')->syncPermissions([
+        Role::findByName('pi', 'web')->syncPermissions([
             'proposals.view_any', 'proposals.view', 'proposals.create',
             'proposals.update', 'proposals.submit', 'proposals.track',
             'proposal_calls.view_any', 'proposal_calls.view',
@@ -381,7 +384,7 @@ class RolePermissionSeeder extends Seeder
         ]);
 
         // ── staff: proposal submission & reviews ─────────────────────────────
-        Role::findByName('staff')->syncPermissions([
+        Role::findByName('staff', 'web')->syncPermissions([
             'proposals.view_any', 'proposals.view', 'proposals.create',
             'proposals.update', 'proposals.submit', 'proposals.track',
             'proposal_calls.view_any', 'proposal_calls.view',
@@ -402,7 +405,7 @@ class RolePermissionSeeder extends Seeder
         ]);
 
         // ── proposal_archivist: read-only access to proposals ─────────────────
-        Role::findByName('proposal_archivist')->syncPermissions([
+        Role::findByName('proposal_archivist', 'web')->syncPermissions([
             'proposals.view_any', 'proposals.view',
         ]);
     }

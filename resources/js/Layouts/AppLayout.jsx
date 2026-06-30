@@ -48,7 +48,7 @@ const ROUTE_PERMISSIONS = [
     // Admin-level
     ['/admin/settings',            ['super_admin', 'admin']],
     ['/admin/public-site',         ['super_admin', 'admin']],
-    ['/admin/system-monitor',      ['super_admin', 'central_officer']],
+    ['/admin/system-monitor',      _A],
     ['/admin/audit-logs',          _A],
     ['/admin/evaluation-criteria', _A],
     ['/admin/similarity-flags',    _A],
@@ -97,6 +97,7 @@ const ROUTE_PERM_REQUIRED = {
     '/admin/assign-reviewers':    'proposals.assign_reviewer',
     '/admin/review-assignment':   'review_assignments.view_any',
     '/admin/audit-logs':          'audit_logs.view_any',
+    '/admin/system-monitor':      'system_monitor.view_any',
     '/admin/users':               'users.view_any',
     '/admin/colleges':            'colleges.view_any',
     '/admin/departments':         'departments.view_any',
@@ -980,7 +981,7 @@ export default function AppLayout({ children, breadcrumb }) {
                 },
                 {
                     label: 'System Monitor', href: '/admin/system-monitor', icon: 'Activity',
-                    show: hasAnyRole(['super_admin', 'central_officer']),
+                    show: perm('system_monitor.view_any'),
                 },
                 {
                     label: 'Feature Management', href: '/admin/features', icon: 'Settings',
