@@ -29,6 +29,7 @@ use App\Http\Controllers\Api\ExternalFund\MilestoneController as EFMilestoneCont
 use App\Http\Controllers\Api\ExternalFund\OpportunityController as EFOpportunityController;
 use App\Http\Controllers\Api\ExternalFund\ReviewController as EFReviewController;
 use App\Http\Controllers\Api\ExternalFund\TeamMemberController as EFTeamMemberController;
+use App\Http\Controllers\Api\FaqController;
 use App\Http\Controllers\Api\FeatureController;
 use App\Http\Controllers\Api\FeedbackController;
 use App\Http\Controllers\Api\HealthController;
@@ -120,6 +121,7 @@ Route::prefix('v1')->group(function () {
     Route::get('/colleges/public', [CollegeController::class, 'publicList']);
     Route::get('/colleges/{id}/departments/public', [CollegeController::class, 'publicDepartments']);
     Route::get('/thematic-areas/public', [ThematicAreaController::class, 'publicIndex']);
+    Route::get('/faqs/public', [FaqController::class, 'public']);
 
     // Lookup options — active values for forms (no auth needed for proposal create)
     Route::get('/lookup-options/active', [LookupOptionController::class, 'active']);
@@ -247,6 +249,13 @@ Route::prefix('v1')->group(function () {
         Route::put('/features', [FeatureController::class, 'update']);
         Route::get('/features/sub', [FeatureController::class, 'getDisabledSubFeatures']);
         Route::put('/features/sub', [FeatureController::class, 'updateDisabledSubFeatures']);
+
+        // FAQs — admin CRUD
+        Route::get('/faqs', [FaqController::class, 'index']);
+        Route::post('/faqs', [FaqController::class, 'store']);
+        Route::put('/faqs/reorder', [FaqController::class, 'reorder']);
+        Route::put('/faqs/{faq}', [FaqController::class, 'update']);
+        Route::delete('/faqs/{faq}', [FaqController::class, 'destroy']);
 
         // Login notices — admin CRUD
         Route::get('/login-notices', [LoginNoticeController::class, 'index']);

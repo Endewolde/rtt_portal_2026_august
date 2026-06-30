@@ -386,7 +386,7 @@ function FaqItem({ item, open, onToggle, primaryColor }) {
                 onClick={onToggle}
                 className="w-full flex items-center justify-between gap-4 px-6 py-4 text-left bg-white hover:bg-gray-50 transition-colors duration-150"
             >
-                <span className="font-semibold text-slate-800 text-sm leading-snug pr-2">{item.q}</span>
+                <span className="font-semibold text-slate-800 text-sm leading-snug pr-2">{item.question ?? item.q}</span>
                 <ChevronDown
                     size={18}
                     className="shrink-0 transition-transform duration-300"
@@ -401,7 +401,7 @@ function FaqItem({ item, open, onToggle, primaryColor }) {
                 style={{ maxHeight: open ? '300px' : '0px' }}
             >
                 <p className="px-6 pb-5 pt-1 text-sm text-slate-500 leading-relaxed border-t border-gray-100">
-                    {item.a}
+                    {item.answer ?? item.a}
                 </p>
             </div>
         </div>
@@ -410,12 +410,19 @@ function FaqItem({ item, open, onToggle, primaryColor }) {
 
 // ─── Hero Stat Card ───────────────────────────────────────────────────────────
 
-function HeroStatCard({ stat, label, color, icon, inView, secondaryStats }) {
+function HeroStatCard({ stat, label, color, icon, inView, secondaryStats, fundedRate }) {
     const num      = parseInt(String(stat ?? 0).replace(/\D/g, ''), 10);
     const animated = useCountUp(num, inView && num > 0, 1400);
     const radius   = 44;
     const circ     = 2 * Math.PI * radius;
-    const offset   = inView ? circ * 0.28 : circ;
+    const showRing  = fundedRate !== null && fundedRate !== undefined;
+    const targetPct = showRing ? Math.min(Math.max(fundedRate, 0), 100) : 0;
+    const [pct, setPct] = useState(0);
+    useEffect(() => {
+        const t = setTimeout(() => setPct(targetPct), 120);
+        return () => clearTimeout(t);
+    }, [targetPct]);
+    const offset = circ * (1 - pct / 100);
 
     return (
         <div className="relative rounded-3xl overflow-hidden border border-white/10 p-7 backdrop-blur-xl"
@@ -425,14 +432,14 @@ function HeroStatCard({ stat, label, color, icon, inView, secondaryStats }) {
                 style={{ background: color }} />
 
             {/* Icon badge */}
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl mb-5 text-xl"
+            <div className={`${showRing ? 'inline-flex' : 'flex mx-auto'} items-center justify-center w-12 h-12 rounded-2xl mb-5 text-xl`}
                 style={{ background: `${color}22`, border: `1.5px solid ${color}35` }}>
                 {icon}
             </div>
 
             {/* Stat + ring row */}
-            <div className="flex items-center justify-between gap-4 mb-1">
-                <div>
+            <div className={`flex items-center gap-4 mb-1 ${showRing ? 'justify-between' : 'justify-center'}`}>
+                <div className={showRing ? '' : 'text-center'}>
                     <div className="text-5xl font-extrabold text-white tabular-nums tracking-tight leading-none">
                         {num > 0 ? animated.toLocaleString() : '—'}
                     </div>
@@ -440,24 +447,26 @@ function HeroStatCard({ stat, label, color, icon, inView, secondaryStats }) {
                         {label}
                     </div>
                 </div>
-                <svg width="80" height="80" viewBox="0 0 110 110" className="shrink-0">
-                    <circle cx="55" cy="55" r={radius} fill="none"
-                        stroke="rgba(255,255,255,0.07)" strokeWidth="9" />
-                    <circle cx="55" cy="55" r={radius} fill="none"
-                        stroke={color} strokeWidth="9" strokeLinecap="round"
-                        strokeDasharray={circ}
-                        strokeDashoffset={offset}
-                        style={{
-                            transition: 'stroke-dashoffset 1.4s cubic-bezier(.16,1,.3,1)',
-                            transform: 'rotate(-90deg)',
-                            transformOrigin: '55px 55px',
-                        }}
-                    />
-                    <text x="55" y="60" textAnchor="middle" fill="rgba(255,255,255,0.5)"
-                        fontSize="11" fontWeight="600" fontFamily="monospace">
-                        {inView ? Math.round((num > 0 ? 0.72 : 0) * 100) + '%' : '0%'}
-                    </text>
-                </svg>
+                {showRing && (
+                    <svg width="80" height="80" viewBox="0 0 110 110" className="shrink-0">
+                        <circle cx="55" cy="55" r={radius} fill="none"
+                            stroke="rgba(255,255,255,0.07)" strokeWidth="9" />
+                        <circle cx="55" cy="55" r={radius} fill="none"
+                            stroke={color} strokeWidth="9" strokeLinecap="round"
+                            strokeDasharray={circ}
+                            strokeDashoffset={offset}
+                            style={{
+                                transition: 'stroke-dashoffset 1.4s cubic-bezier(.16,1,.3,1)',
+                                transform: 'rotate(-90deg)',
+                                transformOrigin: '55px 55px',
+                            }}
+                        />
+                        <text x="55" y="60" textAnchor="middle" fill="rgba(255,255,255,0.5)"
+                            fontSize="11" fontWeight="600" fontFamily="monospace">
+                            {pct + '%'}
+                        </text>
+                    </svg>
+                )}
             </div>
 
             {/* Divider */}
@@ -729,6 +738,7 @@ function HeroSlider({ stats, primaryColor, heroBg, orgName, ctaPrimary, ctaSecon
                                 icon={slide.icon}
                                 inView={true}
                                 secondaryStats={secondaryStats}
+                                fundedRate={['total_proposals','funded'].includes(slide.statKey) ? (stats.funded_rate ?? null) : null}
                             />
                         </div>
                     </div>
@@ -775,6 +785,7 @@ export default function Home() {
     const [calls, setCalls]               = useState([]);
     const [stats, setStats]               = useState({});
     const [thematicAreas, setThematicAreas] = useState([]);
+    const [faqs, setFaqs]                 = useState(null); // null = loading
     const [openFaq, setOpenFaq]           = useState(null);
 
     const s            = usePage().props.app_settings ?? {};
@@ -821,6 +832,9 @@ export default function Home() {
         get('/stats')
             .then(r => setStats(r?.data ?? r ?? {}))
             .catch(() => {});
+        get('/faqs/public')
+            .then(r => setFaqs(r?.data ?? []))
+            .catch(() => setFaqs([]));
         get('/thematic-areas/public')
             .then(r => setThematicAreas(r?.data ?? []))
             .catch(() => {});
@@ -1001,9 +1015,9 @@ export default function Home() {
                         />
 
                         <div className="flex flex-col gap-3">
-                            {DEFAULT_FAQS.map((item, i) => (
+                            {(faqs === null ? DEFAULT_FAQS : faqs.length > 0 ? faqs : DEFAULT_FAQS).map((item, i) => (
                                 <FaqItem
-                                    key={i}
+                                    key={item.id ?? i}
                                     item={item}
                                     open={openFaq === i}
                                     onToggle={() => setOpenFaq(openFaq === i ? null : i)}

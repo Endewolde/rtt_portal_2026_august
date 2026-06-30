@@ -12,6 +12,7 @@ import {
     BadgeDollarSign, Trophy, Archive, ListChecks, ShieldCheck,
     User, ChevronDown, ChevronUp, Lock, Clock, UserX,
     CalendarDays, Banknote, Landmark, MessageSquareHeart, LogIn, Scale, ScrollText, Milestone, FileBarChart2, FolderSearch,
+    HelpCircle,
 } from 'lucide-react'
 import NotificationBell from '../Components/NotificationBell'
 import FeedbackPopup from '../Components/FeedbackPopup'
@@ -58,6 +59,7 @@ const ROUTE_PERMISSIONS = [
     ['/admin/resources',           _A],
     ['/admin/analytics',           _A],
     ['/admin/login-notices',       _A],
+    ['/admin/faqs',                _A],
     ['/admin/feedback',            _A],
     ['/admin/repository',          _A],
     ['/admin/assign-reviewers',    _A],
@@ -285,6 +287,7 @@ const ICONS = {
     BadgeDollarSign, Trophy, Archive, ListChecks, ShieldCheck,
     Globe, CalendarDays, Banknote, Landmark,
     FlaskConical, Brain, MessageSquareHeart, Scale, ScrollText, Milestone, FileBarChart2, FolderSearch,
+    HelpCircle,
     BuildingOffice: Building2,
 }
 
@@ -991,6 +994,7 @@ export default function AppLayout({ children, breadcrumb }) {
                 { label: 'Settings',       href: '/admin/settings',      icon: 'Settings',    show: hasRole('super_admin') || hasRole('admin') },
                 { label: 'Public Site',    href: '/admin/public-site',   icon: 'Globe',       show: hasRole('super_admin') || hasRole('admin') },
                 { label: 'Login Notices',  href: '/admin/login-notices', icon: 'Megaphone',   show: hasAnyRole(ALL_ADMIN) },
+                { label: 'FAQs',           href: '/admin/faqs',          icon: 'HelpCircle',  show: hasAnyRole(ALL_ADMIN) },
                 { label: 'Feedback',       href: '/admin/feedback',      icon: 'MessageSquareHeart', show: hasAnyRole(ALL_ADMIN) },
             ],
         },
