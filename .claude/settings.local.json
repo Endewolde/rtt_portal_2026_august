@@ -73,7 +73,16 @@
       "Bash(grep -n 'protected $fillable' -A 20 /Users/endashaw/real_rtt1/app/Models/CompletionWorkshop.php)",
       "Bash(grep -n 'protected $fillable' -A 20 /Users/endashaw/real_rtt1/app/Models/Award.php)",
       "Bash(grep -n ''\\\\''overdue_reviews'\\\\'' => $overdueReviews,' /Users/endashaw/real_rtt1/app/Http/Controllers/Api/ActionCountController.php)",
-      "Bash(git restore *)"
+      "Bash(git restore *)",
+      "Bash(grep -rn 'transition\\(\\\\s*$proposal,\\\\s*'\\\\''archive'\\\\''\\\\|->transition\\(.*'\\\\''archive'\\\\''' /Users/endashaw/real_rtt1/app/)",
+      "Bash(grep -n 'private WorkflowService\\\\|WorkflowService $workflowService\\\\|use App\\\\\\\\Services\\\\\\\\WorkflowService' /Users/endashaw/real_rtt1/app/Http/Controllers/Api/ReviewController.php)",
+      "Bash(grep -rln 'public function __construct\\(private WorkflowService\\\\|WorkflowService $workflow' /Users/endashaw/real_rtt1/app/Http/Controllers/Api/)",
+      "Bash(grep \"\\\\.php$\")",
+      "Bash(grep -n 'protected $fillable' -A 15 /Users/endashaw/real_rtt1/app/Models/ResearchOutput.php)",
+      "Bash(awk 'NR>=380 && NR<=410' /Users/endashaw/real_rtt1/routes/api.php)",
+      "Bash(php -l app/Http/Controllers/Api/OngoingProposalsController.php)",
+      "Bash(php -l app/Services/AwardService.php)",
+      "Bash(php -l routes/api.php)"
     ]
   },
   "enableAllProjectMcpServers": true,

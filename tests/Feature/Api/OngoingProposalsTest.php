@@ -2,19 +2,25 @@
 
 use App\Models\Award;
 use App\Models\BudgetAllocation;
+use App\Models\BudgetRequest;
 use App\Models\College;
 use App\Models\Department;
+use App\Models\Disbursement;
+use App\Models\FormTemplate;
 use App\Models\MidtermEvaluation;
 use App\Models\Proposal;
 use App\Models\ProposalCall;
+use App\Models\ResearchOutput;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
+use Database\Seeders\WorkflowStageSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
     (new RolePermissionSeeder)->run();
+    (new WorkflowStageSeeder)->run();
 });
 
 function op_makeBase(): array
@@ -67,20 +73,75 @@ test('staff/PI cannot access even though they hold proposals.view_any', function
         ->assertForbidden();
 });
 
-test('only funded and midterm_evaluation proposals are included, not other statuses', function () {
+test('funded, midterm_evaluation and completed proposals are included, not other statuses', function () {
     [$college, $dept, $central, $call] = op_makeBase();
     op_proposal($college, $dept, $call, 'funded');
     op_proposal($college, $dept, $call, 'midterm_evaluation');
-    op_proposal($college, $dept, $call, 'under_blind_review');
     op_proposal($college, $dept, $call, 'completed');
+    op_proposal($college, $dept, $call, 'under_blind_review');
     op_proposal($college, $dept, $call, 'archived');
 
     $response = $this->actingAs($central, 'sanctum')->getJson('/api/v1/ongoing-proposals');
 
     $response->assertOk();
-    expect($response->json('data.kpis.total_ongoing'))->toBe(2)
+    expect($response->json('data.kpis.total_ongoing'))->toBe(3)
         ->and(collect($response->json('data.proposals.data'))->pluck('status')->all())
-        ->toEqualCanonicalizing(['funded', 'midterm_evaluation']);
+        ->toEqualCanonicalizing(['funded', 'midterm_evaluation', 'completed']);
+});
+
+test('a completed proposal is flagged needs_archiving and counted in awaiting_archive', function () {
+    [$college, $dept, $central, $call] = op_makeBase();
+    $completed = op_proposal($college, $dept, $call, 'completed');
+    op_proposal($college, $dept, $call, 'funded');
+
+    $response = $this->actingAs($central, 'sanctum')->getJson('/api/v1/ongoing-proposals');
+
+    $response->assertOk();
+    expect($response->json('data.kpis.awaiting_archive'))->toBe(1);
+
+    $row = collect($response->json('data.proposals.data'))->firstWhere('id', $completed->id);
+    expect($row['needs_archiving'])->toBeTrue();
+
+    $filtered = $this->actingAs($central, 'sanctum')
+        ->getJson('/api/v1/ongoing-proposals?status=awaiting_archive');
+    $ids = collect($filtered->json('data.proposals.data'))->pluck('id')->all();
+    expect($ids)->toBe([$completed->id]);
+});
+
+test('central_officer can archive a completed proposal and it transitions to archived', function () {
+    [$college, $dept, $central, $call] = op_makeBase();
+    $proposal = op_proposal($college, $dept, $call, 'completed');
+
+    $response = $this->actingAs($central, 'sanctum')
+        ->postJson("/api/v1/ongoing-proposals/{$proposal->id}/archive");
+
+    $response->assertOk();
+    expect(Proposal::find($proposal->id)->status)->toBe('archived');
+    $this->assertDatabaseHas('workflow_logs', ['proposal_id' => $proposal->id, 'to_stage' => 'archived']);
+});
+
+test('a college officer cannot archive even a proposal in their own college', function () {
+    [$college, $dept, $central, $call] = op_makeBase();
+    $proposal = op_proposal($college, $dept, $call, 'completed');
+    $officer = User::factory()->create(['college_id' => $college->id]);
+    $officer->assignRole('college_officer');
+
+    $this->actingAs($officer, 'sanctum')
+        ->postJson("/api/v1/ongoing-proposals/{$proposal->id}/archive")
+        ->assertForbidden();
+
+    expect(Proposal::find($proposal->id)->status)->toBe('completed');
+});
+
+test('archiving a proposal that is not yet completed is rejected', function () {
+    [$college, $dept, $central, $call] = op_makeBase();
+    $proposal = op_proposal($college, $dept, $call, 'funded');
+
+    $this->actingAs($central, 'sanctum')
+        ->postJson("/api/v1/ongoing-proposals/{$proposal->id}/archive")
+        ->assertStatus(422);
+
+    expect(Proposal::find($proposal->id)->status)->toBe('funded');
 });
 
 test('a college officer only sees ongoing proposals from their own college, even with a different college_id requested', function () {
@@ -279,5 +340,223 @@ test('a non-allowed role cannot export ongoing proposals', function () {
 
     $this->actingAs($pi, 'sanctum')
         ->get('/api/v1/ongoing-proposals/export')
+        ->assertForbidden();
+});
+
+test('needs_contract reflects contract_status and is counted/filterable', function () {
+    [$college, $dept, $central, $call] = op_makeBase();
+    $approved = op_proposal($college, $dept, $call, 'funded');
+    $approved->update(['contract_status' => 'approved']);
+    $pending = op_proposal($college, $dept, $call, 'funded');
+    $pending->update(['contract_status' => 'pending']);
+    $notSubmitted = op_proposal($college, $dept, $call, 'funded');
+
+    $response = $this->actingAs($central, 'sanctum')->getJson('/api/v1/ongoing-proposals');
+
+    $response->assertOk();
+    expect($response->json('data.kpis.needs_contract'))->toBe(2);
+
+    $rows = collect($response->json('data.proposals.data'))->keyBy('id');
+    expect($rows[$approved->id]['needs_contract'])->toBeFalse()
+        ->and($rows[$pending->id]['needs_contract'])->toBeTrue()
+        ->and($rows[$notSubmitted->id]['needs_contract'])->toBeTrue();
+
+    $filtered = $this->actingAs($central, 'sanctum')
+        ->getJson('/api/v1/ongoing-proposals?status=needs_contract');
+    $ids = collect($filtered->json('data.proposals.data'))->pluck('id')->all();
+    expect($ids)->toEqualCanonicalizing([$pending->id, $notSubmitted->id]);
+});
+
+test('needs_disbursement reflects an approved budget request with no disbursement yet', function () {
+    [$college, $dept, $central, $call] = op_makeBase();
+    $template = FormTemplate::create(['name' => 'Budget Form', 'is_active' => true, 'created_by' => $central->id]);
+
+    $awaitingDisbursement = op_proposal($college, $dept, $call, 'funded');
+    $approvedRequest = BudgetRequest::create([
+        'proposal_id' => $awaitingDisbursement->id, 'form_template_id' => $template->id,
+        'requested_by' => $central->id, 'total_amount' => 5000, 'status' => 'approved',
+    ]);
+
+    $disbursed = op_proposal($college, $dept, $call, 'funded');
+    $disbursedRequest = BudgetRequest::create([
+        'proposal_id' => $disbursed->id, 'form_template_id' => $template->id,
+        'requested_by' => $central->id, 'total_amount' => 5000, 'status' => 'approved',
+    ]);
+    Disbursement::create([
+        'budget_request_id' => $disbursedRequest->id, 'disbursed_by' => $central->id,
+        'amount' => 5000, 'disbursed_at' => now(),
+    ]);
+
+    $notYetApproved = op_proposal($college, $dept, $call, 'funded');
+    BudgetRequest::create([
+        'proposal_id' => $notYetApproved->id, 'form_template_id' => $template->id,
+        'requested_by' => $central->id, 'total_amount' => 5000, 'status' => 'submitted',
+    ]);
+
+    $response = $this->actingAs($central, 'sanctum')->getJson('/api/v1/ongoing-proposals');
+
+    $response->assertOk();
+    expect($response->json('data.kpis.needs_disbursement'))->toBe(1);
+
+    $rows = collect($response->json('data.proposals.data'))->keyBy('id');
+    expect($rows[$awaitingDisbursement->id]['needs_disbursement'])->toBeTrue()
+        ->and($rows[$disbursed->id]['needs_disbursement'])->toBeFalse()
+        ->and($rows[$notYetApproved->id]['needs_disbursement'])->toBeFalse();
+
+    $filtered = $this->actingAs($central, 'sanctum')
+        ->getJson('/api/v1/ongoing-proposals?status=needs_disbursement');
+    $ids = collect($filtered->json('data.proposals.data'))->pluck('id')->all();
+    expect($ids)->toBe([$awaitingDisbursement->id]);
+});
+
+test('outputs_count reflects the number of recorded research outputs', function () {
+    [$college, $dept, $central, $call] = op_makeBase();
+    $withOutputs = op_proposal($college, $dept, $call, 'funded');
+    ResearchOutput::create([
+        'proposal_id' => $withOutputs->id, 'output_type' => 'journal_article',
+        'title' => 'Output 1', 'recorded_by' => $central->id,
+    ]);
+    ResearchOutput::create([
+        'proposal_id' => $withOutputs->id, 'output_type' => 'patent',
+        'title' => 'Output 2', 'recorded_by' => $central->id,
+    ]);
+    $withoutOutputs = op_proposal($college, $dept, $call, 'funded');
+
+    $response = $this->actingAs($central, 'sanctum')->getJson('/api/v1/ongoing-proposals');
+
+    $response->assertOk();
+    $rows = collect($response->json('data.proposals.data'))->keyBy('id');
+    expect($rows[$withOutputs->id]['outputs_count'])->toBe(2)
+        ->and($rows[$withoutOutputs->id]['outputs_count'])->toBe(0);
+});
+
+test('a central_officer cannot grant a legacy proposal, only super_admin can', function () {
+    [$college, $dept, $central, $call] = op_makeBase();
+    $proposal = op_proposal($college, $dept, $call, 'under_blind_review');
+
+    $this->actingAs($central, 'sanctum')
+        ->postJson("/api/v1/ongoing-proposals/{$proposal->id}/grant-legacy", [
+            'justification' => 'Actually funded externally in 2024.',
+            'awarded_amount' => 10000,
+        ])
+        ->assertForbidden();
+
+    expect(Proposal::find($proposal->id)->status)->toBe('under_blind_review');
+});
+
+test('super_admin can grant a legacy proposal, which transitions it to funded and creates an award', function () {
+    [$college, $dept, $central, $call] = op_makeBase();
+    $superAdmin = User::factory()->create();
+    $superAdmin->assignRole('super_admin');
+    $proposal = op_proposal($college, $dept, $call, 'under_blind_review');
+
+    $response = $this->actingAs($superAdmin, 'sanctum')
+        ->postJson("/api/v1/ongoing-proposals/{$proposal->id}/grant-legacy", [
+            'justification' => 'Actually funded externally before this system existed.',
+            'awarded_amount' => 15000,
+            'grant_reference' => 'LEGACY-GR-0001',
+            'approved_at' => '2024-01-15',
+        ]);
+
+    $response->assertOk();
+    expect(Proposal::find($proposal->id)->status)->toBe('funded');
+
+    $this->assertDatabaseHas('awards', [
+        'proposal_id' => $proposal->id,
+        'grant_reference' => 'LEGACY-GR-0001',
+        'awarded_amount' => 15000,
+    ]);
+    $this->assertDatabaseHas('workflow_logs', [
+        'proposal_id' => $proposal->id,
+        'from_stage' => 'under_blind_review',
+        'action' => 'grant_legacy',
+        'to_stage' => 'funded',
+    ]);
+    $this->assertDatabaseHas('audit_logs', [
+        'auditable_id' => $proposal->id,
+        'event' => 'proposal.grant_legacy',
+    ]);
+
+    // Immediately shows up on the ongoing dashboard.
+    $listResponse = $this->actingAs($superAdmin, 'sanctum')->getJson('/api/v1/ongoing-proposals');
+    $ids = collect($listResponse->json('data.proposals.data'))->pluck('id')->all();
+    expect($ids)->toContain($proposal->id);
+});
+
+test('granting a legacy proposal requires a justification of at least 10 characters', function () {
+    [$college, $dept, $central, $call] = op_makeBase();
+    $superAdmin = User::factory()->create();
+    $superAdmin->assignRole('super_admin');
+    $proposal = op_proposal($college, $dept, $call, 'draft');
+
+    $this->actingAs($superAdmin, 'sanctum')
+        ->postJson("/api/v1/ongoing-proposals/{$proposal->id}/grant-legacy", [
+            'justification' => 'too short',
+            'awarded_amount' => 5000,
+        ])
+        ->assertStatus(422);
+
+    expect(Proposal::find($proposal->id)->status)->toBe('draft');
+});
+
+test('a proposal that is already funded, ongoing, or archived cannot be granted again', function () {
+    [$college, $dept, $central, $call] = op_makeBase();
+    $superAdmin = User::factory()->create();
+    $superAdmin->assignRole('super_admin');
+    $funded = op_proposal($college, $dept, $call, 'funded');
+
+    $this->actingAs($superAdmin, 'sanctum')
+        ->postJson("/api/v1/ongoing-proposals/{$funded->id}/grant-legacy", [
+            'justification' => 'Trying to grant an already-funded proposal.',
+            'awarded_amount' => 5000,
+        ])
+        ->assertStatus(422);
+});
+
+test('a proposal that already has an award record cannot be granted again', function () {
+    [$college, $dept, $central, $call] = op_makeBase();
+    $superAdmin = User::factory()->create();
+    $superAdmin->assignRole('super_admin');
+    $proposal = op_proposal($college, $dept, $call, 'rejected');
+    Award::create([
+        'proposal_id' => $proposal->id, 'grant_reference' => 'GR-'.rand(10000, 99999),
+        'approved_by' => $central->id, 'approved_at' => now(), 'awarded_amount' => 1000,
+    ]);
+
+    $this->actingAs($superAdmin, 'sanctum')
+        ->postJson("/api/v1/ongoing-proposals/{$proposal->id}/grant-legacy", [
+            'justification' => 'This proposal already has an award somehow.',
+            'awarded_amount' => 5000,
+        ])
+        ->assertStatus(422);
+});
+
+test('grantable search excludes proposals already funded/ongoing/archived and those with an existing award', function () {
+    [$college, $dept, $central, $call] = op_makeBase();
+    $superAdmin = User::factory()->create();
+    $superAdmin->assignRole('super_admin');
+
+    $eligible = op_proposal($college, $dept, $call, 'rejected');
+    op_proposal($college, $dept, $call, 'funded');
+    op_proposal($college, $dept, $call, 'archived');
+
+    $hasAward = op_proposal($college, $dept, $call, 'under_blind_review');
+    Award::create([
+        'proposal_id' => $hasAward->id, 'grant_reference' => 'GR-'.rand(10000, 99999),
+        'approved_by' => $central->id, 'approved_at' => now(), 'awarded_amount' => 1000,
+    ]);
+
+    $response = $this->actingAs($superAdmin, 'sanctum')->getJson('/api/v1/ongoing-proposals/grantable');
+
+    $response->assertOk();
+    $ids = collect($response->json('data'))->pluck('id')->all();
+    expect($ids)->toBe([$eligible->id]);
+});
+
+test('a non-super_admin cannot search grantable proposals', function () {
+    [$college, $dept, $central, $call] = op_makeBase();
+
+    $this->actingAs($central, 'sanctum')
+        ->getJson('/api/v1/ongoing-proposals/grantable')
         ->assertForbidden();
 });

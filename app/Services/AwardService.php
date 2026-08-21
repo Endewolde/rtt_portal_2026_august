@@ -28,12 +28,12 @@ class AwardService
             $grantReference = $this->generateGrantReference();
 
             $award = Award::create([
-                'proposal_id'     => $proposal->id,
+                'proposal_id' => $proposal->id,
                 'grant_reference' => $grantReference,
-                'approval_notes'  => "Award approved by {$approvedBy->name} on ".now()->toDateString(),
-                'approved_by'     => $approvedBy->id,
-                'approved_at'     => now(),
-                'awarded_amount'  => $awardedAmount,
+                'approval_notes' => "Award approved by {$approvedBy->name} on ".now()->toDateString(),
+                'approved_by' => $approvedBy->id,
+                'approved_at' => now(),
+                'awarded_amount' => $awardedAmount,
             ]);
 
             $this->workflowService->transition(
@@ -52,18 +52,22 @@ class AwardService
      * Create an award record for a proposal that is already in funded state.
      * Used by the central_approve flow where the transition happens before award creation.
      */
-    public function createForFundedProposal(Proposal $proposal, User $approvedBy, float $amount = 0, ?string $notes = null): Award
-    {
-        return DB::transaction(function () use ($proposal, $approvedBy, $amount, $notes) {
-            $grantReference = $this->generateGrantReference();
-
+    public function createForFundedProposal(
+        Proposal $proposal,
+        User $approvedBy,
+        float $amount = 0,
+        ?string $notes = null,
+        ?string $grantReference = null,
+        ?\DateTimeInterface $approvedAt = null,
+    ): Award {
+        return DB::transaction(function () use ($proposal, $approvedBy, $amount, $notes, $grantReference, $approvedAt) {
             return Award::create([
-                'proposal_id'     => $proposal->id,
-                'grant_reference' => $grantReference,
-                'approval_notes'  => $notes ?? "Award approved by {$approvedBy->name} on ".now()->toDateString(),
-                'approved_by'     => $approvedBy->id,
-                'approved_at'     => now(),
-                'awarded_amount'  => $amount,
+                'proposal_id' => $proposal->id,
+                'grant_reference' => $grantReference ?? $this->generateGrantReference(),
+                'approval_notes' => $notes ?? "Award approved by {$approvedBy->name} on ".now()->toDateString(),
+                'approved_by' => $approvedBy->id,
+                'approved_at' => $approvedAt ?? now(),
+                'awarded_amount' => $amount,
             ]);
         });
     }

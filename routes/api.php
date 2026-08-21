@@ -384,6 +384,9 @@ Route::prefix('v1')->group(function () {
         // Ongoing proposals — consolidated post-award monitoring view (funded/midterm_evaluation)
         Route::get('/ongoing-proposals', [OngoingProposalsController::class, 'index']);
         Route::get('/ongoing-proposals/export', [OngoingProposalsController::class, 'export']);
+        Route::get('/ongoing-proposals/grantable', [OngoingProposalsController::class, 'grantable']);
+        Route::post('/ongoing-proposals/{id}/archive', [OngoingProposalsController::class, 'archive']);
+        Route::post('/ongoing-proposals/{id}/grant-legacy', [OngoingProposalsController::class, 'grantLegacy']);
 
         // Central evaluation
         Route::get('/central-evaluation', [CentralEvaluationController::class, 'index']);
