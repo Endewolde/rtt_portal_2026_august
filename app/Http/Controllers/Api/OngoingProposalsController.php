@@ -297,6 +297,15 @@ class OngoingProposalsController extends Controller
             'co_investigators' => 'nullable|array',
             'co_investigators.*.user_id' => 'required|uuid|exists:users,id|different:pi_user_id',
             'co_investigators.*.contribution_percentage' => 'nullable|numeric|min:0|max:100',
+            // Same fields the normal proposal wizard's Step 1 (Basic Info) collects —
+            // so a legacy-created proposal reads the same as one submitted normally.
+            'abstract' => 'required|string|min:100',
+            'keywords' => 'nullable|string|max:1000',
+            'focus_area' => 'required|string|max:255',
+            'research_type' => 'required_if:category,research|nullable|string|max:255',
+            'duration_months' => 'required|integer|min:1|max:120',
+            'ethical_clearance_required' => 'nullable|boolean',
+            'ethical_clearance_number' => 'nullable|required_if:ethical_clearance_required,true|string|max:100',
         ]);
 
         $department = Department::find($validated['department_id']);
@@ -322,6 +331,13 @@ class OngoingProposalsController extends Controller
                 'proposal_call_id' => $call->id,
                 'category' => $validated['category'],
                 'title' => $validated['title'],
+                'abstract' => $validated['abstract'],
+                'keywords' => $validated['keywords'] ?? null,
+                'focus_area' => $validated['focus_area'],
+                'research_type' => $validated['category'] === 'research' ? ($validated['research_type'] ?? null) : null,
+                'duration_months' => $validated['duration_months'],
+                'ethical_clearance_required' => (bool) ($validated['ethical_clearance_required'] ?? false),
+                'ethical_clearance_number' => ($validated['ethical_clearance_required'] ?? false) ? ($validated['ethical_clearance_number'] ?? null) : null,
                 'status' => 'draft',
                 'pi_user_id' => $validated['pi_user_id'],
                 'college_id' => $validated['college_id'],

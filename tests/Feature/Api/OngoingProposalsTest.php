@@ -708,6 +708,10 @@ function op_createLegacyPayload(array $overrides = []): array
         'academic_year' => '2022-2023',
         'justification' => 'Recorded from paper archives — never entered into the system.',
         'awarded_amount' => 20000,
+        'abstract' => str_repeat('This proposal was recorded from paper archives. ', 3),
+        'focus_area' => 'Agriculture & Food Systems',
+        'research_type' => 'Applied Research',
+        'duration_months' => 12,
     ], $overrides);
 }
 
@@ -812,6 +816,65 @@ test('creating a legacy proposal requires the core fields', function () {
     $this->actingAs($superAdmin, 'sanctum')
         ->postJson('/api/v1/ongoing-proposals/grant-legacy/create', [])
         ->assertStatus(422);
+});
+
+test('creating a legacy proposal persists the same basic-info fields the normal wizard collects', function () {
+    [$college, $dept, $central, $call] = op_makeBase();
+    $superAdmin = User::factory()->create();
+    $superAdmin->assignRole('super_admin');
+    $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
+    $pi->assignRole('pi');
+
+    $response = $this->actingAs($superAdmin, 'sanctum')
+        ->postJson('/api/v1/ongoing-proposals/grant-legacy/create', op_createLegacyPayload([
+            'college_id' => $college->id, 'department_id' => $dept->id, 'pi_user_id' => $pi->id,
+            'keywords' => 'legacy, paper archive, historical grant',
+        ]));
+
+    $response->assertOk();
+    $proposal = Proposal::where('title', 'A fully paper-based historical grant')->firstOrFail();
+
+    expect($proposal->keywords)->toBe('legacy, paper archive, historical grant')
+        ->and($proposal->focus_area)->toBe('Agriculture & Food Systems')
+        ->and($proposal->research_type)->toBe('Applied Research')
+        ->and($proposal->duration_months)->toBe(12)
+        ->and($proposal->abstract)->not->toBeNull();
+});
+
+test('creating a legacy proposal rejects an abstract under 100 characters', function () {
+    [$college, $dept, $central, $call] = op_makeBase();
+    $superAdmin = User::factory()->create();
+    $superAdmin->assignRole('super_admin');
+    $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
+    $pi->assignRole('pi');
+
+    $this->actingAs($superAdmin, 'sanctum')
+        ->postJson('/api/v1/ongoing-proposals/grant-legacy/create', op_createLegacyPayload([
+            'college_id' => $college->id, 'department_id' => $dept->id, 'pi_user_id' => $pi->id,
+            'abstract' => 'Too short.',
+        ]))
+        ->assertStatus(422);
+});
+
+test('creating a legacy proposal does not persist research_type for a non-research category', function () {
+    [$college, $dept, $central, $call] = op_makeBase();
+    $superAdmin = User::factory()->create();
+    $superAdmin->assignRole('super_admin');
+    $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
+    $pi->assignRole('pi');
+
+    $response = $this->actingAs($superAdmin, 'sanctum')
+        ->postJson('/api/v1/ongoing-proposals/grant-legacy/create', op_createLegacyPayload([
+            'title' => 'A community engagement legacy grant',
+            'category' => 'community_engagement',
+            'college_id' => $college->id, 'department_id' => $dept->id, 'pi_user_id' => $pi->id,
+            'focus_area' => 'Health & Well-being',
+            'research_type' => 'Applied Research',
+        ]));
+
+    $response->assertOk();
+    $proposal = Proposal::where('title', 'A community engagement legacy grant')->firstOrFail();
+    expect($proposal->research_type)->toBeNull();
 });
 
 test('creating a legacy proposal can attach co-investigators with the pi getting the remaining contribution', function () {

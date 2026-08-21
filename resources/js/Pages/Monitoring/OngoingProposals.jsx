@@ -13,9 +13,21 @@ import AppLayout from '../../Layouts/AppLayout';
 import FilterBar from '../../Components/FilterBar';
 import ConfirmDialog from '../../Components/ConfirmDialog';
 import { useAuth } from '../../hooks/useAuth';
+import { useFeature } from '../../hooks/useFeature';
 import { useToast } from '../../Components/Toast';
 import api, { get, post } from '../../lib/api';
 import { formatDate, formatCurrency, getCategoryLabel } from '../../lib/utils';
+
+// Same category-specific lookup fallbacks the normal proposal wizard uses
+// (resources/js/Pages/Proposals/Create.jsx) — kept in sync so a legacy-created
+// proposal offers the same Focus Area / Research Type choices as a normal one.
+const FOCUS_AREA_FALLBACK = {
+    research: ['Agriculture & Food Systems', 'Health & Biomedical Sciences', 'Engineering & Technology', 'Other'],
+    community_engagement: ['Health & Well-being', 'Education & Literacy', 'Environmental Conservation', 'Other'],
+    technology_transfer: ['Product Innovation', 'Process Innovation', 'Knowledge & Technology Transfer', 'Other'],
+};
+const RESEARCH_TYPE_FALLBACK = ['Basic Research', 'Applied Research', 'Experimental Development', 'Clinical Research', 'Action Research', 'Review / Meta-analysis'];
+const DURATION_OPTIONS = [3, 6, 9, 12, 18, 24, 30, 36, 48, 60];
 
 async function downloadBlob(axiosPromise, filename) {
     const response = await axiosPromise;
@@ -491,8 +503,17 @@ function unwrapUserList(r) {
 
 function NewProposalGrantPanel({ onGranted, onClose }) {
     const toast = useToast();
+    const { hasSubFeature } = useFeature();
     const [title, setTitle] = useState('');
     const [category, setCategory] = useState('research');
+    const [abstract, setAbstract] = useState('');
+    const [keywords, setKeywords] = useState('');
+    const [lookupOptions, setLookupOptions] = useState(null);
+    const [focusArea, setFocusArea] = useState('');
+    const [researchType, setResearchType] = useState('');
+    const [durationMonths, setDurationMonths] = useState('');
+    const [ecRequired, setEcRequired] = useState(false);
+    const [ecNumber, setEcNumber] = useState('');
     const [colleges, setColleges] = useState([]);
     const [departments, setDepartments] = useState([]);
     const [collegeId, setCollegeId] = useState('');
@@ -514,10 +535,20 @@ function NewProposalGrantPanel({ onGranted, onClose }) {
     const [approvedAt, setApprovedAt] = useState('');
     const [submitting, setSubmitting] = useState(false);
 
+    const isResearch = category === 'research';
+    const groupKey = category === 'community_engagement' ? 'community_focus_area'
+        : category === 'technology_transfer' ? 'technology_focus_area' : 'research_focus_area';
+    const focusOptions = lookupOptions?.[groupKey] ?? FOCUS_AREA_FALLBACK[category] ?? FOCUS_AREA_FALLBACK.research;
+    const researchTypeOptions = lookupOptions?.research_type ?? RESEARCH_TYPE_FALLBACK;
+    const abstractOk = abstract.length >= 100;
+
     useEffect(() => {
         get('/colleges').then(r => setColleges(r.data ?? [])).catch(() => {});
         get('/ongoing-proposals/grant-legacy/academic-years').then(r => setAcademicYears(r.data ?? [])).catch(() => {});
+        get('/lookup-options/active').then(r => setLookupOptions(r.data ?? null)).catch(() => {});
     }, []);
+
+    useEffect(() => { setFocusArea(''); setResearchType(''); }, [category]);
 
     useEffect(() => {
         setDepartmentId('');
@@ -565,6 +596,13 @@ function NewProposalGrantPanel({ onGranted, onClose }) {
             await post('/ongoing-proposals/grant-legacy/create', {
                 title,
                 category,
+                abstract,
+                keywords: keywords || undefined,
+                focus_area: focusArea,
+                research_type: isResearch ? researchType : undefined,
+                duration_months: durationMonths,
+                ethical_clearance_required: ecRequired,
+                ethical_clearance_number: ecRequired ? ecNumber : undefined,
                 college_id: collegeId,
                 department_id: departmentId,
                 pi_user_id: selectedPi?.id,
@@ -591,7 +629,9 @@ function NewProposalGrantPanel({ onGranted, onClose }) {
 
     const canSubmit = title.trim().length > 0 && collegeId && departmentId && selectedPi
         && /^\d{4}-\d{4}$/.test(academicYear) && justification.trim().length >= 10
-        && awardedAmount !== '' && Number(awardedAmount) >= 0;
+        && awardedAmount !== '' && Number(awardedAmount) >= 0
+        && abstractOk && focusArea && durationMonths && (!isResearch || researchType)
+        && (!ecRequired || ecNumber.trim().length > 0);
 
     return (
         <>
@@ -651,6 +691,94 @@ function NewProposalGrantPanel({ onGranted, onClose }) {
                     )}
                 </div>
             </div>
+
+            <div>
+                <label className="text-xs font-semibold text-gray-600">Abstract <span className="text-red-500">*</span></label>
+                <textarea
+                    value={abstract}
+                    onChange={e => setAbstract(e.target.value)}
+                    rows={4}
+                    placeholder="Summarize the proposal (minimum 100 characters)…"
+                    className="w-full mt-1 text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-300 resize-none"
+                />
+                <p className={`text-xs mt-1 ${abstractOk ? 'text-emerald-600' : 'text-gray-400'}`}>
+                    {abstract.length} / 100 characters minimum{abstractOk ? ' — meets requirement' : ''}
+                </p>
+            </div>
+
+            <div>
+                <label className="text-xs font-semibold text-gray-600">Keywords <span className="text-gray-400 font-normal">(optional)</span></label>
+                <input
+                    value={keywords}
+                    onChange={e => setKeywords(e.target.value)}
+                    placeholder="e.g. machine learning, climate change, Ethiopian agriculture"
+                    className="w-full mt-1 text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                />
+                <p className="text-xs text-gray-400 mt-1">Separate keywords with commas.</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+                <div className={isResearch ? '' : 'col-span-2'}>
+                    <label className="text-xs font-semibold text-gray-600">Focus Area <span className="text-red-500">*</span></label>
+                    <select
+                        value={focusArea}
+                        onChange={e => setFocusArea(e.target.value)}
+                        className="w-full mt-1 text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                    >
+                        <option value="">Select…</option>
+                        {focusOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                    </select>
+                </div>
+                {isResearch && (
+                    <div>
+                        <label className="text-xs font-semibold text-gray-600">Research Type <span className="text-red-500">*</span></label>
+                        <select
+                            value={researchType}
+                            onChange={e => setResearchType(e.target.value)}
+                            className="w-full mt-1 text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                        >
+                            <option value="">Select…</option>
+                            {researchTypeOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
+                    </div>
+                )}
+            </div>
+
+            <div>
+                <label className="text-xs font-semibold text-gray-600">Duration <span className="text-red-500">*</span></label>
+                <select
+                    value={durationMonths}
+                    onChange={e => setDurationMonths(e.target.value)}
+                    className="w-full mt-1 text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                >
+                    <option value="">Select duration…</option>
+                    {DURATION_OPTIONS.map(m => (
+                        <option key={m} value={m}>{m < 12 ? `${m} months` : `${m / 12} year${m > 12 ? 's' : ''}`}</option>
+                    ))}
+                </select>
+            </div>
+
+            {hasSubFeature('workflow.ethical_clearance') && (
+                <div className="border border-amber-200 bg-amber-50 rounded-xl p-3 space-y-2">
+                    <label className="flex items-center gap-2 text-sm text-gray-700">
+                        <input
+                            type="checkbox"
+                            checked={ecRequired}
+                            onChange={e => { setEcRequired(e.target.checked); if (!e.target.checked) setEcNumber(''); }}
+                            className="h-4 w-4 rounded border-gray-300 text-amber-600"
+                        />
+                        This proposal required ethical clearance approval
+                    </label>
+                    {ecRequired && (
+                        <input
+                            value={ecNumber}
+                            onChange={e => setEcNumber(e.target.value)}
+                            placeholder="Clearance reference number, e.g. EC-2022-00123"
+                            className="w-full text-sm border border-amber-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                        />
+                    )}
+                </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
                 <div>
