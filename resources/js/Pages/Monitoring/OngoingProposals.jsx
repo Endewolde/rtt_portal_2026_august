@@ -482,6 +482,13 @@ function BulkGrantPanel({ onGranted }) {
 // Manual Grants" call) and grants it in one step. The PI must already have an
 // account — deliberately no inline user creation here, to avoid silently
 // provisioning login-capable accounts as a side effect of a grant action.
+// The /users endpoint always returns a Laravel paginator under `data`
+// (data.data.data, not data.data) — this unwraps either shape defensively,
+// same fallback the proposal wizard's co-investigator search already uses.
+function unwrapUserList(r) {
+    return r?.data?.data ?? r?.data ?? [];
+}
+
 function NewProposalGrantPanel({ onGranted, onClose }) {
     const toast = useToast();
     const [title, setTitle] = useState('');
@@ -490,11 +497,17 @@ function NewProposalGrantPanel({ onGranted, onClose }) {
     const [departments, setDepartments] = useState([]);
     const [collegeId, setCollegeId] = useState('');
     const [departmentId, setDepartmentId] = useState('');
+    const [academicYears, setAcademicYears] = useState([]);
     const [academicYear, setAcademicYear] = useState('');
+    const [customYear, setCustomYear] = useState(false);
     const [piQuery, setPiQuery] = useState('');
     const [piResults, setPiResults] = useState([]);
     const [piSearching, setPiSearching] = useState(false);
     const [selectedPi, setSelectedPi] = useState(null);
+    const [coInvQuery, setCoInvQuery] = useState('');
+    const [coInvResults, setCoInvResults] = useState([]);
+    const [coInvSearching, setCoInvSearching] = useState(false);
+    const [coInvestigators, setCoInvestigators] = useState([]);
     const [justification, setJustification] = useState('');
     const [awardedAmount, setAwardedAmount] = useState('');
     const [grantReference, setGrantReference] = useState('');
@@ -503,6 +516,7 @@ function NewProposalGrantPanel({ onGranted, onClose }) {
 
     useEffect(() => {
         get('/colleges').then(r => setColleges(r.data ?? [])).catch(() => {});
+        get('/ongoing-proposals/grant-legacy/academic-years').then(r => setAcademicYears(r.data ?? [])).catch(() => {});
     }, []);
 
     useEffect(() => {
@@ -516,12 +530,34 @@ function NewProposalGrantPanel({ onGranted, onClose }) {
         setPiSearching(true);
         const t = setTimeout(() => {
             get('/users', { search: piQuery, role: 'pi' })
-                .then(r => setPiResults(r.data ?? []))
+                .then(r => setPiResults(unwrapUserList(r)))
                 .catch(() => {})
                 .finally(() => setPiSearching(false));
         }, 300);
         return () => clearTimeout(t);
     }, [piQuery, selectedPi]);
+
+    useEffect(() => {
+        if (coInvQuery.trim().length === 0) { setCoInvResults([]); return; }
+        setCoInvSearching(true);
+        const t = setTimeout(() => {
+            get('/users', { search: coInvQuery })
+                .then(r => setCoInvResults(unwrapUserList(r)))
+                .catch(() => {})
+                .finally(() => setCoInvSearching(false));
+        }, 300);
+        return () => clearTimeout(t);
+    }, [coInvQuery]);
+
+    const addCoInvestigator = (u) => {
+        if (u.id === selectedPi?.id || coInvestigators.some(c => c.user_id === u.id)) return;
+        setCoInvestigators(list => [...list, { user_id: u.id, name: u.name, email: u.email, contribution_percentage: '' }]);
+        setCoInvQuery('');
+        setCoInvResults([]);
+    };
+    const removeCoInvestigator = (userId) => setCoInvestigators(list => list.filter(c => c.user_id !== userId));
+    const updateCoInvestigatorPct = (userId, pct) =>
+        setCoInvestigators(list => list.map(c => (c.user_id === userId ? { ...c, contribution_percentage: pct } : c)));
 
     const submit = async () => {
         setSubmitting(true);
@@ -537,6 +573,12 @@ function NewProposalGrantPanel({ onGranted, onClose }) {
                 awarded_amount: awardedAmount,
                 grant_reference: grantReference || undefined,
                 approved_at: approvedAt || undefined,
+                co_investigators: coInvestigators.length
+                    ? coInvestigators.map(c => ({
+                        user_id: c.user_id,
+                        contribution_percentage: c.contribution_percentage === '' ? undefined : c.contribution_percentage,
+                    }))
+                    : undefined,
             });
             toast.success('Proposal created and granted — now tracked as ongoing.');
             onGranted();
@@ -576,12 +618,37 @@ function NewProposalGrantPanel({ onGranted, onClose }) {
                 </div>
                 <div>
                     <label className="text-xs font-semibold text-gray-600">Academic Year <span className="text-red-500">*</span></label>
-                    <input
-                        value={academicYear}
-                        onChange={e => setAcademicYear(e.target.value)}
-                        placeholder="e.g. 2022-2023"
-                        className="w-full mt-1 text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
-                    />
+                    {customYear ? (
+                        <div className="flex gap-1.5 mt-1">
+                            <input
+                                autoFocus
+                                value={academicYear}
+                                onChange={e => setAcademicYear(e.target.value)}
+                                placeholder="e.g. 2018-2019"
+                                className="w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                            />
+                            <button
+                                type="button"
+                                onClick={() => { setCustomYear(false); setAcademicYear(''); }}
+                                className="shrink-0 px-2.5 rounded-xl border border-gray-200 text-xs text-gray-500 hover:bg-gray-50"
+                            >
+                                List
+                            </button>
+                        </div>
+                    ) : (
+                        <select
+                            value={academicYear}
+                            onChange={e => {
+                                if (e.target.value === '__other__') { setCustomYear(true); setAcademicYear(''); }
+                                else setAcademicYear(e.target.value);
+                            }}
+                            className="w-full mt-1 text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                        >
+                            <option value="">Select…</option>
+                            {academicYears.map(y => <option key={y} value={y}>{y}</option>)}
+                            <option value="__other__">Other (older, not listed)…</option>
+                        </select>
+                    )}
                 </div>
             </div>
 
@@ -647,6 +714,55 @@ function NewProposalGrantPanel({ onGranted, onClose }) {
                             </div>
                         )}
                     </>
+                )}
+            </div>
+
+            <div>
+                <label className="text-xs font-semibold text-gray-600">Co-Investigators <span className="text-gray-400 font-normal">(optional)</span></label>
+                {coInvestigators.length > 0 && (
+                    <div className="mt-1 space-y-1.5">
+                        {coInvestigators.map(c => (
+                            <div key={c.user_id} className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2">
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-sm text-gray-800 truncate">{c.name}</p>
+                                    <p className="text-xs text-gray-400 truncate">{c.email}</p>
+                                </div>
+                                <input
+                                    type="number" min="0" max="100" step="1"
+                                    value={c.contribution_percentage}
+                                    onChange={e => updateCoInvestigatorPct(c.user_id, e.target.value)}
+                                    placeholder="%"
+                                    className="w-16 text-sm border border-gray-200 rounded-lg px-2 py-1.5 text-center focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                                />
+                                <button onClick={() => removeCoInvestigator(c.user_id)} className="text-gray-400 hover:text-red-600 shrink-0">
+                                    <X size={14} />
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+                <div className="relative mt-1.5">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                        value={coInvQuery}
+                        onChange={e => setCoInvQuery(e.target.value)}
+                        placeholder="Search to add a co-investigator…"
+                        className="w-full text-sm border border-gray-200 rounded-xl pl-9 pr-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                    />
+                </div>
+                {coInvQuery.trim().length > 0 && (
+                    <div className="mt-1 border border-gray-100 rounded-xl divide-y divide-gray-100 max-h-32 overflow-y-auto">
+                        {coInvSearching && <p className="px-3 py-3 text-center text-xs text-gray-400">Searching…</p>}
+                        {!coInvSearching && coInvResults.length === 0 && (
+                            <p className="px-3 py-3 text-center text-xs text-gray-400">No matching account found.</p>
+                        )}
+                        {!coInvSearching && coInvResults.map(u => (
+                            <button key={u.id} onClick={() => addCoInvestigator(u)} className="w-full text-left px-3 py-2 hover:bg-emerald-50/60 transition-colors">
+                                <p className="text-sm text-gray-800">{u.name}</p>
+                                <p className="text-xs text-gray-400">{u.email}</p>
+                            </button>
+                        ))}
+                    </div>
                 )}
             </div>
 

@@ -8,6 +8,7 @@ use App\Models\Award;
 use App\Models\Department;
 use App\Models\Proposal;
 use App\Models\ProposalCall;
+use App\Models\ProposalMember;
 use App\Models\ThresholdSetting;
 use App\Models\User;
 use App\Services\AwardService;
@@ -293,6 +294,9 @@ class OngoingProposalsController extends Controller
             'awarded_amount' => 'required|numeric|min:0',
             'grant_reference' => 'nullable|string|max:50|unique:awards,grant_reference',
             'approved_at' => 'nullable|date',
+            'co_investigators' => 'nullable|array',
+            'co_investigators.*.user_id' => 'required|uuid|exists:users,id|different:pi_user_id',
+            'co_investigators.*.contribution_percentage' => 'nullable|numeric|min:0|max:100',
         ]);
 
         $department = Department::find($validated['department_id']);
@@ -305,7 +309,12 @@ class OngoingProposalsController extends Controller
             return response()->json(['data' => null, 'message' => 'The selected user does not hold the PI role.', 'errors' => []], 422);
         }
 
-        $award = DB::transaction(function () use ($validated, $user) {
+        $coInvestigators = collect($validated['co_investigators'] ?? []);
+        if ($coInvestigators->pluck('user_id')->unique()->count() !== $coInvestigators->count()) {
+            return response()->json(['data' => null, 'message' => 'The same co-investigator was added more than once.', 'errors' => []], 422);
+        }
+
+        $award = DB::transaction(function () use ($validated, $coInvestigators, $user) {
             $call = $this->reservedLegacyCall($validated['category'], $validated['academic_year'], $user);
 
             $proposal = Proposal::create([
@@ -320,6 +329,32 @@ class OngoingProposalsController extends Controller
                 'academic_year' => $validated['academic_year'],
                 'created_by' => $user->id,
             ]);
+
+            $coContribTotal = $coInvestigators->sum(fn ($c) => (float) ($c['contribution_percentage'] ?? 0));
+
+            ProposalMember::create([
+                'proposal_id' => $proposal->id,
+                'user_id' => $proposal->pi_user_id,
+                'role' => 'pi',
+                'contribution_percentage' => max(0, 100 - $coContribTotal),
+                'status' => 'active',
+                'invitation_status' => 'accepted',
+                'joined_at' => now(),
+            ]);
+
+            foreach ($coInvestigators as $coI) {
+                ProposalMember::create([
+                    'proposal_id' => $proposal->id,
+                    'user_id' => $coI['user_id'],
+                    'role' => 'co_investigator',
+                    'contribution_percentage' => $coI['contribution_percentage'] ?? 0,
+                    'status' => 'active',
+                    // Recorded historically, not a live invite — the co-investigator
+                    // already knows they took part, so this isn't sent as a pending ask.
+                    'invitation_status' => 'accepted',
+                    'joined_at' => now(),
+                ]);
+            }
 
             return $this->performLegacyGrant(
                 $proposal,
@@ -337,6 +372,23 @@ class OngoingProposalsController extends Controller
             'errors' => [],
             'meta' => [],
         ]);
+    }
+
+    /** Distinct academic years already recorded on proposals — feeds the New Proposal form's dropdown. */
+    public function academicYears(Request $request): JsonResponse
+    {
+        if (! $request->user()?->hasAnyRole(self::LEGACY_GRANT_ROLES)) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
+        }
+
+        $years = DB::table('proposals')
+            ->whereNull('deleted_at')
+            ->whereNotNull('academic_year')
+            ->distinct()
+            ->orderByDesc('academic_year')
+            ->pluck('academic_year');
+
+        return response()->json(['data' => $years, 'message' => '', 'errors' => []]);
     }
 
     /**

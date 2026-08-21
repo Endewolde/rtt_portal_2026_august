@@ -813,3 +813,104 @@ test('creating a legacy proposal requires the core fields', function () {
         ->postJson('/api/v1/ongoing-proposals/grant-legacy/create', [])
         ->assertStatus(422);
 });
+
+test('creating a legacy proposal can attach co-investigators with the pi getting the remaining contribution', function () {
+    [$college, $dept, $central, $call] = op_makeBase();
+    $superAdmin = User::factory()->create();
+    $superAdmin->assignRole('super_admin');
+    $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
+    $pi->assignRole('pi');
+    $coInv1 = User::factory()->create();
+    $coInv1->assignRole('staff');
+    $coInv2 = User::factory()->create();
+    $coInv2->assignRole('staff');
+
+    $response = $this->actingAs($superAdmin, 'sanctum')
+        ->postJson('/api/v1/ongoing-proposals/grant-legacy/create', op_createLegacyPayload([
+            'college_id' => $college->id, 'department_id' => $dept->id, 'pi_user_id' => $pi->id,
+            'co_investigators' => [
+                ['user_id' => $coInv1->id, 'contribution_percentage' => 30],
+                ['user_id' => $coInv2->id, 'contribution_percentage' => 20],
+            ],
+        ]));
+
+    $response->assertOk();
+    $proposal = Proposal::where('title', 'A fully paper-based historical grant')->firstOrFail();
+
+    $this->assertDatabaseHas('proposal_members', [
+        'proposal_id' => $proposal->id, 'user_id' => $pi->id, 'role' => 'pi', 'contribution_percentage' => 50,
+    ]);
+    $this->assertDatabaseHas('proposal_members', [
+        'proposal_id' => $proposal->id, 'user_id' => $coInv1->id, 'role' => 'co_investigator',
+        'contribution_percentage' => 30, 'invitation_status' => 'accepted',
+    ]);
+    $this->assertDatabaseHas('proposal_members', [
+        'proposal_id' => $proposal->id, 'user_id' => $coInv2->id, 'role' => 'co_investigator',
+        'contribution_percentage' => 20, 'invitation_status' => 'accepted',
+    ]);
+});
+
+test('creating a legacy proposal rejects the pi appearing in their own co-investigator list', function () {
+    [$college, $dept, $central, $call] = op_makeBase();
+    $superAdmin = User::factory()->create();
+    $superAdmin->assignRole('super_admin');
+    $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
+    $pi->assignRole('pi');
+
+    $this->actingAs($superAdmin, 'sanctum')
+        ->postJson('/api/v1/ongoing-proposals/grant-legacy/create', op_createLegacyPayload([
+            'college_id' => $college->id, 'department_id' => $dept->id, 'pi_user_id' => $pi->id,
+            'co_investigators' => [['user_id' => $pi->id, 'contribution_percentage' => 10]],
+        ]))
+        ->assertStatus(422);
+});
+
+test('creating a legacy proposal rejects a duplicate co-investigator', function () {
+    [$college, $dept, $central, $call] = op_makeBase();
+    $superAdmin = User::factory()->create();
+    $superAdmin->assignRole('super_admin');
+    $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
+    $pi->assignRole('pi');
+    $coInv = User::factory()->create();
+    $coInv->assignRole('staff');
+
+    $this->actingAs($superAdmin, 'sanctum')
+        ->postJson('/api/v1/ongoing-proposals/grant-legacy/create', op_createLegacyPayload([
+            'college_id' => $college->id, 'department_id' => $dept->id, 'pi_user_id' => $pi->id,
+            'co_investigators' => [
+                ['user_id' => $coInv->id, 'contribution_percentage' => 10],
+                ['user_id' => $coInv->id, 'contribution_percentage' => 20],
+            ],
+        ]))
+        ->assertStatus(422);
+});
+
+test('a non-super_admin cannot list academic years for the legacy grant form', function () {
+    [$college, $dept, $central, $call] = op_makeBase();
+
+    $this->actingAs($central, 'sanctum')
+        ->getJson('/api/v1/ongoing-proposals/grant-legacy/academic-years')
+        ->assertForbidden();
+});
+
+test('super_admin sees distinct academic years already recorded on proposals, newest first', function () {
+    [$college, $dept, $central, $call] = op_makeBase();
+    $superAdmin = User::factory()->create();
+    $superAdmin->assignRole('super_admin');
+
+    op_proposal($college, $dept, $call, 'draft');
+
+    $oldCall = ProposalCall::create([
+        'academic_year' => '2019-2020', 'category' => 'research',
+        'title' => 'Old Call', 'slug' => 'op-old-'.rand(10000, 99999),
+        'start_date' => now()->subYears(6)->toDateString(), 'end_date' => now()->subYears(6)->addMonths(3)->toDateString(),
+        'status' => 'closed', 'is_open' => false, 'created_by' => $central->id,
+    ]);
+    op_proposal($college, $dept, $oldCall, 'draft');
+
+    $response = $this->actingAs($superAdmin, 'sanctum')
+        ->getJson('/api/v1/ongoing-proposals/grant-legacy/academic-years');
+
+    $response->assertOk();
+    expect($response->json('data'))->toBe(['2025-2026', '2019-2020']);
+});
