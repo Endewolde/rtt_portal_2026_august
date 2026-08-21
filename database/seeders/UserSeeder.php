@@ -40,10 +40,10 @@ class UserSeeder extends Seeder
             $user = User::updateOrCreate(
                 ['email' => $data['email']],
                 array_merge([
-                    'name'               => $data['name'],
-                    'password'           => $password,
-                    'status'             => 'active',
-                    'email_verified_at'  => now(),
+                    'name' => $data['name'],
+                    'password' => $password,
+                    'status' => 'active',
+                    'email_verified_at' => now(),
                 ], $data['attrs'] ?? [])
             );
 
@@ -59,8 +59,8 @@ class UserSeeder extends Seeder
         $ensure(['name' => 'Super Admin',        'email' => 'superadmin@rtt.edu', 'role' => 'super_admin', 'attrs' => ['gender' => 'male']]);
 
         // ── Central Office ────────────────────────────────────────────────────
-        $ensure(['name' => 'Central Officer One', 'email' => 'central1@rtt.edu',  'role' => 'central_office', 'attrs' => ['gender' => 'male']]);
-        $ensure(['name' => 'Central Officer Two', 'email' => 'central2@rtt.edu',  'role' => 'central_office', 'attrs' => ['gender' => 'female']]);
+        $ensure(['name' => 'Central Officer One', 'email' => 'central1@rtt.edu',  'role' => 'central_officer', 'attrs' => ['gender' => 'male']]);
+        $ensure(['name' => 'Central Officer Two', 'email' => 'central2@rtt.edu',  'role' => 'central_officer', 'attrs' => ['gender' => 'female']]);
 
         // ── College Admins ────────────────────────────────────────────────────
         foreach ([
@@ -69,9 +69,9 @@ class UserSeeder extends Seeder
             ['name' => 'CSSH Admin', 'email' => 'admin.cssh@rtt.edu', 'code' => 'CSSH', 'gender' => 'female'],
         ] as $ca) {
             $ensure([
-                'name'  => $ca['name'],
+                'name' => $ca['name'],
                 'email' => $ca['email'],
-                'role'  => 'college_admin',
+                'role' => 'college_admin',
                 'attrs' => ['college_id' => $college($ca['code']), 'gender' => $ca['gender']],
             ]);
         }
@@ -84,20 +84,20 @@ class UserSeeder extends Seeder
 
         // ── PIs — must have both college and department ────────────────────────
         foreach ([
-            ['name' => 'PI One',   'email' => 'pi1@rtt.edu', 'college' => 'CNCS', 'dept' => 'CS',   'gender' => 'male'  ],
-            ['name' => 'PI Two',   'email' => 'pi2@rtt.edu', 'college' => 'CNCS', 'dept' => 'MATH', 'gender' => 'male'  ],
+            ['name' => 'PI One',   'email' => 'pi1@rtt.edu', 'college' => 'CNCS', 'dept' => 'CS',   'gender' => 'male'],
+            ['name' => 'PI Two',   'email' => 'pi2@rtt.edu', 'college' => 'CNCS', 'dept' => 'MATH', 'gender' => 'male'],
             ['name' => 'PI Three', 'email' => 'pi3@rtt.edu', 'college' => 'CBE',  'dept' => 'ACCT', 'gender' => 'female'],
-            ['name' => 'PI Four',  'email' => 'pi4@rtt.edu', 'college' => 'CBE',  'dept' => 'MGMT', 'gender' => 'male'  ],
+            ['name' => 'PI Four',  'email' => 'pi4@rtt.edu', 'college' => 'CBE',  'dept' => 'MGMT', 'gender' => 'male'],
             ['name' => 'PI Five',  'email' => 'pi5@rtt.edu', 'college' => 'CSSH', 'dept' => 'HIST', 'gender' => 'female'],
         ] as $pi) {
             $ensure([
-                'name'  => $pi['name'],
+                'name' => $pi['name'],
                 'email' => $pi['email'],
-                'role'  => 'pi',
+                'role' => 'pi',
                 'attrs' => [
-                    'college_id'    => $college($pi['college']),
+                    'college_id' => $college($pi['college']),
                     'department_id' => $dept($pi['dept'], $pi['college']),
-                    'gender'        => $pi['gender'],
+                    'gender' => $pi['gender'],
                 ],
             ]);
         }
@@ -107,13 +107,13 @@ class UserSeeder extends Seeder
 
         // ── Department Head ───────────────────────────────────────────────────
         $ensure([
-            'name'  => 'Dept Head CS',
+            'name' => 'Dept Head CS',
             'email' => 'depthead@rtt.edu',
-            'role'  => 'department_head',
+            'role' => 'department_head',
             'attrs' => [
-                'college_id'    => $college('CNCS'),
+                'college_id' => $college('CNCS'),
                 'department_id' => $dept('CS', 'CNCS'),
-                'gender'        => 'male',
+                'gender' => 'male',
             ],
         ]);
     }
