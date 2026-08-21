@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import {
     TrendingUp, RefreshCw, Search, ChevronLeft, ChevronRight, ExternalLink,
     ArrowUp, ArrowDown, ArrowUpDown, Building2, Wallet, Download, AlertTriangle, Archive,
-    Gavel, X, ArrowLeft,
+    Gavel, X, ArrowLeft, Upload, FileDown, CheckCircle2, FileUp,
 } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -14,8 +14,27 @@ import FilterBar from '../../Components/FilterBar';
 import ConfirmDialog from '../../Components/ConfirmDialog';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../Components/Toast';
-import { get, post } from '../../lib/api';
+import api, { get, post } from '../../lib/api';
 import { formatDate, formatCurrency, getCategoryLabel } from '../../lib/utils';
+
+async function downloadBlob(axiosPromise, filename) {
+    const response = await axiosPromise;
+    const url = URL.createObjectURL(new Blob([response.data]));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+}
+
+function parseLocalCsv(text) {
+    const lines = text.trim().split('\n').filter(Boolean);
+    if (!lines.length) return { headers: [], rows: [] };
+    const parseLine = (line) => line.split(',').map(c => c.trim());
+    const bom = '﻿';
+    const first = lines[0].startsWith(bom) ? lines[0].slice(1) : lines[0];
+    return { headers: parseLine(first), rows: lines.slice(1).map(parseLine) };
+}
 
 const CATEGORY_OPTIONS = ['research', 'community_engagement', 'technology_transfer'];
 const CATEGORY_COLORS = { research: '#6366f1', community_engagement: '#ec4899', technology_transfer: '#14b8a6' };
@@ -115,7 +134,7 @@ function HoverDetailCard({ info }) {
 // reflected reality). This bypasses that workflow entirely, so it's kept as a
 // deliberately narrow, two-step flow: pick the proposal, then justify + record it.
 
-function GrantLegacyModal({ onClose, onGranted }) {
+function SingleGrantPanel({ onGranted, onClose }) {
     const toast = useToast();
     const [query, setQuery] = useState('');
     const [results, setResults] = useState([]);
@@ -160,6 +179,306 @@ function GrantLegacyModal({ onClose, onGranted }) {
 
     const canSubmit = justification.trim().length >= 10 && awardedAmount !== '' && Number(awardedAmount) >= 0;
 
+    if (!selected) {
+        return (
+            <>
+                <div className="relative">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                        autoFocus
+                        value={query}
+                        onChange={e => setQuery(e.target.value)}
+                        placeholder="Search tracker # or title…"
+                        className="w-full text-sm border border-gray-200 rounded-xl pl-9 pr-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                    />
+                </div>
+                <div className="border border-gray-100 rounded-xl divide-y divide-gray-100 max-h-72 overflow-y-auto">
+                    {searching && (
+                        <p className="px-4 py-6 text-center text-xs text-gray-400">Searching…</p>
+                    )}
+                    {!searching && results.length === 0 && (
+                        <p className="px-4 py-6 text-center text-xs text-gray-400">
+                            No eligible proposals found. Only proposals not already funded, ongoing, or archived — and without an existing award — show up here.
+                        </p>
+                    )}
+                    {!searching && results.map(p => (
+                        <button
+                            key={p.id}
+                            onClick={() => setSelected(p)}
+                            className="w-full text-left px-4 py-3 hover:bg-emerald-50/60 transition-colors"
+                        >
+                            <div className="flex items-center gap-2">
+                                <span className="font-mono text-xs font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{p.tracker_number}</span>
+                                <span className="text-[11px] text-gray-400">{p.status}</span>
+                            </div>
+                            <p className="text-sm text-gray-800 mt-1 line-clamp-1">{p.title}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">{p.pi?.name ?? '—'} · {p.college?.name ?? '—'}</p>
+                        </button>
+                    ))}
+                </div>
+            </>
+        );
+    }
+
+    return (
+        <>
+            <button onClick={() => setSelected(null)} className="flex items-center gap-1 text-xs font-semibold text-gray-500 hover:text-gray-700">
+                <ArrowLeft size={12} /> Choose a different proposal
+            </button>
+            <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
+                <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{selected.tracker_number}</span>
+                    <span className="text-[11px] text-gray-400">currently {selected.status}</span>
+                </div>
+                <p className="text-sm text-gray-800 mt-1">{selected.title}</p>
+            </div>
+
+            <div>
+                <label className="text-xs font-semibold text-gray-600">Justification <span className="text-red-500">*</span></label>
+                <textarea
+                    value={justification}
+                    onChange={e => setJustification(e.target.value)}
+                    rows={3}
+                    placeholder="Why is this proposal being granted outside the normal workflow? (min 10 characters — recorded in the audit trail)"
+                    className="w-full mt-1 text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+                <div>
+                    <label className="text-xs font-semibold text-gray-600">Awarded Amount (ETB) <span className="text-red-500">*</span></label>
+                    <input
+                        type="number" min="0" step="0.01"
+                        value={awardedAmount}
+                        onChange={e => setAwardedAmount(e.target.value)}
+                        className="w-full mt-1 text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                    />
+                </div>
+                <div>
+                    <label className="text-xs font-semibold text-gray-600">Grant Date</label>
+                    <input
+                        type="date"
+                        value={approvedAt}
+                        onChange={e => setApprovedAt(e.target.value)}
+                        className="w-full mt-1 text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                    />
+                </div>
+            </div>
+
+            <div>
+                <label className="text-xs font-semibold text-gray-600">Grant Reference <span className="text-gray-400 font-normal">(optional — auto-generated if left blank)</span></label>
+                <input
+                    value={grantReference}
+                    onChange={e => setGrantReference(e.target.value)}
+                    placeholder="e.g. an official pre-existing grant number"
+                    className="w-full mt-1 text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                />
+            </div>
+
+            <button
+                onClick={submit}
+                disabled={!canSubmit || submitting}
+                className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+                {submitting ? 'Granting…' : 'Grant Proposal'}
+            </button>
+        </>
+    );
+}
+
+// Mirrors the CSV-import pattern already established for Users.jsx: local
+// parse-and-preview first five rows, submit to the server for the real
+// per-row validation, show a summary + per-row error table. One shared
+// justification for the whole batch, since every row needs the same "why."
+function BulkGrantPanel({ onGranted }) {
+    const toast = useToast();
+    const fileRef = useRef(null);
+    const [file, setFile] = useState(null);
+    const [preview, setPreview] = useState(null);
+    const [justification, setJustification] = useState('');
+    const [importing, setImporting] = useState(false);
+    const [result, setResult] = useState(null);
+
+    const handleFile = (f) => {
+        if (!f) return;
+        setFile(f);
+        setResult(null);
+        const reader = new FileReader();
+        reader.onload = e => {
+            const { headers, rows } = parseLocalCsv(e.target.result);
+            setPreview({ headers, rows: rows.slice(0, 5) });
+        };
+        reader.readAsText(f);
+    };
+
+    const downloadTemplate = () => {
+        downloadBlob(
+            api.get('/ongoing-proposals/grant-legacy/import-template', { responseType: 'blob' }),
+            'legacy_proposals_import_template.csv'
+        ).catch(() => toast.error('Could not download template.'));
+    };
+
+    const doImport = async () => {
+        if (!file || justification.trim().length < 10) return;
+        setImporting(true);
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('justification', justification);
+            const res = await api.post('/ongoing-proposals/grant-legacy/import', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
+            setResult(res.data?.data);
+            toast.success(res.data?.message ?? 'Import complete.');
+            onGranted();
+        } catch (e) {
+            toast.error(e?.response?.data?.message ?? 'Import failed.');
+        }
+        setImporting(false);
+    };
+
+    const reset = () => { setFile(null); setPreview(null); setResult(null); };
+    const canImport = !!file && justification.trim().length >= 10 && !importing;
+
+    if (result) {
+        return (
+            <div className="space-y-4">
+                <div className={`flex items-center gap-3 rounded-xl px-4 py-3 ${result.summary.errors === 0 ? 'bg-emerald-50 border border-emerald-200' : 'bg-amber-50 border border-amber-200'}`}>
+                    {result.summary.errors === 0
+                        ? <CheckCircle2 size={20} className="text-emerald-500 shrink-0" />
+                        : <AlertTriangle size={20} className="text-amber-500 shrink-0" />}
+                    <div>
+                        <p className={`text-sm font-semibold ${result.summary.errors === 0 ? 'text-emerald-800' : 'text-amber-800'}`}>
+                            {result.summary.errors === 0 ? 'Import completed successfully' : 'Import finished with some errors'}
+                        </p>
+                        <p className={`text-xs mt-0.5 ${result.summary.errors === 0 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                            {result.summary.created} of {result.summary.total} granted
+                        </p>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                    {[
+                        { label: 'Total', val: result.summary.total, color: '#4f46e5' },
+                        { label: 'Granted', val: result.summary.created, color: '#059669' },
+                        { label: 'Errors', val: result.summary.errors, color: '#dc2626' },
+                    ].map(s => (
+                        <div key={s.label} className="rounded-xl border border-gray-200 p-3 text-center">
+                            <p className="text-2xl font-extrabold tabular-nums" style={{ color: s.color }}>{s.val}</p>
+                            <p className="text-[11px] font-semibold text-gray-500 mt-0.5">{s.label}</p>
+                        </div>
+                    ))}
+                </div>
+
+                {result.errors?.length > 0 && (
+                    <div>
+                        <p className="text-[11px] font-semibold text-red-500 uppercase tracking-widest mb-2">Row errors</p>
+                        <div className="rounded-xl overflow-hidden border border-red-100 max-h-48 overflow-y-auto">
+                            <table className="min-w-full text-xs">
+                                <thead>
+                                    <tr className="bg-red-50 border-b border-red-100">
+                                        <th className="px-3 py-2 text-left font-semibold text-red-400 w-12">Row</th>
+                                        <th className="px-3 py-2 text-left font-semibold text-red-400">Tracker</th>
+                                        <th className="px-3 py-2 text-left font-semibold text-red-400">Issue</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {result.errors.map((e, i) => (
+                                        <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-red-50/30'}>
+                                            <td className="px-3 py-2 font-mono text-gray-400">{e.row}</td>
+                                            <td className="px-3 py-2 text-gray-600">{e.tracker_number}</td>
+                                            <td className="px-3 py-2 text-red-500">{e.error}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                )}
+
+                <button onClick={reset} className="text-xs font-semibold text-emerald-700 hover:text-emerald-900">
+                    ← Import another file
+                </button>
+            </div>
+        );
+    }
+
+    return (
+        <>
+            <div className="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-xl px-4 py-3">
+                <div>
+                    <p className="text-xs font-semibold text-gray-700">CSV columns</p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">tracker_number*, awarded_amount*, grant_reference, approved_at</p>
+                </div>
+                <button onClick={downloadTemplate} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-gray-200 text-gray-600 hover:bg-gray-100">
+                    <FileDown size={12} /> Template
+                </button>
+            </div>
+
+            <div
+                onClick={() => fileRef.current?.click()}
+                className="cursor-pointer rounded-xl border-2 border-dashed p-6 text-center transition-colors"
+                style={{ borderColor: file ? '#10b981' : '#e2e8f0', background: file ? 'rgba(16,185,129,0.04)' : '#fafafa' }}
+            >
+                <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={e => handleFile(e.target.files[0])} />
+                {file ? (
+                    <>
+                        <CheckCircle2 size={24} className="mx-auto text-emerald-500 mb-2" />
+                        <p className="text-sm font-semibold text-gray-800">{file.name}</p>
+                        <p className="text-xs text-indigo-500 mt-0.5">click to replace</p>
+                    </>
+                ) : (
+                    <>
+                        <FileUp size={24} className="mx-auto text-gray-400 mb-2" />
+                        <p className="text-sm text-gray-600">Click to upload a CSV file</p>
+                    </>
+                )}
+            </div>
+
+            {preview && (
+                <div className="overflow-x-auto rounded-xl border border-gray-100">
+                    <table className="min-w-full text-xs">
+                        <thead>
+                            <tr className="bg-gray-50 border-b border-gray-100">
+                                {preview.headers.map((h, i) => <th key={i} className="px-3 py-2 text-left font-semibold text-gray-500 whitespace-nowrap">{h}</th>)}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {preview.rows.map((row, ri) => (
+                                <tr key={ri} className={ri % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                                    {row.map((cell, ci) => <td key={ci} className="px-3 py-2 text-gray-700 whitespace-nowrap">{cell || <span className="text-gray-300">—</span>}</td>)}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
+
+            <div>
+                <label className="text-xs font-semibold text-gray-600">Justification for this batch <span className="text-red-500">*</span></label>
+                <textarea
+                    value={justification}
+                    onChange={e => setJustification(e.target.value)}
+                    rows={2}
+                    placeholder="Why are these proposals being granted outside the normal workflow? (min 10 characters — applied to every row, recorded in the audit trail)"
+                    className="w-full mt-1 text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                />
+            </div>
+
+            <button
+                onClick={doImport}
+                disabled={!canImport}
+                className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+                {importing ? <><RefreshCw size={13} className="animate-spin" /> Importing…</> : <><Upload size={13} /> Import & Grant</>}
+            </button>
+        </>
+    );
+}
+
+function GrantLegacyModal({ onClose, onGranted }) {
+    const [mode, setMode] = useState('single');
+
     return createPortal(
         <div className="fixed inset-0 z-9999 flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
@@ -180,110 +499,23 @@ function GrantLegacyModal({ onClose, onGranted }) {
                             <X size={16} className="text-white" />
                         </button>
                     </div>
+                    <div className="mt-4 flex gap-1 bg-white/10 rounded-xl p-1">
+                        {[{ key: 'single', label: 'Single Proposal' }, { key: 'bulk', label: 'Bulk Import (CSV)' }].map(t => (
+                            <button
+                                key={t.key}
+                                onClick={() => setMode(t.key)}
+                                className={`flex-1 text-xs font-semibold py-1.5 rounded-lg transition-colors ${mode === t.key ? 'bg-white text-emerald-900' : 'text-slate-200 hover:bg-white/10'}`}
+                            >
+                                {t.label}
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
                 <div className="px-6 py-5 space-y-4 overflow-y-auto">
-                    {!selected ? (
-                        <>
-                            <div className="relative">
-                                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                                <input
-                                    autoFocus
-                                    value={query}
-                                    onChange={e => setQuery(e.target.value)}
-                                    placeholder="Search tracker # or title…"
-                                    className="w-full text-sm border border-gray-200 rounded-xl pl-9 pr-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
-                                />
-                            </div>
-                            <div className="border border-gray-100 rounded-xl divide-y divide-gray-100 max-h-72 overflow-y-auto">
-                                {searching && (
-                                    <p className="px-4 py-6 text-center text-xs text-gray-400">Searching…</p>
-                                )}
-                                {!searching && results.length === 0 && (
-                                    <p className="px-4 py-6 text-center text-xs text-gray-400">
-                                        No eligible proposals found. Only proposals not already funded, ongoing, or archived — and without an existing award — show up here.
-                                    </p>
-                                )}
-                                {!searching && results.map(p => (
-                                    <button
-                                        key={p.id}
-                                        onClick={() => setSelected(p)}
-                                        className="w-full text-left px-4 py-3 hover:bg-emerald-50/60 transition-colors"
-                                    >
-                                        <div className="flex items-center gap-2">
-                                            <span className="font-mono text-xs font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{p.tracker_number}</span>
-                                            <span className="text-[11px] text-gray-400">{p.status}</span>
-                                        </div>
-                                        <p className="text-sm text-gray-800 mt-1 line-clamp-1">{p.title}</p>
-                                        <p className="text-xs text-gray-400 mt-0.5">{p.pi?.name ?? '—'} · {p.college?.name ?? '—'}</p>
-                                    </button>
-                                ))}
-                            </div>
-                        </>
-                    ) : (
-                        <>
-                            <button onClick={() => setSelected(null)} className="flex items-center gap-1 text-xs font-semibold text-gray-500 hover:text-gray-700">
-                                <ArrowLeft size={12} /> Choose a different proposal
-                            </button>
-                            <div className="bg-gray-50 border border-gray-200 rounded-xl p-3">
-                                <div className="flex items-center gap-2">
-                                    <span className="font-mono text-xs font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{selected.tracker_number}</span>
-                                    <span className="text-[11px] text-gray-400">currently {selected.status}</span>
-                                </div>
-                                <p className="text-sm text-gray-800 mt-1">{selected.title}</p>
-                            </div>
-
-                            <div>
-                                <label className="text-xs font-semibold text-gray-600">Justification <span className="text-red-500">*</span></label>
-                                <textarea
-                                    value={justification}
-                                    onChange={e => setJustification(e.target.value)}
-                                    rows={3}
-                                    placeholder="Why is this proposal being granted outside the normal workflow? (min 10 characters — recorded in the audit trail)"
-                                    className="w-full mt-1 text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
-                                />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="text-xs font-semibold text-gray-600">Awarded Amount (ETB) <span className="text-red-500">*</span></label>
-                                    <input
-                                        type="number" min="0" step="0.01"
-                                        value={awardedAmount}
-                                        onChange={e => setAwardedAmount(e.target.value)}
-                                        className="w-full mt-1 text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-xs font-semibold text-gray-600">Grant Date</label>
-                                    <input
-                                        type="date"
-                                        value={approvedAt}
-                                        onChange={e => setApprovedAt(e.target.value)}
-                                        className="w-full mt-1 text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
-                                    />
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="text-xs font-semibold text-gray-600">Grant Reference <span className="text-gray-400 font-normal">(optional — auto-generated if left blank)</span></label>
-                                <input
-                                    value={grantReference}
-                                    onChange={e => setGrantReference(e.target.value)}
-                                    placeholder="e.g. an official pre-existing grant number"
-                                    className="w-full mt-1 text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
-                                />
-                            </div>
-
-                            <button
-                                onClick={submit}
-                                disabled={!canSubmit || submitting}
-                                className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                {submitting ? 'Granting…' : 'Grant Proposal'}
-                            </button>
-                        </>
-                    )}
+                    {mode === 'single'
+                        ? <SingleGrantPanel onGranted={onGranted} onClose={onClose} />
+                        : <BulkGrantPanel onGranted={onGranted} />}
                 </div>
             </div>
         </div>,

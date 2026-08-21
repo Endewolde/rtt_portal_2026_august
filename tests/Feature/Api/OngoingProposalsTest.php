@@ -15,6 +15,7 @@ use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Database\Seeders\WorkflowStageSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
 
 uses(RefreshDatabase::class);
 
@@ -559,4 +560,142 @@ test('a non-super_admin cannot search grantable proposals', function () {
     $this->actingAs($central, 'sanctum')
         ->getJson('/api/v1/ongoing-proposals/grantable')
         ->assertForbidden();
+});
+
+function op_csv(array $rows): UploadedFile
+{
+    $lines = ['tracker_number,awarded_amount,grant_reference,approved_at'];
+    foreach ($rows as $r) {
+        $lines[] = implode(',', [$r[0], $r[1], $r[2] ?? '', $r[3] ?? '']);
+    }
+
+    return UploadedFile::fake()->createWithContent('legacy.csv', implode("\n", $lines));
+}
+
+test('a non-super_admin cannot access the bulk legacy grant import endpoints', function () {
+    [$college, $dept, $central, $call] = op_makeBase();
+    $proposal = op_proposal($college, $dept, $call, 'rejected');
+
+    $this->actingAs($central, 'sanctum')
+        ->getJson('/api/v1/ongoing-proposals/grant-legacy/import-template')
+        ->assertForbidden();
+
+    $this->actingAs($central, 'sanctum')
+        ->post('/api/v1/ongoing-proposals/grant-legacy/import', [
+            'file' => op_csv([[$proposal->tracker_number, 5000]]),
+            'justification' => 'Bulk migrating legacy grants.',
+        ])
+        ->assertForbidden();
+});
+
+test('super_admin can download the bulk legacy grant CSV template', function () {
+    $superAdmin = User::factory()->create();
+    $superAdmin->assignRole('super_admin');
+
+    $response = $this->actingAs($superAdmin, 'sanctum')
+        ->get('/api/v1/ongoing-proposals/grant-legacy/import-template');
+
+    $response->assertOk();
+    $response->assertHeader('content-type', 'text/csv; charset=UTF-8');
+});
+
+test('bulk import grants every eligible row and reports a shared justification', function () {
+    [$college, $dept, $central, $call] = op_makeBase();
+    $superAdmin = User::factory()->create();
+    $superAdmin->assignRole('super_admin');
+
+    $p1 = op_proposal($college, $dept, $call, 'rejected');
+    $p2 = op_proposal($college, $dept, $call, 'draft');
+
+    $response = $this->actingAs($superAdmin, 'sanctum')
+        ->post('/api/v1/ongoing-proposals/grant-legacy/import', [
+            'file' => op_csv([
+                [$p1->tracker_number, 12000, 'LEGACY-0001', '2024-03-01'],
+                [$p2->tracker_number, 8000],
+            ]),
+            'justification' => 'Bulk migrating FY2023 legacy grants recorded outside the system.',
+        ]);
+
+    $response->assertOk();
+    expect($response->json('data.summary.total'))->toBe(2)
+        ->and($response->json('data.summary.created'))->toBe(2)
+        ->and($response->json('data.summary.errors'))->toBe(0);
+
+    expect(Proposal::find($p1->id)->status)->toBe('funded')
+        ->and(Proposal::find($p2->id)->status)->toBe('funded');
+
+    $this->assertDatabaseHas('awards', ['proposal_id' => $p1->id, 'grant_reference' => 'LEGACY-0001', 'awarded_amount' => 12000]);
+    $this->assertDatabaseHas('awards', ['proposal_id' => $p2->id, 'awarded_amount' => 8000]);
+    $this->assertDatabaseHas('workflow_logs', ['proposal_id' => $p1->id, 'action' => 'grant_legacy']);
+    $this->assertDatabaseHas('workflow_logs', ['proposal_id' => $p2->id, 'action' => 'grant_legacy']);
+});
+
+test('bulk import skips rows with an unknown tracker number, an ineligible status, or a duplicate grant reference, and grants the rest', function () {
+    [$college, $dept, $central, $call] = op_makeBase();
+    $superAdmin = User::factory()->create();
+    $superAdmin->assignRole('super_admin');
+
+    $eligible = op_proposal($college, $dept, $call, 'draft');
+    $alreadyFunded = op_proposal($college, $dept, $call, 'funded');
+    $dupeReferenceTarget = op_proposal($college, $dept, $call, 'rejected');
+    $otherProposal = op_proposal($college, $dept, $call, 'rejected');
+    Award::create([
+        'proposal_id' => $otherProposal->id,
+        'grant_reference' => 'TAKEN-REF', 'approved_by' => $central->id, 'approved_at' => now(), 'awarded_amount' => 1,
+    ]);
+
+    $response = $this->actingAs($superAdmin, 'sanctum')
+        ->post('/api/v1/ongoing-proposals/grant-legacy/import', [
+            'file' => op_csv([
+                ['NON-EXISTENT-TRACKER', 5000],
+                [$alreadyFunded->tracker_number, 5000],
+                [$dupeReferenceTarget->tracker_number, 5000, 'TAKEN-REF'],
+                [$eligible->tracker_number, 5000],
+            ]),
+            'justification' => 'Bulk migrating legacy grants with some bad rows mixed in.',
+        ]);
+
+    $response->assertOk();
+    expect($response->json('data.summary.created'))->toBe(1)
+        ->and($response->json('data.summary.errors'))->toBe(3)
+        ->and($response->json('data.summary.total'))->toBe(4);
+
+    $errors = collect($response->json('data.errors'))->pluck('error', 'tracker_number');
+    expect($errors['NON-EXISTENT-TRACKER'])->toContain('No proposal found')
+        ->and($errors[$alreadyFunded->tracker_number])->toContain('already funded')
+        ->and($errors[$dupeReferenceTarget->tracker_number])->toContain('already in use');
+
+    expect(Proposal::find($eligible->id)->status)->toBe('funded')
+        ->and(Proposal::find($dupeReferenceTarget->id)->status)->toBe('rejected');
+});
+
+test('bulk import rejects rows with a missing tracker or a non-numeric amount before touching the database', function () {
+    [$college, $dept, $central, $call] = op_makeBase();
+    $superAdmin = User::factory()->create();
+    $superAdmin->assignRole('super_admin');
+    $eligible = op_proposal($college, $dept, $call, 'draft');
+
+    $response = $this->actingAs($superAdmin, 'sanctum')
+        ->post('/api/v1/ongoing-proposals/grant-legacy/import', [
+            'file' => op_csv([
+                ['', 5000],
+                [$eligible->tracker_number, 'not-a-number'],
+            ]),
+            'justification' => 'Testing malformed rows.',
+        ]);
+
+    $response->assertOk();
+    expect($response->json('data.summary.created'))->toBe(0)
+        ->and($response->json('data.summary.errors'))->toBe(2);
+
+    expect(Proposal::find($eligible->id)->status)->toBe('draft');
+});
+
+test('bulk import requires a justification and a file', function () {
+    $superAdmin = User::factory()->create();
+    $superAdmin->assignRole('super_admin');
+
+    $this->actingAs($superAdmin, 'sanctum')
+        ->post('/api/v1/ongoing-proposals/grant-legacy/import', [])
+        ->assertStatus(422);
 });

@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Api;
 
 use App\Exports\OngoingProposalsExport;
 use App\Http\Controllers\Controller;
+use App\Models\Award;
 use App\Models\Proposal;
 use App\Models\ThresholdSetting;
+use App\Models\User;
 use App\Services\AwardService;
 use App\Services\WorkflowService;
 use App\Support\AuditLogger;
@@ -17,6 +19,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Single consolidated view of every proposal that's been funded but not yet
@@ -238,15 +241,54 @@ class OngoingProposalsController extends Controller
 
         $proposal = Proposal::findOrFail($id);
 
+        if ($error = $this->legacyGrantEligibilityError($proposal)) {
+            return response()->json(['data' => null, 'message' => $error, 'errors' => []], 422);
+        }
+
+        $award = $this->performLegacyGrant(
+            $proposal,
+            $user,
+            $validated['justification'],
+            (float) $validated['awarded_amount'],
+            $validated['grant_reference'] ?? null,
+            isset($validated['approved_at']) ? Carbon::parse($validated['approved_at']) : null,
+        );
+
+        return response()->json([
+            'data' => $award,
+            'message' => 'Proposal granted — now tracked as ongoing.',
+            'errors' => [],
+            'meta' => [],
+        ]);
+    }
+
+    /** Null when eligible, otherwise the reason it can't be legacy-granted. Shared by the single and bulk-import paths. */
+    private function legacyGrantEligibilityError(Proposal $proposal): ?string
+    {
         if (in_array($proposal->status, [...self::ONGOING_STATUSES, 'archived'], true)) {
-            return response()->json(['data' => null, 'message' => 'This proposal is already funded, ongoing, or archived.', 'errors' => []], 422);
+            return 'This proposal is already funded, ongoing, or archived.';
         }
 
         if ($proposal->award) {
-            return response()->json(['data' => null, 'message' => 'This proposal already has an award record.', 'errors' => []], 422);
+            return 'This proposal already has an award record.';
         }
 
-        $award = DB::transaction(function () use ($proposal, $user, $validated) {
+        return null;
+    }
+
+    /**
+     * The actual write path shared by grantLegacy() and grantLegacyImport(): raw status
+     * write + workflow_logs + audit_logs + Award creation, all in one transaction.
+     */
+    private function performLegacyGrant(
+        Proposal $proposal,
+        User $user,
+        string $justification,
+        float $amount,
+        ?string $grantReference,
+        ?Carbon $approvedAt,
+    ): Award {
+        return DB::transaction(function () use ($proposal, $user, $justification, $amount, $grantReference, $approvedAt) {
             $fromStage = $proposal->status;
 
             DB::table('proposals')->where('id', $proposal->id)->update([
@@ -261,7 +303,7 @@ class OngoingProposalsController extends Controller
                 'action' => 'grant_legacy',
                 'to_stage' => 'funded',
                 'actor_id' => $user->id,
-                'notes' => $validated['justification'],
+                'notes' => $justification,
                 'metadata' => json_encode(['override' => true, 'source' => 'ongoing_proposals_legacy_grant']),
                 'created_at' => now(),
             ]);
@@ -272,22 +314,158 @@ class OngoingProposalsController extends Controller
                 $proposal->id,
                 $user->id,
                 ['status' => $fromStage],
-                ['status' => 'funded', 'awarded_amount' => $validated['awarded_amount'], 'justification' => $validated['justification']],
+                ['status' => 'funded', 'awarded_amount' => $amount, 'justification' => $justification],
             );
 
             return $this->awardService->createForFundedProposal(
                 $proposal->fresh(),
                 $user,
-                (float) $validated['awarded_amount'],
-                $validated['justification'],
-                $validated['grant_reference'] ?? null,
-                isset($validated['approved_at']) ? Carbon::parse($validated['approved_at']) : null,
+                $amount,
+                $justification,
+                $grantReference,
+                $approvedAt,
             );
         });
+    }
+
+    /** CSV template for bulk legacy grants — same 4 columns grantLegacyImport() expects. */
+    public function grantLegacyImportTemplate(Request $request): StreamedResponse|JsonResponse
+    {
+        if (! $request->user()?->hasAnyRole(self::LEGACY_GRANT_ROLES)) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
+        }
+
+        $headers = [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="legacy_proposals_import_template.csv"',
+            'Cache-Control' => 'no-cache',
+        ];
+
+        return response()->stream(function () {
+            $handle = fopen('php://output', 'w');
+            fwrite($handle, "\xEF\xBB\xBF");
+            fputcsv($handle, ['tracker_number', 'awarded_amount', 'grant_reference', 'approved_at']);
+            fputcsv($handle, ['RES-2025-2026-000123', '15000', '', '2024-01-15']);
+            fputcsv($handle, ['COM-2024-2025-000045', '8000', 'GRANT-2024-000045', '']);
+            fclose($handle);
+        }, 200, $headers);
+    }
+
+    /**
+     * Bulk version of grantLegacy() — one CSV row per proposal, one shared justification
+     * for the whole batch (recorded on every row's workflow_logs/audit_logs/award notes).
+     * Each row is validated and granted independently in its own transaction, so one bad
+     * row is reported and skipped rather than rolling back the whole import.
+     */
+    public function grantLegacyImport(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if (! $user?->hasAnyRole(self::LEGACY_GRANT_ROLES)) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
+        }
+
+        $request->validate([
+            'file' => 'required|file|mimes:csv,txt|max:2048',
+            'justification' => 'required|string|min:10',
+        ]);
+
+        $justification = $request->string('justification')->toString();
+        $handle = fopen($request->file('file')->getRealPath(), 'r');
+
+        $rawHeaders = fgetcsv($handle);
+        if ($rawHeaders) {
+            $rawHeaders[0] = ltrim($rawHeaders[0], "\xEF\xBB\xBF");
+        }
+        $headerMap = array_flip(array_map('trim', $rawHeaders ?? []));
+        $col = fn (string $name) => $headerMap[$name] ?? null;
+
+        $rows = [];
+        $errors = [];
+        $rowIndex = 1;
+
+        while (($row = fgetcsv($handle)) !== false) {
+            $rowIndex++;
+
+            $tracker = trim($row[$col('tracker_number')] ?? '');
+            $amountRaw = trim($row[$col('awarded_amount')] ?? '');
+            $grantReference = trim($row[$col('grant_reference')] ?? '') ?: null;
+            $approvedAtRaw = trim($row[$col('approved_at')] ?? '') ?: null;
+
+            $rowErrors = [];
+            if (! $tracker) {
+                $rowErrors[] = 'tracker_number is required';
+            }
+            if ($amountRaw === '' || ! is_numeric($amountRaw) || (float) $amountRaw < 0) {
+                $rowErrors[] = 'awarded_amount must be a non-negative number';
+            }
+            if ($approvedAtRaw && ! strtotime($approvedAtRaw)) {
+                $rowErrors[] = 'approved_at is not a valid date';
+            }
+
+            if ($rowErrors) {
+                $errors[] = ['row' => $rowIndex, 'tracker_number' => $tracker ?: '—', 'error' => implode('; ', $rowErrors)];
+
+                continue;
+            }
+
+            $rows[] = compact('rowIndex', 'tracker', 'amountRaw', 'grantReference', 'approvedAtRaw');
+        }
+
+        fclose($handle);
+
+        $trackers = array_column($rows, 'tracker');
+        $proposalsByTracker = Proposal::whereIn('tracker_number', $trackers)->with('award')->get()->keyBy('tracker_number');
+        $seenGrantReferences = [];
+        $created = 0;
+
+        foreach ($rows as $r) {
+            $proposal = $proposalsByTracker->get($r['tracker']);
+
+            if (! $proposal) {
+                $errors[] = ['row' => $r['rowIndex'], 'tracker_number' => $r['tracker'], 'error' => 'No proposal found with this tracker number'];
+
+                continue;
+            }
+
+            if ($eligibilityError = $this->legacyGrantEligibilityError($proposal)) {
+                $errors[] = ['row' => $r['rowIndex'], 'tracker_number' => $r['tracker'], 'error' => $eligibilityError];
+
+                continue;
+            }
+
+            if ($r['grantReference'] && (isset($seenGrantReferences[$r['grantReference']]) || Award::where('grant_reference', $r['grantReference'])->exists())) {
+                $errors[] = ['row' => $r['rowIndex'], 'tracker_number' => $r['tracker'], 'error' => 'grant_reference is already in use'];
+
+                continue;
+            }
+
+            if ($r['grantReference']) {
+                $seenGrantReferences[$r['grantReference']] = true;
+            }
+
+            $this->performLegacyGrant(
+                $proposal,
+                $user,
+                $justification,
+                (float) $r['amountRaw'],
+                $r['grantReference'],
+                $r['approvedAtRaw'] ? Carbon::parse($r['approvedAtRaw']) : null,
+            );
+
+            $created++;
+        }
 
         return response()->json([
-            'data' => $award,
-            'message' => 'Proposal granted — now tracked as ongoing.',
+            'data' => [
+                'summary' => [
+                    'total' => $created + count($errors),
+                    'created' => $created,
+                    'errors' => count($errors),
+                ],
+                'errors' => $errors,
+            ],
+            'message' => "Import complete. {$created} granted, ".count($errors).' skipped.',
             'errors' => [],
             'meta' => [],
         ]);
