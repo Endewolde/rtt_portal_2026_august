@@ -25,9 +25,15 @@ class ReviewerMatchController extends Controller
 
         $reviewers = User::with('roles:id,name')
             ->whereNotNull('expertise')
-            ->whereHas('roles', fn ($q) => $q->where('name', 'staff'))
+            ->whereHas('roles', fn ($q) => $q->whereIn('name', ['staff', 'external_reviewer']))
             ->where('status', 'active')
             ->where('id', '!=', $proposal->pi_user_id)
+            ->withCount([
+                'reviewAssignments as active_assignments' => fn ($q) => $q->whereIn('status', ['pending', 'accepted', 'in_progress']),
+                'reviewAssignments as completed_assignments' => fn ($q) => $q->where('status', 'submitted'),
+                'reviewAssignments as on_time_assignments' => fn ($q) => $q->where('status', 'submitted')
+                    ->whereColumn('submitted_at', '<=', 'due_date'),
+            ])
             ->get(['id', 'name', 'email', 'avatar', 'expertise', 'department_id']);
 
         $scored = $reviewers->map(function (User $reviewer) use ($proposalTerms) {
@@ -58,18 +64,38 @@ class ReviewerMatchController extends Controller
                 });
             });
 
+            // Reliability: on-time rate among completed reviews. Reviewers with no
+            // completed history get a neutral 50% factor — neither rewarded nor
+            // penalized for being new.
+            $onTimeRate = $reviewer->completed_assignments > 0
+                ? round(($reviewer->on_time_assignments / $reviewer->completed_assignments) * 100)
+                : null;
+            $reliabilityFactor = $onTimeRate === null ? 0.5 : $onTimeRate / 100;
+
+            // Current workload discourages piling more reviews onto an already-busy
+            // reviewer, capped so it can never fully cancel out a genuine expertise match.
+            $workloadPenalty = min($reviewer->active_assignments, 5) * 0.15;
+
+            $matchScore = $matched->count();
+            $compositeScore = round($matchScore + ($reliabilityFactor * 0.9) - $workloadPenalty, 3);
+
             return [
                 'id' => $reviewer->id,
                 'name' => $reviewer->name,
                 'email' => $reviewer->email,
                 'avatar' => $reviewer->avatar,
                 'expertise' => $reviewer->expertise,
-                'match_score' => $matched->count(),
+                'roles' => $reviewer->roles->map(fn ($r) => ['id' => $r->id, 'name' => $r->name])->values(),
+                'match_score' => $matchScore,
                 'matched_terms' => $matched->values()->all(),
+                'active_assignments' => $reviewer->active_assignments,
+                'completed_assignments' => $reviewer->completed_assignments,
+                'on_time_rate' => $onTimeRate,
+                'composite_score' => $compositeScore,
             ];
         })
             ->filter(fn ($r) => $r['match_score'] > 0)
-            ->sortByDesc('match_score')
+            ->sortByDesc('composite_score')
             ->take(10)
             ->values();
 

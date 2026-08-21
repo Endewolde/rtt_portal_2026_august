@@ -82,11 +82,16 @@ class AppSettingsSeeder extends Seeder
             ['key' => 'homepage_banner', 'value' => '',                                         'type' => 'textarea', 'group' => 'appearance'],
             ['key' => 'theme',           'value' => 'light',                                    'type' => 'select',   'group' => 'appearance'],
 
-            // Review Thresholds
+            // Review Thresholds — raw point minimums against each evaluation type's
+            // category-weight sum (blind=80, defence=20, combined=100), not percentages.
             ['key' => 'blind_threshold',      'value' => '60',   'type' => 'number', 'group' => 'thresholds'],
-            ['key' => 'defence_threshold',    'value' => '60',   'type' => 'number', 'group' => 'thresholds'],
-            ['key' => 'combined_threshold',   'value' => '120',  'type' => 'number', 'group' => 'thresholds'],
+            ['key' => 'defence_threshold',    'value' => '10',   'type' => 'number', 'group' => 'thresholds'],
+            ['key' => 'combined_threshold',   'value' => '70',   'type' => 'number', 'group' => 'thresholds'],
+            ['key' => 'combined_decision_mode', 'value' => 'combined_only', 'type' => 'select', 'group' => 'thresholds'],
             ['key' => 'similarity_threshold', 'value' => '0.70', 'type' => 'number', 'group' => 'thresholds'],
+            ['key' => 'max_reviewer_active_assignments', 'value' => '5', 'type' => 'number', 'group' => 'thresholds'],
+            ['key' => 'overdue_reminder_interval_days', 'value' => '3', 'type' => 'number', 'group' => 'thresholds'],
+            ['key' => 'ongoing_midterm_overdue_days', 'value' => '90', 'type' => 'number', 'group' => 'thresholds'],
 
             // Audit & Logging
             ['key' => 'audit_log_retention_days', 'value' => '365',  'type' => 'number',  'group' => 'audit'],

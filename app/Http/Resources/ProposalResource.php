@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Models\ProposalDocument;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -14,6 +15,12 @@ class ProposalResource extends JsonResource
         $isReviewer = $user && $user->hasRole('staff');
         $isColAdmin = $user && $user->hasRole('college_officer');
         $hidePI = ! $isOwner && ($isReviewer || $isColAdmin);
+
+        // Reviewers only need the proposal document and budget spreadsheet to score —
+        // other uploads (PI CV, supporting docs) aren't relevant to scoring and can
+        // carry identifying info. College officers are not scope-limited here since
+        // they're not blind reviewers, just college-scoped oversight.
+        $hideDocs = ! $isOwner && $isReviewer;
 
         return [
             'id' => $this->id,
@@ -54,7 +61,9 @@ class ProposalResource extends JsonResource
             'members' => $hidePI ? [] : $this->whenLoaded('members'),
             'members_hidden' => $hidePI,
             'history_hidden' => $hidePI,
-            'documents' => $this->whenLoaded('documents'),
+            'documents' => $this->whenLoaded('documents', fn () => $hideDocs
+                ? $this->documents->whereIn('document_type', ProposalDocument::REVIEWER_VISIBLE_TYPES)->values()
+                : $this->documents),
             'budgets' => $this->whenLoaded('budgets'),
 
             'proposal_call' => $this->whenLoaded('proposalCall', fn () => new ProposalCallResource($this->proposalCall)),

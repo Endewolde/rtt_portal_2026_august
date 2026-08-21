@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { Link } from '@inertiajs/react';
 import { useAuth } from '../../hooks/useAuth';
 import {
     FileText, Search, RefreshCw, X, Download, Eye,
@@ -86,6 +87,18 @@ function TypeBadge({ type }) {
     return (
         <span className={cn('text-xs font-medium px-2 py-0.5 rounded-full capitalize', TYPE_COLORS[type] ?? TYPE_COLORS.other)}>
             {type ?? '—'}
+        </span>
+    );
+}
+
+function isExternalReviewer(user) {
+    return user?.roles?.some(r => (typeof r === 'string' ? r : r.name) === 'external_reviewer') ?? false;
+}
+
+function ExternalBadge() {
+    return (
+        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-600 border border-orange-200 shrink-0">
+            External
         </span>
     );
 }
@@ -476,7 +489,7 @@ function AssignReviewerModal({ abstract, onSave, onClose }) {
             if (!search.trim()) { setUsers([]); return; }
             setSearching(true);
             try {
-                const res = await api.get('/users', { params: { search, per_page: 10, role: 'staff' } });
+                const res = await api.get('/users', { params: { search, per_page: 10, role: 'staff,external_reviewer' } });
                 const d = res.data.data ?? res.data;
                 setUsers(Array.isArray(d) ? d : (d.data ?? []));
             } catch { /* ignore */ }
@@ -525,7 +538,10 @@ function AssignReviewerModal({ abstract, onSave, onClose }) {
                         <div className="flex items-center gap-3 bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3">
                             <Avatar name={selected.name} size={8} />
                             <div className="flex-1 min-w-0">
-                                <p className="text-sm font-semibold text-gray-900 truncate">{selected.name}</p>
+                                <div className="flex items-center gap-1.5">
+                                    <p className="text-sm font-semibold text-gray-900 truncate">{selected.name}</p>
+                                    {isExternalReviewer(selected) && <ExternalBadge />}
+                                </div>
                                 <p className="text-xs text-gray-500 truncate">{selected.email}</p>
                             </div>
                             <button onClick={() => { setSelected(null); setSearch(''); }}
@@ -537,17 +553,34 @@ function AssignReviewerModal({ abstract, onSave, onClose }) {
 
                     {!selected && users.length > 0 && (
                         <div className="border border-gray-200 rounded-xl overflow-hidden max-h-52 overflow-y-auto divide-y divide-gray-50">
-                            {users.map(u => (
-                                <button key={u.id}
-                                    onClick={() => { setSelected(u); setSearch(u.name); setUsers([]); }}
-                                    className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-indigo-50 transition-colors text-left">
-                                    <Avatar name={u.name} size={7} />
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-medium text-gray-900 truncate">{u.name}</p>
-                                        <p className="text-xs text-gray-400 truncate">{u.email}</p>
-                                    </div>
-                                </button>
-                            ))}
+                            {users.map(u => {
+                                const isSubmitter = abstract.submitter_email
+                                    && u.email
+                                    && u.email.toLowerCase() === abstract.submitter_email.toLowerCase();
+                                return (
+                                    <button key={u.id}
+                                        onClick={() => { if (!isSubmitter) { setSelected(u); setSearch(u.name); setUsers([]); } }}
+                                        disabled={isSubmitter}
+                                        className={cn(
+                                            'w-full flex items-center gap-3 px-4 py-2.5 transition-colors text-left',
+                                            isSubmitter ? 'opacity-50 cursor-not-allowed bg-gray-50' : 'hover:bg-indigo-50',
+                                        )}>
+                                        <Avatar name={u.name} size={7} />
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                <p className="text-sm font-medium text-gray-900 truncate">{u.name}</p>
+                                                {isExternalReviewer(u) && <ExternalBadge />}
+                                                {isSubmitter && (
+                                                    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-red-50 text-red-600 border border-red-200 shrink-0">
+                                                        Submitted this abstract
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="text-xs text-gray-400 truncate">{u.email}</p>
+                                        </div>
+                                    </button>
+                                );
+                            })}
                         </div>
                     )}
 
@@ -1071,338 +1104,11 @@ function ManageAbstractsTab() {
     );
 }
 
-// ─── My Reviews Tab ────────────────────────────────────────────────────────────
-
-const RECOMMENDATION_OPTIONS = [
-    { value: 'accept', label: 'Accept',  activeColor: 'bg-emerald-600 border-emerald-600 text-white' },
-    { value: 'revise', label: 'Revise',  activeColor: 'bg-amber-500 border-amber-500 text-white'     },
-    { value: 'reject', label: 'Reject',  activeColor: 'bg-red-600 border-red-600 text-white'         },
-];
-
-function ReviewCard({ item, onSubmitted, index, total }) {
-    const { success, error } = useToast();
-    const myReview  = item.reviews?.find(r => r.submitted_at) ?? null;
-    const hasReview = Boolean(myReview);
-
-    const [score, setScore]                   = useState(myReview?.score ?? 5);
-    const [recommendation, setRecommendation] = useState(myReview?.recommendation ?? '');
-    const [comments, setComments]             = useState(myReview?.comments ?? '');
-    const [submitting, setSubmitting]         = useState(false);
-
-    const submit = async () => {
-        if (!recommendation) { error('Please select a recommendation.'); return; }
-        setSubmitting(true);
-        try {
-            await api.post(`/reviewer/abstracts/${item.id}/review`, { score, recommendation, comments });
-            success('Review submitted.');
-            onSubmitted();
-        } catch (e) {
-            error(e.response?.data?.message || 'Failed to submit review.');
-        }
-        setSubmitting(false);
-    };
-
-    const recColor = myReview?.recommendation === 'accept' ? 'emerald' :
-                     myReview?.recommendation === 'reject' ? 'red' : 'amber';
-
-    return (
-        <div className={cn(
-            'bg-white rounded-2xl border overflow-hidden shadow-sm',
-            hasReview ? 'border-gray-100' : 'border-indigo-200 ring-1 ring-indigo-100',
-        )}>
-            {/* Top strip */}
-            {total > 1 && (
-                <div className={cn(
-                    'px-6 py-2 flex items-center justify-between text-[11px] font-semibold border-b',
-                    hasReview ? 'bg-gray-50 text-gray-400 border-gray-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100',
-                )}>
-                    <span>Abstract {index} of {total}</span>
-                    <span>{hasReview ? '✓ Reviewed' : '⏳ Pending review'}</span>
-                </div>
-            )}
-
-            <div className="px-6 py-5">
-                {/* Header */}
-                <div className="flex items-start justify-between gap-4 mb-4">
-                    <div className="flex-1 min-w-0">
-                        <h3 className="text-base font-bold text-gray-900 leading-snug">{item.title}</h3>
-                        <div className="flex flex-wrap items-center gap-2 mt-2">
-                            {item.conference?.title && (
-                                <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full text-[11px] font-semibold">
-                                    <BookOpen size={9} /> {item.conference.title}
-                                </span>
-                            )}
-                            {item.presentation_type && <TypeBadge type={item.presentation_type} />}
-                        </div>
-                    </div>
-                    {hasReview && (
-                        <span className="shrink-0 flex items-center gap-1.5 bg-emerald-100 text-emerald-700 text-xs font-bold px-3 py-1.5 rounded-full">
-                            <CheckCircle2 size={12} /> Submitted
-                        </span>
-                    )}
-                </div>
-
-                {/* Submitter */}
-                {item.submitter_name && (
-                    <div className="flex items-center gap-2.5 mb-5 pb-5 border-b border-gray-50">
-                        <Avatar name={item.submitter_name} size={8} />
-                        <div>
-                            <p className="text-sm font-semibold text-gray-800">{item.submitter_name}</p>
-                            {item.submitter_affiliation && (
-                                <p className="text-xs text-gray-400">{item.submitter_affiliation}</p>
-                            )}
-                        </div>
-                    </div>
-                )}
-
-                {/* Abstract body */}
-                <div className="mb-5">
-                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Abstract</p>
-                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{item.body ?? item.abstract_body ?? '—'}</p>
-                </div>
-
-                {/* Keywords */}
-                {item.keywords?.length > 0 && (
-                    <div className="mb-5">
-                        <div className="flex flex-wrap gap-1.5">
-                            {item.keywords.map((kw, i) => (
-                                <span key={i} className="text-xs px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-full font-medium">#{kw}</span>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {/* File */}
-                {item.file_path && (
-                    <div className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-100 rounded-xl mb-5">
-                        <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center shrink-0">
-                            <FileText size={15} className="text-white" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold text-blue-900">Submitted Document</p>
-                            <p className="text-[10px] text-blue-500 truncate">{item.file_path.split('/').pop()}</p>
-                        </div>
-                        <a href={item.file_path} target="_blank" rel="noreferrer"
-                            className="shrink-0 flex items-center gap-1.5 text-xs font-bold text-blue-700
-                                       bg-white border border-blue-200 px-3 py-1.5 rounded-lg
-                                       hover:bg-blue-700 hover:text-white hover:border-blue-700 transition-colors">
-                            <ExternalLink size={11} /> Open
-                        </a>
-                    </div>
-                )}
-
-                {/* Review area */}
-                <div className="border-t border-gray-100 pt-5">
-                    {hasReview ? (
-                        <div className="space-y-4">
-                            <div className={cn(
-                                `flex items-center gap-3 px-4 py-3 rounded-2xl border bg-${recColor}-50 border-${recColor}-200`,
-                            )}>
-                                <div className={cn(`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-${recColor}-600`)}>
-                                    <CheckCircle2 size={17} className="text-white" />
-                                </div>
-                                <div>
-                                    <p className={cn(`text-sm font-bold text-${recColor}-800`)}>
-                                        Review submitted — {myReview.recommendation === 'accept' ? 'Accept' :
-                                            myReview.recommendation === 'reject' ? 'Reject' : 'Revise'}
-                                    </p>
-                                    <p className={cn(`text-xs text-${recColor}-600 mt-0.5`)}>
-                                        {formatDate(myReview.submitted_at ?? myReview.created_at)} · No further action needed
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-3">
-                                <div className="bg-gray-50 rounded-xl p-4 text-center border border-gray-100">
-                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Score</p>
-                                    <p className="text-3xl font-black text-indigo-600 leading-none">{myReview.score}</p>
-                                    <p className="text-[10px] text-gray-400 mt-1">/ 10</p>
-                                </div>
-                                <div className="bg-gray-50 rounded-xl p-4 text-center border border-gray-100">
-                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Recommendation</p>
-                                    <span className={cn(
-                                        'inline-block mt-2 text-sm font-bold px-3 py-1.5 rounded-full capitalize',
-                                        myReview.recommendation === 'accept' ? 'bg-emerald-100 text-emerald-700' :
-                                        myReview.recommendation === 'reject' ? 'bg-red-100 text-red-700' :
-                                        'bg-amber-100 text-amber-700',
-                                    )}>
-                                        {myReview.recommendation === 'accept' ? '✓ Accept' :
-                                         myReview.recommendation === 'reject' ? '✗ Reject' : '⟳ Revise'}
-                                    </span>
-                                </div>
-                            </div>
-
-                            {myReview.comments && (
-                                <div>
-                                    <p className="text-xs font-semibold text-gray-500 mb-2">Your Comments</p>
-                                    <p className="text-sm text-gray-600 leading-relaxed bg-gray-50 rounded-xl p-4 border border-gray-100 whitespace-pre-line">
-                                        {myReview.comments}
-                                    </p>
-                                </div>
-                            )}
-
-                            <div className="flex items-center gap-2 text-xs text-gray-400 bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                                    <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                                </svg>
-                                This review is locked. Contact an admin if a correction is needed.
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="space-y-5">
-                            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Submit Your Review</p>
-
-                            {/* Score */}
-                            <div>
-                                <div className="flex items-center justify-between mb-2">
-                                    <label className="text-xs font-semibold text-gray-600">Score</label>
-                                    <span className="text-lg font-bold text-indigo-600">
-                                        {score}<span className="text-xs text-gray-400 font-normal">/10</span>
-                                    </span>
-                                </div>
-                                <input type="range" min={1} max={10} step={1} value={score}
-                                    onChange={e => setScore(Number(e.target.value))}
-                                    className="w-full accent-indigo-600 h-2 rounded-full cursor-pointer" />
-                                <div className="flex justify-between mt-1">
-                                    <span className="text-[10px] text-gray-400">Poor (1)</span>
-                                    <span className="text-[10px] text-gray-400">Excellent (10)</span>
-                                </div>
-                            </div>
-
-                            {/* Recommendation */}
-                            <div>
-                                <label className="block text-xs font-semibold text-gray-600 mb-2">Recommendation *</label>
-                                <div className="flex gap-2.5">
-                                    {RECOMMENDATION_OPTIONS.map(opt => (
-                                        <button key={opt.value} onClick={() => setRecommendation(opt.value)}
-                                            className={cn(
-                                                'flex-1 py-2.5 rounded-xl border text-xs font-bold transition-all',
-                                                recommendation === opt.value ? opt.activeColor : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300',
-                                            )}>
-                                            {opt.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Comments */}
-                            <div>
-                                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Comments</label>
-                                <textarea value={comments} onChange={e => setComments(e.target.value)}
-                                    rows={4} placeholder="Provide detailed feedback for the author…"
-                                    className="w-full border border-gray-200 bg-gray-50 rounded-xl px-3.5 py-2.5 text-sm
-                                               focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:bg-white transition-colors resize-none" />
-                            </div>
-
-                            <button onClick={submit} disabled={submitting || !recommendation}
-                                className="w-full flex items-center justify-center gap-2 py-3 bg-indigo-600 text-white
-                                           rounded-xl text-sm font-bold hover:bg-indigo-700 disabled:opacity-60 transition-colors">
-                                {submitting ? <Loader2 size={14} className="animate-spin" /> : <Send size={13} />}
-                                {submitting ? 'Submitting…' : 'Submit Review'}
-                            </button>
-                        </div>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-}
-
-function MyReviewsTab() {
-    const { error } = useToast();
-    const [items, setItems]     = useState([]);
-    const [loading, setLoading] = useState(true);
-
-    const load = useCallback(async () => {
-        setLoading(true);
-        try {
-            const res = await api.get('/reviewer/abstracts');
-            const d = res.data.data ?? res.data;
-            setItems(Array.isArray(d) ? d : (d.data ?? []));
-        } catch { error('Failed to load assigned abstracts.'); }
-        setLoading(false);
-    }, []);
-
-    useEffect(() => { load(); }, [load]);
-
-    if (loading) {
-        return (
-            <div className="space-y-4">
-                {[...Array(3)].map((_, i) => (
-                    <div key={i} className="bg-white rounded-2xl border border-gray-100 p-6 animate-pulse space-y-3">
-                        <div className="h-4 bg-gray-100 rounded w-3/5" />
-                        <div className="h-3 bg-gray-100 rounded w-1/4" />
-                        <div className="h-24 bg-gray-100 rounded-xl mt-4" />
-                    </div>
-                ))}
-            </div>
-        );
-    }
-
-    if (items.length === 0) {
-        return (
-            <div className="flex flex-col items-center justify-center py-24">
-                <div className="w-16 h-16 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-center mb-4">
-                    <MessageSquare size={28} className="text-gray-300" />
-                </div>
-                <p className="text-base font-semibold text-gray-400">No abstracts assigned for review</p>
-                <p className="text-sm text-gray-400 mt-1">You'll see abstracts here once they are assigned to you.</p>
-            </div>
-        );
-    }
-
-    const reviewed = items.filter(i => i.reviews?.some(r => r.submitted_at)).length;
-    const pending  = items.length - reviewed;
-    const pct      = Math.round((reviewed / items.length) * 100);
-
-    return (
-        <div className="space-y-5">
-            {/* Progress */}
-            <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-                <div className="flex items-center justify-between mb-3">
-                    <div>
-                        <h3 className="text-sm font-bold text-gray-900">Your Review Progress</h3>
-                        <p className="text-xs text-gray-400 mt-0.5">
-                            {reviewed} of {items.length} abstract{items.length !== 1 ? 's' : ''} reviewed
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                        {pending > 0 && (
-                            <span className="flex items-center gap-1.5 text-xs font-semibold text-amber-700
-                                             bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-full">
-                                <Clock size={11} /> {pending} pending
-                            </span>
-                        )}
-                        <span className={cn('text-2xl font-black', pct === 100 ? 'text-emerald-600' : 'text-indigo-600')}>
-                            {pct}%
-                        </span>
-                    </div>
-                </div>
-                <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div className={cn('h-full rounded-full transition-all duration-700', pct === 100 ? 'bg-emerald-500' : 'bg-indigo-500')}
-                        style={{ width: `${pct}%` }} />
-                </div>
-            </div>
-
-            {items.map((item, idx) => (
-                <ReviewCard key={item.id} item={item} onSubmitted={load} index={idx + 1} total={items.length} />
-            ))}
-        </div>
-    );
-}
-
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
 export default function AdminAbstracts() {
     const { hasAnyRole } = useAuth();
     const isAdmin = hasAnyRole(['super_admin', 'admin', 'central_officer']);
-
-    const TABS = [
-        ...(isAdmin ? [{ id: 'manage', label: 'Manage Abstracts', icon: FileText }] : []),
-        { id: 'reviews', label: 'My Reviews', icon: Star },
-    ];
-
-    const [activeTab, setActiveTab] = useState(() => isAdmin ? 'manage' : 'reviews');
 
     return (
         <AppLayout breadcrumb="Abstracts">
@@ -1416,34 +1122,31 @@ export default function AdminAbstracts() {
                         </div>
                         <div>
                             <h1 className="text-2xl font-black text-gray-900 tracking-tight">Abstracts</h1>
-                            <p className="text-sm text-gray-500 mt-0.5">
-                                {isAdmin ? 'Manage conference abstract submissions and peer reviews' : 'Review abstracts assigned to you'}
-                            </p>
+                            <p className="text-sm text-gray-500 mt-0.5">Manage conference abstract submissions and peer reviews</p>
                         </div>
                     </div>
                 </div>
 
-                {/* Tabs */}
-                {TABS.length > 1 && (
-                    <div className="flex gap-1 p-1 bg-gray-100 rounded-xl w-fit">
-                        {TABS.map(tab => (
-                            <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                                className={cn(
-                                    'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all',
-                                    activeTab === tab.id
-                                        ? 'bg-white text-indigo-700 shadow-sm'
-                                        : 'text-gray-500 hover:text-gray-700',
-                                )}>
-                                <tab.icon size={14} />
-                                {tab.label}
-                            </button>
-                        ))}
+                {/* Content */}
+                {isAdmin ? (
+                    <ManageAbstractsTab />
+                ) : (
+                    <div className="bg-white border border-dashed border-gray-300 rounded-2xl p-14 text-center">
+                        <div className="w-14 h-14 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                            <AlertCircle size={26} className="text-amber-400" />
+                        </div>
+                        <h3 className="text-gray-700 font-semibold mb-1.5">Admins only</h3>
+                        <p className="text-sm text-gray-400 max-w-xs mx-auto leading-relaxed mb-5">
+                            This page is for managing abstract submissions. If you have abstracts assigned to you for review, find them on your Reviews page.
+                        </p>
+                        <Link
+                            href="/reviews"
+                            className="inline-flex items-center gap-1.5 text-sm font-semibold text-indigo-600 hover:text-indigo-800 transition-colors"
+                        >
+                            Go to My Reviews <ChevronRight size={14} />
+                        </Link>
                     </div>
                 )}
-
-                {/* Content */}
-                {activeTab === 'manage'  && isAdmin && <ManageAbstractsTab />}
-                {activeTab === 'reviews' && <MyReviewsTab />}
 
             </div>
         </AppLayout>

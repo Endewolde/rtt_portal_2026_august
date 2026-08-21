@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureCollegeScope;
 use App\Models\College;
 use App\Models\Department;
 use App\Models\Proposal;
@@ -7,6 +8,7 @@ use App\Models\ProposalCall;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 
 uses(RefreshDatabase::class);
 
@@ -38,25 +40,25 @@ function makeProposalForCollege(User $pi, string $collegeId): Proposal
 
     $call = ProposalCall::create([
         'academic_year' => '2025/2026',
-        'category'      => 'research',
-        'title'         => 'Call '.rand(1, 999),
-        'slug'          => 'call-'.rand(10000, 99999),
-        'start_date'    => now()->toDateString(),
-        'end_date'      => now()->addMonths(3)->toDateString(),
-        'created_by'    => $pi->id,
+        'category' => 'research',
+        'title' => 'Call '.rand(1, 999),
+        'slug' => 'call-'.rand(10000, 99999),
+        'start_date' => now()->toDateString(),
+        'end_date' => now()->addMonths(3)->toDateString(),
+        'created_by' => $pi->id,
     ]);
 
     return Proposal::create([
-        'tracker_number'   => 'TRK-'.rand(10000, 99999),
+        'tracker_number' => 'TRK-'.rand(10000, 99999),
         'proposal_call_id' => $call->id,
-        'category'         => 'research',
-        'title'            => 'Test Proposal',
-        'status'           => 'draft',
-        'pi_user_id'       => $pi->id,
-        'college_id'       => $college->id,
-        'department_id'    => $dept->id,
-        'academic_year'    => '2025/2026',
-        'created_by'       => $pi->id,
+        'category' => 'research',
+        'title' => 'Test Proposal',
+        'status' => 'draft',
+        'pi_user_id' => $pi->id,
+        'college_id' => $college->id,
+        'department_id' => $dept->id,
+        'academic_year' => '2025/2026',
+        'created_by' => $pi->id,
     ]);
 }
 
@@ -82,11 +84,11 @@ test('college_admin_cannot_see_proposals_from_another_college', function () {
     // College admin of A should only have access to College A's proposals
     // The EnsureCollegeScope middleware sets _college_scope = college_admin->college_id
     // Verify the middleware correctly injects the scope
-    $request = new \Illuminate\Http\Request;
+    $request = new Request;
     $request->setUserResolver(fn () => $adminA);
 
-    $middleware = new \App\Http\Middleware\EnsureCollegeScope;
-    $passed     = false;
+    $middleware = new EnsureCollegeScope;
+    $passed = false;
     $middleware->handle($request, function ($req) use (&$passed, $collegeA) {
         $passed = true;
         expect($req->input('_college_scope'))->toBe($collegeA->id);
@@ -110,8 +112,8 @@ test('guest cannot access authenticated endpoints returns 401', function () {
 });
 
 test('pi_cannot_update_another_pi_proposal', function () {
-    $piA  = makeUserWithRole('pi');
-    $piB  = makeUserWithRole('pi');
+    $piA = makeUserWithRole('pi');
+    $piB = makeUserWithRole('pi');
 
     $collegeA = College::create(['name' => 'College A', 'code' => 'CA01']);
     $proposalByA = makeProposalForCollege($piA, $collegeA->id);
@@ -146,4 +148,99 @@ test('reviewer_cannot_access_proposals_not_assigned_to_them', function () {
     $this->actingAs($reviewer, 'sanctum')
         ->getJson('/api/v1/proposals')
         ->assertOk();
+});
+
+test('reviewer role has review_assignments.view_any so the Assigned Reviews menu link is visible', function () {
+    $reviewer = makeUserWithRole('reviewer');
+
+    // AppLayout gates the "/reviews" sidebar link on this exact permission —
+    // without it a reviewer has no way to reach their assignments (proposal or abstract).
+    expect($reviewer->hasPermissionTo('review_assignments.view_any'))->toBeTrue();
+});
+
+// ─── College officer scoping: Users / Departments / Report Builder ───────────
+
+test('a college officer only sees users from their own college, even under Administration > Users', function () {
+    $collegeA = College::create(['name' => 'CO College A '.rand(), 'code' => 'CA'.rand(10, 99)]);
+    $collegeB = College::create(['name' => 'CO College B '.rand(), 'code' => 'CB'.rand(10, 99)]);
+    $officerA = makeUserWithRole('college_officer', $collegeA->id);
+    makeUserWithRole('staff', $collegeA->id);
+    makeUserWithRole('staff', $collegeB->id);
+
+    $response = $this->actingAs($officerA, 'sanctum')->getJson('/api/v1/users');
+
+    $response->assertOk();
+    $collegeIds = collect($response->json('data.data'))->pluck('college_id')->unique()->filter();
+    expect($collegeIds->all())->toBe([$collegeA->id]);
+});
+
+test('a college officer\'s user stats count only their own college, not the platform-wide totals', function () {
+    $collegeA = College::create(['name' => 'CO College K '.rand(), 'code' => 'CK'.rand(10, 99)]);
+    $collegeB = College::create(['name' => 'CO College L '.rand(), 'code' => 'CL'.rand(10, 99)]);
+    $officerA = makeUserWithRole('college_officer', $collegeA->id);
+    makeUserWithRole('staff', $collegeA->id);
+    makeUserWithRole('staff', $collegeA->id);
+    makeUserWithRole('staff', $collegeB->id);
+
+    $response = $this->actingAs($officerA, 'sanctum')->getJson('/api/v1/users/stats');
+
+    $response->assertOk();
+    // officerA + 2 staff in college A = 3; must NOT include college B's user.
+    expect($response->json('data.total'))->toBe(3);
+});
+
+test('a college officer only sees departments from their own college, even with a different college_id requested', function () {
+    $collegeA = College::create(['name' => 'CO College C '.rand(), 'code' => 'CC'.rand(10, 99)]);
+    $collegeB = College::create(['name' => 'CO College D '.rand(), 'code' => 'CD'.rand(10, 99)]);
+    Department::create(['college_id' => $collegeA->id, 'name' => 'Dept A', 'code' => 'DA'.rand(10, 99)]);
+    Department::create(['college_id' => $collegeB->id, 'name' => 'Dept B', 'code' => 'DB'.rand(10, 99)]);
+    $officerA = makeUserWithRole('college_officer', $collegeA->id);
+
+    $response = $this->actingAs($officerA, 'sanctum')
+        ->getJson('/api/v1/departments?college_id='.$collegeB->id);
+
+    $response->assertOk();
+    $collegeIds = collect($response->json('data'))->pluck('college_id')->unique();
+    expect($collegeIds->all())->toBe([$collegeA->id]);
+});
+
+test('a college officer cannot create a new department at all', function () {
+    $collegeA = College::create(['name' => 'CO College E '.rand(), 'code' => 'CE'.rand(10, 99)]);
+    $officerA = makeUserWithRole('college_officer', $collegeA->id);
+
+    $response = $this->actingAs($officerA, 'sanctum')->postJson('/api/v1/departments', [
+        'college_id' => $collegeA->id,
+        'name' => 'New Dept',
+        'code' => 'ND'.rand(1000, 9999),
+    ]);
+
+    $response->assertForbidden();
+    $this->assertDatabaseMissing('departments', ['name' => 'New Dept']);
+});
+
+test('a college officer cannot update a department belonging to another college', function () {
+    $collegeA = College::create(['name' => 'CO College G '.rand(), 'code' => 'CG'.rand(10, 99)]);
+    $collegeB = College::create(['name' => 'CO College H '.rand(), 'code' => 'CH'.rand(10, 99)]);
+    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'Dept B', 'code' => 'DB'.rand(1000, 9999)]);
+    $officerA = makeUserWithRole('college_officer', $collegeA->id);
+
+    $this->actingAs($officerA, 'sanctum')
+        ->putJson("/api/v1/departments/{$deptB->id}", ['name' => 'Hijacked'])
+        ->assertForbidden();
+
+    expect(Department::find($deptB->id)->name)->toBe('Dept B');
+});
+
+test('a college officer cannot generate a report builder result for another college', function () {
+    $collegeA = College::create(['name' => 'CO College I '.rand(), 'code' => 'CI'.rand(10, 99)]);
+    $collegeB = College::create(['name' => 'CO College J '.rand(), 'code' => 'CJ'.rand(10, 99)]);
+    $officerA = makeUserWithRole('college_officer', $collegeA->id);
+
+    $response = $this->actingAs($officerA, 'sanctum')->postJson('/api/v1/reports/generate', [
+        'type' => 'custom_builder',
+        'filters' => ['subject' => 'proposals', 'metrics' => ['count'], 'college_id' => $collegeB->id],
+    ]);
+
+    $response->assertSuccessful();
+    expect($response->json('data.filters.college_id'))->toBe($collegeA->id);
 });

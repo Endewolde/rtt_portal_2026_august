@@ -59,6 +59,9 @@ class SendEmailNotificationJob implements ShouldQueue
             'submission_success' => 'Proposal Submitted Successfully — '.($this->data['tracker_number'] ?? ''),
             'deadline_reminder' => 'Proposal Call Deadline Reminder — '.($this->data['days_remaining'] ?? '').' days remaining',
             'review_assignment' => 'New Review Assignment — Action Required',
+            'review_deadline_reminder' => (($this->data['days_remaining'] ?? 0) < 0
+                ? 'Review Overdue — '.($this->data['tracker_number'] ?? '')
+                : 'Review Due Soon — '.($this->data['tracker_number'] ?? '')),
             'decision_result' => 'Proposal Decision: '.ucfirst($this->data['decision'] ?? ''),
             'complaint_response' => 'Your Complaint Has Been Responded To',
             'award_approval' => 'Congratulations — Your Proposal Has Been Funded',
@@ -69,6 +72,7 @@ class SendEmailNotificationJob implements ShouldQueue
             'co_investigator_notified' => 'Co-Investigator Invitation — '.($this->data['tracker_number'] ?? ''),
             'budget_request_approved' => 'Budget Request Approved — '.($this->data['tracker_number'] ?? ''),
             'central_eval_approved' => 'Proposal Advanced to Central Evaluation — '.($this->data['tracker_number'] ?? ''),
+            'blind_review_passed_officer' => 'Open Defence Needed — '.($this->data['tracker_number'] ?? ''),
             'proposal_submitted_officer' => 'New Proposal Submitted — '.($this->data['tracker_number'] ?? ''),
             'appeal_submitted' => 'Appeal Received — '.($this->data['tracker_number'] ?? ''),
             'appeal_resolved' => 'Your Appeal Has Been Resolved — '.($this->data['tracker_number'] ?? ''),
@@ -87,6 +91,7 @@ class SendEmailNotificationJob implements ShouldQueue
             'submission_success' => 'submission_success',
             'deadline_reminder' => 'deadline_reminder',
             'review_assignment' => 'review_assignment',
+            'review_deadline_reminder' => 'review_deadline_reminder',
             'decision_result' => 'decision_result',
             'complaint_response' => 'complaint_response',
             'award_approval' => 'award_approval',
@@ -98,6 +103,7 @@ class SendEmailNotificationJob implements ShouldQueue
             'budget_request_approved' => 'budget_request_approved',
             'central_eval_approved' => 'decision_result',
             'proposal_submitted_officer' => 'decision_result',
+            'blind_review_passed_officer' => 'generic',
             'appeal_submitted' => 'generic',
             'appeal_resolved' => 'decision_result',
             'budget_request_submitted' => 'generic',

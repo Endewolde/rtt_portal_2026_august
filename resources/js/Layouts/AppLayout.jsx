@@ -12,7 +12,7 @@ import {
     BadgeDollarSign, Trophy, Archive, ListChecks, ShieldCheck,
     User, ChevronDown, ChevronUp, Lock, Clock, UserX,
     CalendarDays, Banknote, Landmark, MessageSquareHeart, LogIn, Scale, ScrollText, Milestone, FileBarChart2, FolderSearch,
-    HelpCircle,
+    HelpCircle, Sliders,
 } from 'lucide-react'
 import NotificationBell from '../Components/NotificationBell'
 import FeedbackPopup from '../Components/FeedbackPopup'
@@ -52,12 +52,13 @@ const ROUTE_PERMISSIONS = [
     ['/admin/audit-logs',          _A],
     ['/admin/evaluation-criteria', _A],
     ['/admin/similarity-flags',    _A],
-    ['/admin/users',               _A],
+    // Users/Departments are also college-scoped for college_officer (their own
+    // college only, enforced server-side) — Colleges stays admin-tier only.
+    ['/admin/users',               [..._A, 'college_officer']],
     ['/admin/colleges',            _A],
-    ['/admin/departments',         _A],
+    ['/admin/departments',         [..._A, 'college_officer']],
     ['/admin/reviewer-workload',   _A],
     ['/admin/resources',           _A],
-    ['/admin/analytics',           _A],
     ['/admin/login-notices',       _A],
     ['/admin/faqs',                _A],
     ['/admin/feedback',            _A],
@@ -69,6 +70,11 @@ const ROUTE_PERMISSIONS = [
     ['/admin/grant-letters',       [..._A, ..._OR]],
     ['/admin/validation-queue',    [..._A, ..._OR]],
     ['/admin/central-evaluation',  [..._A, ..._OR]],
+    // Analytics/pipeline are read-only cross-cutting dashboards — same audience as
+    // college_officer's own scoped view, not just admin-tier + category officers.
+    ['/admin/analytics',           [..._A, ..._OR, 'college_officer']],
+    ['/admin/proposal-pipeline',   [..._A, ..._OR, 'college_officer']],
+    ['/ongoing-proposals',         [..._A, ..._OR, 'college_officer']],
     ['/admin/funding',             [..._A, ..._OR]],
     ['/admin/external-funds',      [..._A, ..._OR]],
     ['/admin/conferences',         [..._A, ..._OR]],
@@ -76,6 +82,7 @@ const ROUTE_PERMISSIONS = [
     // Admin + college officers
     ['/admin/blind-review',        [..._A, 'college_officer']],
     ['/admin/open-defence',        [..._A, 'college_officer']],
+    ['/admin/review-deadlines',    [..._A, 'college_officer']],
     // Admin + all officers + finance
     ['/admin/awarded',             [..._A, ..._OR, 'college_officer', _FO]],
     ['/admin/completed-archive',   [..._A, ..._OR, 'college_officer', _FO]],
@@ -288,7 +295,7 @@ const ICONS = {
     BadgeDollarSign, Trophy, Archive, ListChecks, ShieldCheck,
     Globe, CalendarDays, Banknote, Landmark,
     FlaskConical, Brain, MessageSquareHeart, Scale, ScrollText, Milestone, FileBarChart2, FolderSearch,
-    HelpCircle,
+    HelpCircle, Sliders, Clock,
     BuildingOffice: Building2,
 }
 
@@ -811,6 +818,11 @@ export default function AppLayout({ children, breadcrumb }) {
                     show: hasAnyRole(ALL_ADMIN) && hasSubFeature('evaluation.reviewer_workload'),
                 },
                 {
+                    label: 'Review Deadlines', href: '/admin/review-deadlines', icon: 'Clock',
+                    show: hasAnyRole([...ALL_ADMIN, 'college_officer']) && hasSubFeature('evaluation.review_deadlines'),
+                    badge: c => c.overdue_reviews,
+                },
+                {
                     label: 'Complaints', href: '/complaints', icon: 'AlertCircle',
                     show: perm('complaints.view_any') && hasSubFeature('complaints.manage'),
                     badge: c => c.open_complaints,
@@ -860,6 +872,11 @@ export default function AppLayout({ children, breadcrumb }) {
             group: 'Monitoring',
             items: [
                 {
+                    label: 'Ongoing Proposals', href: '/ongoing-proposals', icon: 'TrendingUp',
+                    show: hasAnyRole([...ALL_ADMIN, ...OFFICER_ROLES, 'college_officer']) && hasSubFeature('monitoring.ongoing'),
+                    badge: c => c.ongoing_awaiting_midterm,
+                },
+                {
                     label: 'Midterm Evaluations', href: '/midterm-evaluations', icon: 'Activity',
                     show: perm('midterm_evaluations.view_any') && hasSubFeature('monitoring.midterm'),
                     badge: c => c.midterm_pending,
@@ -892,7 +909,11 @@ export default function AppLayout({ children, breadcrumb }) {
             items: [
                 {
                     label: 'Generate Report', href: '/reports', icon: 'BarChart',
-                    show: perm('reports.view_any') && hasSubFeature('reports.generate'),
+                    show: hasAnyRole([...ALL_ADMIN, ...OFFICER_ROLES, 'college_officer']) && hasSubFeature('reports.generate'),
+                },
+                {
+                    label: 'Report Builder', href: '/reports/builder', icon: 'Sliders',
+                    show: hasAnyRole([...ALL_ADMIN, ...OFFICER_ROLES, 'college_officer']) && hasSubFeature('reports.generate'),
                 },
                 {
                     label: 'Proposal Statistics', href: '/reports?type=proposal_count_by_category', icon: 'TrendingUp',
@@ -912,7 +933,11 @@ export default function AppLayout({ children, breadcrumb }) {
                 },
                 {
                     label: 'Analytics Dashboard', href: '/admin/analytics', icon: 'Brain',
-                    show: hasAnyRole(ALL_ADMIN) && hasSubFeature('reports.analytics'),
+                    show: hasAnyRole([...ALL_ADMIN, ...OFFICER_ROLES, 'college_officer']) && hasSubFeature('reports.analytics'),
+                },
+                {
+                    label: 'Proposal Pipeline', href: '/admin/proposal-pipeline', icon: 'Activity',
+                    show: hasAnyRole([...ALL_ADMIN, ...OFFICER_ROLES, 'college_officer']) && hasSubFeature('reports.analytics'),
                 },
                 {
                     label: 'Annual RTT Report', href: '/reports/annual', icon: 'FileBarChart2',
@@ -932,8 +957,10 @@ export default function AppLayout({ children, breadcrumb }) {
                     show: hasAnyRole([...ALL_ADMIN]) && hasSubFeature('events.conferences'),
                 },
                 {
+                    // Abstract submission management is admin-only now — reviewers (staff/external)
+                    // reach their assigned abstracts via the "Assigned Reviews" link to /reviews instead.
                     label: 'Abstracts', href: '/admin/abstracts', icon: 'FileText',
-                    show: (hasAnyRole([...ALL_ADMIN]) || perm('reviews.view_any')) && hasSubFeature('events.abstracts'),
+                    show: hasAnyRole([...ALL_ADMIN]) && hasSubFeature('events.abstracts'),
                 },
             ],
         },

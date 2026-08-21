@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Proposal;
 use App\Models\ProposalAiScore;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -45,7 +46,10 @@ EOT;
             'key_cfg' => 'services.gemini.api_key',
         ],
         'groq' => [
-            'model' => 'meta-llama/llama-4-scout-17b-16e-instruct',
+            // llama-4-scout-17b-16e-instruct was retired from Groq's production
+            // catalog (calls now 404 with model_not_found) — gpt-oss-120b is Groq's
+            // current general-purpose production model.
+            'model' => 'openai/gpt-oss-120b',
             'key_cfg' => 'services.groq.api_key',
         ],
     ];
@@ -64,6 +68,12 @@ EOT;
             $text = $this->buildProposalText($proposal);
             $result = $this->dispatch($provider, $text);
 
+            if (empty($result) || ! isset($result['overall_score'])) {
+                throw new \RuntimeException(
+                    "The {$provider} model returned a response that could not be parsed as the expected JSON scorecard."
+                );
+            }
+
             $aiScore->update([
                 'clarity_score' => $result['clarity_score'] ?? null,
                 'feasibility_score' => $result['feasibility_score'] ?? null,
@@ -77,11 +87,20 @@ EOT;
                 'summary' => $result['summary'] ?? null,
                 'model_used' => self::PROVIDERS[$provider]['model'],
                 'status' => 'completed',
+                'error_message' => null,
                 'scored_at' => now(),
             ]);
+        } catch (ConnectionException $e) {
+            // The single most common production cause: outbound HTTPS to the AI
+            // provider's domain is blocked by a firewall/proxy on the server —
+            // surfaced distinctly since "check server logs" won't reveal anything
+            // more specific than this for a pure network failure.
+            $message = 'Could not reach the AI provider — this server may be blocking outbound HTTPS requests to it. '.$e->getMessage();
+            Log::error('AI proposal scoring failed: connection error', ['proposal_id' => $proposal->id, 'error' => $e->getMessage()]);
+            $aiScore->update(['status' => 'failed', 'error_message' => $message]);
         } catch (\Throwable $e) {
             Log::error('AI proposal scoring failed', ['proposal_id' => $proposal->id, 'error' => $e->getMessage()]);
-            $aiScore->update(['status' => 'failed']);
+            $aiScore->update(['status' => 'failed', 'error_message' => $e->getMessage()]);
         }
 
         return $aiScore->fresh();
@@ -128,7 +147,7 @@ EOT;
     {
         $apiKey = config('services.anthropic.api_key');
 
-        $response = Http::withHeaders([
+        $response = Http::timeout(45)->connectTimeout(10)->withHeaders([
             'x-api-key' => $apiKey,
             'anthropic-version' => '2023-06-01',
             'content-type' => 'application/json',
@@ -153,7 +172,7 @@ EOT;
         $apiKey = config('services.gemini.api_key');
         $model = self::PROVIDERS['gemini']['model'];
 
-        $response = Http::withHeaders(['content-type' => 'application/json'])
+        $response = Http::timeout(45)->connectTimeout(10)->withHeaders(['content-type' => 'application/json'])
             ->post("https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}", [
                 'system_instruction' => [
                     'parts' => [['text' => self::SYSTEM_PROMPT]],
@@ -181,7 +200,7 @@ EOT;
     {
         $apiKey = config('services.groq.api_key');
 
-        $response = Http::withHeaders([
+        $response = Http::timeout(45)->connectTimeout(10)->withHeaders([
             'Authorization' => "Bearer {$apiKey}",
             'content-type' => 'application/json',
         ])->post('https://api.groq.com/openai/v1/chat/completions', [

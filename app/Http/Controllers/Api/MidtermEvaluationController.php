@@ -26,6 +26,22 @@ class MidtermEvaluationController extends Controller
             'scoredBy:id,name',
         ])->orderByDesc('evaluation_date');
 
+        $this->scopeToUser($query, $user);
+
+        return response()->json([
+            'data' => $query->get(),
+            'message' => '',
+            'errors' => [],
+            'meta' => [],
+        ]);
+    }
+
+    /**
+     * Same scoping as index() — extracted so stats() can't silently drift out of
+     * sync with what a role is actually allowed to see in the list.
+     */
+    private function scopeToUser($query, $user): void
+    {
         if ($user->hasRole('college_officer') ||
             ($user->hasRole('support_officer') && $user->college_id)) {
             $query->whereHas('proposal', fn ($q) => $q->where('college_id', $user->college_id));
@@ -41,13 +57,6 @@ class MidtermEvaluationController extends Controller
                 )
             );
         }
-
-        return response()->json([
-            'data' => $query->get(),
-            'message' => '',
-            'errors' => [],
-            'meta' => [],
-        ]);
     }
 
     public function show(string $id): JsonResponse
@@ -291,16 +300,19 @@ class MidtermEvaluationController extends Controller
         return \Storage::disk('private')->download($path, $filename);
     }
 
-    public function stats(): JsonResponse
+    public function stats(Request $request): JsonResponse
     {
+        $user = $request->user();
+        $base = fn () => tap(MidtermEvaluation::query(), fn ($q) => $this->scopeToUser($q, $user));
+
         return response()->json([
             'data' => [
-                'total' => MidtermEvaluation::count(),
-                'scheduled' => MidtermEvaluation::where('status', 'scheduled')->count(),
-                'report_submitted' => MidtermEvaluation::where('status', 'report_submitted')->count(),
-                'scored' => MidtermEvaluation::where('status', 'scored')->count(),
-                'continue' => MidtermEvaluation::where('recommendation', 'continue')->count(),
-                'hold' => MidtermEvaluation::where('recommendation', 'hold')->count(),
+                'total' => $base()->count(),
+                'scheduled' => $base()->where('status', 'scheduled')->count(),
+                'report_submitted' => $base()->where('status', 'report_submitted')->count(),
+                'scored' => $base()->where('status', 'scored')->count(),
+                'continue' => $base()->where('recommendation', 'continue')->count(),
+                'hold' => $base()->where('recommendation', 'hold')->count(),
             ],
             'message' => '',
             'errors' => [],

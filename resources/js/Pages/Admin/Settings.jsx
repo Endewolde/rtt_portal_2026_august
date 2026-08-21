@@ -106,8 +106,11 @@ const KEY_LABELS = {
     logo_height: 'Logo Height (px)',
     footer_text: 'Footer Text', custom_css: 'Custom CSS',
     homepage_banner: 'Homepage Banner', theme: 'Theme',
-    blind_threshold: 'Blind Review Threshold (%)', defence_threshold: 'Open Defence Threshold (%)',
+    blind_threshold: 'Blind Review Threshold (pts)', defence_threshold: 'Open Defence Threshold (pts)',
     combined_threshold: 'Combined Threshold (pts)', similarity_threshold: 'Similarity Threshold (0–1)',
+    max_reviewer_active_assignments: 'Max Active Reviews per Reviewer',
+    overdue_reminder_interval_days: 'Overdue Reminder Repeat Interval (days)',
+    ongoing_midterm_overdue_days: 'Ongoing Proposals — Midterm Overdue After (days)',
     audit_log_retention_days: 'Audit Log Retention (days)', activity_logging: 'Activity Logging',
     error_logging: 'Error Logging', login_history_enabled: 'Login History',
     backup_schedule: 'Backup Schedule', backup_time: 'Backup Time', backup_retention_days: 'Backup Retention (days)',
@@ -203,8 +206,39 @@ function label(key) {
     return KEY_LABELS[key] ?? key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
 
+// Range guards for numeric settings where an out-of-scale value would silently break
+// something load-bearing. blind_threshold/defence_threshold/combined_threshold are raw
+// point minimums against each evaluation type's category-weight sum (see Evaluation
+// Criteria), not percentages, so their ceiling is generous rather than capped at 100.
+// Mirrors the backend validation.
+const NUMBER_RANGES = {
+    blind_threshold: { min: 0, max: 1000, step: 0.1 },
+    defence_threshold: { min: 0, max: 1000, step: 0.1 },
+    combined_threshold: { min: 0, max: 2000, step: 0.1 },
+    similarity_threshold: { min: 0, max: 1, step: 0.01 },
+    max_reviewer_active_assignments: { min: 1, max: 50, step: 1 },
+    overdue_reminder_interval_days: { min: 1, max: 30, step: 1 },
+    ongoing_midterm_overdue_days: { min: 7, max: 365, step: 1 },
+}
+
 // Keys that are internal / legacy and should not appear in the UI
-const HIDDEN_KEYS = new Set(['site_name'])
+const HIDDEN_KEYS = new Set(['site_name', 'combined_decision_mode'])
+
+// Rendered as a bespoke card selector (see the Review Thresholds section) rather
+// than the generic dropdown, since this decision materially changes real funding
+// outcomes and deserves an explanation next to each option, not just a <select>.
+const DECISION_MODE_OPTIONS = [
+    {
+        value: 'combined_only',
+        title: 'Combined score only',
+        desc: 'Passes if (Blind + Defence) meets the Combined Threshold. The Open Defence Threshold is recorded as a flag for central evaluation, but does not block advancement on its own.',
+    },
+    {
+        value: 'strict_all',
+        title: 'Require every phase to pass',
+        desc: 'Passes only if Blind clears the Blind Threshold AND Defence clears the Open Defence Threshold AND the combined total clears the Combined Threshold — all three, together.',
+    },
+]
 
 // ─── Individual field ─────────────────────────────────────────────────────────
 
@@ -347,6 +381,7 @@ function SettingField({ settingKey, setting, value, onChange, onSave }) {
                     className="flex-1 border border-gray-300 rounded-xl px-3 py-2 text-sm
                                focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder={`Enter ${lbl.toLowerCase()}…`}
+                    {...(NUMBER_RANGES[settingKey] ?? {})}
                 />
                 <SaveBtn onClick={() => save()} saving={saving} />
             </div>
@@ -2283,6 +2318,61 @@ export default function SettingsPage() {
                             />
                         ) : (
                             <>
+                                {/* ── Review Thresholds: clarify these are raw points, not percentages ── */}
+                                {activeSection === 'thresholds' && (
+                                    <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-2xl px-4 py-3.5">
+                                        <Info size={16} className="text-blue-500 mt-0.5 shrink-0" />
+                                        <p className="text-xs text-blue-700 leading-relaxed">
+                                            Blind Review and Open Defence thresholds are <strong>raw point minimums</strong>, not percentages —
+                                            they're compared against the sum of that evaluation type's category weights on the{' '}
+                                            <a href="/admin/evaluation-criteria" className="underline font-semibold">Evaluation Criteria</a> page
+                                            (e.g. if Blind Review categories sum to 80, a threshold of 60 means a proposal needs at least 60 of
+                                            those 80 points to pass). The Combined threshold works the same way, against blind + defence added together.
+                                        </p>
+                                    </div>
+                                )}
+
+                                {/* ── Central Evaluation Decision Method ── */}
+                                {activeSection === 'thresholds' && (
+                                    <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-3">
+                                        <div>
+                                            <h3 className="text-sm font-bold text-gray-800">Central Evaluation Decision Method</h3>
+                                            <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                                                Controls how a proposal's blind review and open defence scores decide whether it moves
+                                                past open defence to central evaluation.
+                                            </p>
+                                        </div>
+                                        <div className="grid sm:grid-cols-2 gap-3">
+                                            {DECISION_MODE_OPTIONS.map(opt => {
+                                                const active = (values.combined_decision_mode ?? 'combined_only') === opt.value
+                                                return (
+                                                    <button
+                                                        key={opt.value}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            handleChange('combined_decision_mode', opt.value)
+                                                            handleSave('combined_decision_mode', opt.value)
+                                                        }}
+                                                        className={`text-left p-4 rounded-xl border-2 transition-all ${
+                                                            active ? 'border-teal-600 bg-teal-50' : 'border-gray-200 hover:border-gray-300'
+                                                        }`}
+                                                    >
+                                                        <div className="flex items-center gap-2 mb-1.5">
+                                                            <div className={`h-4 w-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                                                                active ? 'border-teal-600' : 'border-gray-300'
+                                                            }`}>
+                                                                {active && <div className="h-2 w-2 rounded-full bg-teal-600" />}
+                                                            </div>
+                                                            <p className="text-sm font-semibold text-gray-900">{opt.title}</p>
+                                                        </div>
+                                                        <p className="text-xs text-gray-500 leading-relaxed">{opt.desc}</p>
+                                                    </button>
+                                                )
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* Settings fields */}
                                 {Object.keys(groupData).filter(k => groupData[k]?.type !== 'file').length > 0 && (
                                     <div className="bg-white border border-gray-200 rounded-2xl px-5 py-2">

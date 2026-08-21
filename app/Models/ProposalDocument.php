@@ -4,10 +4,15 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ProposalDocument extends Model
 {
     use HasUuids;
+
+    /** The only document types a reviewer needs to score a proposal — PI CVs and other
+     *  supporting documents can carry identifying info and aren't relevant to scoring. */
+    public const REVIEWER_VISIBLE_TYPES = ['proposal_document', 'budget_spreadsheet'];
 
     protected $primaryKey = 'id';
 
@@ -25,12 +30,12 @@ class ProposalDocument extends Model
         'uploaded_by',
     ];
 
-    public function uploadedBy(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    public function uploadedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'uploaded_by');
     }
 
-    public function proposal(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    public function proposal(): BelongsTo
     {
         return $this->belongsTo(Proposal::class);
     }

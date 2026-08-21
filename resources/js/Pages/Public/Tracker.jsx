@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Search, CheckCircle, XCircle } from 'lucide-react';
+import { Search, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
 import PublicLayout from '../../Layouts/PublicLayout';
 import StatusBadge from '../../Components/StatusBadge';
 import TrackerNumberDisplay from '../../Components/TrackerNumberDisplay';
@@ -8,9 +8,16 @@ import { get } from '../../lib/api';
 
 export default function Tracker() {
     const [input, setInput] = useState('');
+    const [lastSearched, setLastSearched] = useState('');
     const [result, setResult] = useState(null);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
+    const [refreshing, setRefreshing] = useState(false);
+
+    const fetchTracker = async (trackerNumber) => {
+        const res = await get(`/tracker/${trackerNumber}`);
+        setResult(res.data);
+    };
 
     const search = async () => {
         if (!input.trim()) return;
@@ -18,12 +25,25 @@ export default function Tracker() {
         setError('');
         setResult(null);
         try {
-            const res = await get(`/tracker/${input.trim()}`);
-            setResult(res.data);
+            await fetchTracker(input.trim());
+            setLastSearched(input.trim());
         } catch (e) {
             setError(e.response?.data?.message ?? 'Tracker number not found.');
         } finally {
             setLoading(false);
+        }
+    };
+
+    const refresh = async () => {
+        if (!lastSearched) return;
+        setRefreshing(true);
+        setError('');
+        try {
+            await fetchTracker(lastSearched);
+        } catch (e) {
+            setError(e.response?.data?.message ?? 'Tracker number not found.');
+        } finally {
+            setRefreshing(false);
         }
     };
 
@@ -53,9 +73,20 @@ export default function Tracker() {
                     <div className="space-y-6">
                         {/* Header */}
                         <div className="bg-white rounded-2xl border border-gray-200 p-6">
-                            <div className="flex items-start justify-between mb-3">
+                            <div className="flex items-start justify-between mb-3 gap-3">
                                 <TrackerNumberDisplay trackerNumber={result.tracker_number} />
-                                <StatusBadge status={result.current_status} size="lg" />
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <StatusBadge status={result.current_status} size="lg" />
+                                    <button
+                                        onClick={refresh}
+                                        disabled={refreshing}
+                                        title="Refresh status"
+                                        className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-blue-700 border border-gray-200 hover:border-blue-200 rounded-lg px-2.5 py-1.5 disabled:opacity-60 transition-colors"
+                                    >
+                                        <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
+                                        <span className="hidden sm:inline">{refreshing ? 'Refreshing…' : 'Refresh'}</span>
+                                    </button>
+                                </div>
                             </div>
                             <h2 className="text-lg font-semibold text-gray-900 mb-1">{result.title}</h2>
                             <p className="text-sm text-gray-500">{result.category} · {result.college} · {result.academic_year}</p>

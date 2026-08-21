@@ -35,6 +35,13 @@ const TYPE_CFG = {
         template: d => `Assigned to review ${d.tracker_number || ''} — ${d.review_type || ''}`,
         actionLabel: 'Review Now', actionUrl: () => '/proposals/reviewee',
     },
+    review_deadline_reminder: {
+        icon: AlertTriangle, color: 'amber', label: 'Review Deadline Reminder', category: 'action',
+        template: d => (d.days_remaining ?? 0) < 0
+            ? `Review for ${d.tracker_number || ''} is overdue`
+            : `Review for ${d.tracker_number || ''} due ${d.due_date || 'soon'}`,
+        actionLabel: 'Review Now', actionUrl: () => '/proposals/reviewee',
+    },
     proposal_approved: {
         icon: CheckCircle2, color: 'green', label: 'Proposal Approved', category: 'activity',
         template: d => `Proposal ${d.tracker_number || ''} has been approved`,
@@ -49,6 +56,11 @@ const TYPE_CFG = {
         icon: CheckCircle2, color: 'green', label: 'Evaluation Passed', category: 'activity',
         template: d => `Central evaluation approved for ${d.tracker_number || ''}`,
         actionLabel: 'View Proposal', actionUrl: d => d.proposal_id ? `/proposals/${d.proposal_id}` : '/proposals',
+    },
+    blind_review_passed_officer: {
+        icon: Calendar, color: 'violet', label: 'Open Defence Needed', category: 'action',
+        template: d => `Proposal ${d.tracker_number || ''} passed blind review — schedule an open defence session`,
+        actionLabel: 'Schedule Defence', actionUrl: () => '/admin/open-defence',
     },
     decision_result: {
         icon: Bell, color: 'gray', label: 'Decision Update', category: 'activity',

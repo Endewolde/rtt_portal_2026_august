@@ -40,11 +40,17 @@ class SettingsController extends Controller
             return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
         }
 
+        // blind_threshold/defence_threshold/combined_threshold are raw point minimums
+        // against each evaluation type's category-weight sum (see Evaluation Criteria),
+        // not percentages — the ceiling here is a generous sanity bound, not a 0–100 cap.
         $validated = $request->validate([
-            'blind_threshold' => ['sometimes', 'numeric', 'min:0', 'max:100'],
-            'defence_threshold' => ['sometimes', 'numeric', 'min:0', 'max:100'],
-            'combined_threshold' => ['sometimes', 'numeric', 'min:0', 'max:200'],
+            'blind_threshold' => ['sometimes', 'numeric', 'min:0', 'max:1000'],
+            'defence_threshold' => ['sometimes', 'numeric', 'min:0', 'max:1000'],
+            'combined_threshold' => ['sometimes', 'numeric', 'min:0', 'max:2000'],
             'similarity_threshold' => ['sometimes', 'numeric', 'min:0', 'max:1'],
+            'max_reviewer_active_assignments' => ['sometimes', 'integer', 'min:1', 'max:50'],
+            'overdue_reminder_interval_days' => ['sometimes', 'integer', 'min:1', 'max:30'],
+            'ongoing_midterm_overdue_days' => ['sometimes', 'integer', 'min:7', 'max:365'],
         ]);
 
         $user = $request->user();
@@ -101,6 +107,24 @@ class SettingsController extends Controller
         $adminRestrictedKeys = ['developer_credits', 'disabled_sub_features'];
         if ($user->hasRole('admin') && ! $user->hasRole('super_admin') && in_array($key, $adminRestrictedKeys)) {
             return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        // Threshold keys must stay within a sane numeric range. blind_threshold /
+        // defence_threshold / combined_threshold are raw point minimums against each
+        // evaluation type's category-weight sum (see Evaluation Criteria), not
+        // percentages — the ceiling here is a generous sanity bound, not a 0–100 cap.
+        $thresholdRules = [
+            'blind_threshold' => ['numeric', 'min:0', 'max:1000'],
+            'defence_threshold' => ['numeric', 'min:0', 'max:1000'],
+            'combined_threshold' => ['numeric', 'min:0', 'max:2000'],
+            'combined_decision_mode' => ['in:combined_only,strict_all'],
+            'similarity_threshold' => ['numeric', 'min:0', 'max:1'],
+            'max_reviewer_active_assignments' => ['integer', 'min:1', 'max:50'],
+            'overdue_reminder_interval_days' => ['integer', 'min:1', 'max:30'],
+            'ongoing_midterm_overdue_days' => ['integer', 'min:7', 'max:365'],
+        ];
+        if (isset($thresholdRules[$key])) {
+            $request->validate(['value' => $thresholdRules[$key]]);
         }
 
         $value = $request->value;
@@ -161,7 +185,7 @@ class SettingsController extends Controller
         }
 
         // Threshold keys must also be written to threshold_settings (used by the review pipeline)
-        $thresholdKeys = ['blind_threshold', 'defence_threshold', 'combined_threshold', 'similarity_threshold'];
+        $thresholdKeys = ['blind_threshold', 'defence_threshold', 'combined_threshold', 'similarity_threshold', 'max_reviewer_active_assignments', 'overdue_reminder_interval_days', 'ongoing_midterm_overdue_days'];
         if (in_array($key, $thresholdKeys)) {
             ThresholdSetting::where('key', $key)
                 ->update(['value' => $value, 'updated_by' => $userId]);

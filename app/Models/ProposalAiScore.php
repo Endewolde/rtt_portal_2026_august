@@ -28,6 +28,7 @@ class ProposalAiScore extends Model
         'summary',
         'model_used',
         'status',
+        'error_message',
         'scored_at',
     ];
 

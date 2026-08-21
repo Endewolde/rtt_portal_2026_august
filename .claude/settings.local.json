@@ -60,7 +60,20 @@
       "Bash(grep -A2 -B2 '$disk->download\\\\|Storage.*download' /Users/endashaw/real_rtt1/app/Http/Controllers/Api/ProposalArchiveController.php)",
       "Bash(node --input-type=module --eval ' *)",
       "Bash(node -e ' *)",
-      "Bash(grep -n 'uuid\\\\|bigIncrement\\\\|$table->id\\\\|unsignedBigInteger' /Users/endashaw/real_rtt1/database/migrations/2014_10_12_000000_create_users_table.php /Users/endashaw/real_rtt1/database/migrations/2019_12_14_000001_create_personal_access_tokens_table.php)"
+      "Bash(grep -n 'uuid\\\\|bigIncrement\\\\|$table->id\\\\|unsignedBigInteger' /Users/endashaw/real_rtt1/database/migrations/2014_10_12_000000_create_users_table.php /Users/endashaw/real_rtt1/database/migrations/2019_12_14_000001_create_personal_access_tokens_table.php)",
+      "Bash(./vendor/bin/pint --dirty --format agent)",
+      "Bash(composer run *)",
+      "Bash(read perm *)",
+      "Bash(grep -q ''\\\\''__TRACKED_VAR__'\\\\''' /Users/endashaw/real_rtt1/database/seeders/RolePermissionSeeder.php)",
+      "Bash(perl -pi -e \"s/Role::findByName\\\\\\('\\([a-z_]+\\)'\\\\\\)/Role::findByName\\('\\\\$1', 'web'\\)/g\" database/seeders/RolePermissionSeeder.php)",
+      "Bash(xargs -I{} basename {})",
+      "Bash(mysql -u root -e \"SHOW GRANTS FOR 'rtt_user'@'localhost';\")",
+      "WebSearch",
+      "WebFetch(domain:console.groq.com)",
+      "Bash(grep -n 'protected $fillable' -A 20 /Users/endashaw/real_rtt1/app/Models/CompletionWorkshop.php)",
+      "Bash(grep -n 'protected $fillable' -A 20 /Users/endashaw/real_rtt1/app/Models/Award.php)",
+      "Bash(grep -n ''\\\\''overdue_reviews'\\\\'' => $overdueReviews,' /Users/endashaw/real_rtt1/app/Http/Controllers/Api/ActionCountController.php)",
+      "Bash(git restore *)"
     ]
   },
   "enableAllProjectMcpServers": true,

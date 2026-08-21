@@ -126,6 +126,14 @@ class AbstractAdminController extends Controller
             ], 422);
         }
 
+        if ($reviewer->email && $abstract->submitter_email && strcasecmp($reviewer->email, $abstract->submitter_email) === 0) {
+            return response()->json([
+                'data' => null,
+                'message' => 'This user submitted this abstract and cannot be assigned to review it.',
+                'errors' => [],
+            ], 422);
+        }
+
         // Create or reset the review so the reviewer can always submit/override
         $review = ConferenceAbstractReview::updateOrCreate(
             ['abstract_id' => $abstract->id, 'reviewer_id' => $reviewerId],

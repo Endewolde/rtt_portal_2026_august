@@ -13,16 +13,95 @@ class ReportService
     private const SYNC_MAX_MONTHS = 3;
 
     /**
+     * Whitelist of report-builder subjects. Dimension/metric/filter SQL fragments live
+     * only here (never come from the client) — the client picks keys, we resolve them.
+     * `filter_columns` lets every listed key be used as an equality WHERE filter (this
+     * is also how the college-officer scoping enforced in ReportController::generate
+     * applies — it just sets $filters['college_id']).
+     */
+    private const SUBJECTS = [
+        'proposals' => [
+            'from' => 'proposals as p',
+            'joins' => [
+                ['colleges as c', 'p.college_id', '=', 'c.id'],
+            ],
+            'base_where' => 'p.deleted_at IS NULL',
+            'dimensions' => [
+                'college' => 'c.name',
+                'category' => 'p.category',
+                'status' => 'p.status',
+                'academic_year' => 'p.academic_year',
+            ],
+            'metrics' => [
+                'count' => 'COUNT(*)',
+                'funded_count' => "SUM(CASE WHEN p.status IN ('funded','accepted','completed','midterm_evaluation','archived') THEN 1 ELSE 0 END)",
+                'rejected_count' => "SUM(CASE WHEN p.status = 'rejected' THEN 1 ELSE 0 END)",
+            ],
+            'filter_columns' => [
+                'college_id' => 'p.college_id',
+                'category' => 'p.category',
+                'status' => 'p.status',
+                'academic_year' => 'p.academic_year',
+            ],
+        ],
+        'complaints' => [
+            'from' => 'complaints as co',
+            'joins' => [
+                ['proposals as p', 'co.proposal_id', '=', 'p.id'],
+                ['colleges as c', 'p.college_id', '=', 'c.id'],
+            ],
+            'dimensions' => [
+                'college' => 'c.name',
+                'status' => 'co.status',
+                'level' => 'co.level',
+                'complaint_type' => 'co.complaint_type',
+            ],
+            'metrics' => [
+                'count' => 'COUNT(*)',
+                'avg_resolution_days' => 'ROUND(AVG(CASE WHEN co.resolved_at IS NOT NULL THEN DATEDIFF(co.resolved_at, co.created_at) END), 1)',
+            ],
+            'filter_columns' => [
+                'college_id' => 'p.college_id',
+                'status' => 'co.status',
+                'level' => 'co.level',
+                'complaint_type' => 'co.complaint_type',
+                'academic_year' => 'p.academic_year',
+            ],
+        ],
+        'review_workload' => [
+            'from' => 'review_assignments as ra',
+            'joins' => [
+                ['proposals as p', 'ra.proposal_id', '=', 'p.id'],
+                ['colleges as c', 'p.college_id', '=', 'c.id'],
+            ],
+            'dimensions' => [
+                'college' => 'c.name',
+                'status' => 'ra.status',
+            ],
+            'metrics' => [
+                'count' => 'COUNT(*)',
+                'submitted_count' => "SUM(CASE WHEN ra.status = 'submitted' THEN 1 ELSE 0 END)",
+                'avg_days_to_review' => 'ROUND(AVG(CASE WHEN ra.submitted_at IS NOT NULL THEN DATEDIFF(ra.submitted_at, ra.assigned_at) END), 1)',
+            ],
+            'filter_columns' => [
+                'college_id' => 'p.college_id',
+                'status' => 'ra.status',
+                'academic_year' => 'p.academic_year',
+            ],
+        ],
+    ];
+
+    /**
      * Generate a report synchronously or queue it based on date range.
      *
-     * @return ReportSnapshot  status=ready if sync, status=processing if queued
+     * @return ReportSnapshot status=ready if sync, status=processing if queued
      */
     public function generate(string $type, array $filters, User $requestedBy): ReportSnapshot
     {
         $snapshot = ReportSnapshot::create([
-            'report_type'  => $type,
-            'filters'      => $filters,
-            'status'       => 'processing',
+            'report_type' => $type,
+            'filters' => $filters,
+            'status' => 'processing',
             'requested_by' => $requestedBy->id,
         ]);
 
@@ -35,8 +114,8 @@ class ReportService
         try {
             $result = $this->runReport($type, $filters);
             $snapshot->update([
-                'status'       => 'ready',
-                'result'       => $result,
+                'status' => 'ready',
+                'result' => $result,
                 'completed_at' => now(),
             ]);
         } catch (\Exception $e) {
@@ -56,14 +135,95 @@ class ReportService
     {
         return match ($type) {
             'proposal_count_by_category' => $this->proposalCountByCategory($filters),
-            'proposal_count_by_college'  => $this->proposalCountByCollege($filters),
-            'reviewer_workload'          => $this->reviewerWorkload($filters),
-            'approval_rate_by_category'  => $this->approvalRateByCategory($filters),
-            'budget_utilization'         => $this->budgetUtilization($filters),
-            'college_performance'        => $this->collegePerformance($filters),
-            'review_progress_pipeline'   => $this->reviewProgressPipeline($filters),
+            'proposal_count_by_college' => $this->proposalCountByCollege($filters),
+            'reviewer_workload' => $this->reviewerWorkload($filters),
+            'approval_rate_by_category' => $this->approvalRateByCategory($filters),
+            'budget_utilization' => $this->budgetUtilization($filters),
+            'college_performance' => $this->collegePerformance($filters),
+            'review_progress_pipeline' => $this->reviewProgressPipeline($filters),
+            'complaint_summary' => $this->complaintSummary($filters),
+            'custom_builder' => $this->customBuilder($filters),
             default => throw new \InvalidArgumentException("Unknown report type: {$type}"),
         };
+    }
+
+    /**
+     * Available subjects/dimensions/metrics/filters for the report builder UI — the
+     * client chooses only from these, never supplies raw SQL.
+     *
+     * @return array<string, array{dimensions: string[], metrics: string[], filters: string[]}>
+     */
+    public function builderOptions(): array
+    {
+        return collect(self::SUBJECTS)->map(fn ($config) => [
+            'dimensions' => array_keys($config['dimensions']),
+            'metrics' => array_keys($config['metrics']),
+            'filters' => array_keys($config['filter_columns']),
+        ])->toArray();
+    }
+
+    /**
+     * Run a whitelist-validated ad-hoc report: client picks a subject plus any
+     * combination of that subject's allowed dimensions/metrics. Column SQL never
+     * comes from the client — only the whitelist keys they're choosing between.
+     *
+     * @throws \InvalidArgumentException for an unknown subject
+     */
+    private function customBuilder(array $filters): array
+    {
+        $subjectKey = $filters['subject'] ?? null;
+        $config = self::SUBJECTS[$subjectKey] ?? null;
+
+        if (! $config) {
+            throw new \InvalidArgumentException('Unknown or missing report subject.');
+        }
+
+        $dimensions = array_values(array_unique(array_intersect(
+            (array) ($filters['dimensions'] ?? []),
+            array_keys($config['dimensions'])
+        )));
+        $metrics = array_values(array_unique(array_intersect(
+            (array) ($filters['metrics'] ?? []),
+            array_keys($config['metrics'])
+        )));
+
+        if (empty($metrics)) {
+            $metrics = ['count'];
+        }
+
+        $query = DB::table($config['from']);
+        foreach ($config['joins'] as [$table, $first, $operator, $second]) {
+            $query->join($table, $first, $operator, $second);
+        }
+        if (! empty($config['base_where'])) {
+            $query->whereRaw($config['base_where']);
+        }
+
+        $selects = [];
+        foreach ($dimensions as $dim) {
+            $selects[] = DB::raw("{$config['dimensions'][$dim]} as `{$dim}`");
+        }
+        foreach ($metrics as $metric) {
+            $selects[] = DB::raw("{$config['metrics'][$metric]} as `{$metric}`");
+        }
+        $query->select($selects);
+
+        if (! empty($dimensions)) {
+            $query->groupBy(array_map(fn ($dim) => $config['dimensions'][$dim], $dimensions));
+        }
+
+        foreach ($config['filter_columns'] as $key => $column) {
+            if (! empty($filters[$key])) {
+                $query->where($column, $filters[$key]);
+            }
+        }
+
+        return [
+            'subject' => $subjectKey,
+            'dimensions' => $dimensions,
+            'metrics' => $metrics,
+            'rows' => $query->get()->map(fn ($r) => (array) $r)->toArray(),
+        ];
     }
 
     private function proposalCountByCategory(array $filters): array
@@ -98,6 +258,9 @@ class ReportService
         if (! empty($filters['academic_year'])) {
             $query->where('p.academic_year', $filters['academic_year']);
         }
+        if (! empty($filters['college_id'])) {
+            $query->where('c.id', $filters['college_id']);
+        }
 
         return $query->select(
             'c.name as college_name',
@@ -110,13 +273,17 @@ class ReportService
     private function reviewerWorkload(array $filters): array
     {
         $query = DB::table('review_assignments as ra')
-            ->join('users as u', 'ra.reviewer_id', '=', 'u.id');
+            ->join('users as u', 'ra.reviewer_id', '=', 'u.id')
+            ->join('proposals as p', 'ra.proposal_id', '=', 'p.id');
 
         if (! empty($filters['date_from'])) {
             $query->where('ra.assigned_at', '>=', $filters['date_from']);
         }
         if (! empty($filters['date_to'])) {
             $query->where('ra.assigned_at', '<=', $filters['date_to']);
+        }
+        if (! empty($filters['college_id'])) {
+            $query->where('p.college_id', $filters['college_id']);
         }
 
         return $query->select(
@@ -134,6 +301,9 @@ class ReportService
 
         if (! empty($filters['academic_year'])) {
             $query->where('academic_year', $filters['academic_year']);
+        }
+        if (! empty($filters['college_id'])) {
+            $query->where('college_id', $filters['college_id']);
         }
 
         return $query->select(
@@ -185,6 +355,10 @@ class ReportService
             })
             ->leftJoin('awards as a', 'p.id', '=', 'a.proposal_id');
 
+        if (! empty($filters['college_id'])) {
+            $query->where('c.id', $filters['college_id']);
+        }
+
         return $query->select(
             'c.name as college_name',
             DB::raw('COUNT(DISTINCT p.id) as proposals_submitted'),
@@ -208,6 +382,9 @@ class ReportService
         if (! empty($filters['academic_year'])) {
             $query->where('academic_year', $filters['academic_year']);
         }
+        if (! empty($filters['college_id'])) {
+            $query->where('college_id', $filters['college_id']);
+        }
 
         $counts = $query->select('status', DB::raw('COUNT(*) as count'))
             ->whereIn('status', $stages)
@@ -218,6 +395,32 @@ class ReportService
             'stage' => $stage,
             'count' => $counts[$stage] ?? 0,
         ])->toArray();
+    }
+
+    /** Complaint volume, resolution outcomes, and average resolution time, broken down by college. */
+    private function complaintSummary(array $filters): array
+    {
+        $query = DB::table('complaints as co')
+            ->join('proposals as p', 'co.proposal_id', '=', 'p.id')
+            ->join('colleges as c', 'p.college_id', '=', 'c.id');
+
+        if (! empty($filters['academic_year'])) {
+            $query->where('p.academic_year', $filters['academic_year']);
+        }
+        if (! empty($filters['college_id'])) {
+            $query->where('c.id', $filters['college_id']);
+        }
+
+        return $query->select(
+            'c.name as college_name',
+            DB::raw('COUNT(*) as total_complaints'),
+            DB::raw("SUM(CASE WHEN co.status IN ('open','under_review','escalated') THEN 1 ELSE 0 END) as unresolved"),
+            DB::raw("SUM(CASE WHEN co.status = 'resolved' THEN 1 ELSE 0 END) as resolved"),
+            DB::raw("SUM(CASE WHEN co.status = 'dismissed' THEN 1 ELSE 0 END) as dismissed"),
+            DB::raw("SUM(CASE WHEN co.level = 'college' THEN 1 ELSE 0 END) as level_1_college"),
+            DB::raw("SUM(CASE WHEN co.level = 'officer' THEN 1 ELSE 0 END) as level_2_officer"),
+            DB::raw('ROUND(AVG(CASE WHEN co.resolved_at IS NOT NULL THEN DATEDIFF(co.resolved_at, co.created_at) END), 1) as avg_resolution_days')
+        )->groupBy('c.id', 'c.name')->orderByDesc('total_complaints')->get()->toArray();
     }
 
     private function shouldQueue(array $filters): bool

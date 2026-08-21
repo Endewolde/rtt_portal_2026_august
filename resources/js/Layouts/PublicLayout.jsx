@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, usePage } from '@inertiajs/react';
-import { FlaskConical, Menu, X, Search, Download, ChevronDown, Clock, Calendar, ArrowRight, Flame, CalendarDays, MapPin, Video, Building2, Globe, Star } from 'lucide-react';
+import { FlaskConical, Menu, X, Search, Download, ChevronDown, Clock, Calendar, ArrowRight, Flame, CalendarDays, MapPin, Video, Building2, Globe, Star, FileText } from 'lucide-react';
 import { get } from '../lib/api';
 
 // ─── Inline social SVG icons ──────────────────────────────────────────────────
@@ -761,11 +761,16 @@ export default function PublicLayout({ children }) {
                                     </Link>
                                 );
                             })}
-                            <div className="ml-auto">
+                            <div className="ml-auto flex items-center">
                                 <Link href="/tracker"
                                     className="flex items-center gap-1.5 h-10 px-4 text-white/80
                                                hover:text-white hover:bg-black/10 transition-colors text-sm">
                                     <Search size={15} /> Track
+                                </Link>
+                                <Link href="/my-abstracts"
+                                    className="flex items-center gap-1.5 h-10 px-4 text-white/80
+                                               hover:text-white hover:bg-black/10 transition-colors text-sm">
+                                    <FileText size={15} /> My Abstracts
                                 </Link>
                             </div>
                         </div>
@@ -790,6 +795,16 @@ export default function PublicLayout({ children }) {
                                     )}
                                 </Link>
                             ))}
+                            <Link href="/tracker"
+                                onClick={() => setMobileOpen(false)}
+                                className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                                <Search size={15} className="text-gray-400" /> Track Proposal
+                            </Link>
+                            <Link href="/my-abstracts"
+                                onClick={() => setMobileOpen(false)}
+                                className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                                <FileText size={15} className="text-gray-400" /> My Abstracts
+                            </Link>
                             <Link href="/download"
                                 onClick={() => setMobileOpen(false)}
                                 className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">

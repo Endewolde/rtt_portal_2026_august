@@ -26,13 +26,50 @@ class StatsController extends Controller
 
         $fundedRate = $allNonDraft > 0 ? round(($funded / $allNonDraft) * 100) : 0;
 
+        $totalProposals = DB::table('proposals')
+            ->whereNull('deleted_at')
+            ->where('academic_year', $currentYear)
+            ->whereNotNull('submitted_at')
+            ->count();
+
+        $validated = DB::table('proposals')
+            ->whereNull('deleted_at')
+            ->where('academic_year', $currentYear)
+            ->whereNotNull('validated_at')
+            ->count();
+
+        $validatedRate = $totalProposals > 0 ? round(($validated / $totalProposals) * 100) : 0;
+
+        $validatedByCategory = DB::table('proposals')
+            ->whereNull('deleted_at')
+            ->where('academic_year', $currentYear)
+            ->whereNotNull('validated_at')
+            ->select('category', DB::raw('count(*) as count'))
+            ->groupBy('category')
+            ->pluck('count', 'category');
+
+        $categoryLabels = [
+            'research' => 'Research',
+            'community_engagement' => 'Community Engagement',
+            'technology_transfer' => 'Technology Transfer',
+        ];
+
+        $validatedByCategoryData = collect(array_keys($categoryLabels))
+            ->merge($validatedByCategory->keys())
+            ->unique()
+            ->map(fn (string $category) => [
+                'category' => $category,
+                'label' => $categoryLabels[$category] ?? ucwords(str_replace('_', ' ', $category)),
+                'count' => (int) ($validatedByCategory[$category] ?? 0),
+            ])
+            ->values();
+
         return response()->json([
             'data' => [
-                'total_proposals' => DB::table('proposals')
-                    ->whereNull('deleted_at')
-                    ->where('academic_year', $currentYear)
-                    ->where('status', 'submitted')
-                    ->count(),
+                'total_proposals' => $totalProposals,
+                'validated' => $validated,
+                'validated_rate' => $validatedRate,
+                'validated_by_category' => $validatedByCategoryData,
                 'funded' => $funded,
                 'funded_rate' => $fundedRate,
                 'colleges' => DB::table('colleges')->where('status', 'active')->where('code', '!=', 'ORTT')->count(),

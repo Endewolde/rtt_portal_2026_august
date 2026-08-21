@@ -851,6 +851,11 @@ function AiScorePanel({ proposalId }) {
             toast.success('AI scoring complete. Scroll down to see results.');
             setTimeout(() => panelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
         } catch (e) {
+            // A failed scoring attempt still returns the (failed) score row in the
+            // response body — keep it so the panel can show the real reason inline
+            // instead of only a toast that's gone the moment the user looks away.
+            setScore(e?.response?.data?.data ?? null);
+            setOpen(true);
             toast.error(e?.response?.data?.message ?? 'AI scoring failed.');
         } finally { setGenerating(false); }
     };
@@ -950,6 +955,104 @@ function AiScorePanel({ proposalId }) {
                     </button>
                 </div>
             )}
+
+            {!generating && open && score?.status === 'failed' && (
+                <div className="px-4 pb-4 border-t border-violet-200 pt-3">
+                    <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5">
+                        <AlertCircle size={14} className="text-red-500 shrink-0 mt-0.5" />
+                        <div className="min-w-0">
+                            <p className="text-xs font-semibold text-red-700">AI scoring failed</p>
+                            <p className="text-xs text-red-600 mt-0.5 wrap-break-word">{score.error_message ?? 'Check server logs for details.'}</p>
+                        </div>
+                    </div>
+                    <button onClick={generate} disabled={generating}
+                        className="flex items-center gap-1.5 text-[11px] font-semibold text-violet-600 hover:text-violet-800 mt-2.5">
+                        {generating ? <RefreshCw size={10} className="animate-spin" /> : <RefreshCw size={10} />}
+                        Try again
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function RecalculatePanel({ proposalId, proposalStatus }) {
+    const { error } = useToast();
+    const [recalculating, setRecalculating] = useState(false);
+    const [snapshot, setSnapshot] = useState(null);
+
+    const recalculate = async () => {
+        setRecalculating(true);
+        try {
+            const r = await get(`/proposals/${proposalId}/review-results/recalculate`);
+            setSnapshot(r.data ?? null);
+        } catch (e) {
+            error(e.response?.data?.message ?? 'Could not recalculate the score.');
+        }
+        setRecalculating(false);
+    };
+
+    return (
+        <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+                <div>
+                    <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">Verify Current Score</p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                        Recomputes live against the current threshold settings and evaluation criteria — useful after either was edited.
+                    </p>
+                </div>
+                <button
+                    onClick={recalculate}
+                    disabled={recalculating}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border border-gray-300 text-gray-600 hover:bg-white disabled:opacity-60 transition-colors shrink-0"
+                >
+                    <RefreshCw size={12} className={recalculating ? 'animate-spin' : ''} />
+                    {recalculating ? 'Recalculating…' : 'Recalculate'}
+                </button>
+            </div>
+
+            {snapshot && (
+                <div className="space-y-2.5 pt-2 border-t border-gray-200">
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                        <div className="bg-white rounded-lg border border-gray-200 px-2 py-2">
+                            <p className="text-sm font-bold text-gray-800 tabular-nums">
+                                {snapshot.blind ? `${snapshot.blind.score}/${snapshot.blind.max}` : '—'}
+                            </p>
+                            <p className="text-[10px] text-gray-400 mt-0.5">
+                                Blind ({snapshot.blind_passes === null ? 'n/a' : snapshot.blind_passes ? 'passes' : 'fails'} · min {snapshot.blind_threshold})
+                            </p>
+                        </div>
+                        <div className="bg-white rounded-lg border border-gray-200 px-2 py-2">
+                            <p className="text-sm font-bold text-gray-800 tabular-nums">
+                                {snapshot.defence ? `${snapshot.defence.score}/${snapshot.defence.max}` : '—'}
+                            </p>
+                            <p className="text-[10px] text-gray-400 mt-0.5">
+                                Defence {snapshot.defence_below_threshold ? '(below min ' + snapshot.defence_threshold + ')' : snapshot.defence ? '(ok)' : ''}
+                            </p>
+                        </div>
+                        <div className="bg-white rounded-lg border border-gray-200 px-2 py-2">
+                            <p className="text-sm font-bold text-gray-800 tabular-nums">{snapshot.combined}/{snapshot.combined_max}</p>
+                            <p className="text-[10px] text-gray-400 mt-0.5">
+                                Combined ({snapshot.combined_passes === null ? 'n/a' : snapshot.combined_passes ? 'passes' : 'fails'} · min {snapshot.combined_threshold})
+                            </p>
+                        </div>
+                    </div>
+
+                    {snapshot.defence_below_threshold && (
+                        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                            <AlertCircle size={12} className="text-amber-500 mt-0.5 shrink-0" />
+                            <p className="text-[11px] text-amber-700 leading-relaxed">
+                                Open defence score is below the open defence threshold — flagged for the central evaluation decision.
+                            </p>
+                        </div>
+                    )}
+
+                    <p className="text-[10px] text-gray-400">
+                        Current proposal status: <span className="font-semibold text-gray-600">{proposalStatus}</span>
+                        {' · '}Recalculated {formatDate(snapshot.recalculated_at)}
+                    </p>
+                </div>
+            )}
         </div>
     );
 }
@@ -1003,7 +1106,7 @@ function ReviewResultsTab({ proposalId, isVisible, isStaff, proposalStatus }) {
         return <p className="text-sm text-gray-400">No review results available yet.</p>;
     }
 
-    const { total_reviews, submitted_reviews, average_score, reviews } = results;
+    const { total_reviews, submitted_reviews, average_score, average_max, reviews } = results;
 
     return (
         <div className="space-y-5">
@@ -1019,11 +1122,13 @@ function ReviewResultsTab({ proposalId, isVisible, isStaff, proposalStatus }) {
                 </div>
                 {average_score != null && (
                     <div className="bg-indigo-50 rounded-xl px-4 py-3 text-center">
-                        <p className="text-2xl font-bold text-indigo-700 tabular-nums">{average_score}/10</p>
+                        <p className="text-2xl font-bold text-indigo-700 tabular-nums">{average_score}{average_max != null ? `/${average_max}` : ''}</p>
                         <p className="text-xs text-indigo-500 mt-0.5">Avg. Score</p>
                     </div>
                 )}
             </div>
+
+            {isStaff && <RecalculatePanel proposalId={proposalId} proposalStatus={proposalStatus} />}
 
             {/* Per-review cards (anonymized) */}
             {reviews.length > 0 && (
@@ -1035,7 +1140,7 @@ function ReviewResultsTab({ proposalId, isVisible, isStaff, proposalStatus }) {
                                 <span className="text-xs font-semibold text-gray-600">Reviewer {i + 1}</span>
                                 {rv.overall_score != null && (
                                     <span className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full">
-                                        {rv.overall_score}/10
+                                        {rv.overall_score}{rv.overall_max != null ? `/${rv.overall_max}` : ''}
                                     </span>
                                 )}
                                 {rv.recommendation && (

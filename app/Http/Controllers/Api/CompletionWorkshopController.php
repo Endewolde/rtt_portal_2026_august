@@ -25,6 +25,23 @@ class CompletionWorkshopController extends Controller
             'scheduledBy:id,name',
         ])->orderByDesc('scheduled_date');
 
+        $this->scopeToUser($query, $user);
+
+        return response()->json([
+            'data' => $query->get(),
+            'message' => '',
+            'errors' => [],
+            'meta' => [],
+        ]);
+    }
+
+    /**
+     * Same scoping as index() — extracted so stats() can't silently drift out of
+     * sync with what a role is actually allowed to see in the list (it previously
+     * only scoped college/support officers, leaving category officers unscoped).
+     */
+    private function scopeToUser($query, $user): void
+    {
         if ($user->hasRole('college_officer') ||
             ($user->hasRole('support_officer') && $user->college_id)) {
             $query->whereHas('proposal', fn ($q) => $q->where('college_id', $user->college_id));
@@ -40,13 +57,6 @@ class CompletionWorkshopController extends Controller
                 )
             );
         }
-
-        return response()->json([
-            'data' => $query->get(),
-            'message' => '',
-            'errors' => [],
-            'meta' => [],
-        ]);
     }
 
     public function show(string $id): JsonResponse
@@ -370,11 +380,7 @@ class CompletionWorkshopController extends Controller
     {
         $user = $request->user();
         $query = CompletionWorkshop::query();
-
-        if ($user->hasRole('college_officer') ||
-            ($user->hasRole('support_officer') && $user->college_id)) {
-            $query->whereHas('proposal', fn ($q) => $q->where('college_id', $user->college_id));
-        }
+        $this->scopeToUser($query, $user);
 
         $all = $query->selectRaw('status, count(*) as total')->groupBy('status')->pluck('total', 'status');
 

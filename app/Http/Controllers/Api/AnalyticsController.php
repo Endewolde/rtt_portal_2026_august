@@ -1,38 +1,60 @@
 <?php
 
-namespace App\Http\Controllers\Admin;
+namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Inertia\Inertia;
 
 class AnalyticsController extends Controller
 {
-    public function index(Request $request)
+    private const ANALYTICS_ROLES = [
+        'super_admin', 'admin', 'central_officer', 'research_officer',
+        'community_officer', 'technology_officer', 'college_officer',
+    ];
+
+    /**
+     * Full analytics payload in one request. College officers are always forced to
+     * their own college — the client's college_id is only honoured for other roles.
+     */
+    public function index(Request $request): JsonResponse
     {
+        $user = $request->user();
+
+        if (! $user?->hasAnyRole(self::ANALYTICS_ROLES)) {
+            return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
+        }
+
         $currentAcademicYear = DB::table('app_settings')
             ->where('key', 'current_academic_year')
             ->value('value');
 
+        $collegeId = $user->hasRole('college_officer') ? $user->college_id : $request->input('college_id');
+
         $filters = [
             'academic_year' => $request->input('academic_year') ?? $currentAcademicYear,
-            'college_id' => $request->input('college_id'),
+            'college_id' => $collegeId,
         ];
 
-        return Inertia::render('Admin/Analytics', [
-            'filters' => $filters,
-            'academicYears' => $this->getAcademicYears(),
-            'colleges' => $this->getColleges(),
-            'summaryStats' => $this->summaryStats($filters),
-            'researchTypes' => Inertia::defer(fn () => $this->researchTypeDistribution($filters)),
-            'collegePerf' => Inertia::defer(fn () => $this->collegePerformance($filters)),
-            'passRateTrends' => Inertia::defer(fn () => $this->passRateTrends()),
-            'appTrends' => Inertia::defer(fn () => $this->applicationTrends()),
-            'genderPassRate' => Inertia::defer(fn () => $this->passRateByGender($filters)),
-            'yearDistribution' => Inertia::defer(fn () => $this->yearDistribution()),
-            'collegeTypeDist' => Inertia::defer(fn () => $this->collegeTypeDistribution($filters)),
-            'predictive' => Inertia::defer(fn () => $this->predictiveModel()),
+        return response()->json([
+            'data' => [
+                'filters' => $filters,
+                'academicYears' => $this->getAcademicYears(),
+                'colleges' => $this->getColleges(),
+                'summaryStats' => $this->summaryStats($filters),
+                'researchTypes' => $this->researchTypeDistribution($filters),
+                'collegePerf' => $this->collegePerformance($filters),
+                'passRateTrends' => $this->passRateTrends($filters),
+                'appTrends' => $this->applicationTrends($filters),
+                'genderPassRate' => $this->passRateByGender($filters),
+                'yearDistribution' => $this->yearDistribution($filters),
+                'collegeTypeDist' => $this->collegeTypeDistribution($filters),
+                'predictive' => $this->predictiveModel($filters),
+            ],
+            'message' => '',
+            'errors' => [],
+            'meta' => [],
         ]);
     }
 
@@ -125,6 +147,7 @@ class AnalyticsController extends Controller
                 }
             })
             ->whereNull('c.deleted_at')
+            ->when(! empty($filters['college_id']), fn ($q) => $q->where('c.id', $filters['college_id']))
             ->select(
                 'c.name as college',
                 'c.code',
@@ -140,19 +163,24 @@ class AnalyticsController extends Controller
             ->toArray();
     }
 
-    private function passRateTrends(): array
+    private function passRateTrends(array $filters): array
     {
-        return DB::table('proposals')
+        $q = DB::table('proposals')
             ->whereNull('deleted_at')
             ->whereNotNull('academic_year')
-            ->where('status', '!=', 'draft')
-            ->select(
-                'academic_year',
-                DB::raw('COUNT(*) as total'),
-                DB::raw("SUM(CASE WHEN status IN ('funded','accepted','completed') THEN 1 ELSE 0 END) as funded"),
-                DB::raw("SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected"),
-                DB::raw("ROUND(SUM(CASE WHEN status IN ('funded','accepted','completed') THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0), 1) as pass_rate")
-            )
+            ->where('status', '!=', 'draft');
+
+        if (! empty($filters['college_id'])) {
+            $q->where('college_id', $filters['college_id']);
+        }
+
+        return $q->select(
+            'academic_year',
+            DB::raw('COUNT(*) as total'),
+            DB::raw("SUM(CASE WHEN status IN ('funded','accepted','completed') THEN 1 ELSE 0 END) as funded"),
+            DB::raw("SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected"),
+            DB::raw("ROUND(SUM(CASE WHEN status IN ('funded','accepted','completed') THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0), 1) as pass_rate")
+        )
             ->groupBy('academic_year')
             ->orderBy('academic_year')
             ->get()
@@ -160,17 +188,22 @@ class AnalyticsController extends Controller
             ->toArray();
     }
 
-    private function applicationTrends(): array
+    private function applicationTrends(array $filters): array
     {
-        return DB::table('proposals')
+        $q = DB::table('proposals')
             ->whereNull('deleted_at')
             ->whereNotNull('submitted_at')
-            ->where('submitted_at', '>=', now()->subMonths(24))
-            ->select(
-                DB::raw("DATE_FORMAT(submitted_at, '%Y-%m') as month"),
-                DB::raw('COUNT(*) as submitted'),
-                DB::raw("SUM(CASE WHEN status IN ('funded','accepted','completed') THEN 1 ELSE 0 END) as funded")
-            )
+            ->where('submitted_at', '>=', now()->subMonths(24));
+
+        if (! empty($filters['college_id'])) {
+            $q->where('college_id', $filters['college_id']);
+        }
+
+        return $q->select(
+            DB::raw("DATE_FORMAT(submitted_at, '%Y-%m') as month"),
+            DB::raw('COUNT(*) as submitted'),
+            DB::raw("SUM(CASE WHEN status IN ('funded','accepted','completed') THEN 1 ELSE 0 END) as funded")
+        )
             ->groupBy('month')
             ->orderBy('month')
             ->get()
@@ -206,19 +239,24 @@ class AnalyticsController extends Controller
             ->toArray();
     }
 
-    private function yearDistribution(): array
+    private function yearDistribution(array $filters): array
     {
-        return DB::table('proposals')
+        $q = DB::table('proposals')
             ->whereNull('deleted_at')
             ->whereNotNull('academic_year')
-            ->where('status', '!=', 'draft')
-            ->select(
-                'academic_year',
-                DB::raw('COUNT(*) as total'),
-                DB::raw("SUM(CASE WHEN status IN ('funded','accepted','completed') THEN 1 ELSE 0 END) as funded"),
-                DB::raw("SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected"),
-                DB::raw("SUM(CASE WHEN status NOT IN ('funded','accepted','completed','rejected','archived','draft') THEN 1 ELSE 0 END) as in_progress")
-            )
+            ->where('status', '!=', 'draft');
+
+        if (! empty($filters['college_id'])) {
+            $q->where('college_id', $filters['college_id']);
+        }
+
+        return $q->select(
+            'academic_year',
+            DB::raw('COUNT(*) as total'),
+            DB::raw("SUM(CASE WHEN status IN ('funded','accepted','completed') THEN 1 ELSE 0 END) as funded"),
+            DB::raw("SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected"),
+            DB::raw("SUM(CASE WHEN status NOT IN ('funded','accepted','completed','rejected','archived','draft') THEN 1 ELSE 0 END) as in_progress")
+        )
             ->groupBy('academic_year')
             ->orderBy('academic_year')
             ->get()
@@ -237,6 +275,9 @@ class AnalyticsController extends Controller
         if (! empty($filters['academic_year'])) {
             $q->where('p.academic_year', $filters['academic_year']);
         }
+        if (! empty($filters['college_id'])) {
+            $q->where('c.id', $filters['college_id']);
+        }
 
         return $q->select(
             'c.name as college',
@@ -251,13 +292,18 @@ class AnalyticsController extends Controller
             ->toArray();
     }
 
-    private function predictiveModel(): array
+    private function predictiveModel(array $filters): array
     {
-        $yearlyData = DB::table('proposals')
+        $q = DB::table('proposals')
             ->whereNull('deleted_at')
             ->whereNotNull('academic_year')
-            ->where('status', '!=', 'draft')
-            ->select('academic_year', DB::raw('COUNT(*) as total'))
+            ->where('status', '!=', 'draft');
+
+        if (! empty($filters['college_id'])) {
+            $q->where('college_id', $filters['college_id']);
+        }
+
+        $yearlyData = $q->select('academic_year', DB::raw('COUNT(*) as total'))
             ->groupBy('academic_year')
             ->orderBy('academic_year')
             ->get();

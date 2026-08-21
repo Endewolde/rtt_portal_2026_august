@@ -47,54 +47,26 @@ class CentralEvaluationController extends Controller
 
         $proposals = $query->get()
             ->map(function (Proposal $p) {
-                $blind = $p->reviewAssignments->filter(fn ($a) => str_starts_with($a->evaluationType?->name ?? '', 'blind_review'));
-                $defence = $p->reviewAssignments->filter(fn ($a) => str_starts_with($a->evaluationType?->name ?? '', 'open_defence'));
-
-                // Normalized percentage scores per type (0–100%), used for display
-                $blindScore = $blind->isNotEmpty()
-                    ? round($blind->map(fn ($a) => $this->scoreService->calculateScore($a))->avg(), 2)
-                    : null;
-                $defenceScore = $defence->isNotEmpty()
-                    ? round($defence->map(fn ($a) => $this->scoreService->calculateScore($a))->avg(), 2)
-                    : null;
-
-                // Raw weighted scores: each out of its evaluation type's total weight
-                // (e.g. blind review out of 80, open defence out of 20)
-                $blindDisplayInfos = $blind->map(fn ($a) => $this->scoreService->calculateWeightedDisplay($a));
-                $defenceDisplayInfos = $defence->map(fn ($a) => $this->scoreService->calculateWeightedDisplay($a));
-
-                $blindScoreRaw = $blindDisplayInfos->isNotEmpty()
-                    ? round($blindDisplayInfos->avg('score'), 2) : null;
-                $blindMax = $blindDisplayInfos->isNotEmpty()
-                    ? $blindDisplayInfos->first()['max'] : null;
-                $defenceScoreRaw = $defenceDisplayInfos->isNotEmpty()
-                    ? round($defenceDisplayInfos->avg('score'), 2) : null;
-                $defenceMax = $defenceDisplayInfos->isNotEmpty()
-                    ? $defenceDisplayInfos->first()['max'] : null;
-
-                // Total weight from DB category weights (e.g. blind=80 + defence=20 = 100)
-                $totalMax = ($blindMax ?? 0) + ($defenceMax ?? 0);
-
-                // Combined uses raw weighted scores out of totalMax
-                $combined = ($blindScoreRaw ?? 0) + ($defenceScoreRaw ?? 0);
-
-                // Threshold is a percentage of totalMax (e.g. 70% of 100 = 70 minimum score)
-                $thresholdPct = (float) (DB::table('threshold_settings')->where('key', 'combined_threshold')->value('value') ?? 70);
-                $threshold = $totalMax > 0 ? round($thresholdPct / 100 * $totalMax, 2) : $thresholdPct;
+                // Live recalculation against CURRENT threshold settings and CURRENT
+                // evaluation-criteria weights — never cached, so this list is always
+                // up to date even if thresholds/criteria changed after the proposal's
+                // automatic blind/defence decision.
+                $snapshot = $this->scoreService->recalculateSnapshot($p);
 
                 $budgetTotal = $p->budgets->sum('amount');
 
                 return array_merge($p->toArray(), [
-                    'blind_score' => $blindScore,
-                    'defence_score' => $defenceScore,
-                    'blind_score_raw' => $blindScoreRaw,
-                    'blind_max' => $blindMax,
-                    'defence_score_raw' => $defenceScoreRaw,
-                    'defence_max' => $defenceMax,
-                    'combined_score' => round($combined, 2),
-                    'total_max' => $totalMax,
-                    'threshold_pct' => $thresholdPct,
-                    'threshold' => $threshold,
+                    'blind_score_raw' => $snapshot['blind']['score'] ?? null,
+                    'blind_max' => $snapshot['blind']['max'] ?? null,
+                    'defence_score_raw' => $snapshot['defence']['score'] ?? null,
+                    'defence_max' => $snapshot['defence']['max'] ?? null,
+                    'combined_score' => $snapshot['combined'],
+                    'total_max' => $snapshot['combined_max'],
+                    'threshold_pct' => $snapshot['combined_threshold'],
+                    'threshold' => $snapshot['combined_threshold'],
+                    'defence_threshold' => $snapshot['defence_threshold'],
+                    'defence_below_threshold' => $snapshot['defence_below_threshold'],
+                    'decision_mode' => $snapshot['decision_mode'],
                     'budget_total' => $budgetTotal,
                 ]);
             });

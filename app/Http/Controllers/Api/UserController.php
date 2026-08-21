@@ -122,6 +122,12 @@ class UserController extends Controller
 
         $base = User::query();
 
+        // Same scoping as index() — a college officer's stats must reflect only
+        // their own college, not the platform-wide totals.
+        if ($request->user()->hasRole('college_officer') && $request->user()->college_id) {
+            $base->where('college_id', $request->user()->college_id);
+        }
+
         return response()->json([
             'data' => [
                 'total' => (clone $base)->count(),

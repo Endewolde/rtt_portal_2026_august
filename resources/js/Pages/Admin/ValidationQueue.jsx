@@ -7,7 +7,7 @@ import ViewToggle from '../../Components/ViewToggle';
 import ProposalTable from '../../Components/ProposalTable';
 import { useViewPreference } from '../../hooks/useViewPreference';
 import { get, post } from '../../lib/api';
-import { formatDate } from '../../lib/utils';
+import { formatDate, getCategoryLabel } from '../../lib/utils';
 import { useToast } from '../../Components/Toast';
 
 function CountdownTimer({ endDate }) {
@@ -88,6 +88,8 @@ function ProposalCard({ proposal, onAction, num, checked, onToggle }) {
 export default function ValidationQueue() {
     const toast = useToast();
     const [data, setData]           = useState([]);
+    const [categoryFilter, setCategoryFilter] = useState('');
+    const [collegeFilter, setCollegeFilter] = useState('');
     const [loading, setLoading]     = useState(true);
     const [dialog, setDialog]       = useState(null);
     const [reason, setReason]       = useState('');
@@ -132,9 +134,17 @@ export default function ValidationQueue() {
         setSubmitting(false); setDialog(null); setReason('');
     };
 
+    // ── Category/college options & client-side filters ──
+    const availableCategories = [...new Set(data.map(p => p.category).filter(Boolean))].sort();
+    const availableColleges   = [...new Map(data.filter(p => p.college).map(p => [p.college.id, p.college])).values()]
+        .sort((a, b) => a.name.localeCompare(b.name));
+    const filteredData = data
+        .filter(p => !categoryFilter || p.category === categoryFilter)
+        .filter(p => !collegeFilter || p.college_id === collegeFilter);
+
     const now = new Date();
-    const awaitingDeadline   = data.filter(p => p.proposal_call && new Date(p.proposal_call.end_date) > now);
-    const readyForValidation = data.filter(p => !p.proposal_call || new Date(p.proposal_call.end_date) <= now);
+    const awaitingDeadline   = filteredData.filter(p => p.proposal_call && new Date(p.proposal_call.end_date) > now);
+    const readyForValidation = filteredData.filter(p => !p.proposal_call || new Date(p.proposal_call.end_date) <= now);
 
     // Selection helpers scoped to readyForValidation
     const readyIds    = readyForValidation.map(p => p.id);
@@ -193,6 +203,30 @@ export default function ValidationQueue() {
                         </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
+                        {availableColleges.length > 1 && (
+                            <select
+                                value={collegeFilter}
+                                onChange={e => setCollegeFilter(e.target.value)}
+                                className="text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+                            >
+                                <option value="">All Colleges</option>
+                                {availableColleges.map(c => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                            </select>
+                        )}
+                        {availableCategories.length > 1 && (
+                            <select
+                                value={categoryFilter}
+                                onChange={e => setCategoryFilter(e.target.value)}
+                                className="text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300"
+                            >
+                                <option value="">All Categories</option>
+                                {availableCategories.map(c => (
+                                    <option key={c} value={c}>{getCategoryLabel(c)}</option>
+                                ))}
+                            </select>
+                        )}
                         {!loading && (
                             <>
                                 {awaitingDeadline.length > 0 && (
@@ -218,7 +252,7 @@ export default function ValidationQueue() {
                     <div className="flex justify-center py-20">
                         <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
                     </div>
-                ) : data.length === 0 ? (
+                ) : filteredData.length === 0 ? (
                     <div className="bg-white border border-gray-200 rounded-2xl p-16 text-center">
                         <div className="h-14 w-14 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
                             <FileQuestion size={28} className="text-gray-400" />

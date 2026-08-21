@@ -89,6 +89,7 @@ class RolePermissionSeeder extends Seeder
             'staff',
             'pi',
             'reviewer',
+            'external_reviewer',
             'proposal_archivist',
             'guest',
         ];
@@ -361,7 +362,17 @@ class RolePermissionSeeder extends Seeder
         Role::findByName('reviewer', 'web')->syncPermissions([
             'proposals.view',
             'reviews.view', 'reviews.create', 'reviews.update',
-            'review_assignments.view', 'review_assignments.update',
+            'review_assignments.view_any', 'review_assignments.view', 'review_assignments.update',
+            'proposal_calls.view',
+        ]);
+
+        // ── external_reviewer: same scope as reviewer, for reviewers outside the
+        //    institution — deliberately excludes anything beyond reviewing (no
+        //    proposal creation, budgets, or admin pages) ───────────────────────
+        Role::findByName('external_reviewer', 'web')->syncPermissions([
+            'proposals.view',
+            'reviews.view', 'reviews.create', 'reviews.update',
+            'review_assignments.view_any', 'review_assignments.view', 'review_assignments.update',
             'proposal_calls.view',
         ]);
 

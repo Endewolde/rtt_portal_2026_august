@@ -175,27 +175,38 @@ class ActionCountController extends Controller
             )->count();
         }
 
-        // ── 14. Proposals in open defence ─────────────────────────────────────
+        // ── 14. Proposals in open defence — includes proposals that have passed
+        // blind review and are awaiting a defence session to be scheduled, since
+        // that's exactly what the Open Defence page's queue tab shows.
         $openDefenceQueue = 0;
         if ($isCentral || $isOfficer || $isCollegeStaff) {
             $openDefenceQueue = $scopeProposals(
-                DB::table('proposals as p')->whereNull('p.deleted_at')->where('p.status', 'under_open_defence'), 'p'
+                DB::table('proposals as p')->whereNull('p.deleted_at')
+                    ->whereIn('p.status', ['blind_review_passed', 'under_open_defence']), 'p'
             )->count();
         }
 
-        // ── 15. Proposals passed blind review — ready for central evaluation ───
+        // ── 15. Proposals awaiting a central evaluation funding decision ───────
+        // Must match CentralEvaluationController::index(), which only ever queries
+        // status = 'accepted' — 'blind_review_passed' proposals haven't reached
+        // central evaluation yet (they're still awaiting defence scheduling, and
+        // are already counted in open_defence_queue below).
         $centralEvalQueue = 0;
         if ($isCentral || $isOfficer) {
             $centralEvalQueue = $scopeProposals(
-                DB::table('proposals as p')->whereNull('p.deleted_at')->where('p.status', 'blind_review_passed'), 'p'
+                DB::table('proposals as p')->whereNull('p.deleted_at')->where('p.status', 'accepted'), 'p'
             )->count();
         }
 
-        // ── 16. Accepted proposals awaiting funding decision ──────────────────
+        // ── 16. Funded proposals under management on the Proposal Funding page ─
+        // Must match ProposalFunding.jsx, which only ever queries status = 'funded'
+        // (it's an admin page for already-funded proposals — edit awarded amount,
+        // revoke funding — not a decision queue; that's central_eval_queue above,
+        // which already covers "accepted, awaiting a funding decision").
         $proposalFundingQueue = 0;
         if ($isCentral || $isOfficer) {
             $proposalFundingQueue = $scopeProposals(
-                DB::table('proposals as p')->whereNull('p.deleted_at')->where('p.status', 'accepted'), 'p'
+                DB::table('proposals as p')->whereNull('p.deleted_at')->where('p.status', 'funded'), 'p'
             )->count();
         }
 
@@ -244,6 +255,32 @@ class ActionCountController extends Controller
                 ->count();
         }
 
+        // ── 20. Ongoing proposals awaiting a midterm evaluation to be scheduled ─
+        $ongoingAwaitingMidterm = 0;
+        if ($isCentral || $isOfficer || $isCollegeStaff) {
+            $q = DB::table('proposals as p')
+                ->whereNull('p.deleted_at')
+                ->where('p.status', 'funded')
+                ->whereNotExists(function ($sub) {
+                    $sub->select(DB::raw(1))
+                        ->from('midterm_evaluations')
+                        ->whereColumn('midterm_evaluations.proposal_id', 'p.id');
+                });
+            $ongoingAwaitingMidterm = $scopeProposals($q, 'p')->count();
+        }
+
+        // ── 21. Overdue review assignments (admin + college officer — reviewer nudge dashboard) ─
+        $overdueReviews = 0;
+        if ($isCentral || $isCollegeStaff) {
+            $q = DB::table('review_assignments as ra')
+                ->join('proposals as p', 'ra.proposal_id', '=', 'p.id')
+                ->whereNull('p.deleted_at')
+                ->whereIn('ra.status', ['pending', 'accepted', 'in_progress'])
+                ->whereNotNull('ra.due_date')
+                ->where('ra.due_date', '<', now()->toDateString());
+            $overdueReviews = $scopeProposals($q, 'p')->count();
+        }
+
         return response()->json([
             'data' => [
                 // Existing
@@ -267,6 +304,8 @@ class ActionCountController extends Controller
                 'similarity_flags_pending' => $similarityFlagsPending,
                 'midterm_pending' => $midtermPending,
                 'completion_workshops_pending' => $completionWorkshopsPending,
+                'ongoing_awaiting_midterm' => $ongoingAwaitingMidterm,
+                'overdue_reviews' => $overdueReviews,
             ],
             'message' => '',
             'errors' => [],

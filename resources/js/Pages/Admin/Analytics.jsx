@@ -1,5 +1,4 @@
-import { useState } from 'react'
-import { router } from '@inertiajs/react'
+import { useState, useEffect, useCallback } from 'react'
 import {
     ComposedChart, BarChart, Bar, LineChart, Line, AreaChart, Area,
     XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
@@ -10,6 +9,8 @@ import {
     FlaskConical, Brain, BookOpen, Filter, RefreshCw,
 } from 'lucide-react'
 import AppLayout from '../../Layouts/AppLayout'
+import { get } from '../../lib/api'
+import { useToast } from '../../Components/Toast'
 
 const PIE_COLORS = [
     '#6366f1', '#3b82f6', '#10b981', '#f59e0b',
@@ -53,34 +54,67 @@ function ChartCard({ title, icon: Icon, desc, bg, color, children }) {
     )
 }
 
-export default function Analytics({
-    filters,
-    academicYears,
-    colleges,
-    summaryStats,
-    researchTypes,
-    collegePerf,
-    passRateTrends,
-    appTrends,
-    genderPassRate,
-    yearDistribution,
-    collegeTypeDist,
-    predictive,
-}) {
-    const [yr, setYr] = useState(filters?.academic_year ?? '')
-    const [col, setCol] = useState(filters?.college_id ?? '')
+export default function Analytics() {
+    const { error } = useToast()
+
+    const [loading, setLoading] = useState(true)
+
+    const [academicYears, setAcademicYears] = useState([])
+    const [colleges, setColleges] = useState([])
+    const [summaryStats, setSummaryStats] = useState(null)
+    const [researchTypes, setResearchTypes] = useState(null)
+    const [collegePerf, setCollegePerf] = useState(null)
+    const [passRateTrends, setPassRateTrends] = useState(null)
+    const [appTrends, setAppTrends] = useState(null)
+    const [genderPassRate, setGenderPassRate] = useState(null)
+    const [yearDistribution, setYearDistribution] = useState(null)
+    const [collegeTypeDist, setCollegeTypeDist] = useState(null)
+    const [predictive, setPredictive] = useState(null)
+
+    const [yr, setYr] = useState('')
+    const [col, setCol] = useState('')
+
+    const load = useCallback((academicYear, collegeId) => {
+        setLoading(true)
+        // Reset section state so stale data from a previous filter doesn't briefly show.
+        setResearchTypes(null); setCollegePerf(null); setPassRateTrends(null)
+        setAppTrends(null); setGenderPassRate(null); setYearDistribution(null)
+        setCollegeTypeDist(null); setPredictive(null)
+
+        get('/admin/analytics', {
+            ...(academicYear ? { academic_year: academicYear } : {}),
+            ...(collegeId ? { college_id: collegeId } : {}),
+        })
+            .then(r => {
+                const d = r.data ?? {}
+                setAcademicYears(d.academicYears ?? [])
+                setColleges(d.colleges ?? [])
+                setSummaryStats(d.summaryStats ?? {})
+                setResearchTypes(d.researchTypes ?? [])
+                setCollegePerf(d.collegePerf ?? [])
+                setPassRateTrends(d.passRateTrends ?? [])
+                setAppTrends(d.appTrends ?? [])
+                setGenderPassRate(d.genderPassRate ?? [])
+                setYearDistribution(d.yearDistribution ?? [])
+                setCollegeTypeDist(d.collegeTypeDist ?? [])
+                setPredictive(d.predictive ?? null)
+                setYr(d.filters?.academic_year ?? '')
+                setCol(d.filters?.college_id ?? '')
+            })
+            .catch(() => error('Failed to load analytics.'))
+            .finally(() => setLoading(false))
+    }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+    useEffect(() => { load(); }, [load])
 
     function applyFilters() {
-        router.get('/admin/analytics', {
-            ...(yr ? { academic_year: yr } : {}),
-            ...(col ? { college_id: col } : {}),
-        })
+        load(yr, col)
     }
 
     function resetFilters() {
         setYr('')
         setCol('')
-        router.get('/admin/analytics')
+        load()
     }
 
     const stats = summaryStats ?? {}
@@ -126,15 +160,17 @@ export default function Analytics({
                 </div>
                 <button
                     onClick={applyFilters}
-                    className="h-9 px-4 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-1.5"
+                    disabled={loading}
+                    className="h-9 px-4 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-60 transition-colors flex items-center gap-1.5"
                 >
                     <Filter size={13} /> Apply
                 </button>
                 <button
                     onClick={resetFilters}
-                    className="h-9 px-4 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-1.5"
+                    disabled={loading}
+                    className="h-9 px-4 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 disabled:opacity-60 transition-colors flex items-center gap-1.5"
                 >
-                    <RefreshCw size={13} /> Reset
+                    <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Reset
                 </button>
             </div>
 

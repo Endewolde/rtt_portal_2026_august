@@ -4,6 +4,7 @@ import {
     ArrowRight, Search, ChevronRight, ChevronLeft, ChevronDown, Globe,
     FileText, CheckSquare, Award, BookOpen, BarChart2, Shield,
     Calendar, Clock, HelpCircle, TrendingUp, Users, Layers,
+    Microscope, Zap,
 } from 'lucide-react';
 import {
     PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
@@ -408,15 +409,60 @@ function FaqItem({ item, open, onToggle, primaryColor }) {
     );
 }
 
+// ─── Validated-by-category breakdown ───────────────────────────────────────────
+
+// Colors/icons mirror ProposalCallCard's CATEGORY_CONFIG so category identity stays
+// consistent across the public site.
+const VALIDATED_CATEGORY_META = {
+    research:             { color: '#3b82f6', icon: Microscope },
+    community_engagement: { color: '#10b981', icon: Users },
+    technology_transfer:  { color: '#a855f7', icon: Zap },
+};
+
+function ValidatedByCategory({ items }) {
+    const max = Math.max(1, ...items.map(i => i.count));
+
+    return (
+        <div className="space-y-3.5">
+            {items.map((item) => {
+                const meta = VALIDATED_CATEGORY_META[item.category] ?? { color: '#64748b', icon: Layers };
+                const Icon = meta.icon;
+                const pct  = Math.round((item.count / max) * 100);
+
+                return (
+                    <div key={item.category}>
+                        <div className="flex items-center justify-between mb-1.5">
+                            <div className="flex items-center gap-2 min-w-0">
+                                <span className="w-6 h-6 rounded-lg flex items-center justify-center shrink-0"
+                                    style={{ background: `${meta.color}22`, color: meta.color }}>
+                                    <Icon size={12} />
+                                </span>
+                                <span className="text-xs font-medium text-slate-300 truncate">{item.label}</span>
+                            </div>
+                            <span className="text-sm font-bold text-white tabular-nums shrink-0 ml-2">
+                                {item.count.toLocaleString()}
+                            </span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-white/8 overflow-hidden">
+                            <div className="h-full rounded-full transition-all duration-700"
+                                style={{ width: `${pct}%`, background: meta.color }} />
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    );
+}
+
 // ─── Hero Stat Card ───────────────────────────────────────────────────────────
 
-function HeroStatCard({ stat, label, color, icon, inView, secondaryStats, fundedRate }) {
+function HeroStatCard({ stat, label, color, icon, inView, secondaryStats, ringPct, categoryBreakdown }) {
     const num      = parseInt(String(stat ?? 0).replace(/\D/g, ''), 10);
     const animated = useCountUp(num, inView && num > 0, 1400);
     const radius   = 44;
     const circ     = 2 * Math.PI * radius;
-    const showRing  = fundedRate !== null && fundedRate !== undefined;
-    const targetPct = showRing ? Math.min(Math.max(fundedRate, 0), 100) : 0;
+    const showRing  = ringPct !== null && ringPct !== undefined;
+    const targetPct = showRing ? Math.min(Math.max(ringPct, 0), 100) : 0;
     const [pct, setPct] = useState(0);
     useEffect(() => {
         const t = setTimeout(() => setPct(targetPct), 120);
@@ -472,18 +518,27 @@ function HeroStatCard({ stat, label, color, icon, inView, secondaryStats, funded
             {/* Divider */}
             <div className="my-5 h-px" style={{ background: `linear-gradient(90deg, ${color}50, transparent 80%)` }} />
 
-            {/* Secondary stats */}
-            <div className="grid grid-cols-2 gap-3">
-                {secondaryStats.map((s, i) => (
-                    <div key={i} className="rounded-xl px-3.5 py-3 border border-white/5"
-                        style={{ background: 'rgba(255,255,255,0.03)' }}>
-                        <div className="text-xl font-bold text-white tabular-nums">
-                            {parseInt(String(s.value ?? 0)) > 0 ? parseInt(String(s.value ?? 0)).toLocaleString() : '—'}
-                        </div>
-                        <div className="text-[11px] text-slate-400 mt-0.5 font-medium">{s.label}</div>
+            {categoryBreakdown ? (
+                <>
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-3">
+                        Validated by Category
                     </div>
-                ))}
-            </div>
+                    <ValidatedByCategory items={categoryBreakdown} />
+                </>
+            ) : (
+                /* Secondary stats */
+                <div className="grid grid-cols-2 gap-3">
+                    {secondaryStats.map((s, i) => (
+                        <div key={i} className="rounded-xl px-3.5 py-3 border border-white/5"
+                            style={{ background: 'rgba(255,255,255,0.03)' }}>
+                            <div className="text-xl font-bold text-white tabular-nums">
+                                {parseInt(String(s.value ?? 0)) > 0 ? parseInt(String(s.value ?? 0)).toLocaleString() : '—'}
+                            </div>
+                            <div className="text-[11px] text-slate-400 mt-0.5 font-medium">{s.label}</div>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }
@@ -569,6 +624,9 @@ function HeroSlider({ stats, primaryColor, heroBg, orgName, ctaPrimary, ctaSecon
         { key: 'departments',     value: stats.departments,     label: 'Departments'      },
     ];
     const secondaryStats = allStatsMeta.filter(s => s.key !== slide.statKey).slice(0, 2);
+    // The Total Proposals card breaks validated proposals down per category instead of a
+    // single count, since validation no longer shrinks the headline number itself.
+    const validatedByCategory = stats.validated_by_category ?? [];
 
     return (
         <section
@@ -738,7 +796,12 @@ function HeroSlider({ stats, primaryColor, heroBg, orgName, ctaPrimary, ctaSecon
                                 icon={slide.icon}
                                 inView={true}
                                 secondaryStats={secondaryStats}
-                                fundedRate={['total_proposals','funded'].includes(slide.statKey) ? (stats.funded_rate ?? null) : null}
+                                categoryBreakdown={slide.statKey === 'total_proposals' && validatedByCategory.length > 0 ? validatedByCategory : null}
+                                ringPct={
+                                    slide.statKey === 'total_proposals' ? (stats.validated_rate ?? null)
+                                        : slide.statKey === 'funded' ? (stats.funded_rate ?? null)
+                                        : null
+                                }
                             />
                         </div>
                     </div>

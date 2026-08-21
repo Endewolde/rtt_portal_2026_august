@@ -85,6 +85,12 @@ class WorkflowStageSeeder extends Seeder
             ['from' => 'validated',          'action' => 'assign_for_review',     'to' => 'under_blind_review',  'roles' => $adminWithCol],
             ['from' => 'under_blind_review', 'action' => 'pass_blind_review',     'to' => 'blind_review_passed', 'roles' => $adminFull],
             ['from' => 'under_blind_review', 'action' => 'fail_blind_review',     'to' => 'rejected',            'roles' => $adminFull],
+            // Same action, a second edge: lets an admin-tier actor (or the
+            // reviews:correct-blind-review command) correct a proposal that was
+            // already auto-passed but shouldn't have been — without a status guard
+            // hack outside WorkflowService, which is the only place proposal.status
+            // is allowed to change.
+            ['from' => 'blind_review_passed', 'action' => 'fail_blind_review',     'to' => 'rejected',            'roles' => $adminFull],
             ['from' => 'blind_review_passed', 'action' => 'schedule_defence',      'to' => 'under_open_defence',  'roles' => $adminWithCol],
             ['from' => 'under_open_defence', 'action' => 'pass_defence',          'to' => 'accepted',            'roles' => $adminFull],
             ['from' => 'under_open_defence', 'action' => 'fail_defence',          'to' => 'rejected',            'roles' => $adminFull],

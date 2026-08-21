@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\DefenceSession;
 use App\Models\Proposal;
-use App\Models\ReviewAssignment;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
@@ -75,46 +74,50 @@ class DefenceSessionService
     }
 
     /**
-     * Process the defence result after all scores are submitted.
-     * combined = blind_review_score_avg + open_defence_score_avg
+     * Process the defence result after all scores are submitted. Delegates the actual
+     * scoring to ReviewScoreService::recalculateSnapshot() — the single source of truth
+     * for blind/defence/combined scoring — so a manual "finalize" action here always
+     * agrees with the automatic decision made when the last score is submitted.
+     *
+     * The pass/fail rule itself is decided by recalculateSnapshot()'s `combined_passes`,
+     * which respects the configurable `combined_decision_mode` setting (see
+     * ReviewScoreService::combinedDecisionMode()) — never hardcoded here.
      */
     public function processDefenceResult(DefenceSession $session, User $decidedBy): Proposal
     {
         $proposal = $session->proposal;
+        $snapshot = $this->reviewScoreService->recalculateSnapshot($proposal);
 
-        $blindAssignments = ReviewAssignment::where('proposal_id', $proposal->id)
-            ->whereHas('evaluationType', fn ($q) => $q->where('name', 'like', 'blind_review%'))
-            ->where('status', 'submitted')
-            ->get();
-
-        $blindScore = $blindAssignments->isNotEmpty()
-            ? $blindAssignments->map(fn ($a) => $this->reviewScoreService->calculateScore($a))->avg()
-            : 0;
-
-        $defenceAssignments = ReviewAssignment::where('proposal_id', $proposal->id)
-            ->whereHas('evaluationType', fn ($q) => $q->where('name', 'like', 'open_defence%'))
-            ->where('status', 'submitted')
-            ->get();
-
-        $defenceScore = $defenceAssignments->isNotEmpty()
-            ? $defenceAssignments->map(fn ($a) => $this->reviewScoreService->calculateScore($a))->avg()
-            : 0;
-
-        $combinedScore = $blindScore + $defenceScore;
-
-        $threshold = (float) (DB::table('threshold_settings')
-            ->where('key', 'combined_threshold')
-            ->value('value') ?? 120);
+        $blindScore = $snapshot['blind']['score'] ?? 0.0;
+        $defenceScore = $snapshot['defence']['score'] ?? 0.0;
+        $combinedScore = $snapshot['combined'];
+        $threshold = $snapshot['combined_threshold'];
+        $defenceThreshold = $snapshot['defence_threshold'];
+        $mode = $snapshot['decision_mode'];
+        $defenceBelowThreshold = $snapshot['defence_below_threshold'] ?? false;
+        $passes = $snapshot['combined_passes'] ?? false;
 
         $session->update(['final_score' => $combinedScore, 'status' => 'completed']);
 
-        if ($combinedScore >= $threshold) {
+        $defenceNote = match (true) {
+            ! $defenceBelowThreshold => '',
+            $mode === 'strict_all' => " Open defence score ({$defenceScore} < {$defenceThreshold}) did not individually clear its threshold — required under the 'strict' decision mode.",
+            default => " Note: open defence score is below its own threshold ({$defenceScore} < {$defenceThreshold}) — flagged for central evaluation.",
+        };
+
+        $metadata = [
+            'blind_score' => $blindScore, 'defence_score' => $defenceScore, 'combined' => $combinedScore,
+            'defence_threshold' => $defenceThreshold, 'defence_below_threshold' => $defenceBelowThreshold,
+            'decision_mode' => $mode,
+        ];
+
+        if ($passes) {
             return $this->workflowService->transition(
                 $proposal,
                 'pass_defence',
                 $decidedBy,
-                "Defence passed. Combined score: {$combinedScore}. Threshold: {$threshold}.",
-                ['blind_score' => $blindScore, 'defence_score' => $defenceScore, 'combined' => $combinedScore]
+                "Defence passed. Combined score: {$combinedScore}. Threshold: {$threshold}.{$defenceNote}",
+                $metadata
             );
         }
 
@@ -122,8 +125,8 @@ class DefenceSessionService
             $proposal,
             'fail_defence',
             $decidedBy,
-            "Defence failed. Combined score: {$combinedScore}. Threshold: {$threshold}.",
-            ['blind_score' => $blindScore, 'defence_score' => $defenceScore, 'combined' => $combinedScore]
+            "Defence failed. Combined score: {$combinedScore}. Threshold: {$threshold}.{$defenceNote}",
+            $metadata
         );
     }
 }

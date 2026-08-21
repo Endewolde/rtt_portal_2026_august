@@ -92,7 +92,10 @@ export default function CollegeDashboard() {
             const params = {}
             if (year) params.academic_year = year
             const r = await get('/proposals/statistics', params)
-            setStats(r.data?.data ?? null)
+            // get() already unwraps to the JSON body ({ data, message, errors, meta }) —
+            // r.data IS the payload; r.data.data was one level too deep and always
+            // undefined, silently rendering every stat as its 0 fallback.
+            setStats(r.data ?? null)
         } catch { error('Failed to load statistics.') }
         finally { setLoading(false) }
     }
@@ -124,8 +127,11 @@ export default function CollegeDashboard() {
         ? Math.round((totals.funded / totals.submitted) * 100)
         : 0
 
+    // academic_year is stored (and set via app_settings.current_academic_year) as a
+    // "YYYY-YYYY" range string, not a bare year — the dropdown must submit the same
+    // format or the filter silently matches no proposals at all.
     const currentYear = new Date().getFullYear()
-    const years = Array.from({ length: 5 }, (_, i) => currentYear - i)
+    const years = Array.from({ length: 5 }, (_, i) => `${currentYear - i}-${currentYear - i + 1}`)
 
     return (
         <AppLayout breadcrumb="College Dashboard">
@@ -141,7 +147,7 @@ export default function CollegeDashboard() {
                         <select value={year} onChange={e => setYear(e.target.value)}
                             className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
                             <option value="">All Years</option>
-                            {years.map(y => <option key={y} value={y}>{y}/{y + 1}</option>)}
+                            {years.map(y => <option key={y} value={y}>{y}</option>)}
                         </select>
                         <button onClick={load} disabled={loading}
                             className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50">

@@ -26,6 +26,7 @@ class SendProposalWorkflowNotifications
                 : $this->onDecision($proposal, 'rejected'),
             'funded' => $this->onFunded($proposal),
             'under_blind_review' => $this->onUnderReview($proposal, 'blind review'),
+            'blind_review_passed' => $this->onBlindReviewPassed($proposal),
             'under_open_defence' => $this->onUnderReview($proposal, 'open defence'),
             default => null,
         };
@@ -154,6 +155,39 @@ class SendProposalWorkflowNotifications
         foreach ($this->allRecipients($proposal) as $user) {
             $this->notify($user, 'award_approval', $data, 'award_approval');
         }
+    }
+
+    /** Notify the officers who can schedule an open-defence session that one is now needed. */
+    private function onBlindReviewPassed(Proposal $proposal): void
+    {
+        $data = [
+            'tracker_number' => $proposal->tracker_number,
+            'title' => $proposal->title,
+            'message' => "Proposal {$proposal->tracker_number} ({$proposal->title}) has passed blind review and is awaiting an open defence session.",
+        ];
+
+        foreach ($this->defenceSchedulers($proposal) as $officer) {
+            $this->notify($officer, 'blind_review_passed_officer', $data, 'blind_review_passed_officer');
+        }
+    }
+
+    /** Officers allowed to run the `schedule_defence` transition for this proposal (see WorkflowStageSeeder). */
+    private function defenceSchedulers(Proposal $proposal): array
+    {
+        $recipients = User::role('central_officer')->where('status', 'active')->get();
+
+        $categoryRole = self::CATEGORY_OFFICER_ROLES[$proposal->category] ?? null;
+        if ($categoryRole) {
+            $recipients = $recipients->merge(User::role($categoryRole)->where('status', 'active')->get());
+        }
+
+        if ($proposal->college_id) {
+            $recipients = $recipients->merge(
+                User::role('college_officer')->where('status', 'active')->where('college_id', $proposal->college_id)->get()
+            );
+        }
+
+        return $recipients->unique('id')->values()->all();
     }
 
     private function onUnderReview(Proposal $proposal, string $phase): void

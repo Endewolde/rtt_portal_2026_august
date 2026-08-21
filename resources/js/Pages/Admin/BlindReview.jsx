@@ -10,6 +10,7 @@ import AppLayout from '../../Layouts/AppLayout';
 import StatusBadge from '../../Components/StatusBadge';
 import WorkflowBreadcrumb from '../../Components/WorkflowBreadcrumb';
 import ViewToggle from '../../Components/ViewToggle';
+import FilterBar from '../../Components/FilterBar';
 import ProposalTable from '../../Components/ProposalTable';
 import { useViewPreference } from '../../hooks/useViewPreference';
 import api from '../../lib/api';
@@ -34,6 +35,10 @@ function ReviewerAvatar({ name = '', size = 'md' }) {
             {initials}
         </div>
     );
+}
+
+function isExternalReviewer(user) {
+    return user?.roles?.some(r => (typeof r === 'string' ? r : r.name) === 'external_reviewer') ?? false;
 }
 
 function daysAgo(dateStr) {
@@ -81,7 +86,7 @@ const STATUS_LABEL = {
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 
-function StatCard({ icon: Icon, label, value, sub, color }) {
+function StatCard({ icon: Icon, label, value, sub, color, onClick }) {
     const colors = {
         indigo: { bg: 'bg-indigo-50', icon: 'bg-indigo-100 text-indigo-600', val: 'text-indigo-700' },
         purple: { bg: 'bg-purple-50', icon: 'bg-purple-100 text-purple-600', val: 'text-purple-700' },
@@ -90,8 +95,14 @@ function StatCard({ icon: Icon, label, value, sub, color }) {
         gray:   { bg: 'bg-gray-50',   icon: 'bg-gray-100 text-gray-500',    val: 'text-gray-700'   },
     }[color] ?? { bg: 'bg-gray-50', icon: 'bg-gray-100 text-gray-500', val: 'text-gray-700' };
 
+    const Tag = onClick ? 'button' : 'div';
+
     return (
-        <div className={`${colors.bg} border border-white rounded-2xl px-5 py-4 flex items-center gap-4`}>
+        <Tag
+            type={onClick ? 'button' : undefined}
+            onClick={onClick}
+            className={`${colors.bg} border border-white rounded-2xl px-5 py-4 flex items-center gap-4 w-full text-left transition-all duration-150 active:scale-95 hover:shadow-sm touch-manipulation ${onClick ? 'cursor-pointer' : ''}`}
+        >
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${colors.icon}`}>
                 <Icon size={18} />
             </div>
@@ -100,7 +111,7 @@ function StatCard({ icon: Icon, label, value, sub, color }) {
                 <p className={`text-2xl font-bold leading-none mt-0.5 ${colors.val}`}>{value}</p>
                 {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
             </div>
-        </div>
+        </Tag>
     );
 }
 
@@ -297,6 +308,11 @@ function ReviewerSearchList({ proposalId, selectedId, onSelect, alreadyAssignedI
                                             <p className={`text-sm font-semibold ${isChosen ? 'text-indigo-900' : 'text-gray-800'}`}>
                                                 {r.title ? `${r.title} ` : ''}{r.name}
                                             </p>
+                                            {isExternalReviewer(r) && (
+                                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-600 border border-orange-200">
+                                                    External
+                                                </span>
+                                            )}
                                             {isAssigned && (
                                                 <span className="text-[10px] bg-amber-50 text-amber-600 border border-amber-200 px-1.5 py-0.5 rounded-full font-medium">
                                                     Already assigned
@@ -373,13 +389,22 @@ function ReassignModal({ assignment, proposalId, currentAssignments, onSave, onC
         ? new Date(assignment.due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
         : null;
 
-    const save = async () => {
+    const save = async (overrideWorkloadCap = false) => {
         if (!selectedId || !dueDate) return;
         setSaving(true);
         try {
-            await api.put(`/review-assignments/${assignment.id}/reassign`, { new_reviewer_id: selectedId, due_date: dueDate });
+            await api.put(`/review-assignments/${assignment.id}/reassign`, {
+                new_reviewer_id: selectedId, due_date: dueDate, override_workload_cap: overrideWorkloadCap,
+            });
             onSave();
-        } catch (e) { error(e.response?.data?.message || 'Failed to reassign.'); }
+        } catch (e) {
+            const msg = e.response?.data?.message || 'Failed to reassign.';
+            if (msg.includes('max workload')) {
+                error(msg, { action: { label: 'Assign Anyway', onClick: () => save(true) } });
+            } else {
+                error(msg);
+            }
+        }
         setSaving(false);
     };
 
@@ -409,7 +434,7 @@ function ReassignModal({ assignment, proposalId, currentAssignments, onSave, onC
                             className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-700 hover:bg-gray-50 font-medium transition-colors">
                             Cancel
                         </button>
-                        <button onClick={save} disabled={!selectedId || !dueDate || saving}
+                        <button onClick={() => save()} disabled={!selectedId || !dueDate || saving}
                             className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                             {saving ? <><RefreshCw size={13} className="animate-spin inline mr-1.5" />Saving…</> : 'Replace Reviewer'}
                         </button>
@@ -447,13 +472,22 @@ function AddReviewerModal({ proposalId, currentAssignments, onSave, onClose }) {
             .filter(Boolean)
     );
 
-    const save = async () => {
+    const save = async (overrideWorkloadCap = false) => {
         if (!selectedId || !dueDate) return;
         setSaving(true);
         try {
-            await api.post(`/proposals/${proposalId}/review/add-reviewer`, { reviewer_id: selectedId, due_date: dueDate });
+            await api.post(`/proposals/${proposalId}/review/add-reviewer`, {
+                reviewer_id: selectedId, due_date: dueDate, override_workload_cap: overrideWorkloadCap,
+            });
             onSave();
-        } catch (e) { error(e.response?.data?.message || 'Failed to add reviewer.'); }
+        } catch (e) {
+            const msg = e.response?.data?.message || 'Failed to add reviewer.';
+            if (msg.includes('max workload')) {
+                error(msg, { action: { label: 'Assign Anyway', onClick: () => save(true) } });
+            } else {
+                error(msg);
+            }
+        }
         setSaving(false);
     };
 
@@ -477,7 +511,7 @@ function AddReviewerModal({ proposalId, currentAssignments, onSave, onClose }) {
                             className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-700 hover:bg-gray-50 font-medium transition-colors">
                             Cancel
                         </button>
-                        <button onClick={save} disabled={!selectedId || !dueDate || saving}
+                        <button onClick={() => save()} disabled={!selectedId || !dueDate || saving}
                             className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                             {saving ? <><RefreshCw size={13} className="animate-spin inline mr-1.5" />Adding…</> : 'Add Reviewer'}
                         </button>
@@ -747,9 +781,20 @@ export default function BlindReview() {
     const isCollegeOfficer = hasRole('college_officer');
     const [view, setView] = useViewPreference('blind_review', 'card');
     const [activeTab, setActiveTab] = useState('active');
+    const awaitingSectionRef = useRef(null);
+    const underReviewSectionRef = useRef(null);
+
+    const jumpToSection = (ref, tab) => {
+        if (tab) setActiveTab(tab);
+        // Tab-filtered content swaps in on the next render — wait a tick so the
+        // section (and its now-correct height) exists before scrolling to it.
+        requestAnimationFrame(() => ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    };
 
     const [allProposals, setAllProposals]        = useState([]);
     const [yearFilter, setYearFilter]            = useState(app_settings?.current_academic_year ?? '');
+    const [categoryFilter, setCategoryFilter]    = useState('');
+    const [collegeFilter, setCollegeFilter]      = useState('');
     const [loading, setLoading]                  = useState(true);
     const [reassignModal, setReassignModal]       = useState(null);
     const [addReviewerModal, setAddReviewerModal] = useState(null);
@@ -794,9 +839,15 @@ export default function BlindReview() {
         load();
     };
 
-    // ── Year options & client-side year filter ──
-    const availableYears = [...new Set(allProposals.map(p => p.academic_year).filter(Boolean))].sort().reverse();
-    const proposals      = yearFilter ? allProposals.filter(p => p.academic_year === yearFilter) : allProposals;
+    // ── Year/category/college options & client-side filters ──
+    const availableYears      = [...new Set(allProposals.map(p => p.academic_year).filter(Boolean))].sort().reverse();
+    const availableCategories = [...new Set(allProposals.map(p => p.category).filter(Boolean))].sort();
+    const availableColleges   = [...new Map(allProposals.filter(p => p.college).map(p => [p.college.id, p.college])).values()]
+        .sort((a, b) => a.name.localeCompare(b.name));
+    const proposals = allProposals
+        .filter(p => !yearFilter || p.academic_year === yearFilter)
+        .filter(p => !categoryFilter || p.category === categoryFilter)
+        .filter(p => !collegeFilter || p.college_id === collegeFilter);
 
     // ── Data slices ──
     const validated   = proposals.filter(p => p.status === 'validated');
@@ -839,7 +890,7 @@ export default function BlindReview() {
                 )}
 
                 {/* ── Page header ── */}
-                <div className="flex items-start justify-between mb-6 gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-6 gap-4">
                     <div className="flex items-center gap-4">
                         <div className="h-12 w-12 bg-indigo-600 rounded-2xl flex items-center justify-center shrink-0 shadow-sm shadow-indigo-200">
                             <EyeOff size={22} className="text-white" />
@@ -849,12 +900,49 @@ export default function BlindReview() {
                             <p className="text-sm text-gray-500 mt-0.5">Assign reviewers to validated proposals and track review progress</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <FilterBar
+                        accent="indigo"
+                        activeCount={[collegeFilter, categoryFilter, yearFilter].filter(Boolean).length}
+                        trailing={
+                            <>
+                                <ViewToggle view={view} onChange={setView} />
+                                <button onClick={load}
+                                    className="flex items-center gap-2 px-3.5 py-2.5 sm:py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors font-medium shrink-0">
+                                    <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+                                    <span className="hidden sm:inline">Refresh</span>
+                                </button>
+                            </>
+                        }
+                    >
+                        {availableColleges.length > 1 && (
+                            <select
+                                value={collegeFilter}
+                                onChange={e => { setCollegeFilter(e.target.value); setActiveTab('active'); }}
+                                className="w-full sm:w-auto text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                            >
+                                <option value="">All Colleges</option>
+                                {availableColleges.map(c => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                            </select>
+                        )}
+                        {availableCategories.length > 1 && (
+                            <select
+                                value={categoryFilter}
+                                onChange={e => { setCategoryFilter(e.target.value); setActiveTab('active'); }}
+                                className="w-full sm:w-auto text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                            >
+                                <option value="">All Categories</option>
+                                {availableCategories.map(c => (
+                                    <option key={c} value={c}>{getCategoryLabel(c)}</option>
+                                ))}
+                            </select>
+                        )}
                         {availableYears.length > 0 && (
                             <select
                                 value={yearFilter}
                                 onChange={e => { setYearFilter(e.target.value); setActiveTab('active'); }}
-                                className="text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                                className="w-full sm:w-auto text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
                             >
                                 <option value="">All Years</option>
                                 {availableYears.map(y => (
@@ -862,21 +950,20 @@ export default function BlindReview() {
                                 ))}
                             </select>
                         )}
-                        <ViewToggle view={view} onChange={setView} />
-                        <button onClick={load}
-                            className="flex items-center gap-2 px-3.5 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors font-medium">
-                            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
-                        </button>
-                    </div>
+                    </FilterBar>
                 </div>
 
                 {/* ── Stat cards ── */}
                 {!loading && allProposals.length > 0 && (
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
-                        <StatCard icon={Shield}      label="Awaiting Assignment" value={validated.length}   color="indigo" />
-                        <StatCard icon={EyeOff}      label="Under Review"        value={underReview.length} color="purple" />
-                        <StatCard icon={Activity}    label="Reviews Submitted"   value={`${totalSubmitted}/${totalAssignments}`} sub="of assigned reviews" color="blue" />
-                        <StatCard icon={AlertCircle} label="Overdue Reviews"     value={totalOverdue} color={totalOverdue > 0 ? 'red' : 'gray'} />
+                        <StatCard icon={Shield}      label="Awaiting Assignment" value={validated.length}   color="indigo"
+                            onClick={validated.length > 0 ? () => jumpToSection(awaitingSectionRef) : undefined} />
+                        <StatCard icon={EyeOff}      label="Under Review"        value={underReview.length} color="purple"
+                            onClick={underReview.length > 0 ? () => jumpToSection(underReviewSectionRef, 'active') : undefined} />
+                        <StatCard icon={Activity}    label="Reviews Submitted"   value={`${totalSubmitted}/${totalAssignments}`} sub="of assigned reviews" color="blue"
+                            onClick={tabComplete.length > 0 ? () => jumpToSection(underReviewSectionRef, 'complete') : undefined} />
+                        <StatCard icon={AlertCircle} label="Overdue Reviews"     value={totalOverdue} color={totalOverdue > 0 ? 'red' : 'gray'}
+                            onClick={tabOverdue.length > 0 ? () => jumpToSection(underReviewSectionRef, 'overdue') : undefined} />
                     </div>
                 )}
 
@@ -902,7 +989,7 @@ export default function BlindReview() {
 
                         {/* ── Awaiting assignment (above tabs) ── */}
                         {validated.length > 0 && (
-                            <div>
+                            <div ref={awaitingSectionRef} className="scroll-mt-4">
                                 <div className="border-l-4 border-l-indigo-500 pl-4 mb-4">
                                     <div className="flex items-center gap-3">
                                         <UserCheck size={18} className="text-indigo-600" />
@@ -933,7 +1020,7 @@ export default function BlindReview() {
 
                         {/* ── Under Blind Review (tabbed) ── */}
                         {underReview.length > 0 && (
-                            <div>
+                            <div ref={underReviewSectionRef} className="scroll-mt-4">
                                 <div className="border-l-4 border-l-purple-500 pl-4 mb-5">
                                     <div className="flex items-center gap-3">
                                         <EyeOff size={18} className="text-purple-600" />

@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AbstractAdminController;
 use App\Http\Controllers\Api\AbstractController;
 use App\Http\Controllers\Api\ActionCountController;
+use App\Http\Controllers\Api\AnalyticsController;
 use App\Http\Controllers\Api\AnnualReportController;
 use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\AuthController;
@@ -37,11 +38,13 @@ use App\Http\Controllers\Api\LoginNoticeController;
 use App\Http\Controllers\Api\LookupOptionController;
 use App\Http\Controllers\Api\MidtermEvaluationController;
 use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\OngoingProposalsController;
 use App\Http\Controllers\Api\ProposalAiScoreController;
 use App\Http\Controllers\Api\ProposalAppealController;
 use App\Http\Controllers\Api\ProposalArchiveController;
 use App\Http\Controllers\Api\ProposalCallController;
 use App\Http\Controllers\Api\ProposalController;
+use App\Http\Controllers\Api\ProposalPipelineController;
 use App\Http\Controllers\Api\ProposalValidationController;
 use App\Http\Controllers\Api\ProposalWizardController;
 use App\Http\Controllers\Api\ReportController;
@@ -51,6 +54,7 @@ use App\Http\Controllers\Api\ResearchImpactController;
 use App\Http\Controllers\Api\ResearchOutputController;
 use App\Http\Controllers\Api\ResourceController;
 use App\Http\Controllers\Api\ReviewController;
+use App\Http\Controllers\Api\ReviewDeadlineController;
 use App\Http\Controllers\Api\ReviewerMatchController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\SettingsController;
@@ -357,11 +361,29 @@ Route::prefix('v1')->group(function () {
         Route::post('/review-assignments/{id}/declare-coi', [ReviewController::class, 'declareCoi']);
         Route::post('/proposal-members/{id}/respond-invitation', [ReviewController::class, 'respondInvitation']);
 
+        // Overdue reviews dashboard — reminder history is shared with the daily
+        // rtt:review-deadline-reminders scheduled command via ReviewReminderService.
+        Route::get('/admin/review-deadlines', [ReviewDeadlineController::class, 'index']);
+        Route::middleware('throttle:20,1')->post('/review-assignments/{id}/remind', [ReviewDeadlineController::class, 'remind']);
+        // One click can remind up to MAX_BULK_IDS (100) reviewers in a single request,
+        // so this needs a much higher per-minute ceiling than the single-remind route —
+        // the real anti-spam guard is the per-assignment cooldown inside
+        // ReviewReminderService::sendReminder(), not this request-rate limit.
+        Route::middleware('throttle:30,1')->post('/review-assignments/bulk-remind', [ReviewDeadlineController::class, 'bulkRemind']);
+
         // Appeals
         Route::post('/proposals/{id}/appeal', [ProposalAppealController::class, 'store']);
         Route::get('/proposals/{id}/appeal', [ProposalAppealController::class, 'show']);
         Route::get('/appeals', [ProposalAppealController::class, 'index']);
         Route::post('/appeals/{id}/resolve', [ProposalAppealController::class, 'resolve']);
+
+        // Proposal pipeline — cross-phase status overview
+        Route::get('/proposal-pipeline', [ProposalPipelineController::class, 'index']);
+        Route::get('/proposal-pipeline/export', [ProposalPipelineController::class, 'export']);
+
+        // Ongoing proposals — consolidated post-award monitoring view (funded/midterm_evaluation)
+        Route::get('/ongoing-proposals', [OngoingProposalsController::class, 'index']);
+        Route::get('/ongoing-proposals/export', [OngoingProposalsController::class, 'export']);
 
         // Central evaluation
         Route::get('/central-evaluation', [CentralEvaluationController::class, 'index']);
@@ -493,6 +515,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/proposals/{proposal}/ai-score', [ProposalAiScoreController::class, 'show']);
             Route::post('/proposals/{proposal}/ai-score/generate', [ProposalAiScoreController::class, 'generate']);
             Route::get('/proposals/{id}/review-results', [ReviewController::class, 'proposalReviewResults']);
+            Route::get('/proposals/{id}/review-results/recalculate', [ReviewController::class, 'recalculateReviewScore']);
             Route::get('/proposals/{proposal}/reviewer-suggestions', [ReviewerMatchController::class, 'suggestions']);
             Route::post('/proposals/{proposal}/clone', [ProposalController::class, 'clone']);
 
@@ -511,10 +534,14 @@ Route::prefix('v1')->group(function () {
             Route::delete('/admin/repository/{id}', [RepositoryController::class, 'unpublish']);
         });
 
+        Route::get('/admin/analytics', [AnalyticsController::class, 'index']);
+
         // ── Reports module (feature: reports) ─────────────────────────────────
         Route::middleware('feature:reports')->group(function () {
             Route::get('/reports', [ReportController::class, 'index']);
             Route::post('/reports/generate', [ReportController::class, 'generate']);
+            Route::get('/reports/builder-options', [ReportController::class, 'builderOptions']);
+            Route::get('/reports/{id}/export', [ReportController::class, 'exportExcel']);
             Route::get('/reports/{id}', [ReportController::class, 'show']);
         });
         Route::get('/reports/proposals/export', [ReportController::class, 'exportProposals']);

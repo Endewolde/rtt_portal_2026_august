@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Exports\ProposalsExport;
+use App\Exports\ReportSnapshotExport;
 use App\Http\Controllers\Controller;
 use App\Models\Proposal;
 use App\Models\ReportSnapshot;
@@ -28,26 +29,128 @@ class ReportController extends Controller
         return response()->json(['data' => $snapshots]);
     }
 
+    /** Whitelisted subjects/dimensions/metrics the report builder UI can offer. */
+    public function builderOptions(Request $request): JsonResponse
+    {
+        if (! $request->user()?->hasAnyRole(['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer', 'college_officer'])) {
+            abort(403, 'Unauthorized.');
+        }
+
+        return response()->json(['data' => $this->service->builderOptions(), 'message' => '', 'errors' => [], 'meta' => []]);
+    }
+
     public function generate(Request $request): JsonResponse
     {
+        $user = $request->user();
+
+        if (! $user?->hasAnyRole(['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer', 'college_officer'])) {
+            abort(403, 'Unauthorized.');
+        }
+
         $request->validate(['type' => 'required|string']);
 
-        $snapshot = $this->service->generate(
-            $request->type,
-            $request->input('filters', []),
-            $request->user()
-        );
+        $filters = $request->input('filters', []);
+
+        // College officers can only ever generate reports scoped to their own college —
+        // override whatever the client sent rather than merely defaulting to it.
+        if ($user->hasRole('college_officer')) {
+            $filters['college_id'] = $user->college_id;
+        }
+
+        $snapshot = $this->service->generate($request->type, $filters, $user);
 
         $status = $snapshot->status === 'processing' ? 202 : 200;
 
         return response()->json(['data' => $snapshot], $status);
     }
 
-    public function show(string $id): JsonResponse
+    public function show(string $id, Request $request): JsonResponse
     {
+        $user = $request->user();
         $snapshot = ReportSnapshot::findOrFail($id);
 
+        if ($snapshot->requested_by !== $user?->id && ! $user?->hasAnyRole(['super_admin', 'admin', 'central_officer'])) {
+            abort(403, 'Unauthorized.');
+        }
+
         return response()->json(['data' => $snapshot]);
+    }
+
+    /** Export any ready report snapshot's result as an Excel file — works for every report type. */
+    public function exportExcel(string $id, Request $request): BinaryFileResponse
+    {
+        $user = $request->user();
+        $snapshot = ReportSnapshot::findOrFail($id);
+
+        if ($snapshot->requested_by !== $user?->id && ! $user?->hasAnyRole(['super_admin', 'admin', 'central_officer'])) {
+            abort(403, 'Unauthorized.');
+        }
+
+        if ($snapshot->status !== 'ready' || empty($snapshot->result)) {
+            abort(422, 'This report has no data to export yet.');
+        }
+
+        [$rows, $fields] = $this->tabulateResult($snapshot->result);
+
+        if (empty($rows)) {
+            abort(422, 'This report type cannot be exported to Excel.');
+        }
+
+        $columns = collect($fields)->mapWithKeys(fn ($f) => [$f => $this->columnLabel($f)])->all();
+        $filename = $snapshot->report_type.'_'.now()->format('Ymd_His').'.xlsx';
+
+        return Excel::download(new ReportSnapshotExport($rows, $columns), $filename);
+    }
+
+    /**
+     * Normalize any report result shape into a flat [rows, fieldNames] pair.
+     * Handles the report-builder's {dimensions, metrics, rows} shape as well as the
+     * plain list-of-rows shape every other report type returns.
+     *
+     * @return array{0: array<int, array<string, mixed>>, 1: string[]}
+     */
+    private function tabulateResult(array $result): array
+    {
+        if (isset($result['rows']) && is_array($result['rows'])) {
+            $fields = array_merge($result['dimensions'] ?? [], $result['metrics'] ?? []);
+
+            return [$result['rows'], $fields];
+        }
+
+        if (array_is_list($result) && ! empty($result) && is_array($result[0])) {
+            return [$result, array_keys($result[0])];
+        }
+
+        return [[], []];
+    }
+
+    private const COLUMN_LABELS = [
+        'college' => 'College', 'college_name' => 'College', 'category' => 'Category',
+        'status' => 'Status', 'academic_year' => 'Academic Year', 'level' => 'Level',
+        'complaint_type' => 'Complaint Type', 'stage' => 'Stage', 'code' => 'Code',
+        'count' => 'Count', 'total' => 'Total', 'total_proposals' => 'Total Proposals',
+        'total_submitted' => 'Total Submitted', 'total_accepted' => 'Total Accepted',
+        'funded' => 'Funded', 'funded_count' => 'Funded', 'rejected' => 'Rejected',
+        'rejected_count' => 'Rejected', 'accepted' => 'Accepted',
+        'submitted' => 'Submitted', 'validated' => 'Validated', 'under_review' => 'Under Review',
+        'archived' => 'Archived', 'unresolved' => 'Unresolved', 'resolved' => 'Resolved',
+        'dismissed' => 'Dismissed', 'level_1_college' => 'Level 1 (College)',
+        'level_2_officer' => 'Level 2 (Officer)', 'avg_resolution_days' => 'Avg Resolution (days)',
+        'approval_rate_percent' => 'Approval Rate (%)', 'rejection_rate_percent' => 'Rejection Rate (%)',
+        'pass_rate' => 'Pass Rate (%)', 'reviewer_name' => 'Reviewer', 'total_assigned' => 'Total Assigned',
+        'pending' => 'Pending', 'average_days_to_review' => 'Avg Days to Review',
+        'submitted_count' => 'Submitted', 'avg_days_to_review' => 'Avg Days to Review',
+        'proposal_title' => 'Proposal Title', 'tracker_number' => 'Tracker Number',
+        'allocated' => 'Allocated', 'disbursed' => 'Disbursed', 'settled' => 'Settled',
+        'utilization_percent' => 'Utilization (%)', 'outputs_produced' => 'Outputs Produced',
+        'publications_count' => 'Publications', 'total_awarded' => 'Total Awarded',
+        'proposals_submitted' => 'Proposals Submitted', 'proposals_accepted' => 'Proposals Accepted',
+        'stage_label' => 'Stage',
+    ];
+
+    private function columnLabel(string $key): string
+    {
+        return self::COLUMN_LABELS[$key] ?? ucwords(str_replace('_', ' ', $key));
     }
 
     /** Export proposals as an Excel file, filtered by status, college, category, and academic year. */

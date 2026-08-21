@@ -1,6 +1,5 @@
 <?php
 
-use App\Http\Controllers\Admin\AnalyticsController;
 use App\Http\Controllers\Auth\OAuthController;
 use App\Http\Controllers\DocumentController;
 use App\Models\AppSetting;
@@ -69,12 +68,15 @@ Route::get('/admin/evaluation-criteria', fn () => Inertia::render('Admin/Evaluat
 Route::get('/admin/blind-review', fn () => Inertia::render('Admin/BlindReview'));
 Route::get('/admin/open-defence', fn () => Inertia::render('Admin/OpenDefence'));
 Route::get('/admin/central-evaluation', fn () => Inertia::render('Admin/CentralEvaluation'));
+Route::get('/admin/proposal-pipeline', fn () => Inertia::render('Admin/ProposalPipeline'));
+Route::get('/admin/review-deadlines', fn () => Inertia::render('Admin/ReviewDeadlines'));
 Route::get('/admin/funding', fn () => Inertia::render('Admin/ProposalFunding'));
 Route::get('/admin/awarded', fn () => Inertia::render('Admin/AwardedProposals'));
 Route::get('/admin/completed-archive', fn () => Inertia::render('Admin/CompletedArchive'));
 Route::get('/admin/review-assignment/{id}', fn () => Inertia::render('Admin/ReviewAssignment'));
 Route::get('/reports', fn () => Inertia::render('Reports/Index'));
-Route::get('/admin/analytics', [AnalyticsController::class, 'index'])->name('admin.analytics');
+Route::get('/reports/builder', fn () => Inertia::render('Reports/Builder'));
+Route::get('/admin/analytics', fn () => Inertia::render('Admin/Analytics'))->name('admin.analytics');
 Route::get('/admin/login-notices', fn () => Inertia::render('Admin/LoginNotices'));
 Route::get('/admin/faqs', fn () => Inertia::render('Admin/Faqs'));
 Route::get('/admin/feedback', fn () => Inertia::render('Admin/Feedback'));
@@ -100,6 +102,7 @@ Route::get('/admin/resources', fn () => Inertia::render('Admin/Resources'));
 Route::get('/budget-allocations', fn () => Inertia::render('Finance/BudgetAllocations'));
 Route::get('/disbursements', fn () => Inertia::render('Finance/Disbursements'));
 Route::get('/settlements', fn () => Inertia::render('Finance/Settlements'));
+Route::get('/ongoing-proposals', fn () => Inertia::render('Monitoring/OngoingProposals'));
 Route::get('/midterm-evaluations', fn () => Inertia::render('Monitoring/MidtermEvaluations'));
 Route::get('/completion-workshops', fn () => Inertia::render('Monitoring/CompletionWorkshops'));
 Route::get('/research-outputs', fn () => Inertia::render('Monitoring/ResearchOutputs'));

@@ -11,6 +11,7 @@ use App\Models\ReviewAssignment;
 use App\Models\ReviewScore;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -47,23 +48,39 @@ class ReviewScoreService
             }
         }
 
+        // A required question left unanswered would otherwise be silently excluded from
+        // both the numerator and denominator when the score is calculated, inflating the
+        // percentage instead of dragging it down. The frontend already blocks this, but it
+        // must be enforced here too since this endpoint can be called directly.
+        $assignment->loadMissing('evaluationType.categories.questions');
+        $requiredQuestionIds = ($assignment->evaluationType?->categories ?? collect())
+            ->flatMap(fn ($category) => $category->questions)
+            ->where('is_required', true)
+            ->pluck('id');
+        $answeredQuestionIds = collect($answers)->pluck('question_id');
+        $missing = $requiredQuestionIds->diff($answeredQuestionIds);
+
+        if ($missing->isNotEmpty()) {
+            throw new InvalidScoreException('All required questions must be answered before submitting.');
+        }
+
         DB::transaction(function () use ($assignment, $answers) {
             foreach ($answers as $answer) {
                 ReviewScore::updateOrCreate(
                     [
-                        'review_assignment_id'   => $assignment->id,
+                        'review_assignment_id' => $assignment->id,
                         'evaluation_question_id' => $answer['question_id'],
                     ],
                     [
-                        'score'          => $answer['score'],
-                        'comment'        => $answer['comment'] ?? null,
+                        'score' => $answer['score'],
+                        'comment' => $answer['comment'] ?? null,
                         'recommendation' => $answer['recommendation'] ?? null,
                     ]
                 );
             }
 
             $assignment->update([
-                'status'       => 'submitted',
+                'status' => 'submitted',
                 'submitted_at' => now(),
             ]);
         });
@@ -77,7 +94,7 @@ class ReviewScoreService
         } catch (\Throwable $e) {
             Log::error('Auto-transition failed after score submission', [
                 'assignment_id' => $assignment->id,
-                'error'         => $e->getMessage(),
+                'error' => $e->getMessage(),
             ]);
         }
 
@@ -109,7 +126,7 @@ class ReviewScoreService
         }
 
         $scheduledDate = Carbon::parse($session->scheduled_date)->startOfDay();
-        $today         = Carbon::today();
+        $today = Carbon::today();
 
         if ($today->lt($scheduledDate)) {
             throw new \RuntimeException(
@@ -140,39 +157,29 @@ class ReviewScoreService
      */
     public function calculateScore(ReviewAssignment $assignment): float
     {
-        $scores = ReviewScore::where('review_assignment_id', $assignment->id)
-            ->with('evaluationQuestion.category')
-            ->get();
+        $categories = $this->categoryBreakdown($assignment);
 
-        if ($scores->isEmpty()) {
+        if ($categories->isEmpty()) {
             return 0.0;
         }
 
-        $byCategory = $scores->groupBy(fn ($s) => $s->evaluationQuestion?->evaluation_category_id ?? 'none');
-
-        $allHaveWeight = $byCategory->every(
-            fn ($catScores) => ($catScores->first()->evaluationQuestion?->category?->weight ?? 0) > 0
-        );
+        $allHaveWeight = $categories->every(fn ($c) => $c['weight'] > 0);
 
         if ($allHaveWeight) {
             $weightedSum = 0.0;
             $totalWeight = 0.0;
 
-            foreach ($byCategory as $catScores) {
-                $category    = $catScores->first()->evaluationQuestion->category;
-                $catEarned   = $catScores->sum('score');
-                $catMax      = $catScores->sum(fn ($s) => $s->evaluationQuestion->max_score);
-                $catPct      = $catMax > 0 ? $catEarned / $catMax : 0.0;
-
-                $weightedSum += $catPct * $category->weight;
-                $totalWeight += $category->weight;
+            foreach ($categories as $c) {
+                $catPct = $c['max'] > 0 ? $c['earned'] / $c['max'] : 0.0;
+                $weightedSum += $catPct * $c['weight'];
+                $totalWeight += $c['weight'];
             }
 
             return $totalWeight > 0 ? round(($weightedSum / $totalWeight) * 100, 2) : 0.0;
         }
 
-        $totalScore    = $scores->sum('score');
-        $totalMaxScore = $scores->sum(fn ($s) => $s->evaluationQuestion->max_score);
+        $totalScore = $categories->sum('earned');
+        $totalMaxScore = $categories->sum('max');
 
         return $totalMaxScore > 0 ? round(($totalScore / $totalMaxScore) * 100, 2) : 0.0;
     }
@@ -186,46 +193,187 @@ class ReviewScoreService
      */
     public function calculateWeightedDisplay(ReviewAssignment $assignment): array
     {
-        $scores = ReviewScore::where('review_assignment_id', $assignment->id)
-            ->with('evaluationQuestion.category')
-            ->get();
+        $categories = $this->categoryBreakdown($assignment);
 
-        if ($scores->isEmpty()) {
+        if ($categories->isEmpty()) {
             return ['score' => 0.0, 'max' => 0.0];
         }
 
-        $byCategory    = $scores->groupBy(fn ($s) => $s->evaluationQuestion?->evaluation_category_id ?? 'none');
-        $allHaveWeight = $byCategory->every(
-            fn ($cs) => ($cs->first()->evaluationQuestion?->category?->weight ?? 0) > 0
-        );
+        $allHaveWeight = $categories->every(fn ($c) => $c['weight'] > 0);
 
         if ($allHaveWeight) {
             $weightedSum = 0.0;
             $totalWeight = 0.0;
 
-            foreach ($byCategory as $catScores) {
-                $category  = $catScores->first()->evaluationQuestion->category;
-                $catEarned = $catScores->sum('score');
-                $catMax    = $catScores->sum(fn ($s) => $s->evaluationQuestion->max_score);
-                $catPct    = $catMax > 0 ? $catEarned / $catMax : 0.0;
-
-                $weightedSum += $catPct * $category->weight;
-                $totalWeight += $category->weight;
+            foreach ($categories as $c) {
+                $catPct = $c['max'] > 0 ? $c['earned'] / $c['max'] : 0.0;
+                $weightedSum += $catPct * $c['weight'];
+                $totalWeight += $c['weight'];
             }
 
             return ['score' => round($weightedSum, 2), 'max' => $totalWeight];
         }
 
-        $totalScore = $scores->sum('score');
-        $totalMax   = $scores->sum(fn ($s) => $s->evaluationQuestion->max_score);
+        return ['score' => (float) $categories->sum('earned'), 'max' => (float) $categories->sum('max')];
+    }
 
-        return ['score' => (float) $totalScore, 'max' => (float) $totalMax];
+    /**
+     * Per-category earned/max points for an assignment, computed from EVERY question
+     * defined on the assignment's evaluation type — not only the questions that were
+     * actually scored. This matters: a category (or a required question) left entirely
+     * unscored must still count its full weight/max toward the denominator, otherwise
+     * an incomplete submission can inflate the percentage instead of dragging it down.
+     *
+     * @return Collection<int, array{weight: float, earned: float, max: float}>
+     */
+    private function categoryBreakdown(ReviewAssignment $assignment): Collection
+    {
+        $assignment->loadMissing('evaluationType.categories.questions');
+
+        $categories = $assignment->evaluationType?->categories ?? collect();
+
+        if ($categories->isEmpty()) {
+            return collect();
+        }
+
+        $scoresByQuestion = ReviewScore::where('review_assignment_id', $assignment->id)
+            ->pluck('score', 'evaluation_question_id');
+
+        return $categories->map(function ($category) use ($scoresByQuestion) {
+            $earned = 0.0;
+            $max = 0.0;
+
+            foreach ($category->questions as $question) {
+                $max += $question->max_score;
+                $earned += (float) ($scoresByQuestion[$question->id] ?? 0);
+            }
+
+            return ['weight' => (float) $category->weight, 'earned' => $earned, 'max' => $max];
+        });
+    }
+
+    /**
+     * Read a threshold setting's live, user-configured value — no hardcoded fallback
+     * number. If it isn't configured, that's a real misconfiguration: it's logged and
+     * treated as 0 (a fail-safe "no bar set" rather than guessing a business number).
+     */
+    private function thresholdValue(string $key): float
+    {
+        $value = DB::table('threshold_settings')->where('key', $key)->value('value');
+
+        if ($value === null) {
+            Log::error("Threshold setting '{$key}' is not configured in threshold_settings.");
+
+            return 0.0;
+        }
+
+        return (float) $value;
+    }
+
+    /**
+     * Which rule decides whether a proposal advances past open defence — configurable
+     * from Settings > Review Thresholds, never hardcoded:
+     *   - 'combined_only' (default): (blind + defence) >= combined_threshold is the
+     *     sole gate. defence_threshold is informational only.
+     *   - 'strict_all': blind must ALSO individually clear blind_threshold, defence
+     *     must ALSO individually clear defence_threshold, in addition to the combined
+     *     total clearing combined_threshold — all three must hold.
+     */
+    private function combinedDecisionMode(): string
+    {
+        $value = DB::table('app_settings')->where('key', 'combined_decision_mode')->value('value');
+
+        return in_array($value, ['combined_only', 'strict_all'], true) ? $value : 'combined_only';
+    }
+
+    /**
+     * Live, read-only snapshot of a proposal's blind review / open defence scores
+     * against the CURRENT threshold settings and CURRENT evaluation-criteria weights —
+     * recomputed fresh every call, never cached or persisted. Used both to decide the
+     * automatic pass/fail transitions below and to power an on-demand "Recalculate"
+     * action so staff can always confirm a proposal's numbers are up to date, even
+     * after editing thresholds or evaluation criteria post-decision.
+     *
+     * @return array{
+     *     blind: array{score: float, max: float}|null,
+     *     defence: array{score: float, max: float}|null,
+     *     combined: float,
+     *     combined_max: float,
+     *     blind_threshold: float,
+     *     defence_threshold: float,
+     *     combined_threshold: float,
+     *     decision_mode: string,
+     *     blind_passes: bool|null,
+     *     defence_below_threshold: bool|null,
+     *     combined_passes: bool|null,
+     * }
+     */
+    public function recalculateSnapshot(Proposal $proposal): array
+    {
+        $blindAssignments = ReviewAssignment::where('proposal_id', $proposal->id)
+            ->whereHas('evaluationType', fn ($q) => $q->where('name', 'like', 'blind_review%'))
+            ->where('status', 'submitted')
+            ->get();
+        $defenceAssignments = ReviewAssignment::where('proposal_id', $proposal->id)
+            ->whereHas('evaluationType', fn ($q) => $q->where('name', 'like', 'open_defence%'))
+            ->where('status', 'submitted')
+            ->get();
+
+        $blindDisplayInfos = $blindAssignments->map(fn ($a) => $this->calculateWeightedDisplay($a));
+        $defenceDisplayInfos = $defenceAssignments->map(fn ($a) => $this->calculateWeightedDisplay($a));
+
+        $blind = $blindDisplayInfos->isNotEmpty()
+            ? ['score' => round($blindDisplayInfos->avg('score'), 2), 'max' => $blindDisplayInfos->first()['max']]
+            : null;
+        $defence = $defenceDisplayInfos->isNotEmpty()
+            ? ['score' => round($defenceDisplayInfos->avg('score'), 2), 'max' => $defenceDisplayInfos->first()['max']]
+            : null;
+
+        $combined = ($blind['score'] ?? 0.0) + ($defence['score'] ?? 0.0);
+        $combinedMax = ($blind['max'] ?? 0.0) + ($defence['max'] ?? 0.0);
+
+        $blindThreshold = $this->thresholdValue('blind_threshold');
+        $defenceThreshold = $this->thresholdValue('defence_threshold');
+        $combinedThreshold = $this->thresholdValue('combined_threshold');
+        $mode = $this->combinedDecisionMode();
+
+        $blindPasses = $blind === null ? null : $blind['score'] >= $blindThreshold;
+        $defenceBelowThreshold = $defence === null ? null : $defence['score'] < $defenceThreshold;
+        $meetsCombinedBar = $defence === null ? null : $combined >= $combinedThreshold;
+
+        $combinedPasses = match (true) {
+            $defence === null => null,
+            $mode === 'strict_all' => ($blindPasses ?? false) && ! $defenceBelowThreshold && $meetsCombinedBar,
+            default => $meetsCombinedBar,
+        };
+
+        return [
+            'blind' => $blind,
+            'defence' => $defence,
+            'combined' => round($combined, 2),
+            'combined_max' => $combinedMax,
+            'blind_threshold' => $blindThreshold,
+            'defence_threshold' => $defenceThreshold,
+            'combined_threshold' => $combinedThreshold,
+            'decision_mode' => $mode,
+            'blind_passes' => $blindPasses,
+            'defence_below_threshold' => $defenceBelowThreshold,
+            'combined_passes' => $combinedPasses,
+        ];
     }
 
     /**
      * When all open-defence scores are in, calculate the combined (blind + defence)
-     * score and automatically transition the proposal to accepted or rejected.
+     * raw score and automatically transition the proposal to accepted or rejected.
      * Mirrors processBlindReviewResult — no manual trigger needed.
+     *
+     * The actual pass/fail rule is decided by recalculateSnapshot()'s `combined_passes`,
+     * which respects the configurable `combined_decision_mode` setting:
+     *   - 'combined_only' (default): combined_threshold is the sole gate; defence_threshold
+     *     is informational only (recorded but doesn't block advancement).
+     *   - 'strict_all': blind, defence, AND combined must each individually clear their
+     *     own threshold.
+     * Never hardcode this rule here — always read it from the snapshot.
      */
     public function processOpenDefenceResultIfComplete(Proposal $proposal): void
     {
@@ -246,20 +394,17 @@ class ReviewScoreService
             return;
         }
 
-        $blindAssignments = ReviewAssignment::where('proposal_id', $proposal->id)
-            ->whereHas('evaluationType', fn ($q) => $q->where('name', 'like', 'blind_review%'))
-            ->where('status', 'submitted')
-            ->get();
-
-        $blindScore   = $blindAssignments->isNotEmpty()
-            ? $blindAssignments->map(fn ($a) => $this->calculateScore($a))->avg()
-            : 0;
-        $defenceScore = $defenceAssignments->map(fn ($a) => $this->calculateScore($a))->avg();
-        $combined     = $blindScore + $defenceScore;
-
-        $threshold = (float) (DB::table('threshold_settings')
-            ->where('key', 'combined_threshold')
-            ->value('value') ?? 120);
+        $snapshot = $this->recalculateSnapshot($proposal);
+        $blindRaw = $snapshot['blind']['score'] ?? 0.0;
+        $blindMax = $snapshot['blind']['max'] ?? 0.0;
+        $defenceRaw = $snapshot['defence']['score'] ?? 0.0;
+        $defenceMax = $snapshot['defence']['max'] ?? 0.0;
+        $combined = $snapshot['combined'];
+        $combinedMax = $snapshot['combined_max'];
+        $defenceThreshold = $snapshot['defence_threshold'];
+        $combinedThreshold = $snapshot['combined_threshold'];
+        $mode = $snapshot['decision_mode'];
+        $defenceBelowThreshold = $snapshot['defence_below_threshold'] ?? false;
 
         $systemActor = User::role('central_officer')->first()
             ?? User::role('super_admin')->first();
@@ -270,27 +415,23 @@ class ReviewScoreService
             return;
         }
 
-        // Build "X/max" display labels for the note
-        $blindDisplayInfos   = ReviewAssignment::where('proposal_id', $proposal->id)
-            ->whereHas('evaluationType', fn ($q) => $q->where('name', 'like', 'blind_review%'))
-            ->where('status', 'submitted')
-            ->get()
-            ->map(fn ($a) => $this->calculateWeightedDisplay($a));
+        $blindLabel = $blindMax > 0 ? "{$blindRaw}/{$blindMax}" : (string) $blindRaw;
+        $defenceLabel = $defenceMax > 0 ? "{$defenceRaw}/{$defenceMax}" : (string) $defenceRaw;
 
-        $defenceDisplayInfos = $defenceAssignments->map(fn ($a) => $this->calculateWeightedDisplay($a));
+        $passes = $snapshot['combined_passes'] ?? false;
+        $action = $passes ? 'pass_defence' : 'fail_defence';
+        $outcome = $passes ? 'passed' : 'failed';
+        $defenceNote = match (true) {
+            ! $defenceBelowThreshold => '',
+            $mode === 'strict_all' => " Open defence score ({$defenceRaw} < {$defenceThreshold}) did not individually clear its threshold — required under the 'strict' decision mode.",
+            default => " Note: open defence score is below its own threshold ({$defenceRaw} < {$defenceThreshold}) — flagged for central evaluation.",
+        };
 
-        $blindRaw    = $blindDisplayInfos->isNotEmpty() ? round($blindDisplayInfos->avg('score'), 2) : 0;
-        $blindMax    = $blindDisplayInfos->isNotEmpty() ? $blindDisplayInfos->first()['max'] : 0;
-        $defenceRaw  = round($defenceDisplayInfos->avg('score'), 2);
-        $defenceMax  = $defenceDisplayInfos->first()['max'] ?? 0;
-
-        $blindLabel   = $blindMax > 0   ? "{$blindRaw}/{$blindMax}"   : "{$blindScore}%";
-        $defenceLabel = $defenceMax > 0 ? "{$defenceRaw}/{$defenceMax}" : "{$defenceScore}%";
-
-        $action  = $combined >= $threshold ? 'pass_defence' : 'fail_defence';
-        $outcome = $combined >= $threshold ? 'passed' : 'failed';
-
-        DB::transaction(function () use ($proposal, $combined, $action, $outcome, $systemActor, $blindScore, $defenceScore, $threshold, $blindLabel, $defenceLabel) {
+        DB::transaction(function () use (
+            $proposal, $combined, $combinedMax, $action, $outcome, $systemActor,
+            $blindRaw, $defenceRaw, $defenceThreshold, $combinedThreshold, $defenceBelowThreshold, $mode,
+            $blindLabel, $defenceLabel, $defenceNote
+        ) {
             DefenceSession::where('proposal_id', $proposal->id)
                 ->where('status', 'scheduled')
                 ->latest()
@@ -300,14 +441,23 @@ class ReviewScoreService
                 $proposal,
                 $action,
                 $systemActor,
-                "Defence {$outcome} automatically. Blind: {$blindLabel}, Defence: {$defenceLabel}. Combined threshold: {$threshold}.",
-                ['blind_score' => $blindScore, 'defence_score' => $defenceScore, 'combined' => $combined]
+                "Defence {$outcome} automatically. Blind: {$blindLabel}, Defence: {$defenceLabel}. "
+                    ."Combined: {$combined}/{$combinedMax}. Combined threshold: {$combinedThreshold}.{$defenceNote}",
+                [
+                    'blind_score' => $blindRaw, 'defence_score' => $defenceRaw,
+                    'combined' => $combined, 'combined_max' => $combinedMax,
+                    'defence_threshold' => $defenceThreshold, 'combined_threshold' => $combinedThreshold,
+                    'defence_below_threshold' => $defenceBelowThreshold, 'decision_mode' => $mode,
+                ]
             );
         });
     }
 
     /**
-     * Check if all reviewers submitted. If yes, calculate average and transition proposal.
+     * Check if all reviewers submitted. If yes, calculate the raw weighted average and
+     * transition the proposal. `blind_threshold` is a RAW point value against the blind
+     * review evaluation type's actual category-weight sum (e.g. 60 out of a possible 80)
+     * — not a normalized 0–100 percentage.
      */
     public function processBlindReviewResult(Proposal $proposal): void
     {
@@ -329,36 +479,31 @@ class ReviewScoreService
             return;
         }
 
-        $averageScore = $assignments->map(fn ($a) => $this->calculateScore($a))->avg();
-
-        $threshold = (float) (DB::table('threshold_settings')
-            ->where('key', 'blind_threshold')
-            ->value('value') ?? 60);
-
-        // Build a human-readable "X/max" label using raw weighted scores
         $displayInfos = $assignments->map(fn ($a) => $this->calculateWeightedDisplay($a));
-        $rawAvg       = round($displayInfos->avg('score'), 2);
-        $rawMax       = $displayInfos->first()['max'];
-        $scoreLabel   = $rawMax > 0 ? "{$rawAvg}/{$rawMax}" : "{$averageScore}%";
+        $rawAvg = round($displayInfos->avg('score'), 2);
+        $rawMax = $displayInfos->first()['max'];
+        $scoreLabel = $rawMax > 0 ? "{$rawAvg}/{$rawMax}" : (string) $rawAvg;
+
+        $threshold = $this->thresholdValue('blind_threshold');
 
         $systemActor = User::role('central_officer')->first()
             ?? User::role('super_admin')->first();
 
-        if ($averageScore >= $threshold) {
+        if ($rawAvg >= $threshold) {
             $this->workflowService->transition(
                 $proposal,
                 'pass_blind_review',
                 $systemActor,
-                "Blind review passed. Average score: {$scoreLabel}. Threshold: {$threshold}%.",
-                ['average_score' => $averageScore, 'score_label' => $scoreLabel, 'threshold' => $threshold]
+                "Blind review passed. Average score: {$scoreLabel}. Threshold: {$threshold}.",
+                ['average_score' => $rawAvg, 'score_label' => $scoreLabel, 'threshold' => $threshold]
             );
         } else {
             $this->workflowService->transition(
                 $proposal,
                 'fail_blind_review',
                 $systemActor,
-                "Blind review failed. Average score: {$scoreLabel}. Threshold: {$threshold}%.",
-                ['average_score' => $averageScore, 'score_label' => $scoreLabel, 'threshold' => $threshold]
+                "Blind review failed. Average score: {$scoreLabel}. Threshold: {$threshold}.",
+                ['average_score' => $rawAvg, 'score_label' => $scoreLabel, 'threshold' => $threshold]
             );
         }
     }

@@ -32,6 +32,7 @@ class ReviewAssignment extends Model
 
     protected $casts = [
         'assigned_at' => 'datetime',
+        'due_date' => 'date',
         'submitted_at' => 'datetime',
         'coi_declared_at' => 'datetime',
         'is_external' => 'boolean',
@@ -60,5 +61,10 @@ class ReviewAssignment extends Model
     public function scores(): HasMany
     {
         return $this->hasMany(ReviewScore::class);
+    }
+
+    public function reminders(): HasMany
+    {
+        return $this->hasMany(ReviewReminder::class);
     }
 }

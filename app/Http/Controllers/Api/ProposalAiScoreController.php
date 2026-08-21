@@ -46,7 +46,7 @@ class ProposalAiScoreController extends Controller
         $score = $service->score($proposal);
 
         if ($score->status === 'failed') {
-            return response()->json(['data' => $score, 'message' => 'AI scoring failed. Check server logs for details.', 'errors' => []], 500);
+            return response()->json(['data' => $score, 'message' => $score->error_message ?? 'AI scoring failed. Check server logs for details.', 'errors' => []], 500);
         }
 
         return response()->json(['data' => $score, 'message' => 'Scoring complete.', 'errors' => []]);

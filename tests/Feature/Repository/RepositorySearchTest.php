@@ -11,6 +11,8 @@ use App\Services\RepositoryService;
 use Database\Seeders\RolePermissionSeeder;
 use Database\Seeders\WorkflowStageSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
 
@@ -24,14 +26,15 @@ beforeEach(function () {
 function repo_makeCollege(string $suffix = ''): array
 {
     $college = College::create(['name' => 'Repo College '.$suffix.rand(), 'code' => 'RC'.rand(10, 99)]);
-    $dept    = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'RD'.rand(10, 99)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'RD'.rand(10, 99)]);
 
     return [$college, $dept];
 }
 
 function repo_makeProposal(College $college, Department $dept, array $attrs = []): Proposal
 {
-    $central = User::factory()->create(); $central->assignRole('central_officer');
+    $central = User::factory()->create();
+    $central->assignRole('central_officer');
 
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research',
@@ -44,26 +47,26 @@ function repo_makeProposal(College $college, Department $dept, array $attrs = []
     $pi->assignRole('pi');
 
     return Proposal::create(array_merge([
-        'tracker_number'   => 'TRK-'.rand(100000, 999999),
+        'tracker_number' => 'TRK-'.rand(100000, 999999),
         'proposal_call_id' => $call->id, 'category' => 'research',
-        'title'            => 'Repository Proposal', 'status' => 'completed',
-        'pi_user_id'       => $pi->id, 'college_id' => $college->id,
-        'department_id'    => $dept->id, 'academic_year' => '2026', 'created_by' => $pi->id,
+        'title' => 'Repository Proposal', 'status' => 'completed',
+        'pi_user_id' => $pi->id, 'college_id' => $college->id,
+        'department_id' => $dept->id, 'academic_year' => '2026', 'created_by' => $pi->id,
     ], $attrs));
 }
 
 function repo_makeRecord(Proposal $proposal, array $attrs = []): RepositoryRecord
 {
     return RepositoryRecord::create(array_merge([
-        'proposal_id'  => $proposal->id,
-        'title'        => $proposal->title ?? 'Default Title',
-        'abstract'     => 'Abstract text for testing repository search.',
-        'keywords'     => 'testing search keyword',
-        'category'     => $proposal->category ?? 'research',
-        'college_id'   => $proposal->college_id,
-        'pi_name'      => 'Dr. Test PI',
-        'academic_year'=> $proposal->academic_year ?? '2026',
-        'status'       => 'published',
+        'proposal_id' => $proposal->id,
+        'title' => $proposal->title ?? 'Default Title',
+        'abstract' => 'Abstract text for testing repository search.',
+        'keywords' => 'testing search keyword',
+        'category' => $proposal->category ?? 'research',
+        'college_id' => $proposal->college_id,
+        'pi_name' => 'Dr. Test PI',
+        'academic_year' => $proposal->academic_year ?? '2026',
+        'status' => 'published',
     ], $attrs));
 }
 
@@ -161,11 +164,11 @@ test('tracker lookup history is anonymized — no reviewer real names', function
 
     WorkflowLog::create([
         'proposal_id' => $proposal->id,
-        'from_stage'  => 'submitted',
-        'action'      => 'assign_reviewer',
-        'to_stage'    => 'blind_review',
-        'actor_id'    => $reviewer->id,
-        'notes'       => 'Assigned',
+        'from_stage' => 'submitted',
+        'action' => 'assign_reviewer',
+        'to_stage' => 'blind_review',
+        'actor_id' => $reviewer->id,
+        'notes' => 'Assigned',
     ]);
 
     $data = app(RepositoryService::class)->getTrackerStatus('RES-2026-ANON');
@@ -180,15 +183,16 @@ test('tracker lookup returns RTT Office for central office actions', function ()
     [$college, $dept] = repo_makeCollege();
     $proposal = repo_makeProposal($college, $dept, ['tracker_number' => 'RES-2026-CENT']);
 
-    $central = User::factory()->create(); $central->assignRole('central_officer');
+    $central = User::factory()->create();
+    $central->assignRole('central_officer');
 
     WorkflowLog::create([
         'proposal_id' => $proposal->id,
-        'from_stage'  => 'draft',
-        'action'      => 'submit',
-        'to_stage'    => 'submitted',
-        'actor_id'    => $central->id,
-        'notes'       => 'Validated',
+        'from_stage' => 'draft',
+        'action' => 'submit',
+        'to_stage' => 'submitted',
+        'actor_id' => $central->id,
+        'notes' => 'Validated',
     ]);
 
     $data = app(RepositoryService::class)->getTrackerStatus('RES-2026-CENT');
@@ -205,7 +209,7 @@ test('tracker lookup returns Principal Investigator for PI actions', function ()
     $pi->assignRole('pi');
 
     $proposal = Proposal::create([
-        'tracker_number'   => 'RES-2026-PI01',
+        'tracker_number' => 'RES-2026-PI01',
         'proposal_call_id' => ProposalCall::create([
             'academic_year' => '2026', 'category' => 'research', 'title' => 'C',
             'slug' => 'pi01-'.rand(), 'start_date' => now()->toDateString(),
@@ -219,11 +223,11 @@ test('tracker lookup returns Principal Investigator for PI actions', function ()
 
     WorkflowLog::create([
         'proposal_id' => $proposal->id,
-        'from_stage'  => 'draft',
-        'action'      => 'submit',
-        'to_stage'    => 'submitted',
-        'actor_id'    => $pi->id,
-        'notes'       => 'Submitted by PI',
+        'from_stage' => 'draft',
+        'action' => 'submit',
+        'to_stage' => 'submitted',
+        'actor_id' => $pi->id,
+        'notes' => 'Submitted by PI',
     ]);
 
     $data = app(RepositoryService::class)->getTrackerStatus('RES-2026-PI01');
@@ -235,5 +239,49 @@ test('tracker lookup returns Principal Investigator for PI actions', function ()
 
 test('non-existent tracker number throws exception', function () {
     expect(fn () => app(RepositoryService::class)->getTrackerStatus('NONEXISTENT-9999'))
-        ->toThrow(\Exception::class, 'not found');
+        ->toThrow(Exception::class, 'not found');
+});
+
+test('tracker history hides an entry that was later superseded by an automatic correction', function () {
+    [$college, $dept] = repo_makeCollege();
+    $proposal = repo_makeProposal($college, $dept, ['tracker_number' => 'RES-2026-CORRECTED', 'status' => 'rejected']);
+    $central = User::factory()->create();
+    $central->assignRole('central_officer');
+
+    $originalDecisionAt = now()->subDay();
+
+    // Inserted directly, matching how WorkflowService::transition() actually writes
+    // these rows (DB::table()->insert(), not the Eloquent model) — this is the only
+    // way to control created_at, since it isn't fillable and the model is immutable.
+    DB::table('workflow_logs')->insert([
+        'id' => Str::uuid()->toString(),
+        'proposal_id' => $proposal->id,
+        'from_stage' => 'under_blind_review',
+        'action' => 'pass_blind_review',
+        'to_stage' => 'blind_review_passed',
+        'actor_id' => $central->id,
+        'notes' => 'Blind review passed. Average score: 56.67/90. Threshold: 60%.',
+        'metadata' => null,
+        'created_at' => $originalDecisionAt,
+    ]);
+
+    // The correction — references the original entry's exact timestamp.
+    DB::table('workflow_logs')->insert([
+        'id' => Str::uuid()->toString(),
+        'proposal_id' => $proposal->id,
+        'from_stage' => 'blind_review_passed',
+        'action' => 'fail_blind_review',
+        'to_stage' => 'rejected',
+        'actor_id' => $central->id,
+        'notes' => 'Corrected automatically: blind review score 50.34/80 (min 60) no longer meets the threshold.',
+        'metadata' => json_encode(['corrected' => true, 'original_decision_at' => $originalDecisionAt->format('Y-m-d H:i:s')]),
+        'created_at' => now(),
+    ]);
+
+    $data = app(RepositoryService::class)->getTrackerStatus('RES-2026-CORRECTED');
+
+    $actions = collect($data['history'])->pluck('action')->toArray();
+
+    expect($actions)->not->toContain('pass_blind_review')
+        ->and($actions)->toContain('fail_blind_review');
 });

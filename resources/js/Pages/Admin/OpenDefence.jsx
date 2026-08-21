@@ -10,6 +10,7 @@ import AppLayout from '../../Layouts/AppLayout';
 import StatusBadge from '../../Components/StatusBadge';
 import WorkflowBreadcrumb from '../../Components/WorkflowBreadcrumb';
 import ViewToggle from '../../Components/ViewToggle';
+import FilterBar from '../../Components/FilterBar';
 import ProposalTable from '../../Components/ProposalTable';
 import { useViewPreference } from '../../hooks/useViewPreference';
 import api from '../../lib/api';
@@ -34,6 +35,10 @@ function ReviewerAvatar({ name = '', size = 'md' }) {
             {initials}
         </div>
     );
+}
+
+function isExternalReviewer(user) {
+    return user?.roles?.some(r => (typeof r === 'string' ? r : r.name) === 'external_reviewer') ?? false;
 }
 
 function WorkloadBadge({ count }) {
@@ -308,6 +313,11 @@ function ReviewerSearchList({ proposalId, selectedId, onSelect, alreadyAssignedI
                                                 {r.title ? `${r.title} ` : ''}{r.name}
                                             </p>
                                             <WorkloadBadge count={r.active_assignments} />
+                                            {isExternalReviewer(r) && (
+                                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-600 border border-orange-200">
+                                                    External
+                                                </span>
+                                            )}
                                             {isAssigned && (
                                                 <span className="text-[10px] bg-amber-50 text-amber-600 border border-amber-200 px-1.5 py-0.5 rounded-full font-medium">
                                                     Already assigned
@@ -382,13 +392,22 @@ function ReassignModal({ assignment, proposalId, currentAssignments, onSave, onC
         ? new Date(assignment.due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
         : null;
 
-    const save = async () => {
+    const save = async (overrideWorkloadCap = false) => {
         if (!selectedId || !dueDate) return;
         setSaving(true);
         try {
-            await api.put(`/review-assignments/${assignment.id}/reassign`, { new_reviewer_id: selectedId, due_date: dueDate });
+            await api.put(`/review-assignments/${assignment.id}/reassign`, {
+                new_reviewer_id: selectedId, due_date: dueDate, override_workload_cap: overrideWorkloadCap,
+            });
             onSave();
-        } catch (e) { error(e.response?.data?.message || 'Failed to reassign.'); }
+        } catch (e) {
+            const msg = e.response?.data?.message || 'Failed to reassign.';
+            if (msg.includes('max workload')) {
+                error(msg, { action: { label: 'Assign Anyway', onClick: () => save(true) } });
+            } else {
+                error(msg);
+            }
+        }
         setSaving(false);
     };
 
@@ -418,7 +437,7 @@ function ReassignModal({ assignment, proposalId, currentAssignments, onSave, onC
                             className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-700 hover:bg-gray-50 font-medium transition-colors">
                             Cancel
                         </button>
-                        <button onClick={save} disabled={!selectedId || !dueDate || saving}
+                        <button onClick={() => save()} disabled={!selectedId || !dueDate || saving}
                             className="flex-1 px-4 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                             {saving ? <><RefreshCw size={13} className="animate-spin inline mr-1.5" />Saving…</> : 'Replace Reviewer'}
                         </button>
@@ -454,13 +473,22 @@ function AddReviewerModal({ proposalId, currentAssignments, onSave, onClose }) {
             .filter(Boolean)
     );
 
-    const save = async () => {
+    const save = async (overrideWorkloadCap = false) => {
         if (!selectedId || !dueDate) return;
         setSaving(true);
         try {
-            await api.post(`/proposals/${proposalId}/review/add-reviewer`, { reviewer_id: selectedId, due_date: dueDate });
+            await api.post(`/proposals/${proposalId}/review/add-reviewer`, {
+                reviewer_id: selectedId, due_date: dueDate, override_workload_cap: overrideWorkloadCap,
+            });
             onSave();
-        } catch (e) { error(e.response?.data?.message || 'Failed to add reviewer.'); }
+        } catch (e) {
+            const msg = e.response?.data?.message || 'Failed to add reviewer.';
+            if (msg.includes('max workload')) {
+                error(msg, { action: { label: 'Assign Anyway', onClick: () => save(true) } });
+            } else {
+                error(msg);
+            }
+        }
         setSaving(false);
     };
 
@@ -484,7 +512,7 @@ function AddReviewerModal({ proposalId, currentAssignments, onSave, onClose }) {
                             className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-700 hover:bg-gray-50 font-medium transition-colors">
                             Cancel
                         </button>
-                        <button onClick={save} disabled={!selectedId || !dueDate || saving}
+                        <button onClick={() => save()} disabled={!selectedId || !dueDate || saving}
                             className="flex-1 px-4 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
                             {saving ? <><RefreshCw size={13} className="animate-spin inline mr-1.5" />Adding…</> : 'Add Reviewer'}
                         </button>
@@ -754,6 +782,8 @@ export default function OpenDefence() {
 
     const [allProposals, setAllProposals]        = useState([]);
     const [yearFilter, setYearFilter]            = useState(app_settings?.current_academic_year ?? '');
+    const [categoryFilter, setCategoryFilter]    = useState('');
+    const [collegeFilter, setCollegeFilter]      = useState('');
     const [loading, setLoading]                  = useState(true);
     const [reassignModal, setReassignModal]       = useState(null);
     const [addReviewerModal, setAddReviewerModal] = useState(null);
@@ -798,9 +828,15 @@ export default function OpenDefence() {
         load();
     };
 
-    // ── Year options & client-side year filter ──
-    const availableYears = [...new Set(allProposals.map(p => p.academic_year).filter(Boolean))].sort().reverse();
-    const proposals      = yearFilter ? allProposals.filter(p => p.academic_year === yearFilter) : allProposals;
+    // ── Year/category/college options & client-side filters ──
+    const availableYears      = [...new Set(allProposals.map(p => p.academic_year).filter(Boolean))].sort().reverse();
+    const availableCategories = [...new Set(allProposals.map(p => p.category).filter(Boolean))].sort();
+    const availableColleges   = [...new Map(allProposals.filter(p => p.college).map(p => [p.college.id, p.college])).values()]
+        .sort((a, b) => a.name.localeCompare(b.name));
+    const proposals = allProposals
+        .filter(p => !yearFilter || p.academic_year === yearFilter)
+        .filter(p => !categoryFilter || p.category === categoryFilter)
+        .filter(p => !collegeFilter || p.college_id === collegeFilter);
 
     // ── Data slices ──
     const passedBlindReview = proposals.filter(p => p.status === 'blind_review_passed');
@@ -845,7 +881,7 @@ export default function OpenDefence() {
                 )}
 
                 {/* ── Page header ── */}
-                <div className="flex items-start justify-between mb-6 gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-6 gap-4">
                     <div className="flex items-center gap-4">
                         <div className="h-12 w-12 bg-purple-600 rounded-2xl flex items-center justify-center shrink-0 shadow-sm shadow-purple-200">
                             <Presentation size={22} className="text-white" />
@@ -855,12 +891,49 @@ export default function OpenDefence() {
                             <p className="text-sm text-gray-500 mt-0.5">Schedule defences and manage active open defence reviews</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <FilterBar
+                        accent="purple"
+                        activeCount={[collegeFilter, categoryFilter, yearFilter].filter(Boolean).length}
+                        trailing={
+                            <>
+                                <ViewToggle view={view} onChange={setView} />
+                                <button onClick={load}
+                                    className="flex items-center gap-2 px-3.5 py-2.5 sm:py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors font-medium shrink-0">
+                                    <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+                                    <span className="hidden sm:inline">Refresh</span>
+                                </button>
+                            </>
+                        }
+                    >
+                        {availableColleges.length > 1 && (
+                            <select
+                                value={collegeFilter}
+                                onChange={e => { setCollegeFilter(e.target.value); setActiveTab('active'); }}
+                                className="w-full sm:w-auto text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-purple-300"
+                            >
+                                <option value="">All Colleges</option>
+                                {availableColleges.map(c => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                            </select>
+                        )}
+                        {availableCategories.length > 1 && (
+                            <select
+                                value={categoryFilter}
+                                onChange={e => { setCategoryFilter(e.target.value); setActiveTab('active'); }}
+                                className="w-full sm:w-auto text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-purple-300"
+                            >
+                                <option value="">All Categories</option>
+                                {availableCategories.map(c => (
+                                    <option key={c} value={c}>{getCategoryLabel(c)}</option>
+                                ))}
+                            </select>
+                        )}
                         {availableYears.length > 0 && (
                             <select
                                 value={yearFilter}
                                 onChange={e => { setYearFilter(e.target.value); setActiveTab('active'); }}
-                                className="text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-purple-300"
+                                className="w-full sm:w-auto text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-purple-300"
                             >
                                 <option value="">All Years</option>
                                 {availableYears.map(y => (
@@ -868,12 +941,7 @@ export default function OpenDefence() {
                                 ))}
                             </select>
                         )}
-                        <ViewToggle view={view} onChange={setView} />
-                        <button onClick={load}
-                            className="flex items-center gap-2 px-3.5 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors font-medium">
-                            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
-                        </button>
-                    </div>
+                    </FilterBar>
                 </div>
 
                 {/* ── Stat cards ── */}

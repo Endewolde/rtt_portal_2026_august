@@ -3,9 +3,11 @@
 namespace App\Services;
 
 use App\Exceptions\ConflictingReviewerException;
+use App\Exceptions\ReviewerOverloadedException;
 use App\Jobs\StoreInAppNotificationJob;
 use App\Models\Proposal;
 use App\Models\ReviewAssignment;
+use App\Models\ThresholdSetting;
 use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -42,7 +44,8 @@ class ReviewAssignmentService
         string $evaluationTypeId,
         User $assignedBy,
         array $sessionData = [],
-        ?string $dueDate = null
+        ?string $dueDate = null,
+        bool $overrideWorkloadCap = false
     ): array {
         $validStates = ['validated', 'blind_review_passed'];
 
@@ -83,9 +86,17 @@ class ReviewAssignmentService
             );
         }
 
+        $this->ensureWithinWorkloadCap($reviewerIds, $overrideWorkloadCap);
+
         $assignments = [];
 
         $dueDate = $dueDate ?? now()->addDays(14)->toDateString();
+
+        // Captured BEFORE the transition below — WorkflowService::transition() mutates
+        // $proposal->status in place (validated -> under_blind_review), so reading it
+        // again afterwards always looks like "not validated" and mislabels every blind
+        // review assignment email/notification as "Open Defence".
+        $reviewType = $proposal->status === 'validated' ? 'Blind Review' : 'Open Defence';
 
         DB::transaction(function () use ($proposal, $reviewerIds, $evaluationTypeId, $assignedBy, $dueDate, &$assignments) {
             foreach ($reviewerIds as $reviewerId) {
@@ -112,7 +123,6 @@ class ReviewAssignmentService
         });
 
         // Notify each reviewer after the transaction commits
-        $reviewType = $proposal->status === 'validated' ? 'Blind Review' : 'Open Defence';
         $reviewers = User::whereIn('id', $reviewerIds)->get();
 
         foreach ($reviewers as $reviewer) {
@@ -123,11 +133,40 @@ class ReviewAssignmentService
     }
 
     /**
+     * Block assignment of reviewers already at or above the configured max concurrent
+     * active reviews, unless explicitly overridden by the assigning admin.
+     *
+     * @throws ReviewerOverloadedException
+     */
+    public function ensureWithinWorkloadCap(array $reviewerIds, bool $override = false): void
+    {
+        if ($override || empty($reviewerIds)) {
+            return;
+        }
+
+        $cap = (int) (ThresholdSetting::where('key', 'max_reviewer_active_assignments')->value('value') ?? 5);
+
+        $overloaded = User::whereIn('id', $reviewerIds)
+            ->withCount([
+                'reviewAssignments as active_assignments' => fn ($q) => $q->whereIn('status', ['pending', 'accepted', 'in_progress']),
+            ])
+            ->get(['id', 'name'])
+            ->filter(fn (User $u) => $u->active_assignments >= $cap);
+
+        if ($overloaded->isNotEmpty()) {
+            $names = $overloaded->map(fn (User $u) => "{$u->name} ({$u->active_assignments} active)")->implode(', ');
+            throw new ReviewerOverloadedException(
+                "These reviewers are at or above the max workload of {$cap} active reviews: {$names}."
+            );
+        }
+    }
+
+    /**
      * Get eligible reviewers for a proposal, excluding the PI, co-investigators, and
      * all active team members. Supports filtering by name/email/expertise, department,
      * and college. Includes active assignment count for workload balancing.
      *
-     * @param  array{search?: string, expertise?: string, department_id?: string, college_id?: string}  $filters
+     * @param  array{search?: string, expertise?: string, department_id?: string, college_id?: string, reviewer_type?: string}  $filters
      */
     public function getAvailableReviewers(string $proposalId, array $filters = []): Collection
     {
@@ -142,8 +181,8 @@ class ReviewAssignmentService
             ->unique()
             ->values();
 
-        // Eligible reviewers: active staff users, excluding the proposal's own PI/team.
-        $query = User::whereHas('roles', fn ($q) => $q->where('name', 'staff'))
+        // Eligible reviewers: active staff or external reviewers, excluding the proposal's own PI/team.
+        $query = User::whereHas('roles', fn ($q) => $q->whereIn('name', ['staff', 'external_reviewer']))
             ->whereNotIn('id', $excludedIds)
             ->where('status', 'active')
             ->with(['roles:name', 'college:id,name', 'department:id,name'])
@@ -171,6 +210,12 @@ class ReviewAssignmentService
 
         if (! empty($filters['college_id'])) {
             $query->where('college_id', $filters['college_id']);
+        }
+
+        if (($filters['reviewer_type'] ?? null) === 'external') {
+            $query->whereHas('roles', fn ($q) => $q->where('name', 'external_reviewer'));
+        } elseif (($filters['reviewer_type'] ?? null) === 'internal') {
+            $query->whereHas('roles', fn ($q) => $q->where('name', 'staff'));
         }
 
         return $query

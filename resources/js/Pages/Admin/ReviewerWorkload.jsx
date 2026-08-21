@@ -3,7 +3,7 @@ import {
     Users, Download, Filter, Search, X, RefreshCw,
     Building2, ClipboardList, EyeOff, Presentation,
     ChevronDown, ChevronRight, FileDown, BarChart2,
-    Clock, CheckCircle2, AlertCircle, TrendingUp,
+    Clock, CheckCircle2, AlertCircle, TrendingUp, FileText,
 } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import api from '../../lib/api';
@@ -62,6 +62,21 @@ function AssignmentBadge({ status }) {
     return (
         <span className={`inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold ${STATUS_STYLES[status] ?? 'bg-gray-100 text-gray-600'}`}>
             {status?.replace('_', ' ')}
+        </span>
+    );
+}
+
+// ─── Reviewer type helpers ─────────────────────────────────────────────────────
+
+function isExternalReviewer(reviewer) {
+    return reviewer?.roles?.some(r => (typeof r === 'string' ? r : r.name) === 'external_reviewer') ?? false;
+}
+
+function ReviewerTypeBadge({ reviewer }) {
+    if (!isExternalReviewer(reviewer)) { return null; }
+    return (
+        <span className="inline-flex items-center text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-600 border border-orange-200">
+            External
         </span>
     );
 }
@@ -134,7 +149,10 @@ function ProposalRow({ proposal, rowNum }) {
                 <tr key={a.id} className="bg-indigo-50/40 border-l-2 border-indigo-300">
                     <td className="px-5 py-2.5 pl-12" />
                     <td className="px-5 py-2.5">
-                        <p className="text-sm font-medium text-gray-800">{a.reviewer?.name ?? '—'}</p>
+                        <div className="flex items-center gap-1.5">
+                            <p className="text-sm font-medium text-gray-800">{a.reviewer?.name ?? '—'}</p>
+                            <ReviewerTypeBadge reviewer={a.reviewer} />
+                        </div>
                         <p className="text-xs text-gray-400">{a.reviewer?.email}</p>
                     </td>
                     <td className="px-5 py-2.5 text-xs text-gray-500">{proposal.college_name}</td>
@@ -159,6 +177,7 @@ export default function ReviewerWorkload() {
     const [loading, setLoading]         = useState(true);
     const [filterCollege, setFilterCollege] = useState('');
     const [filterEvalType, setFilterEvalType] = useState('all'); // 'all' | 'blind' | 'open'
+    const [filterReviewerType, setFilterReviewerType] = useState('all'); // 'all' | 'internal' | 'external'
     const [search, setSearch]           = useState('');
     const [tab, setTab]                 = useState('summary'); // 'summary' | 'all' | 'analytics'
     const [analytics, setAnalytics]     = useState(null);
@@ -207,6 +226,11 @@ export default function ReviewerWorkload() {
         } else if (filterEvalType === 'open') {
             list = list.filter(a => a.evaluation_type?.name?.startsWith('open'));
         }
+        if (filterReviewerType === 'external') {
+            list = list.filter(a => isExternalReviewer(a.reviewer));
+        } else if (filterReviewerType === 'internal') {
+            list = list.filter(a => !isExternalReviewer(a.reviewer));
+        }
         if (search) {
             const q = search.toLowerCase();
             list = list.filter(a =>
@@ -217,7 +241,7 @@ export default function ReviewerWorkload() {
             );
         }
         return list;
-    }, [assignments, filterEvalType, search]);
+    }, [assignments, filterEvalType, filterReviewerType, search]);
 
     // Group by proposal for summary tab
     const proposalMap = useMemo(() => {
@@ -409,6 +433,27 @@ export default function ReviewerWorkload() {
                             </button>
                         ))}
                     </div>
+
+                    {/* Reviewer type filter */}
+                    <div className="flex items-center gap-1 bg-gray-100 rounded-xl p-1">
+                        {[
+                            { value: 'all',      label: 'All Reviewers' },
+                            { value: 'internal', label: 'Internal' },
+                            { value: 'external', label: 'External' },
+                        ].map(opt => (
+                            <button
+                                key={opt.value}
+                                onClick={() => setFilterReviewerType(opt.value)}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                                    filterReviewerType === opt.value
+                                        ? 'bg-white text-indigo-700 shadow-sm'
+                                        : 'text-gray-500 hover:text-gray-700'
+                                }`}
+                            >
+                                {opt.label}
+                            </button>
+                        ))}
+                    </div>
                 </div>
 
                 {/* Download bar */}
@@ -489,14 +534,23 @@ export default function ReviewerWorkload() {
                     <AnalyticsTab
                         analytics={analytics}
                         loading={analyticsLoading}
+                        reviewerTypeFilter={filterReviewerType}
                         onDownload={() => {
                             if (!analytics?.reviewers) { return; }
-                            const headers = ['Reviewer', 'Email', 'Total', 'Completed', 'Pending', 'Overdue', 'Declined', 'Avg Days', 'On-Time %', 'Avg Score'];
+                            const headers = [
+                                'Reviewer', 'Email', 'Proposal Total', 'Proposal Completed', 'Proposal Pending',
+                                'Overdue', 'Declined', 'Avg Days', 'On-Time %', 'Avg Score',
+                                'Abstract Total', 'Abstract Completed', 'Abstract Pending', 'Abstract Avg Score',
+                                'Combined Pending',
+                            ];
                             const rows = analytics.reviewers.map(r => [
                                 r.reviewer?.name ?? '', r.reviewer?.email ?? '',
                                 r.total, r.completed, r.pending, r.overdue, r.declined,
                                 r.avg_days ?? '', r.on_time_rate != null ? r.on_time_rate + '%' : '',
                                 r.avg_score ?? '',
+                                r.abstract_reviews?.total ?? 0, r.abstract_reviews?.completed ?? 0,
+                                r.abstract_reviews?.pending ?? 0, r.abstract_reviews?.avg_score ?? '',
+                                r.combined_pending ?? 0,
                             ]);
                             downloadCsv('reviewer_analytics.csv', rows, headers);
                         }}
@@ -618,7 +672,10 @@ function AllAssignmentsTable({ assignments }) {
                                             <EvalBadge name={a.evaluation_type?.name} label={a.evaluation_type?.label} />
                                         </td>
                                         <td className="px-5 py-3">
-                                            <p className="font-medium text-gray-800">{a.reviewer?.name ?? '—'}</p>
+                                            <div className="flex items-center gap-1.5">
+                                                <p className="font-medium text-gray-800">{a.reviewer?.name ?? '—'}</p>
+                                                <ReviewerTypeBadge reviewer={a.reviewer} />
+                                            </div>
                                             <p className="text-xs text-gray-400">{a.reviewer?.email}</p>
                                         </td>
                                         <td className="px-5 py-3">
@@ -674,7 +731,7 @@ function AnalyticsStatCard({ label, value, icon: Icon, color, sub }) {
     );
 }
 
-function AnalyticsTab({ analytics, loading, onDownload }) {
+function AnalyticsTab({ analytics, loading, onDownload, reviewerTypeFilter = 'all' }) {
     const [sortKey, setSortKey] = useState('total');
     const [sortDir, setSortDir] = useState('desc');
 
@@ -689,12 +746,18 @@ function AnalyticsTab({ analytics, loading, onDownload }) {
 
     const sortedReviewers = useMemo(() => {
         if (!analytics?.reviewers) { return []; }
-        return [...analytics.reviewers].sort((a, b) => {
+        let list = analytics.reviewers;
+        if (reviewerTypeFilter === 'external') {
+            list = list.filter(r => isExternalReviewer(r.reviewer));
+        } else if (reviewerTypeFilter === 'internal') {
+            list = list.filter(r => !isExternalReviewer(r.reviewer));
+        }
+        return [...list].sort((a, b) => {
             const av = a[sortKey] ?? -1;
             const bv = b[sortKey] ?? -1;
             return sortDir === 'asc' ? (av > bv ? 1 : -1) : (av < bv ? 1 : -1);
         });
-    }, [analytics, sortKey, sortDir]);
+    }, [analytics, reviewerTypeFilter, sortKey, sortDir]);
 
     if (loading) {
         return (
@@ -755,6 +818,13 @@ function AnalyticsTab({ analytics, loading, onDownload }) {
                     color="bg-amber-500"
                     sub="submitted_at − assigned_at"
                 />
+                <AnalyticsStatCard
+                    label="Abstract Reviews Pending"
+                    value={summary.total_abstract_pending ?? 0}
+                    icon={FileText}
+                    color={(summary.total_abstract_pending ?? 0) > 0 ? 'bg-orange-500' : 'bg-gray-400'}
+                    sub="awaiting a reviewer score"
+                />
             </div>
 
             {/* Per-reviewer table */}
@@ -788,6 +858,8 @@ function AnalyticsTab({ analytics, loading, onDownload }) {
                                     <SortHeader label="Avg Days"  col="avg_days" />
                                     <th className="px-5 py-3.5 text-left text-xs font-semibold text-indigo-100 uppercase tracking-wide whitespace-nowrap">On-Time Rate</th>
                                     <SortHeader label="Avg Score" col="avg_score" />
+                                    <th className="px-5 py-3.5 text-left text-xs font-semibold text-indigo-100 uppercase tracking-wide whitespace-nowrap">Abstract Reviews</th>
+                                    <SortHeader label="Total Pending" col="combined_pending" />
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-50">
@@ -795,7 +867,10 @@ function AnalyticsTab({ analytics, loading, onDownload }) {
                                     <tr key={r.reviewer_id} className="hover:bg-gray-50 transition-colors">
                                         <td className="px-5 py-3.5 text-xs font-medium text-gray-400 tabular-nums w-10">{i + 1}</td>
                                         <td className="px-5 py-3.5">
-                                            <p className="text-sm font-medium text-gray-900">{r.reviewer?.name ?? '—'}</p>
+                                            <div className="flex items-center gap-1.5">
+                                                <p className="text-sm font-medium text-gray-900">{r.reviewer?.name ?? '—'}</p>
+                                                <ReviewerTypeBadge reviewer={r.reviewer} />
+                                            </div>
                                             <p className="text-xs text-gray-400">{r.reviewer?.email}</p>
                                         </td>
                                         <td className="px-5 py-3.5 text-sm font-semibold text-gray-700">{r.total}</td>
@@ -822,6 +897,24 @@ function AnalyticsTab({ analytics, loading, onDownload }) {
                                         </td>
                                         <td className="px-5 py-3.5">
                                             <span className="text-sm text-gray-600">{r.avg_score ?? '—'}</span>
+                                        </td>
+                                        <td className="px-5 py-3.5">
+                                            {r.abstract_reviews?.total > 0 ? (
+                                                <span className="text-sm text-gray-600">
+                                                    <span className="font-semibold text-emerald-600">{r.abstract_reviews.completed}</span>
+                                                    {' / '}{r.abstract_reviews.total}
+                                                    {r.abstract_reviews.pending > 0 && (
+                                                        <span className="text-amber-600 ml-1">({r.abstract_reviews.pending} pending)</span>
+                                                    )}
+                                                </span>
+                                            ) : (
+                                                <span className="text-sm text-gray-300">—</span>
+                                            )}
+                                        </td>
+                                        <td className="px-5 py-3.5">
+                                            <span className={`text-sm font-bold ${r.combined_pending > 0 ? 'text-amber-700' : 'text-gray-400'}`}>
+                                                {r.combined_pending}
+                                            </span>
                                         </td>
                                     </tr>
                                 ))}

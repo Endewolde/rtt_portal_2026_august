@@ -4,6 +4,7 @@ import { ClipboardList, CheckCircle, XCircle, TrendingUp, TrendingDown, RefreshC
 import AppLayout from '../../Layouts/AppLayout';
 import WorkflowBreadcrumb from '../../Components/WorkflowBreadcrumb';
 import ViewToggle from '../../Components/ViewToggle';
+import FilterBar from '../../Components/FilterBar';
 import ProposalTable from '../../Components/ProposalTable';
 import { useViewPreference } from '../../hooks/useViewPreference';
 import api from '../../lib/api';
@@ -113,7 +114,9 @@ function PiFundingHistory({ data }) {
 export default function CentralEvaluation() {
     const { success, error } = useToast();
     const [view, setView] = useViewPreference('central_evaluation', 'card');
-    const [proposals, setProposals]   = useState([]);
+    const [allProposals, setAllProposals] = useState([]);
+    const [categoryFilter, setCategoryFilter] = useState('');
+    const [collegeFilter, setCollegeFilter] = useState('');
     const [loading, setLoading]       = useState(true);
     const [dialog, setDialog]         = useState(null);
     const [reason, setReason]         = useState('');
@@ -153,12 +156,20 @@ export default function CentralEvaluation() {
         setLoading(true);
         try {
             const res = await api.get('/central-evaluation');
-            setProposals(res.data?.data ?? []);
+            setAllProposals(res.data?.data ?? []);
         } catch { error('Failed to load proposals.'); }
         setLoading(false);
     };
 
     useEffect(() => { load(); }, []);
+
+    // ── Category/college options & client-side filters ──
+    const availableCategories = [...new Set(allProposals.map(p => p.category).filter(Boolean))].sort();
+    const availableColleges   = [...new Map(allProposals.filter(p => p.college).map(p => [p.college.id, p.college])).values()]
+        .sort((a, b) => a.name.localeCompare(b.name));
+    const proposals = allProposals
+        .filter(p => !categoryFilter || p.category === categoryFilter)
+        .filter(p => !collegeFilter || p.college_id === collegeFilter);
 
     const openApprove = (proposal) => {
         setApproveForm({ remarks: '', awarded_amount: proposal.budget_total ?? '' });
@@ -203,7 +214,7 @@ export default function CentralEvaluation() {
                 <WorkflowBreadcrumb current="accepted" />
 
                 {/* Page Header */}
-                <div className="flex items-start justify-between mb-6 gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-6 gap-4">
                     <div className="flex items-center gap-3">
                         <div className="h-10 w-10 bg-teal-100 rounded-xl flex items-center justify-center shrink-0">
                             <ClipboardList size={20} className="text-teal-600" />
@@ -213,17 +224,49 @@ export default function CentralEvaluation() {
                             <p className="text-sm text-gray-500 mt-0.5">Proposals that passed open defence — ready for final funding decision</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                        {!loading && proposals.length > 0 && (
-                            <span className="flex items-center gap-1.5 text-xs font-semibold bg-teal-50 text-teal-700 border border-teal-200 px-2.5 py-1.5 rounded-lg">
-                                {proposals.length} Awaiting Decision
-                            </span>
+                    <FilterBar
+                        accent="teal"
+                        activeCount={[collegeFilter, categoryFilter].filter(Boolean).length}
+                        trailing={
+                            <>
+                                {!loading && proposals.length > 0 && (
+                                    <span className="flex items-center gap-1.5 text-xs font-semibold bg-teal-50 text-teal-700 border border-teal-200 px-2.5 py-1.5 rounded-lg shrink-0">
+                                        {proposals.length} Awaiting Decision
+                                    </span>
+                                )}
+                                <ViewToggle view={view} onChange={setView} />
+                                <button onClick={load} className="flex items-center gap-2 px-3 py-2.5 sm:py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors shrink-0">
+                                    <RefreshCw size={14} />
+                                    <span className="hidden sm:inline">Refresh</span>
+                                </button>
+                            </>
+                        }
+                    >
+                        {availableColleges.length > 1 && (
+                            <select
+                                value={collegeFilter}
+                                onChange={e => setCollegeFilter(e.target.value)}
+                                className="w-full sm:w-auto text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-teal-300"
+                            >
+                                <option value="">All Colleges</option>
+                                {availableColleges.map(c => (
+                                    <option key={c.id} value={c.id}>{c.name}</option>
+                                ))}
+                            </select>
                         )}
-                        <ViewToggle view={view} onChange={setView} />
-                        <button onClick={load} className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors">
-                            <RefreshCw size={14} /> Refresh
-                        </button>
-                    </div>
+                        {availableCategories.length > 1 && (
+                            <select
+                                value={categoryFilter}
+                                onChange={e => setCategoryFilter(e.target.value)}
+                                className="w-full sm:w-auto text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-teal-300"
+                            >
+                                <option value="">All Categories</option>
+                                {availableCategories.map(c => (
+                                    <option key={c} value={c}>{getCategoryLabel(c)}</option>
+                                ))}
+                            </select>
+                        )}
+                    </FilterBar>
                 </div>
 
                 {loading ? (
@@ -285,7 +328,7 @@ export default function CentralEvaluation() {
                                             <div className={`shrink-0 flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-xl ${passesThreshold ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
                                                 {passesThreshold ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
                                                 {p.combined_score} / {totalMax}
-                                                <span className="text-xs font-normal opacity-70">({p.threshold_pct}% min)</span>
+                                                <span className="text-xs font-normal opacity-70">({p.threshold_pct} pts min)</span>
                                             </div>
                                         </div>
                                     </div>
@@ -299,6 +342,19 @@ export default function CentralEvaluation() {
                                             <ScoreBar score={p.combined_score}                        max={totalMax}            label="Total"        color={passesThreshold ? 'bg-green-500' : 'bg-red-500'} />
                                         </div>
                                     </div>
+
+                                    {/* Informational flag: defence score fell short of its own threshold —
+                                        doesn't block advancement, but the central officer should know. */}
+                                    {p.defence_below_threshold && (
+                                        <div className="mx-4 mb-3 flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl px-3.5 py-2.5">
+                                            <AlertTriangle size={14} className="text-amber-500 mt-0.5 shrink-0" />
+                                            <p className="text-xs text-amber-700 leading-relaxed">
+                                                Open defence score ({p.defence_score_raw}/{p.defence_max}) is below the open defence threshold
+                                                ({p.defence_threshold} pts) — the proposal still cleared the combined threshold, but consider this
+                                                when making the final funding decision.
+                                            </p>
+                                        </div>
+                                    )}
 
                                     {/* Budget toggle */}
                                     <div className="mx-4 mb-3">

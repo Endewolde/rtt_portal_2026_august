@@ -6,6 +6,7 @@ use App\Models\Proposal;
 use App\Models\RepositoryRecord;
 use App\Models\User;
 use App\Models\WorkflowLog;
+use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 
 class RepositoryService
@@ -75,6 +76,23 @@ class RepositoryService
         $history = WorkflowLog::where('proposal_id', $proposal->id)
             ->orderBy('created_at', 'asc')
             ->get();
+
+        // Entries that were later superseded by an automatic correction (see
+        // ReviewScoreService::processBlindReviewResult/processOpenDefenceResultIfComplete
+        // and the reviews:correct-blind-review command) shouldn't confuse someone
+        // tracking their proposal publicly — they only need the corrected, final
+        // outcome. The correcting entry's own notes still explain what happened.
+        $supersededAt = $history
+            ->map(fn ($log) => $log->metadata['original_decision_at'] ?? null)
+            ->filter()
+            ->map(fn ($ts) => Carbon::parse($ts)->format('Y-m-d H:i:s'))
+            ->all();
+
+        if (! empty($supersededAt)) {
+            $history = $history->reject(
+                fn ($log) => in_array($log->created_at->format('Y-m-d H:i:s'), $supersededAt)
+            )->values();
+        }
 
         $reviewerMap = [];
         $reviewerCounter = 'A';

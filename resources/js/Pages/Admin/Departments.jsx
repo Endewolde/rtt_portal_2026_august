@@ -21,11 +21,11 @@ function StatCard({ label, value, icon: Icon, color, sub }) {
     );
 }
 
-function DeptModal({ dept, colleges, onSave, onClose }) {
+function DeptModal({ dept, colleges, lockedCollegeId, onSave, onClose }) {
     const [form, setForm] = useState(
         dept
             ? { college_id: dept.college_id, name: dept.name, code: dept.code, status: dept.status }
-            : { college_id: '', name: '', code: '', status: 'active' }
+            : { college_id: lockedCollegeId ?? '', name: '', code: '', status: 'active' }
     );
     const [saving, setSaving] = useState(false);
     const { error, success } = useToast();
@@ -73,7 +73,8 @@ function DeptModal({ dept, colleges, onSave, onClose }) {
                         <select
                             value={form.college_id}
                             onChange={e => set('college_id', e.target.value)}
-                            className="w-full border border-gray-200 bg-gray-50 focus:bg-white rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition"
+                            disabled={!!lockedCollegeId}
+                            className="w-full border border-gray-200 bg-gray-50 focus:bg-white rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition disabled:opacity-60 disabled:cursor-not-allowed"
                         >
                             <option value="">— Select college —</option>
                             {colleges.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -140,11 +141,15 @@ function DeptModal({ dept, colleges, onSave, onClose }) {
 
 export default function Departments() {
     const { error, success } = useToast();
-    const { hasRole } = useAuth();
+    const { user: currentUser, hasRole } = useAuth();
+    const isCollegeOfficer = hasRole('college_officer');
     const [departments, setDepartments] = useState([]);
     const [colleges, setColleges]       = useState([]);
     const [loading, setLoading]         = useState(true);
-    const [filterCollege, setFilterCollege] = useState('');
+    // College officers are already scoped to their own college server-side —
+    // pre-select it so there's no "All Colleges" picker implying they could
+    // manage anyone else's departments.
+    const [filterCollege, setFilterCollege] = useState(() => (isCollegeOfficer ? currentUser?.college_id ?? '' : ''));
     const [search, setSearch]           = useState('');
     const [modal, setModal]             = useState(null);
     const [deleteConfirm, setDeleteConfirm] = useState(null);
@@ -205,28 +210,37 @@ export default function Departments() {
                             <Building2 size={24} className="text-blue-600" /> Departments
                         </h1>
                         <p className="text-sm text-gray-500 mt-1">
-                            {departments.length} departments across {Object.keys(grouped).length} colleges
+                            {isCollegeOfficer
+                                ? `${departments.length} department${departments.length !== 1 ? 's' : ''}`
+                                : `${departments.length} departments across ${Object.keys(grouped).length} colleges`}
                         </p>
                     </div>
                     <div className="flex items-center gap-2">
                         <button onClick={load} className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition">
                             <RefreshCw size={14} /> Refresh
                         </button>
-                        <button
-                            onClick={() => setModal({ dept: null })}
-                            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition shadow-sm shadow-blue-200"
-                        >
-                            <Plus size={14} /> Add Department
-                        </button>
+                        {!isCollegeOfficer && (
+                            <button
+                                onClick={() => setModal({ dept: null })}
+                                className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition shadow-sm shadow-blue-200"
+                            >
+                                <Plus size={14} /> Add Department
+                            </button>
+                        )}
                     </div>
                 </div>
 
-                {/* Stats */}
-                <div className="grid grid-cols-3 gap-4">
-                    <StatCard label="Total Departments" value={departments.length} icon={Building2}     color="bg-blue-500" />
-                    <StatCard label="Active"            value={activeCount}        icon={CheckCircle}   color="bg-emerald-500" />
-                    <StatCard label="Inactive"          value={inactiveCount}      icon={AlertCircle}   color="bg-amber-400" />
-                </div>
+                {/* Stats — college officers just get their own total; the active/inactive
+                    breakdown and cross-college framing aren't relevant to a single college. */}
+                {isCollegeOfficer ? (
+                    <StatCard label="Total Departments" value={departments.length} icon={Building2} color="bg-blue-500" />
+                ) : (
+                    <div className="grid grid-cols-3 gap-4">
+                        <StatCard label="Total Departments" value={departments.length} icon={Building2}     color="bg-blue-500" />
+                        <StatCard label="Active"            value={activeCount}        icon={CheckCircle}   color="bg-emerald-500" />
+                        <StatCard label="Inactive"          value={inactiveCount}      icon={AlertCircle}   color="bg-amber-400" />
+                    </div>
+                )}
 
                 {/* Filters */}
                 <div className="flex items-center gap-3">
@@ -244,14 +258,16 @@ export default function Departments() {
                             </button>
                         )}
                     </div>
-                    <select
-                        value={filterCollege}
-                        onChange={e => setFilterCollege(e.target.value)}
-                        className="border border-gray-200 bg-white rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm text-gray-700"
-                    >
-                        <option value="">All Colleges</option>
-                        {colleges.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                    </select>
+                    {!isCollegeOfficer && (
+                        <select
+                            value={filterCollege}
+                            onChange={e => setFilterCollege(e.target.value)}
+                            className="border border-gray-200 bg-white rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm text-gray-700"
+                        >
+                            <option value="">All Colleges</option>
+                            {colleges.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                    )}
                 </div>
 
                 {/* Content */}
@@ -273,21 +289,24 @@ export default function Departments() {
                     <div className="space-y-5">
                         {Object.entries(grouped).map(([collegeName, { college, items: depts }]) => (
                             <div key={collegeName} className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
-                                {/* College header */}
-                                <div className="px-5 py-3.5 bg-linear-to-r from-blue-50 to-indigo-50 border-b border-blue-100 flex items-center justify-between">
-                                    <div className="flex items-center gap-2.5">
-                                        <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
-                                            <Building2 size={15} className="text-white" />
+                                {/* College header — omitted for college officers, who only ever
+                                    have one group here; the college name/code is redundant. */}
+                                {!isCollegeOfficer && (
+                                    <div className="px-5 py-3.5 bg-linear-to-r from-blue-50 to-indigo-50 border-b border-blue-100 flex items-center justify-between">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
+                                                <Building2 size={15} className="text-white" />
+                                            </div>
+                                            <div>
+                                                <h2 className="text-sm font-semibold text-gray-800">{collegeName}</h2>
+                                                <p className="text-[10px] text-gray-400">{depts.length} department{depts.length !== 1 ? 's' : ''}</p>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <h2 className="text-sm font-semibold text-gray-800">{collegeName}</h2>
-                                            <p className="text-[10px] text-gray-400">{depts.length} department{depts.length !== 1 ? 's' : ''}</p>
-                                        </div>
+                                        <span className="text-xs font-mono text-blue-600 bg-blue-100 px-2 py-0.5 rounded-md">
+                                            {college?.code ?? '—'}
+                                        </span>
                                     </div>
-                                    <span className="text-xs font-mono text-blue-600 bg-blue-100 px-2 py-0.5 rounded-md">
-                                        {college?.code ?? '—'}
-                                    </span>
-                                </div>
+                                )}
 
                                 {/* Departments table */}
                                 <table className="w-full text-sm">
@@ -352,6 +371,7 @@ export default function Departments() {
                 <DeptModal
                     dept={modal.dept}
                     colleges={colleges}
+                    lockedCollegeId={isCollegeOfficer ? currentUser?.college_id : null}
                     onSave={afterSave}
                     onClose={() => setModal(null)}
                 />

@@ -1,8 +1,8 @@
 <?php
 
 use App\Models\College;
-use App\Models\Department;
 use App\Models\DefenceSession;
+use App\Models\Department;
 use App\Models\EvaluationCategory;
 use App\Models\EvaluationQuestion;
 use App\Models\EvaluationType;
@@ -17,6 +17,7 @@ use Database\Seeders\RolePermissionSeeder;
 use Database\Seeders\ThresholdSettingSeeder;
 use Database\Seeders\WorkflowStageSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 
 uses(RefreshDatabase::class);
 
@@ -37,8 +38,8 @@ function makeProposalAt(string $status): array
     $pi->assignRole('pi');
 
     $college = College::create(['name' => 'C'.rand(), 'code' => 'C'.rand(10, 99)]);
-    $dept    = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'D'.rand(10, 99)]);
-    $call    = ProposalCall::create([
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'D'.rand(10, 99)]);
+    $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research',
         'title' => 'Call', 'slug' => 'c-'.rand(10000, 99999),
         'start_date' => now()->toDateString(), 'end_date' => now()->addMonths(3)->toDateString(),
@@ -72,29 +73,29 @@ function createCompletedAssignment(Proposal $proposal, EvaluationType $type, Use
     $reviewer->assignRole('reviewer');
 
     $assignment = ReviewAssignment::create([
-        'proposal_id'        => $proposal->id,
-        'reviewer_id'        => $reviewer->id,
+        'proposal_id' => $proposal->id,
+        'reviewer_id' => $reviewer->id,
         'evaluation_type_id' => $type->id,
-        'assigned_by'        => $assignedBy->id,
-        'status'             => 'submitted',
-        'assigned_at'        => now(),
-        'submitted_at'       => now(),
+        'assigned_by' => $assignedBy->id,
+        'status' => 'submitted',
+        'assigned_at' => now(),
+        'submitted_at' => now(),
     ]);
 
     for ($i = 0; $i < $qCount; $i++) {
         $q = EvaluationQuestion::create([
             'evaluation_category_id' => $cat->id,
-            'question_text'          => "Q{$i}",
-            'max_score'              => $maxScore,
-            'weight'                 => 1.00,
-            'is_required'            => true,
-            'order_index'            => $i + 1,
+            'question_text' => "Q{$i}",
+            'max_score' => $maxScore,
+            'weight' => 1.00,
+            'is_required' => true,
+            'order_index' => $i + 1,
         ]);
 
         ReviewScore::create([
-            'review_assignment_id'   => $assignment->id,
+            'review_assignment_id' => $assignment->id,
             'evaluation_question_id' => $q->id,
-            'score'                  => $score,
+            'score' => $score,
         ]);
     }
 
@@ -117,10 +118,10 @@ test('can schedule defence for blind_review_passed proposal', function () {
     $service = app(DefenceSessionService::class);
 
     $session = $service->schedule($proposal, [
-        'date'               => now()->addDays(7)->toDateString(),
-        'time'               => '10:00:00',
-        'venue'              => 'Main Hall',
-        'reviewer_ids'       => [$reviewer->id],
+        'date' => now()->addDays(7)->toDateString(),
+        'time' => '10:00:00',
+        'venue' => 'Main Hall',
+        'reviewer_ids' => [$reviewer->id],
         'evaluation_type_id' => $defenceType->id,
     ], $central);
 
@@ -143,10 +144,10 @@ test('defence scheduling transitions proposal to under_open_defence', function (
     $service = app(DefenceSessionService::class);
 
     $service->schedule($proposal, [
-        'date'               => now()->addDays(7)->toDateString(),
-        'time'               => '09:00:00',
-        'venue'              => 'Room A',
-        'reviewer_ids'       => [$reviewer->id],
+        'date' => now()->addDays(7)->toDateString(),
+        'time' => '09:00:00',
+        'venue' => 'Room A',
+        'reviewer_ids' => [$reviewer->id],
         'evaluation_type_id' => $defenceType->id,
     ], $central);
 
@@ -183,8 +184,9 @@ test('combined score equals blind_score plus defence_score', function () {
     expect((float) $session->final_score)->toBe(140.0); // 80 + 60
 });
 
-test('proposal accepted when combined score >= 120', function () {
+test('proposal accepted when combined score >= combined_threshold', function () {
     [$proposal, $central] = makeProposalAt('under_open_defence');
+    DB::table('threshold_settings')->where('key', 'combined_threshold')->update(['value' => 120]);
 
     $blindType = EvaluationType::create([
         'name' => 'blind_review_research_'.rand(100, 999),
@@ -196,7 +198,8 @@ test('proposal accepted when combined score >= 120', function () {
         'label' => 'Defence', 'proposal_category' => 'research', 'is_active' => true,
     ]);
 
-    // 80% + 80% = 160 >= 120 → accepted
+    // 80 + 80 = 160 >= 120 → accepted (single category with weight 100, so the raw
+    // weighted score numerically equals the percentage here)
     createCompletedAssignment($proposal, $blindType, $central, 4, 5, 2);
     createCompletedAssignment($proposal, $defenceType, $central, 4, 5, 2);
 
@@ -211,8 +214,9 @@ test('proposal accepted when combined score >= 120', function () {
     expect($result->status)->toBe('accepted');
 });
 
-test('proposal rejected when combined score < 120', function () {
+test('proposal rejected when combined score < combined_threshold', function () {
     [$proposal, $central] = makeProposalAt('under_open_defence');
+    DB::table('threshold_settings')->where('key', 'combined_threshold')->update(['value' => 120]);
 
     $blindType = EvaluationType::create([
         'name' => 'blind_review_research_'.rand(100, 999),
@@ -224,7 +228,7 @@ test('proposal rejected when combined score < 120', function () {
         'label' => 'Defence', 'proposal_category' => 'research', 'is_active' => true,
     ]);
 
-    // 40% + 40% = 80 < 120 → rejected
+    // 40 + 40 = 80 < 120 → rejected
     createCompletedAssignment($proposal, $blindType, $central, 2, 5, 2);
     createCompletedAssignment($proposal, $defenceType, $central, 2, 5, 2);
 

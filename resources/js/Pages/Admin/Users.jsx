@@ -1157,6 +1157,7 @@ export default function AdminUsers() {
     const { success, error } = useToast();
     const isSuperAdmin      = hasRole('super_admin');
     const isAdminRole       = hasRole('admin');
+    const isCollegeOfficer  = hasRole('college_officer');
     const canManageUsers    = isSuperAdmin || isAdminRole;
     const canCreateUser     = hasPermission('users.create');
     const canEditUser       = hasPermission('users.update');
@@ -1185,7 +1186,10 @@ export default function AdminUsers() {
     const [search, setSearch]                     = useState('');
     const [roleFilter, setRoleFilter]             = useState('');
     const [statusFilter, setStatusFilter]         = useState('');
-    const [collegeFilter, setCollegeFilter]       = useState('');
+    // College officers are already scoped to their own college server-side —
+    // pre-select it so the department-filter cascade below works for them too,
+    // and there's no "All Colleges" picker implying they could see anyone else's.
+    const [collegeFilter, setCollegeFilter]       = useState(() => (hasRole('college_officer') ? currentUser?.college_id ?? '' : ''));
     const [departmentFilter, setDepartmentFilter] = useState('');
     const [genderFilter, setGenderFilter]         = useState('');
     const [regMethodFilter, setRegMethodFilter]   = useState('');
@@ -1415,8 +1419,36 @@ export default function AdminUsers() {
                 </div>
 
                 {/* ── Stats cards ─────────────────────────────────────────── */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    {[
+                <div className={`grid grid-cols-2 ${isCollegeOfficer ? 'lg:grid-cols-3' : 'lg:grid-cols-4'} gap-4`}>
+                    {(isCollegeOfficer ? [
+                        {
+                            label: 'Total Users',
+                            value: stats?.total ?? '—',
+                            icon: UsersIcon,
+                            color: '#6366f1',
+                            bg: '#eef2ff',
+                            border: '#e0e7ff',
+                            sub: meta ? `${meta.total.toLocaleString()} in current view` : null,
+                        },
+                        {
+                            label: 'Total Departments',
+                            value: filterDepts.length,
+                            icon: Building2,
+                            color: '#0ea5e9',
+                            bg: '#f0f9ff',
+                            border: '#bae6fd',
+                            sub: null,
+                        },
+                        {
+                            label: 'Active Departments',
+                            value: filterDepts.filter(d => d.status === 'active').length,
+                            icon: CheckCircle2,
+                            color: '#10b981',
+                            bg: '#ecfdf5',
+                            border: '#a7f3d0',
+                            sub: null,
+                        },
+                    ] : [
                         {
                             label: 'Total Users',
                             value: stats?.total ?? '—',
@@ -1453,7 +1485,7 @@ export default function AdminUsers() {
                             border: '#ddd6fe',
                             sub: 'joined since 1st',
                         },
-                    ].map(({ label, value, icon: Icon, color, bg, border, sub }) => (
+                    ]).map(({ label, value, icon: Icon, color, bg, border, sub }) => (
                         <div key={label} className="bg-white rounded-2xl border p-5 flex items-start gap-4 shadow-sm"
                             style={{ borderColor: border }}>
                             <div className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0"
@@ -1487,11 +1519,13 @@ export default function AdminUsers() {
                                 className="w-full pl-8 pr-4 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 transition-all"
                             />
                         </div>
-                        <select value={collegeFilter} onChange={e => { setCollegeFilter(e.target.value); setPage(1); }}
-                            className="py-2 pl-3 pr-7 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 transition-all text-gray-700">
-                            <option value="">All Colleges</option>
-                            {colleges.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                        </select>
+                        {!isCollegeOfficer && (
+                            <select value={collegeFilter} onChange={e => { setCollegeFilter(e.target.value); setPage(1); }}
+                                className="py-2 pl-3 pr-7 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 transition-all text-gray-700">
+                                <option value="">All Colleges</option>
+                                {colleges.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                        )}
                         {filterDepts.length > 0 && (
                             <select value={departmentFilter} onChange={e => { setDepartmentFilter(e.target.value); setPage(1); }}
                                 className="py-2 pl-3 pr-7 text-sm border border-indigo-200 rounded-xl bg-indigo-50/50 focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 transition-all text-gray-700">

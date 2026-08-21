@@ -4,14 +4,14 @@ import {
     ClipboardCheck, Clock, AlertCircle, Download,
     CheckCircle2, ChevronRight, BookOpen, EyeOff,
     Presentation, Calendar, Shield, Star, ChevronDown, ChevronUp,
-    MessageSquare, Loader2, ShieldAlert,
+    MessageSquare, Loader2, ShieldAlert, Send, ExternalLink,
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import AppLayout from '../../Layouts/AppLayout';
 import { useToast } from '../../Components/Toast';
 import { useFeature } from '../../hooks/useFeature';
 import api from '../../lib/api';
-import { formatDate, getCategoryLabel } from '../../lib/utils';
+import { cn, formatDate, getCategoryLabel } from '../../lib/utils';
 
 const STATUS_META = {
     pending:     { label: 'Pending',     bg: 'bg-amber-100',   text: 'text-amber-700',  dot: 'bg-amber-400'   },
@@ -37,6 +37,13 @@ const TABS = [
         color: 'blue',
         description: 'Attend and score proposals presented in open defence sessions.',
         filter: a => (a.evaluation_type?.name ?? '').startsWith('open_defence') && a.status !== 'submitted',
+    },
+    {
+        key: 'abstracts',
+        label: 'Abstract Review',
+        icon: BookOpen,
+        color: 'amber',
+        description: 'Score conference abstracts assigned to you.',
     },
     {
         key: 'completed',
@@ -125,12 +132,46 @@ function ScoreBar({ score, max }) {
     );
 }
 
+// Mirrors the backend's ReviewScoreService::calculateWeightedDisplay(): when every
+// answered category has a weight, the displayed total is the weighted sum out of the
+// categories' combined weight (e.g. out of 100), not a flat sum of raw question points.
+function weightedScoreDisplay(scores) {
+    if (scores.length === 0) return { earned: 0, max: 0 };
+
+    const byCategory = new Map();
+    scores.forEach(sc => {
+        const catId = sc.evaluation_question?.evaluation_category_id ?? 'none';
+        if (!byCategory.has(catId)) byCategory.set(catId, []);
+        byCategory.get(catId).push(sc);
+    });
+    const categories = Array.from(byCategory.values());
+    const hasWeights = categories.every(cs => (cs[0].evaluation_question?.category?.weight ?? 0) > 0);
+
+    if (hasWeights) {
+        let weightedSum = 0;
+        let totalWeight = 0;
+        categories.forEach(cs => {
+            const weight    = cs[0].evaluation_question.category.weight;
+            const catEarned = cs.reduce((s, sc) => s + (sc.score ?? 0), 0);
+            const catMax    = cs.reduce((s, sc) => s + (sc.evaluation_question?.max_score ?? 0), 0);
+            const catPct    = catMax > 0 ? catEarned / catMax : 0;
+            weightedSum += catPct * weight;
+            totalWeight += weight;
+        });
+        return { earned: Math.round(weightedSum * 100) / 100, max: totalWeight };
+    }
+
+    return {
+        earned: scores.reduce((s, sc) => s + (sc.score ?? 0), 0),
+        max: scores.reduce((s, sc) => s + (sc.evaluation_question?.max_score ?? 0), 0),
+    };
+}
+
 function CompletedCard({ assignment }) {
     const [expanded, setExpanded] = useState(false);
     const isDefence   = (assignment.evaluation_type?.name ?? '').startsWith('open_defence');
     const scores      = assignment.scores ?? [];
-    const totalScore  = scores.reduce((s, sc) => s + (sc.score ?? 0), 0);
-    const maxScore    = scores.reduce((s, sc) => s + (sc.evaluation_question?.max_score ?? 0), 0);
+    const { earned: totalScore, max: maxScore } = weightedScoreDisplay(scores);
     const pct         = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : null;
     const recommendation = scores.find(s => s.recommendation)?.recommendation;
     const comments    = scores.filter(s => s.comment);
@@ -424,6 +465,322 @@ function AssignmentCard({ assignment, tabKey, onCoiDeclared }) {
     );
 }
 
+// ─── Abstract Review (conference abstracts, separate from proposal review) ────
+
+const ABSTRACT_TYPE_COLORS = {
+    oral:     'bg-sky-50 text-sky-700',
+    poster:   'bg-fuchsia-50 text-fuchsia-700',
+    workshop: 'bg-teal-50 text-teal-700',
+    panel:    'bg-orange-50 text-orange-700',
+    other:    'bg-gray-100 text-gray-600',
+};
+
+function AbstractTypeBadge({ type }) {
+    return (
+        <span className={cn('text-xs font-medium px-2 py-0.5 rounded-full capitalize', ABSTRACT_TYPE_COLORS[type] ?? ABSTRACT_TYPE_COLORS.other)}>
+            {type ?? '—'}
+        </span>
+    );
+}
+
+function AbstractAvatar({ name }) {
+    const initials = (name ?? '?').split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
+    const colors = ['from-blue-500 to-indigo-600', 'from-violet-500 to-purple-600', 'from-emerald-500 to-teal-600', 'from-orange-500 to-amber-600', 'from-pink-500 to-rose-600'];
+    const gradient = colors[(name?.charCodeAt(0) ?? 0) % colors.length];
+    return (
+        <div className={cn('w-8 h-8 rounded-full bg-linear-to-br flex items-center justify-center text-white font-bold shrink-0 text-xs', gradient)}>
+            {initials}
+        </div>
+    );
+}
+
+const RECOMMENDATION_OPTIONS = [
+    { value: 'accept', label: 'Accept', activeColor: 'bg-emerald-600 border-emerald-600 text-white' },
+    { value: 'revise', label: 'Revise', activeColor: 'bg-amber-500 border-amber-500 text-white' },
+    { value: 'reject', label: 'Reject', activeColor: 'bg-red-600 border-red-600 text-white' },
+];
+
+function AbstractReviewCard({ item, onSubmitted, index, total }) {
+    const { success, error } = useToast();
+    const myReview  = item.reviews?.find(r => r.submitted_at) ?? null;
+    const hasReview = Boolean(myReview);
+
+    const [score, setScore]                   = useState(myReview?.score ?? 5);
+    const [recommendation, setRecommendation] = useState(myReview?.recommendation ?? '');
+    const [comments, setComments]             = useState(myReview?.comments ?? '');
+    const [submitting, setSubmitting]         = useState(false);
+
+    const submit = async () => {
+        if (!recommendation) { error('Please select a recommendation.'); return; }
+        setSubmitting(true);
+        try {
+            await api.post(`/reviewer/abstracts/${item.id}/review`, { score, recommendation, comments });
+            success('Review submitted.');
+            onSubmitted();
+        } catch (e) {
+            error(e.response?.data?.message || 'Failed to submit review.');
+        }
+        setSubmitting(false);
+    };
+
+    const recColor = myReview?.recommendation === 'accept' ? 'emerald' :
+                     myReview?.recommendation === 'reject' ? 'red' : 'amber';
+
+    return (
+        <div className={cn(
+            'bg-white rounded-2xl border overflow-hidden shadow-sm',
+            hasReview ? 'border-gray-100' : 'border-indigo-200 ring-1 ring-indigo-100',
+        )}>
+            {total > 1 && (
+                <div className={cn(
+                    'px-6 py-2 flex items-center justify-between text-[11px] font-semibold border-b',
+                    hasReview ? 'bg-gray-50 text-gray-400 border-gray-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100',
+                )}>
+                    <span>Abstract {index} of {total}</span>
+                    <span>{hasReview ? '✓ Reviewed' : '⏳ Pending review'}</span>
+                </div>
+            )}
+
+            <div className="px-6 py-5">
+                <div className="flex items-start justify-between gap-4 mb-4">
+                    <div className="flex-1 min-w-0">
+                        <h3 className="text-base font-bold text-gray-900 leading-snug">{item.title}</h3>
+                        <div className="flex flex-wrap items-center gap-2 mt-2">
+                            {item.conference?.title && (
+                                <span className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full text-[11px] font-semibold">
+                                    <BookOpen size={9} /> {item.conference.title}
+                                </span>
+                            )}
+                            {item.presentation_type && <AbstractTypeBadge type={item.presentation_type} />}
+                        </div>
+                    </div>
+                    {hasReview && (
+                        <span className="shrink-0 flex items-center gap-1.5 bg-emerald-100 text-emerald-700 text-xs font-bold px-3 py-1.5 rounded-full">
+                            <CheckCircle2 size={12} /> Submitted
+                        </span>
+                    )}
+                </div>
+
+                {item.submitter_name && (
+                    <div className="flex items-center gap-2.5 mb-5 pb-5 border-b border-gray-50">
+                        <AbstractAvatar name={item.submitter_name} />
+                        <div>
+                            <p className="text-sm font-semibold text-gray-800">{item.submitter_name}</p>
+                            {item.submitter_affiliation && (
+                                <p className="text-xs text-gray-400">{item.submitter_affiliation}</p>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                <div className="mb-5">
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Abstract</p>
+                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{item.body ?? item.abstract_body ?? '—'}</p>
+                </div>
+
+                {item.keywords?.length > 0 && (
+                    <div className="mb-5">
+                        <div className="flex flex-wrap gap-1.5">
+                            {item.keywords.map((kw, i) => (
+                                <span key={i} className="text-xs px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-full font-medium">#{kw}</span>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {item.file_path && (
+                    <div className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-100 rounded-xl mb-5">
+                        <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center shrink-0">
+                            <ClipboardCheck size={15} className="text-white" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold text-blue-900">Submitted Document</p>
+                            <p className="text-[10px] text-blue-500 truncate">{item.file_path.split('/').pop()}</p>
+                        </div>
+                        <a href={item.file_path} target="_blank" rel="noreferrer"
+                            className="shrink-0 flex items-center gap-1.5 text-xs font-bold text-blue-700
+                                       bg-white border border-blue-200 px-3 py-1.5 rounded-lg
+                                       hover:bg-blue-700 hover:text-white hover:border-blue-700 transition-colors">
+                            <ExternalLink size={11} /> Open
+                        </a>
+                    </div>
+                )}
+
+                <div className="border-t border-gray-100 pt-5">
+                    {hasReview ? (
+                        <div className="space-y-4">
+                            <div className={cn(
+                                `flex items-center gap-3 px-4 py-3 rounded-2xl border bg-${recColor}-50 border-${recColor}-200`,
+                            )}>
+                                <div className={cn(`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-${recColor}-600`)}>
+                                    <CheckCircle2 size={17} className="text-white" />
+                                </div>
+                                <div>
+                                    <p className={cn(`text-sm font-bold text-${recColor}-800`)}>
+                                        Review submitted — {myReview.recommendation === 'accept' ? 'Accept' :
+                                            myReview.recommendation === 'reject' ? 'Reject' : 'Revise'}
+                                    </p>
+                                    <p className={cn(`text-xs text-${recColor}-600 mt-0.5`)}>
+                                        {formatDate(myReview.submitted_at ?? myReview.created_at)} · No further action needed
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="bg-gray-50 rounded-xl p-4 text-center border border-gray-100">
+                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Score</p>
+                                    <p className="text-3xl font-black text-indigo-600 leading-none">{myReview.score}</p>
+                                    <p className="text-[10px] text-gray-400 mt-1">/ 10</p>
+                                </div>
+                                <div className="bg-gray-50 rounded-xl p-4 text-center border border-gray-100">
+                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Recommendation</p>
+                                    <span className={cn(
+                                        'inline-block mt-2 text-sm font-bold px-3 py-1.5 rounded-full capitalize',
+                                        myReview.recommendation === 'accept' ? 'bg-emerald-100 text-emerald-700' :
+                                        myReview.recommendation === 'reject' ? 'bg-red-100 text-red-700' :
+                                        'bg-amber-100 text-amber-700',
+                                    )}>
+                                        {myReview.recommendation === 'accept' ? '✓ Accept' :
+                                         myReview.recommendation === 'reject' ? '✗ Reject' : '⟳ Revise'}
+                                    </span>
+                                </div>
+                            </div>
+
+                            {myReview.comments && (
+                                <div>
+                                    <p className="text-xs font-semibold text-gray-500 mb-2">Your Comments</p>
+                                    <p className="text-sm text-gray-600 leading-relaxed bg-gray-50 rounded-xl p-4 border border-gray-100 whitespace-pre-line">
+                                        {myReview.comments}
+                                    </p>
+                                </div>
+                            )}
+
+                            <div className="flex items-center gap-2 text-xs text-gray-400 bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
+                                <ShieldAlert size={12} className="shrink-0" />
+                                This review is locked. Contact an admin if a correction is needed.
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="space-y-5">
+                            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Submit Your Review</p>
+
+                            <div>
+                                <div className="flex items-center justify-between mb-2">
+                                    <label className="text-xs font-semibold text-gray-600">Score</label>
+                                    <span className="text-lg font-bold text-indigo-600">
+                                        {score}<span className="text-xs text-gray-400 font-normal">/10</span>
+                                    </span>
+                                </div>
+                                <input type="range" min={1} max={10} step={1} value={score}
+                                    onChange={e => setScore(Number(e.target.value))}
+                                    className="w-full accent-indigo-600 h-2 rounded-full cursor-pointer" />
+                                <div className="flex justify-between mt-1">
+                                    <span className="text-[10px] text-gray-400">Poor (1)</span>
+                                    <span className="text-[10px] text-gray-400">Excellent (10)</span>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-600 mb-2">Recommendation *</label>
+                                <div className="flex gap-2.5">
+                                    {RECOMMENDATION_OPTIONS.map(opt => (
+                                        <button key={opt.value} onClick={() => setRecommendation(opt.value)}
+                                            className={cn(
+                                                'flex-1 py-2.5 rounded-xl border text-xs font-bold transition-all',
+                                                recommendation === opt.value ? opt.activeColor : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300',
+                                            )}>
+                                            {opt.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Comments</label>
+                                <textarea value={comments} onChange={e => setComments(e.target.value)}
+                                    rows={4} placeholder="Provide detailed feedback for the author…"
+                                    className="w-full border border-gray-200 bg-gray-50 rounded-xl px-3.5 py-2.5 text-sm
+                                               focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:bg-white transition-colors resize-none" />
+                            </div>
+
+                            <button onClick={submit} disabled={submitting || !recommendation}
+                                className="w-full flex items-center justify-center gap-2 py-3 bg-indigo-600 text-white
+                                           rounded-xl text-sm font-bold hover:bg-indigo-700 disabled:opacity-60 transition-colors">
+                                {submitting ? <Loader2 size={14} className="animate-spin" /> : <Send size={13} />}
+                                {submitting ? 'Submitting…' : 'Submit Review'}
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function AbstractReviewsPanel({ items, loading, onReload }) {
+    if (loading) {
+        return (
+            <div className="space-y-4">
+                {[...Array(3)].map((_, i) => (
+                    <div key={i} className="bg-white rounded-2xl border border-gray-100 p-6 animate-pulse space-y-3">
+                        <div className="h-4 bg-gray-100 rounded w-3/5" />
+                        <div className="h-3 bg-gray-100 rounded w-1/4" />
+                        <div className="h-24 bg-gray-100 rounded-xl mt-4" />
+                    </div>
+                ))}
+            </div>
+        );
+    }
+
+    if (items.length === 0) {
+        return (
+            <div className="bg-white border border-dashed border-gray-300 rounded-2xl p-12 text-center">
+                <BookOpen size={28} className="text-gray-300 mx-auto mb-3" />
+                <p className="text-sm font-medium text-gray-500">No Abstract Review assignments</p>
+                <p className="text-xs text-gray-400 mt-1">Abstracts assigned to you for review will appear here.</p>
+            </div>
+        );
+    }
+
+    const reviewed = items.filter(i => i.reviews?.some(r => r.submitted_at)).length;
+    const pending  = items.length - reviewed;
+    const pct      = Math.round((reviewed / items.length) * 100);
+
+    return (
+        <div className="space-y-5">
+            <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-3">
+                    <div>
+                        <h3 className="text-sm font-bold text-gray-900">Your Review Progress</h3>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                            {reviewed} of {items.length} abstract{items.length !== 1 ? 's' : ''} reviewed
+                        </p>
+                    </div>
+                    <div className="flex items-center gap-3">
+                        {pending > 0 && (
+                            <span className="flex items-center gap-1.5 text-xs font-semibold text-amber-700
+                                             bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-full">
+                                <Clock size={11} /> {pending} pending
+                            </span>
+                        )}
+                        <span className={cn('text-2xl font-black', pct === 100 ? 'text-emerald-600' : 'text-indigo-600')}>
+                            {pct}%
+                        </span>
+                    </div>
+                </div>
+                <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div className={cn('h-full rounded-full transition-all duration-700', pct === 100 ? 'bg-emerald-500' : 'bg-indigo-500')}
+                        style={{ width: `${pct}%` }} />
+                </div>
+            </div>
+
+            {items.map((item, idx) => (
+                <AbstractReviewCard key={item.id} item={item} onSubmitted={onReload} index={idx + 1} total={items.length} />
+            ))}
+        </div>
+    );
+}
+
 export default function ReviewIndex() {
     const { error } = useToast();
     const { app_settings } = usePage().props;
@@ -432,10 +789,24 @@ export default function ReviewIndex() {
     const [loading, setLoading]               = useState(true);
     const [activeTab, setActiveTab]           = useState('blind');
 
+    const [abstractItems, setAbstractItems]     = useState([]);
+    const [abstractsLoading, setAbstractsLoading] = useState(true);
+
     const handleCoiDeclared = (assignmentId) => {
         setAllAssignments(prev => prev.map(a =>
             a.id === assignmentId ? { ...a, coi_declared_at: new Date().toISOString() } : a
         ));
+    };
+
+    const loadAbstracts = () => {
+        setAbstractsLoading(true);
+        api.get('/reviewer/abstracts')
+            .then(res => {
+                const d = res.data?.data ?? res.data ?? [];
+                setAbstractItems(Array.isArray(d) ? d : (d.data ?? []));
+            })
+            .catch(() => {})
+            .finally(() => setAbstractsLoading(false));
     };
 
     useEffect(() => {
@@ -443,20 +814,23 @@ export default function ReviewIndex() {
             .then(res => setAllAssignments(res.data?.data ?? []))
             .catch(() => error('Failed to load your review assignments.'))
             .finally(() => setLoading(false));
+        loadAbstracts();
     }, []);
 
     const availableYears = [...new Set(allAssignments.map(a => a.proposal?.academic_year).filter(Boolean))].sort().reverse();
     const assignments    = yearFilter ? allAssignments.filter(a => a.proposal?.academic_year === yearFilter) : allAssignments;
 
     const currentTab  = TABS.find(t => t.key === activeTab);
-    const tabItems    = currentTab ? assignments.filter(currentTab.filter) : [];
-    const allTotal    = allAssignments.length;
+    const tabItems    = currentTab?.filter ? assignments.filter(currentTab.filter) : [];
+    const allTotal    = allAssignments.length + abstractItems.length;
 
-    const getCount   = tab => assignments.filter(tab.filter).length;
-    const getPending = tab => assignments.filter(tab.filter).filter(a => ['pending', 'in_progress', 'accepted'].includes(a.status)).length;
-    const getNew     = tab => assignments.filter(tab.filter).filter(isNewAssignment).length;
+    const getCount   = tab => tab.key === 'abstracts' ? abstractItems.length : assignments.filter(tab.filter).length;
+    const getPending = tab => tab.key === 'abstracts'
+        ? abstractItems.filter(i => !i.reviews?.some(r => r.submitted_at)).length
+        : assignments.filter(tab.filter).filter(a => ['pending', 'in_progress', 'accepted'].includes(a.status)).length;
+    const getNew     = tab => tab.key === 'abstracts' ? 0 : assignments.filter(tab.filter).filter(isNewAssignment).length;
 
-    if (loading) {
+    if (loading || abstractsLoading) {
         return (
             <AppLayout breadcrumb="Reviews">
                 <div className="p-8 flex items-center justify-center min-h-64">
@@ -474,9 +848,9 @@ export default function ReviewIndex() {
             <div className="p-6 max-w-5xl mx-auto space-y-6">
 
                 {/* ── Page header ─────────────────────────────────────────── */}
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                     <div className="flex items-center gap-3">
-                        <div className="h-11 w-11 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200">
+                        <div className="h-11 w-11 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200 shrink-0">
                             <Shield size={20} className="text-white" />
                         </div>
                         <div>
@@ -486,12 +860,12 @@ export default function ReviewIndex() {
                             </p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-2 sm:shrink-0">
                         {availableYears.length > 1 && (
                             <select
                                 value={yearFilter}
                                 onChange={e => { setYearFilter(e.target.value); setActiveTab('blind'); }}
-                                className="text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                                className="flex-1 sm:flex-none text-sm border border-gray-200 rounded-xl px-3 py-2.5 sm:py-2 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
                             >
                                 <option value="">All Years</option>
                                 {availableYears.map(y => (
@@ -501,7 +875,7 @@ export default function ReviewIndex() {
                         )}
                         <a
                             href={`/api/v1/calendar/export?token=${localStorage.getItem('rtt_token') ?? ''}`}
-                            className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-3.5 py-2 rounded-xl transition-colors"
+                            className="flex items-center justify-center gap-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-3.5 py-2.5 sm:py-2 rounded-xl transition-colors shrink-0"
                         >
                             <Download size={13} /> Export iCal
                         </a>
@@ -525,79 +899,87 @@ export default function ReviewIndex() {
                 {allTotal > 0 && (
                     <>
                         {/* ── Tabs ─────────────────────────────────────────── */}
-                        <div className="flex gap-2 p-1 bg-gray-100 rounded-2xl w-fit">
-                            {TABS.map(tab => {
-                                const count    = getCount(tab);
-                                const pending  = getPending(tab);
-                                const newCount = getNew(tab);
-                                const isActive = activeTab === tab.key;
-                                const Icon = tab.icon;
+                        <div className="-mx-4 px-4 sm:mx-0 sm:px-0 overflow-x-auto">
+                            <div className="flex gap-2 p-1 bg-gray-100 rounded-2xl w-fit">
+                                {TABS.map(tab => {
+                                    const count    = getCount(tab);
+                                    const pending  = getPending(tab);
+                                    const newCount = getNew(tab);
+                                    const isActive = activeTab === tab.key;
+                                    const Icon = tab.icon;
 
-                                return (
-                                    <button
-                                        key={tab.key}
-                                        onClick={() => setActiveTab(tab.key)}
-                                        className={`relative flex items-center gap-2.5 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-                                            isActive
-                                                ? 'bg-white shadow-sm text-gray-900'
-                                                : 'text-gray-500 hover:text-gray-700'
-                                        }`}
-                                    >
-                                        <Icon size={15} className={isActive
-                                            ? tab.color === 'violet' ? 'text-violet-600'
-                                                : tab.color === 'emerald' ? 'text-emerald-600'
-                                                : 'text-blue-600'
-                                            : 'text-gray-400'} />
-                                        {tab.label}
-                                        {count > 0 && (
-                                            <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${
+                                    return (
+                                        <button
+                                            key={tab.key}
+                                            onClick={() => setActiveTab(tab.key)}
+                                            className={`relative flex items-center gap-2 sm:gap-2.5 px-3.5 sm:px-5 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${
                                                 isActive
-                                                    ? tab.color === 'violet'  ? 'bg-violet-100 text-violet-700'
-                                                    : tab.color === 'emerald' ? 'bg-emerald-100 text-emerald-700'
-                                                    : 'bg-blue-100 text-blue-700'
-                                                    : 'bg-gray-200 text-gray-600'
-                                            }`}>
-                                                {count}
-                                            </span>
-                                        )}
-                                        {newCount > 0 && !isActive && (
-                                            <span className="absolute top-1 right-1 flex h-2.5 w-2.5">
-                                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-                                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
-                                            </span>
-                                        )}
-                                        {pending > 0 && !isActive && newCount === 0 && (
-                                            <span className="absolute top-1 right-1 w-2 h-2 bg-amber-400 rounded-full" />
-                                        )}
-                                    </button>
-                                );
-                            })}
+                                                    ? 'bg-white shadow-sm text-gray-900'
+                                                    : 'text-gray-500 hover:text-gray-700'
+                                            }`}
+                                        >
+                                            <Icon size={15} className={isActive
+                                                ? tab.color === 'violet' ? 'text-violet-600'
+                                                    : tab.color === 'emerald' ? 'text-emerald-600'
+                                                    : tab.color === 'amber' ? 'text-amber-600'
+                                                    : 'text-blue-600'
+                                                : 'text-gray-400'} />
+                                            {tab.label}
+                                            {count > 0 && (
+                                                <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${
+                                                    isActive
+                                                        ? tab.color === 'violet'  ? 'bg-violet-100 text-violet-700'
+                                                        : tab.color === 'emerald' ? 'bg-emerald-100 text-emerald-700'
+                                                        : tab.color === 'amber' ? 'bg-amber-100 text-amber-700'
+                                                        : 'bg-blue-100 text-blue-700'
+                                                        : 'bg-gray-200 text-gray-600'
+                                                }`}>
+                                                    {count}
+                                                </span>
+                                            )}
+                                            {newCount > 0 && !isActive && (
+                                                <span className="absolute top-1 right-1 flex h-2.5 w-2.5">
+                                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+                                                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
+                                                </span>
+                                            )}
+                                            {pending > 0 && !isActive && newCount === 0 && (
+                                                <span className="absolute top-1 right-1 w-2 h-2 bg-amber-400 rounded-full" />
+                                            )}
+                                        </button>
+                                    );
+                                })}
+                            </div>
                         </div>
 
                         {/* ── Tab description + context banner ─────────────── */}
                         {currentTab && (
                             <div className={`rounded-2xl border px-5 py-4 flex items-start gap-3 ${
-                                activeTab === 'blind'    ? 'bg-violet-50 border-violet-200' :
-                                activeTab === 'defence'  ? 'bg-blue-50 border-blue-200' :
-                                                           'bg-emerald-50 border-emerald-200'
+                                activeTab === 'blind'     ? 'bg-violet-50 border-violet-200' :
+                                activeTab === 'defence'   ? 'bg-blue-50 border-blue-200' :
+                                activeTab === 'abstracts' ? 'bg-amber-50 border-amber-200' :
+                                                             'bg-emerald-50 border-emerald-200'
                             }`}>
                                 <currentTab.icon size={18} className={`mt-0.5 shrink-0 ${
-                                    activeTab === 'blind'   ? 'text-violet-500' :
-                                    activeTab === 'defence' ? 'text-blue-500' :
-                                                              'text-emerald-500'
+                                    activeTab === 'blind'     ? 'text-violet-500' :
+                                    activeTab === 'defence'   ? 'text-blue-500' :
+                                    activeTab === 'abstracts' ? 'text-amber-500' :
+                                                                 'text-emerald-500'
                                 }`} />
                                 <div>
                                     <p className={`text-sm font-semibold ${
-                                        activeTab === 'blind'   ? 'text-violet-800' :
-                                        activeTab === 'defence' ? 'text-blue-800' :
-                                                                  'text-emerald-800'
+                                        activeTab === 'blind'     ? 'text-violet-800' :
+                                        activeTab === 'defence'   ? 'text-blue-800' :
+                                        activeTab === 'abstracts' ? 'text-amber-800' :
+                                                                     'text-emerald-800'
                                     }`}>
                                         {currentTab.label}
                                     </p>
                                     <p className={`text-xs mt-0.5 ${
-                                        activeTab === 'blind'   ? 'text-violet-600' :
-                                        activeTab === 'defence' ? 'text-blue-600' :
-                                                                  'text-emerald-600'
+                                        activeTab === 'blind'     ? 'text-violet-600' :
+                                        activeTab === 'defence'   ? 'text-blue-600' :
+                                        activeTab === 'abstracts' ? 'text-amber-600' :
+                                                                     'text-emerald-600'
                                     }`}>
                                         {currentTab.description}
                                     </p>
@@ -605,11 +987,16 @@ export default function ReviewIndex() {
                             </div>
                         )}
 
+                        {/* ── Abstract review panel (separate data source) ─── */}
+                        {activeTab === 'abstracts' && (
+                            <AbstractReviewsPanel items={abstractItems} loading={abstractsLoading} onReload={loadAbstracts} />
+                        )}
+
                         {/* ── Stats (active/pending tabs only) ─────────────── */}
-                        {tabItems.length > 0 && activeTab !== 'completed' && <StatsRow items={tabItems} />}
+                        {activeTab !== 'abstracts' && tabItems.length > 0 && activeTab !== 'completed' && <StatsRow items={tabItems} />}
 
                         {/* ── Empty tab state ────────────────────────────────── */}
-                        {tabItems.length === 0 && (
+                        {activeTab !== 'abstracts' && tabItems.length === 0 && (
                             <div className="bg-white border border-dashed border-gray-300 rounded-2xl p-12 text-center">
                                 <currentTab.icon size={28} className="text-gray-300 mx-auto mb-3" />
                                 <p className="text-sm font-medium text-gray-500">No {currentTab.label} assignments</p>
@@ -618,7 +1005,7 @@ export default function ReviewIndex() {
                         )}
 
                         {/* ── Assignment cards ────────────────────────────────── */}
-                        {tabItems.length > 0 && activeTab !== 'completed' && (
+                        {activeTab !== 'abstracts' && tabItems.length > 0 && activeTab !== 'completed' && (
                             <div className="space-y-3">
                                 {tabItems.map(assignment => (
                                     <AssignmentCard

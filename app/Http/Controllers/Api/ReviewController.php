@@ -5,11 +5,13 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Jobs\SendRawMailJob;
 use App\Jobs\StoreInAppNotificationJob;
+use App\Models\ConferenceAbstractReview;
 use App\Models\DefenceSession;
 use App\Models\EvaluationCategory;
 use App\Models\EvaluationQuestion;
 use App\Models\EvaluationType;
 use App\Models\Proposal;
+use App\Models\ProposalDocument;
 use App\Models\ProposalMember;
 use App\Models\ReviewAssignment;
 use App\Models\ReviewScore;
@@ -25,6 +27,11 @@ use Illuminate\Support\Facades\Log;
 
 class ReviewController extends Controller
 {
+    private const WORKLOAD_ROLES = [
+        'super_admin', 'admin', 'central_officer', 'research_officer',
+        'community_officer', 'technology_officer', 'college_officer',
+    ];
+
     public function __construct(
         private ReviewAssignmentService $assignmentService,
         private ReviewScoreService $scoreService,
@@ -34,7 +41,7 @@ class ReviewController extends Controller
 
     public function availableReviewers(string $id, Request $request): JsonResponse
     {
-        $filters = $request->only(['search', 'expertise', 'department_id', 'college_id']);
+        $filters = $request->only(['search', 'expertise', 'department_id', 'college_id', 'reviewer_type']);
         $reviewers = $this->assignmentService->getAvailableReviewers($id, $filters);
 
         return response()->json(['data' => $reviewers]);
@@ -46,6 +53,7 @@ class ReviewController extends Controller
             'reviewer_ids' => 'required|array|min:1',
             'evaluation_type_id' => 'required|string',
             'due_date' => 'required|date|after:today',
+            'override_workload_cap' => 'sometimes|boolean',
         ]);
 
         $proposal = Proposal::findOrFail($id);
@@ -55,7 +63,8 @@ class ReviewController extends Controller
             $request->evaluation_type_id,
             $request->user(),
             [],
-            $request->due_date
+            $request->due_date,
+            $request->boolean('override_workload_cap')
         );
 
         AuditLogger::log(
@@ -316,7 +325,7 @@ class ReviewController extends Controller
 
         $reviews = $submitted->map(function ($assignment) {
             $scores = $assignment->scores;
-            $avgScore = $scores->isNotEmpty() ? round($scores->avg('score'), 1) : null;
+            $display = $this->scoreService->calculateWeightedDisplay($assignment);
             $recommendation = $scores->whereNotNull('recommendation')->last()?->recommendation;
 
             $comments = $scores->map(fn ($s) => [
@@ -326,21 +335,53 @@ class ReviewController extends Controller
             ])->filter(fn ($c) => $c['comment'])->values();
 
             return [
-                'overall_score' => $avgScore,
+                'overall_score' => $scores->isNotEmpty() ? $display['score'] : null,
+                'overall_max' => $scores->isNotEmpty() ? $display['max'] : null,
                 'recommendation' => $recommendation,
                 'comments' => $comments,
             ];
         })->values();
 
-        $overallAvg = $reviews->whereNotNull('overall_score')->avg('overall_score');
+        $scored = $reviews->whereNotNull('overall_score');
 
         return response()->json([
             'data' => [
                 'total_reviews' => $proposal->reviewAssignments->count(),
                 'submitted_reviews' => $submitted->count(),
-                'average_score' => $overallAvg ? round($overallAvg, 1) : null,
+                'average_score' => $scored->isNotEmpty() ? round($scored->avg('overall_score'), 2) : null,
+                'average_max' => $scored->isNotEmpty() ? $scored->first()['overall_max'] : null,
                 'reviews' => $reviews,
             ],
+            'message' => '',
+            'errors' => [],
+        ]);
+    }
+
+    /**
+     * Live, read-only recalculation of a proposal's blind/defence/combined scores
+     * against the CURRENT threshold settings and CURRENT evaluation-criteria weights.
+     * Never cached — lets staff confirm a proposal's numbers (and its pass/fail
+     * verdicts) are correct at any time, including after thresholds or evaluation
+     * criteria were edited following an earlier automatic decision. Does not mutate
+     * anything; it does not re-run the workflow transition.
+     */
+    public function recalculateReviewScore(string $id, Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $proposal = Proposal::findOrFail($id);
+
+        if (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'research_officer',
+            'community_officer', 'technology_officer', 'college_officer'])) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
+        }
+
+        $snapshot = $this->scoreService->recalculateSnapshot($proposal);
+
+        return response()->json([
+            'data' => array_merge($snapshot, [
+                'proposal_status' => $proposal->status,
+                'recalculated_at' => now()->toIso8601String(),
+            ]),
             'message' => '',
             'errors' => [],
         ]);
@@ -368,24 +409,48 @@ class ReviewController extends Controller
             $query->where('college_id', $request->_college_scope);
         }
 
+        // Research/community/technology officers only see their own category's proposals
+        if ($request->_category_scope) {
+            $query->where('category', $request->_category_scope);
+        }
+
         if ($request->filled('academic_year')) {
             $query->where('academic_year', $request->academic_year);
+        }
+
+        if ($request->filled('category')) {
+            $query->where('category', $request->category);
         }
 
         return response()->json(['data' => $query->get(), 'message' => '', 'errors' => [], 'meta' => []]);
     }
 
+    /** College officers can only ever see their own college — overrides whatever the client sends. */
+    private function resolveCollegeScope(Request $request): ?string
+    {
+        return $request->user()->hasRole('college_officer')
+            ? $request->user()->college_id
+            : $request->college_id;
+    }
+
     public function reviewerWorkload(Request $request): JsonResponse
     {
+        if (! $request->user()?->hasAnyRole(self::WORKLOAD_ROLES)) {
+            return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
+        }
+
+        $collegeId = $this->resolveCollegeScope($request);
+
         $assignments = ReviewAssignment::with([
             'proposal:id,title,tracker_number,college_id',
             'proposal.college:id,name',
             'reviewer:id,name,email',
+            'reviewer.roles:id,name',
             'evaluationType:id,name,label',
         ])
-            ->when($request->college_id, fn ($q) => $q->whereHas(
+            ->when($collegeId, fn ($q) => $q->whereHas(
                 'proposal',
-                fn ($p) => $p->where('college_id', $request->college_id)
+                fn ($p) => $p->where('college_id', $collegeId)
             ))
             ->orderBy('assigned_at', 'desc')
             ->get();
@@ -395,13 +460,20 @@ class ReviewController extends Controller
 
     public function reviewerAnalytics(Request $request): JsonResponse
     {
+        if (! $request->user()?->hasAnyRole(self::WORKLOAD_ROLES)) {
+            return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
+        }
+
+        $collegeId = $this->resolveCollegeScope($request);
+
         $query = ReviewAssignment::with([
             'reviewer:id,name,email',
+            'reviewer.roles:id,name',
             'scores:id,review_assignment_id,score',
         ])
-            ->when($request->college_id, fn ($q) => $q->whereHas(
+            ->when($collegeId, fn ($q) => $q->whereHas(
                 'proposal',
-                fn ($p) => $p->where('college_id', $request->college_id)
+                fn ($p) => $p->where('college_id', $collegeId)
             ));
 
         $assignments = $query->get([
@@ -410,7 +482,12 @@ class ReviewController extends Controller
 
         $grouped = $assignments->groupBy('reviewer_id');
 
-        $stats = $grouped->map(function ($items) {
+        // Abstracts have no college, so they're only folded in for the unfiltered view.
+        $abstractGrouped = $collegeId
+            ? collect()
+            : ConferenceAbstractReview::query()->get(['id', 'reviewer_id', 'score', 'submitted_at', 'created_at'])->groupBy('reviewer_id');
+
+        $stats = $grouped->map(function ($items) use ($abstractGrouped) {
             $reviewer = $items->first()->reviewer;
             $total = $items->count();
             $completed = $items->where('status', 'submitted')->count();
@@ -433,9 +510,23 @@ class ReviewController extends Controller
             $allScores = $items->flatMap(fn ($a) => $a->scores)->pluck('score')->filter();
             $avgScore = $allScores->isNotEmpty() ? round($allScores->avg(), 1) : null;
 
+            // Abstract reviews have no due date, so "overdue"/"on-time" don't apply to them —
+            // kept as a separate block rather than blended into the proposal-review numbers above.
+            $abstractItems = $abstractGrouped->get($reviewer?->id, collect());
+            $abstractTotal = $abstractItems->count();
+            $abstractCompleted = $abstractItems->whereNotNull('submitted_at')->count();
+            $abstractPending = $abstractTotal - $abstractCompleted;
+            $abstractScores = $abstractItems->pluck('score')->filter();
+            $abstractAvgScore = $abstractScores->isNotEmpty() ? round($abstractScores->avg(), 1) : null;
+
             return [
                 'reviewer_id' => $reviewer?->id,
-                'reviewer' => $reviewer ? ['id' => $reviewer->id, 'name' => $reviewer->name, 'email' => $reviewer->email] : null,
+                'reviewer' => $reviewer ? [
+                    'id' => $reviewer->id,
+                    'name' => $reviewer->name,
+                    'email' => $reviewer->email,
+                    'roles' => $reviewer->roles->map(fn ($r) => ['id' => $r->id, 'name' => $r->name])->values(),
+                ] : null,
                 'total' => $total,
                 'completed' => $completed,
                 'pending' => $pending,
@@ -444,8 +535,61 @@ class ReviewController extends Controller
                 'avg_days' => $avgDays,
                 'on_time_rate' => $onTimeRate,
                 'avg_score' => $avgScore,
+                'abstract_reviews' => [
+                    'total' => $abstractTotal,
+                    'completed' => $abstractCompleted,
+                    'pending' => $abstractPending,
+                    'avg_score' => $abstractAvgScore,
+                ],
+                'combined_total' => $total + $abstractTotal,
+                'combined_pending' => $pending + $abstractPending,
+                'combined_completed' => $completed + $abstractCompleted,
             ];
         })->values();
+
+        // Reviewers who only have abstract assignments (no proposal reviews at all) still
+        // need a row, since combined_pending should reflect all their outstanding work.
+        $proposalReviewerIds = $grouped->keys();
+        $abstractOnlyStats = $abstractGrouped
+            ->reject(fn ($items, $reviewerId) => $proposalReviewerIds->contains($reviewerId))
+            ->map(function ($items) {
+                $reviewer = User::with('roles:id,name')->find($items->first()->reviewer_id);
+                $abstractTotal = $items->count();
+                $abstractCompleted = $items->whereNotNull('submitted_at')->count();
+                $abstractPending = $abstractTotal - $abstractCompleted;
+                $abstractScores = $items->pluck('score')->filter();
+                $abstractAvgScore = $abstractScores->isNotEmpty() ? round($abstractScores->avg(), 1) : null;
+
+                return [
+                    'reviewer_id' => $reviewer?->id,
+                    'reviewer' => $reviewer ? [
+                        'id' => $reviewer->id,
+                        'name' => $reviewer->name,
+                        'email' => $reviewer->email,
+                        'roles' => $reviewer->roles->map(fn ($r) => ['id' => $r->id, 'name' => $r->name])->values(),
+                    ] : null,
+                    'total' => 0,
+                    'completed' => 0,
+                    'pending' => 0,
+                    'overdue' => 0,
+                    'declined' => 0,
+                    'avg_days' => null,
+                    'on_time_rate' => null,
+                    'avg_score' => null,
+                    'abstract_reviews' => [
+                        'total' => $abstractTotal,
+                        'completed' => $abstractCompleted,
+                        'pending' => $abstractPending,
+                        'avg_score' => $abstractAvgScore,
+                    ],
+                    'combined_total' => $abstractTotal,
+                    'combined_pending' => $abstractPending,
+                    'combined_completed' => $abstractCompleted,
+                ];
+            })
+            ->values();
+
+        $stats = $stats->concat($abstractOnlyStats)->values();
 
         $totalReviewers = $stats->count();
         $avgCompletionRate = $stats->isNotEmpty()
@@ -454,6 +598,7 @@ class ReviewController extends Controller
         $totalOverdue = $stats->sum('overdue');
         $avgDaysAll = $stats->filter(fn ($s) => $s['avg_days'] !== null);
         $avgDaysGlobal = $avgDaysAll->isNotEmpty() ? round($avgDaysAll->avg('avg_days')) : null;
+        $totalAbstractPending = $stats->sum(fn ($s) => $s['abstract_reviews']['pending']);
 
         return response()->json([
             'data' => [
@@ -462,6 +607,7 @@ class ReviewController extends Controller
                     'avg_completion_rate' => $avgCompletionRate,
                     'total_overdue' => $totalOverdue,
                     'avg_days_to_complete' => $avgDaysGlobal,
+                    'total_abstract_pending' => $totalAbstractPending,
                 ],
                 'reviewers' => $stats,
             ],
@@ -476,6 +622,7 @@ class ReviewController extends Controller
         $request->validate([
             'new_reviewer_id' => 'required|uuid|exists:users,id',
             'due_date' => 'required|date|after:today',
+            'override_workload_cap' => 'sometimes|boolean',
         ]);
 
         $assignment = ReviewAssignment::with('evaluationType')->findOrFail($id);
@@ -496,6 +643,8 @@ class ReviewController extends Controller
                 'meta' => [],
             ], 422);
         }
+
+        $this->assignmentService->ensureWithinWorkloadCap([$request->new_reviewer_id], $request->boolean('override_workload_cap'));
 
         $oldReviewerId = $assignment->reviewer_id;
         $assignment->update([
@@ -560,6 +709,7 @@ class ReviewController extends Controller
         $request->validate([
             'reviewer_id' => 'required|uuid|exists:users,id',
             'due_date' => 'required|date|after:today',
+            'override_workload_cap' => 'sometimes|boolean',
         ]);
 
         $proposal = Proposal::findOrFail($id);
@@ -596,6 +746,8 @@ class ReviewController extends Controller
                 'meta' => [],
             ], 422);
         }
+
+        $this->assignmentService->ensureWithinWorkloadCap([$request->reviewer_id], $request->boolean('override_workload_cap'));
 
         $alreadyAssigned = ReviewAssignment::where('proposal_id', $id)
             ->where('reviewer_id', $request->reviewer_id)
@@ -708,7 +860,7 @@ class ReviewController extends Controller
         $assignments = ReviewAssignment::with([
             'proposal.college',
             'evaluationType',
-            'scores.evaluationQuestion',
+            'scores.evaluationQuestion.category',
         ])
             ->where('reviewer_id', $request->user()->id)
             ->orderByDesc('assigned_at')
@@ -744,6 +896,14 @@ class ReviewController extends Controller
             $memberCount = $proposal->members->count();
             $proposal->makeHidden(['members']);
             $proposal->setAttribute('members_count', $memberCount);
+
+            // Reviewers only need the proposal document and budget spreadsheet to
+            // score — other uploads (PI CV, supporting docs) aren't relevant to
+            // scoring and can carry identifying info.
+            $proposal->setRelation(
+                'documents',
+                $proposal->documents->whereIn('document_type', ProposalDocument::REVIEWER_VISIBLE_TYPES)->values()
+            );
         }
 
         // Attach defence session for open-defence assignments so the frontend

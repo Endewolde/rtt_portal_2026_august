@@ -450,7 +450,7 @@ export default function MyProposals() {
                 )}
 
                 {/* Header */}
-                <div className="flex items-center justify-between gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                             <FolderOpen size={22} className="text-blue-600" /> My Proposals
@@ -459,17 +459,19 @@ export default function MyProposals() {
                             {myProposals.length} as PI · {coProposals.length} as Co-Investigator
                         </p>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                        <ViewToggle view={view} onChange={setView} />
-                        <a
-                            href={`/api/v1/calendar/export?token=${localStorage.getItem('rtt_token') ?? ''}`}
-                            className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors"
-                        >
-                            <Download size={12} />
-                            Calendar
-                        </a>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 sm:shrink-0">
+                        <div className="flex items-center gap-2">
+                            <ViewToggle view={view} onChange={setView} />
+                            <a
+                                href={`/api/v1/calendar/export?token=${localStorage.getItem('rtt_token') ?? ''}`}
+                                className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-2 sm:py-1.5 rounded-lg transition-colors shrink-0"
+                            >
+                                <Download size={12} />
+                                Calendar
+                            </a>
+                        </div>
                         <Link href="/proposals/create"
-                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 shadow-sm">
+                            className="flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 shadow-sm w-full sm:w-auto">
                             + New Application
                         </Link>
                     </div>

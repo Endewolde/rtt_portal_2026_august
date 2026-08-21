@@ -12,6 +12,12 @@ import { get, post } from '../../lib/api';
 import { getCategoryLabel, cn } from '../../lib/utils';
 import { useToast } from '../../Components/Toast';
 
+// ─── Reviewer type helpers ─────────────────────────────────────────────────────
+
+function isExternalReviewer(reviewer) {
+    return reviewer?.roles?.some(r => (typeof r === 'string' ? r : r.name) === 'external_reviewer') ?? false;
+}
+
 // ─── Workload indicator ────────────────────────────────────────────────────────
 
 function WorkloadBadge({ count }) {
@@ -94,7 +100,7 @@ export default function AssignReviewers() {
     const [override, setOverride]           = useState(false);
 
     const [filters, setFilters] = useState({
-        search: '', expertise: '', department_id: '', college_id: '',
+        search: '', expertise: '', department_id: '', college_id: '', reviewer_type: '',
     });
 
     useEffect(() => {
@@ -134,7 +140,8 @@ export default function AssignReviewers() {
     }, [id]);
 
     const hasActiveQuery = filters.search.trim().length >= 2 ||
-        filters.expertise !== '' || filters.department_id !== '' || filters.college_id !== '';
+        filters.expertise !== '' || filters.department_id !== '' || filters.college_id !== '' ||
+        filters.reviewer_type !== '';
 
     const fetchReviewers = useCallback(async (currentFilters) => {
         setReviewersLoading(true);
@@ -158,7 +165,7 @@ export default function AssignReviewers() {
     }, [filters, loading]);
 
     const setFilter      = (k, v) => setFilters(f => ({ ...f, [k]: v }));
-    const clearFilters   = ()     => setFilters({ search: '', expertise: '', department_id: '', college_id: '' });
+    const clearFilters   = ()     => setFilters({ search: '', expertise: '', department_id: '', college_id: '', reviewer_type: '' });
     const activeFilters  = Object.values(filters).filter(v => v !== '').length;
 
     const toggleReviewer = (rid) =>
@@ -168,7 +175,7 @@ export default function AssignReviewers() {
         setOverride(o => { if (!o) clearFilters(); return !o; });
     };
 
-    const assign = async () => {
+    const assign = async (overrideWorkloadCap = false) => {
         if (!selected.length || !evalType || !dueDate) {
             toast.warning('Select at least one reviewer, an evaluation type, and a due date.');
             return;
@@ -180,11 +187,17 @@ export default function AssignReviewers() {
                 reviewer_ids:       selected,
                 evaluation_type_id: evalType,
                 due_date:           dueDate,
+                override_workload_cap: overrideWorkloadCap,
             });
             toast.success('Reviewers assigned. Proposal moved to Blind Review.');
             router.visit('/admin/blind-review');
         } catch (e) {
             const msg = e.response?.data?.message ?? 'Assignment failed. Please try again.';
+            if (msg.includes('max workload')) {
+                toast.error(msg, { action: { label: 'Assign Anyway', onClick: () => assign(true) } });
+                setSubmitting(false);
+                return;
+            }
             setError(msg);
             toast.error(msg);
         }
@@ -243,7 +256,7 @@ export default function AssignReviewers() {
 
                     {selected.length > 0 && evalType && (
                         <button
-                            onClick={assign}
+                            onClick={() => assign()}
                             disabled={submitting}
                             className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 disabled:opacity-60 shadow-sm transition-colors"
                         >
@@ -329,12 +342,34 @@ export default function AssignReviewers() {
                                             )}>
                                             <ReviewerAvatar reviewer={s} size="sm" />
                                             <div className="flex-1 min-w-0">
-                                                <p className="text-xs font-semibold text-gray-800 truncate">{s.name}</p>
+                                                <div className="flex items-center gap-1.5">
+                                                    <p className="text-xs font-semibold text-gray-800 truncate">{s.name}</p>
+                                                    {isExternalReviewer(s) && (
+                                                        <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-600 border border-orange-200 shrink-0">
+                                                            External
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 {s.matched_terms?.length > 0 && (
                                                     <p className="text-[10px] text-violet-600 truncate">
                                                         {s.matched_terms.slice(0, 3).join(', ')}
                                                     </p>
                                                 )}
+                                                <div className="flex items-center gap-2 mt-0.5">
+                                                    {s.on_time_rate != null && (
+                                                        <span className={cn(
+                                                            'text-[10px] font-medium',
+                                                            s.on_time_rate >= 80 ? 'text-emerald-600' : s.on_time_rate >= 50 ? 'text-amber-600' : 'text-red-500'
+                                                        )}>
+                                                            {s.on_time_rate}% on-time
+                                                        </span>
+                                                    )}
+                                                    {s.active_assignments >= 5 && (
+                                                        <span className="text-[10px] font-medium text-red-500">
+                                                            {s.active_assignments} active reviews
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
                                             <div className={cn(
                                                 'h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors',
@@ -384,7 +419,7 @@ export default function AssignReviewers() {
                                     )}
 
                                     <button
-                                        onClick={assign}
+                                        onClick={() => assign()}
                                         disabled={submitting || !evalType || !(suggestDueDate || dueDate)}
                                         className="w-full flex items-center justify-center gap-2 py-2.5 bg-violet-600 text-white text-xs font-semibold rounded-xl hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
                                     >
@@ -464,9 +499,16 @@ export default function AssignReviewers() {
                                                 className="flex items-center gap-2.5 p-2.5 bg-indigo-50 border border-indigo-100 rounded-xl">
                                                 <ReviewerAvatar reviewer={r} size="sm" />
                                                 <div className="flex-1 min-w-0">
-                                                    <p className="text-xs font-semibold text-gray-800 truncate">
-                                                        {r.title ? `${r.title} ` : ''}{r.name}
-                                                    </p>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <p className="text-xs font-semibold text-gray-800 truncate">
+                                                            {r.title ? `${r.title} ` : ''}{r.name}
+                                                        </p>
+                                                        {isExternalReviewer(r) && (
+                                                            <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-600 border border-orange-200 shrink-0">
+                                                                External
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                     <p className="text-[11px] text-gray-400 truncate">{r.email}</p>
                                                 </div>
                                                 <button onClick={() => toggleReviewer(r.id)}
@@ -494,7 +536,7 @@ export default function AssignReviewers() {
 
                         {/* Assign button */}
                         <button
-                            onClick={assign}
+                            onClick={() => assign()}
                             disabled={submitting || !selected.length || !evalType || !dueDate}
                             className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-colors"
                         >
@@ -600,6 +642,30 @@ export default function AssignReviewers() {
                                                 .filter(d => !filters.college_id || d.college_id === filters.college_id)
                                                 .map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                                         </select>
+                                    </div>
+                                    <div className="col-span-2">
+                                        <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Reviewer Type</label>
+                                        <div className="flex items-center gap-1 bg-white rounded-lg border border-gray-200 p-1">
+                                            {[
+                                                { value: '',         label: 'All Reviewers' },
+                                                { value: 'internal', label: 'Internal' },
+                                                { value: 'external', label: 'External' },
+                                            ].map(opt => (
+                                                <button
+                                                    key={opt.value}
+                                                    type="button"
+                                                    onClick={() => setFilter('reviewer_type', opt.value)}
+                                                    className={cn(
+                                                        'flex-1 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors',
+                                                        filters.reviewer_type === opt.value
+                                                            ? 'bg-indigo-50 text-indigo-700'
+                                                            : 'text-gray-500 hover:text-gray-700'
+                                                    )}
+                                                >
+                                                    {opt.label}
+                                                </button>
+                                            ))}
+                                        </div>
                                     </div>
                                     {activeFilters > 0 && (
                                         <div className="col-span-2 flex justify-end">
@@ -717,6 +783,11 @@ export default function AssignReviewers() {
                                                             {r.title ? `${r.title} ` : ''}{r.name}
                                                         </p>
                                                         <WorkloadBadge count={r.active_assignments} />
+                                                        {isExternalReviewer(r) && (
+                                                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-600 border border-orange-200">
+                                                                External
+                                                            </span>
+                                                        )}
                                                     </div>
 
                                                     <p className="text-xs text-gray-400 truncate">{r.email}</p>
