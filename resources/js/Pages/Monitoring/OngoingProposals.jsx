@@ -560,7 +560,7 @@ function NewProposalGrantPanel({ onGranted, onClose }) {
         if (selectedPi) return;
         setPiSearching(true);
         const t = setTimeout(() => {
-            get('/users', { search: piQuery, role: 'pi' })
+            get('/users', { search: piQuery, role: 'staff' })
                 .then(r => setPiResults(unwrapUserList(r)))
                 .catch(() => {})
                 .finally(() => setPiSearching(false));
@@ -831,7 +831,7 @@ function NewProposalGrantPanel({ onGranted, onClose }) {
                             <div className="mt-1 border border-gray-100 rounded-xl divide-y divide-gray-100 max-h-40 overflow-y-auto">
                                 {piSearching && <p className="px-3 py-3 text-center text-xs text-gray-400">Searching…</p>}
                                 {!piSearching && piResults.length === 0 && (
-                                    <p className="px-3 py-3 text-center text-xs text-gray-400">No PI account found. The PI must already have an account — create one via Users first.</p>
+                                    <p className="px-3 py-3 text-center text-xs text-gray-400">No matching staff account found. The PI must already have a staff account — create one via Users first.</p>
                                 )}
                                 {!piSearching && piResults.map(u => (
                                     <button key={u.id} onClick={() => setSelectedPi(u)} className="w-full text-left px-3 py-2 hover:bg-emerald-50/60 transition-colors">

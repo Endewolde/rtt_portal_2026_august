@@ -313,9 +313,12 @@ class OngoingProposalsController extends Controller
             return response()->json(['data' => null, 'message' => 'This department does not belong to the selected college.', 'errors' => []], 422);
         }
 
+        // PIs in this app are tagged with the 'staff' role, not a dedicated 'pi'
+        // role — matches the same convention the co-investigator search already
+        // uses (Step3CoInvestigators.jsx searches role=staff).
         $pi = User::find($validated['pi_user_id']);
-        if (! $pi->hasRole('pi')) {
-            return response()->json(['data' => null, 'message' => 'The selected user does not hold the PI role.', 'errors' => []], 422);
+        if (! $pi->hasRole('staff')) {
+            return response()->json(['data' => null, 'message' => 'The selected user does not hold the staff role.', 'errors' => []], 422);
         }
 
         $coInvestigators = collect($validated['co_investigators'] ?? []);

@@ -718,7 +718,7 @@ function op_createLegacyPayload(array $overrides = []): array
 test('a non-super_admin cannot create-and-grant a brand new legacy proposal', function () {
     [$college, $dept, $central, $call] = op_makeBase();
     $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
-    $pi->assignRole('pi');
+    $pi->assignRole('staff');
 
     $this->actingAs($central, 'sanctum')
         ->postJson('/api/v1/ongoing-proposals/grant-legacy/create', op_createLegacyPayload([
@@ -732,7 +732,7 @@ test('super_admin can create and grant a brand new proposal that never existed i
     $superAdmin = User::factory()->create();
     $superAdmin->assignRole('super_admin');
     $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
-    $pi->assignRole('pi');
+    $pi->assignRole('staff');
 
     $response = $this->actingAs($superAdmin, 'sanctum')
         ->postJson('/api/v1/ongoing-proposals/grant-legacy/create', op_createLegacyPayload([
@@ -762,7 +762,7 @@ test('a second legacy creation for the same category and academic year reuses th
     $superAdmin = User::factory()->create();
     $superAdmin->assignRole('super_admin');
     $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
-    $pi->assignRole('pi');
+    $pi->assignRole('staff');
 
     $this->actingAs($superAdmin, 'sanctum')->postJson('/api/v1/ongoing-proposals/grant-legacy/create', op_createLegacyPayload([
         'title' => 'First legacy proposal', 'college_id' => $college->id, 'department_id' => $dept->id, 'pi_user_id' => $pi->id,
@@ -786,7 +786,7 @@ test('creating a legacy proposal rejects a department that does not belong to th
     $superAdmin = User::factory()->create();
     $superAdmin->assignRole('super_admin');
     $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
-    $pi->assignRole('pi');
+    $pi->assignRole('staff');
 
     $this->actingAs($superAdmin, 'sanctum')
         ->postJson('/api/v1/ongoing-proposals/grant-legacy/create', op_createLegacyPayload([
@@ -795,16 +795,16 @@ test('creating a legacy proposal rejects a department that does not belong to th
         ->assertStatus(422);
 });
 
-test('creating a legacy proposal rejects a selected user who does not hold the pi role', function () {
+test('creating a legacy proposal rejects a selected user who does not hold the staff role', function () {
     [$college, $dept, $central, $call] = op_makeBase();
     $superAdmin = User::factory()->create();
     $superAdmin->assignRole('super_admin');
-    $notPi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
-    $notPi->assignRole('staff');
+    $notStaff = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
+    $notStaff->assignRole('college_officer');
 
     $this->actingAs($superAdmin, 'sanctum')
         ->postJson('/api/v1/ongoing-proposals/grant-legacy/create', op_createLegacyPayload([
-            'college_id' => $college->id, 'department_id' => $dept->id, 'pi_user_id' => $notPi->id,
+            'college_id' => $college->id, 'department_id' => $dept->id, 'pi_user_id' => $notStaff->id,
         ]))
         ->assertStatus(422);
 });
@@ -823,7 +823,7 @@ test('creating a legacy proposal persists the same basic-info fields the normal 
     $superAdmin = User::factory()->create();
     $superAdmin->assignRole('super_admin');
     $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
-    $pi->assignRole('pi');
+    $pi->assignRole('staff');
 
     $response = $this->actingAs($superAdmin, 'sanctum')
         ->postJson('/api/v1/ongoing-proposals/grant-legacy/create', op_createLegacyPayload([
@@ -846,7 +846,7 @@ test('creating a legacy proposal rejects an abstract under 100 characters', func
     $superAdmin = User::factory()->create();
     $superAdmin->assignRole('super_admin');
     $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
-    $pi->assignRole('pi');
+    $pi->assignRole('staff');
 
     $this->actingAs($superAdmin, 'sanctum')
         ->postJson('/api/v1/ongoing-proposals/grant-legacy/create', op_createLegacyPayload([
@@ -861,7 +861,7 @@ test('creating a legacy proposal does not persist research_type for a non-resear
     $superAdmin = User::factory()->create();
     $superAdmin->assignRole('super_admin');
     $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
-    $pi->assignRole('pi');
+    $pi->assignRole('staff');
 
     $response = $this->actingAs($superAdmin, 'sanctum')
         ->postJson('/api/v1/ongoing-proposals/grant-legacy/create', op_createLegacyPayload([
@@ -882,7 +882,7 @@ test('creating a legacy proposal can attach co-investigators with the pi getting
     $superAdmin = User::factory()->create();
     $superAdmin->assignRole('super_admin');
     $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
-    $pi->assignRole('pi');
+    $pi->assignRole('staff');
     $coInv1 = User::factory()->create();
     $coInv1->assignRole('staff');
     $coInv2 = User::factory()->create();
@@ -918,7 +918,7 @@ test('creating a legacy proposal rejects the pi appearing in their own co-invest
     $superAdmin = User::factory()->create();
     $superAdmin->assignRole('super_admin');
     $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
-    $pi->assignRole('pi');
+    $pi->assignRole('staff');
 
     $this->actingAs($superAdmin, 'sanctum')
         ->postJson('/api/v1/ongoing-proposals/grant-legacy/create', op_createLegacyPayload([
@@ -933,7 +933,7 @@ test('creating a legacy proposal rejects a duplicate co-investigator', function 
     $superAdmin = User::factory()->create();
     $superAdmin->assignRole('super_admin');
     $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
-    $pi->assignRole('pi');
+    $pi->assignRole('staff');
     $coInv = User::factory()->create();
     $coInv->assignRole('staff');
 
