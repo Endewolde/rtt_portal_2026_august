@@ -476,6 +476,233 @@ function BulkGrantPanel({ onGranted }) {
     );
 }
 
+// For proposals that were entirely paper-based/manual and were never entered
+// into the system at all — there's no existing row to search for, so this
+// creates the Proposal from scratch (real tracker_number, reserved "Legacy /
+// Manual Grants" call) and grants it in one step. The PI must already have an
+// account — deliberately no inline user creation here, to avoid silently
+// provisioning login-capable accounts as a side effect of a grant action.
+function NewProposalGrantPanel({ onGranted, onClose }) {
+    const toast = useToast();
+    const [title, setTitle] = useState('');
+    const [category, setCategory] = useState('research');
+    const [colleges, setColleges] = useState([]);
+    const [departments, setDepartments] = useState([]);
+    const [collegeId, setCollegeId] = useState('');
+    const [departmentId, setDepartmentId] = useState('');
+    const [academicYear, setAcademicYear] = useState('');
+    const [piQuery, setPiQuery] = useState('');
+    const [piResults, setPiResults] = useState([]);
+    const [piSearching, setPiSearching] = useState(false);
+    const [selectedPi, setSelectedPi] = useState(null);
+    const [justification, setJustification] = useState('');
+    const [awardedAmount, setAwardedAmount] = useState('');
+    const [grantReference, setGrantReference] = useState('');
+    const [approvedAt, setApprovedAt] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+
+    useEffect(() => {
+        get('/colleges').then(r => setColleges(r.data ?? [])).catch(() => {});
+    }, []);
+
+    useEffect(() => {
+        setDepartmentId('');
+        if (!collegeId) { setDepartments([]); return; }
+        get('/departments', { college_id: collegeId }).then(r => setDepartments(r.data ?? [])).catch(() => {});
+    }, [collegeId]);
+
+    useEffect(() => {
+        if (selectedPi) return;
+        setPiSearching(true);
+        const t = setTimeout(() => {
+            get('/users', { search: piQuery, role: 'pi' })
+                .then(r => setPiResults(r.data ?? []))
+                .catch(() => {})
+                .finally(() => setPiSearching(false));
+        }, 300);
+        return () => clearTimeout(t);
+    }, [piQuery, selectedPi]);
+
+    const submit = async () => {
+        setSubmitting(true);
+        try {
+            await post('/ongoing-proposals/grant-legacy/create', {
+                title,
+                category,
+                college_id: collegeId,
+                department_id: departmentId,
+                pi_user_id: selectedPi?.id,
+                academic_year: academicYear,
+                justification,
+                awarded_amount: awardedAmount,
+                grant_reference: grantReference || undefined,
+                approved_at: approvedAt || undefined,
+            });
+            toast.success('Proposal created and granted — now tracked as ongoing.');
+            onGranted();
+            onClose();
+        } catch (e) {
+            toast.error(e?.response?.data?.message ?? 'Could not create and grant this proposal.');
+        }
+        setSubmitting(false);
+    };
+
+    const canSubmit = title.trim().length > 0 && collegeId && departmentId && selectedPi
+        && /^\d{4}-\d{4}$/.test(academicYear) && justification.trim().length >= 10
+        && awardedAmount !== '' && Number(awardedAmount) >= 0;
+
+    return (
+        <>
+            <div>
+                <label className="text-xs font-semibold text-gray-600">Proposal Title <span className="text-red-500">*</span></label>
+                <input
+                    value={title}
+                    onChange={e => setTitle(e.target.value)}
+                    placeholder="e.g. Community water access improvement study"
+                    className="w-full mt-1 text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+                <div>
+                    <label className="text-xs font-semibold text-gray-600">Category <span className="text-red-500">*</span></label>
+                    <select
+                        value={category}
+                        onChange={e => setCategory(e.target.value)}
+                        className="w-full mt-1 text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                    >
+                        {CATEGORY_OPTIONS.map(c => <option key={c} value={c}>{getCategoryLabel(c)}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label className="text-xs font-semibold text-gray-600">Academic Year <span className="text-red-500">*</span></label>
+                    <input
+                        value={academicYear}
+                        onChange={e => setAcademicYear(e.target.value)}
+                        placeholder="e.g. 2022-2023"
+                        className="w-full mt-1 text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                    />
+                </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+                <div>
+                    <label className="text-xs font-semibold text-gray-600">College <span className="text-red-500">*</span></label>
+                    <select
+                        value={collegeId}
+                        onChange={e => setCollegeId(e.target.value)}
+                        className="w-full mt-1 text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                    >
+                        <option value="">Select…</option>
+                        {colleges.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label className="text-xs font-semibold text-gray-600">Department <span className="text-red-500">*</span></label>
+                    <select
+                        value={departmentId}
+                        onChange={e => setDepartmentId(e.target.value)}
+                        disabled={!collegeId}
+                        className="w-full mt-1 text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300 disabled:opacity-50"
+                    >
+                        <option value="">Select…</option>
+                        {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <label className="text-xs font-semibold text-gray-600">Principal Investigator <span className="text-red-500">*</span></label>
+                {selectedPi ? (
+                    <div className="mt-1 flex items-center justify-between bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5">
+                        <div>
+                            <p className="text-sm text-gray-800 font-medium">{selectedPi.name}</p>
+                            <p className="text-xs text-gray-400">{selectedPi.email}</p>
+                        </div>
+                        <button onClick={() => setSelectedPi(null)} className="text-xs font-semibold text-gray-500 hover:text-gray-700">Change</button>
+                    </div>
+                ) : (
+                    <>
+                        <div className="relative mt-1">
+                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                            <input
+                                value={piQuery}
+                                onChange={e => setPiQuery(e.target.value)}
+                                placeholder="Search PI by name or email…"
+                                className="w-full text-sm border border-gray-200 rounded-xl pl-9 pr-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                            />
+                        </div>
+                        {piQuery.trim().length > 0 && (
+                            <div className="mt-1 border border-gray-100 rounded-xl divide-y divide-gray-100 max-h-40 overflow-y-auto">
+                                {piSearching && <p className="px-3 py-3 text-center text-xs text-gray-400">Searching…</p>}
+                                {!piSearching && piResults.length === 0 && (
+                                    <p className="px-3 py-3 text-center text-xs text-gray-400">No PI account found. The PI must already have an account — create one via Users first.</p>
+                                )}
+                                {!piSearching && piResults.map(u => (
+                                    <button key={u.id} onClick={() => setSelectedPi(u)} className="w-full text-left px-3 py-2 hover:bg-emerald-50/60 transition-colors">
+                                        <p className="text-sm text-gray-800">{u.name}</p>
+                                        <p className="text-xs text-gray-400">{u.email}</p>
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </>
+                )}
+            </div>
+
+            <div>
+                <label className="text-xs font-semibold text-gray-600">Justification <span className="text-red-500">*</span></label>
+                <textarea
+                    value={justification}
+                    onChange={e => setJustification(e.target.value)}
+                    rows={2}
+                    placeholder="Why is this being recorded outside the normal workflow? (min 10 characters — recorded in the audit trail)"
+                    className="w-full mt-1 text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+                <div>
+                    <label className="text-xs font-semibold text-gray-600">Awarded Amount (ETB) <span className="text-red-500">*</span></label>
+                    <input
+                        type="number" min="0" step="0.01"
+                        value={awardedAmount}
+                        onChange={e => setAwardedAmount(e.target.value)}
+                        className="w-full mt-1 text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                    />
+                </div>
+                <div>
+                    <label className="text-xs font-semibold text-gray-600">Grant Date</label>
+                    <input
+                        type="date"
+                        value={approvedAt}
+                        onChange={e => setApprovedAt(e.target.value)}
+                        className="w-full mt-1 text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                    />
+                </div>
+            </div>
+
+            <div>
+                <label className="text-xs font-semibold text-gray-600">Grant Reference <span className="text-gray-400 font-normal">(optional — auto-generated if left blank)</span></label>
+                <input
+                    value={grantReference}
+                    onChange={e => setGrantReference(e.target.value)}
+                    placeholder="e.g. an official pre-existing grant number"
+                    className="w-full mt-1 text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                />
+            </div>
+
+            <button
+                onClick={submit}
+                disabled={!canSubmit || submitting}
+                className="w-full flex items-center justify-center gap-2 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+                {submitting ? 'Creating & Granting…' : 'Create & Grant Proposal'}
+            </button>
+        </>
+    );
+}
+
 function GrantLegacyModal({ onClose, onGranted }) {
     const [mode, setMode] = useState('single');
 
@@ -500,7 +727,11 @@ function GrantLegacyModal({ onClose, onGranted }) {
                         </button>
                     </div>
                     <div className="mt-4 flex gap-1 bg-white/10 rounded-xl p-1">
-                        {[{ key: 'single', label: 'Single Proposal' }, { key: 'bulk', label: 'Bulk Import (CSV)' }].map(t => (
+                        {[
+                            { key: 'single', label: 'Single Proposal' },
+                            { key: 'bulk', label: 'Bulk Import (CSV)' },
+                            { key: 'new', label: 'New Proposal' },
+                        ].map(t => (
                             <button
                                 key={t.key}
                                 onClick={() => setMode(t.key)}
@@ -513,9 +744,9 @@ function GrantLegacyModal({ onClose, onGranted }) {
                 </div>
 
                 <div className="px-6 py-5 space-y-4 overflow-y-auto">
-                    {mode === 'single'
-                        ? <SingleGrantPanel onGranted={onGranted} onClose={onClose} />
-                        : <BulkGrantPanel onGranted={onGranted} />}
+                    {mode === 'single' && <SingleGrantPanel onGranted={onGranted} onClose={onClose} />}
+                    {mode === 'bulk' && <BulkGrantPanel onGranted={onGranted} />}
+                    {mode === 'new' && <NewProposalGrantPanel onGranted={onGranted} onClose={onClose} />}
                 </div>
             </div>
         </div>,

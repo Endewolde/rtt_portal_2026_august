@@ -82,7 +82,8 @@
       "Bash(awk 'NR>=380 && NR<=410' /Users/endashaw/real_rtt1/routes/api.php)",
       "Bash(php -l app/Http/Controllers/Api/OngoingProposalsController.php)",
       "Bash(php -l app/Services/AwardService.php)",
-      "Bash(php -l routes/api.php)"
+      "Bash(php -l routes/api.php)",
+      "Bash(grep -n 'protected $fillable\\\\|belongsTo\\\\|college_id' app/Models/Department.php)"
     ]
   },
   "enableAllProjectMcpServers": true,

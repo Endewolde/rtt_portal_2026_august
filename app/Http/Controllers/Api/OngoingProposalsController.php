@@ -5,10 +5,13 @@ namespace App\Http\Controllers\Api;
 use App\Exports\OngoingProposalsExport;
 use App\Http\Controllers\Controller;
 use App\Models\Award;
+use App\Models\Department;
 use App\Models\Proposal;
+use App\Models\ProposalCall;
 use App\Models\ThresholdSetting;
 use App\Models\User;
 use App\Services\AwardService;
+use App\Services\TrackerNumberService;
 use App\Services\WorkflowService;
 use App\Support\AuditLogger;
 use Illuminate\Database\Eloquent\Builder;
@@ -260,6 +263,105 @@ class OngoingProposalsController extends Controller
             'errors' => [],
             'meta' => [],
         ]);
+    }
+
+    /**
+     * For a proposal that was fully paper-based/manual and was never entered into this
+     * system at all — there's no existing Proposal row for grantLegacy() to move, so this
+     * creates one from scratch (with a real tracker_number from the same generator the
+     * proposal wizard uses) and immediately grants it. Deliberately narrower than the
+     * normal proposal wizard: the PI must already have an account (no inline user
+     * creation — keeps this from silently provisioning login-capable accounts as a
+     * side effect of a grant action).
+     */
+    public function createLegacy(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if (! $user?->hasAnyRole(self::LEGACY_GRANT_ROLES)) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
+        }
+
+        $validated = $request->validate([
+            'title' => 'required|string|max:500',
+            'category' => 'required|in:research,community_engagement,technology_transfer',
+            'college_id' => 'required|uuid|exists:colleges,id',
+            'department_id' => 'required|uuid|exists:departments,id',
+            'pi_user_id' => 'required|uuid|exists:users,id',
+            'academic_year' => 'required|string|max:20',
+            'justification' => 'required|string|min:10',
+            'awarded_amount' => 'required|numeric|min:0',
+            'grant_reference' => 'nullable|string|max:50|unique:awards,grant_reference',
+            'approved_at' => 'nullable|date',
+        ]);
+
+        $department = Department::find($validated['department_id']);
+        if ($department->college_id !== $validated['college_id']) {
+            return response()->json(['data' => null, 'message' => 'This department does not belong to the selected college.', 'errors' => []], 422);
+        }
+
+        $pi = User::find($validated['pi_user_id']);
+        if (! $pi->hasRole('pi')) {
+            return response()->json(['data' => null, 'message' => 'The selected user does not hold the PI role.', 'errors' => []], 422);
+        }
+
+        $award = DB::transaction(function () use ($validated, $user) {
+            $call = $this->reservedLegacyCall($validated['category'], $validated['academic_year'], $user);
+
+            $proposal = Proposal::create([
+                'tracker_number' => app(TrackerNumberService::class)->generate($validated['category'], $validated['academic_year']),
+                'proposal_call_id' => $call->id,
+                'category' => $validated['category'],
+                'title' => $validated['title'],
+                'status' => 'draft',
+                'pi_user_id' => $validated['pi_user_id'],
+                'college_id' => $validated['college_id'],
+                'department_id' => $validated['department_id'],
+                'academic_year' => $validated['academic_year'],
+                'created_by' => $user->id,
+            ]);
+
+            return $this->performLegacyGrant(
+                $proposal,
+                $user,
+                $validated['justification'],
+                (float) $validated['awarded_amount'],
+                $validated['grant_reference'] ?? null,
+                isset($validated['approved_at']) ? Carbon::parse($validated['approved_at']) : null,
+            );
+        });
+
+        return response()->json([
+            'data' => $award,
+            'message' => 'Proposal created and granted — now tracked as ongoing.',
+            'errors' => [],
+            'meta' => [],
+        ]);
+    }
+
+    /**
+     * Every proposal needs a real proposal_call_id (NOT NULL + FK, no placeholder
+     * concept exists elsewhere in the app), so createLegacy() attaches to one reserved,
+     * permanently-closed call per (category, academic_year) — created once, reused after.
+     */
+    private function reservedLegacyCall(string $category, string $academicYear, User $user): ProposalCall
+    {
+        $slug = "legacy-manual-grants-{$category}-".Str::slug($academicYear);
+
+        return ProposalCall::firstOrCreate(
+            ['slug' => $slug],
+            [
+                'academic_year' => $academicYear,
+                'category' => $category,
+                'title' => 'Legacy / Manual Grants — '.ucwords(str_replace('_', ' ', $category)).' ('.$academicYear.')',
+                'description' => 'System-provisioned holder for proposals granted outside the normal workflow via Grant Legacy Proposal. Never open for submissions.',
+                'start_date' => now()->toDateString(),
+                'end_date' => now()->toDateString(),
+                'status' => 'closed',
+                'is_open' => false,
+                'created_by' => $user->id,
+            ]
+        );
     }
 
     /** Null when eligible, otherwise the reason it can't be legacy-granted. Shared by the single and bulk-import paths. */

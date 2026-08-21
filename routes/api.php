@@ -387,6 +387,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/ongoing-proposals/grantable', [OngoingProposalsController::class, 'grantable']);
         Route::get('/ongoing-proposals/grant-legacy/import-template', [OngoingProposalsController::class, 'grantLegacyImportTemplate']);
         Route::post('/ongoing-proposals/grant-legacy/import', [OngoingProposalsController::class, 'grantLegacyImport']);
+        Route::post('/ongoing-proposals/grant-legacy/create', [OngoingProposalsController::class, 'createLegacy']);
         Route::post('/ongoing-proposals/{id}/archive', [OngoingProposalsController::class, 'archive']);
         Route::post('/ongoing-proposals/{id}/grant-legacy', [OngoingProposalsController::class, 'grantLegacy']);
 
