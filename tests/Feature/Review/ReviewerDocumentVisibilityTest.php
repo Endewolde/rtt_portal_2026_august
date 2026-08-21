@@ -99,3 +99,54 @@ test('the PI still sees all of their own uploaded document types', function () {
     $types = collect($response->json('data.documents'))->pluck('document_type')->all();
     expect($types)->toEqualCanonicalizing(['proposal_document', 'budget_spreadsheet', 'pi_cv', 'supporting_document']);
 });
+
+test('central_officer still sees the PI CV', function () {
+    [$proposal, , $admin] = rdv_makeProposalWithAllDocumentTypes();
+
+    $response = $this->actingAs($admin, 'sanctum')
+        ->getJson("/api/v1/proposals/{$proposal->id}");
+
+    $response->assertOk();
+    $types = collect($response->json('data.documents'))->pluck('document_type')->all();
+    expect($types)->toContain('pi_cv');
+});
+
+test('non-central officer roles never see the PI CV in the proposal payload', function (string $role) {
+    [$proposal] = rdv_makeProposalWithAllDocumentTypes();
+    $officer = User::factory()->create(['college_id' => $proposal->college_id]);
+    $officer->assignRole($role);
+
+    $response = $this->actingAs($officer, 'sanctum')
+        ->getJson("/api/v1/proposals/{$proposal->id}");
+
+    $response->assertOk();
+    $types = collect($response->json('data.documents'))->pluck('document_type')->all();
+    expect($types)->not->toContain('pi_cv');
+    expect($types)->toContain('supporting_document');
+})->with([
+    'research_officer',
+    'community_officer',
+    'technology_officer',
+    'college_officer',
+    'finance_officer',
+    'support_officer',
+]);
+
+test('non-central officer roles cannot download the PI CV directly even with a known document id', function (string $role) {
+    [$proposal] = rdv_makeProposalWithAllDocumentTypes();
+    $officer = User::factory()->create(['college_id' => $proposal->college_id]);
+    $officer->assignRole($role);
+    $cv = $proposal->documents()->where('document_type', 'pi_cv')->firstOrFail();
+
+    $response = $this->actingAs($officer, 'sanctum')
+        ->getJson("/api/v1/proposals/{$proposal->id}/documents/{$cv->id}/download");
+
+    $response->assertForbidden();
+})->with([
+    'research_officer',
+    'community_officer',
+    'technology_officer',
+    'college_officer',
+    'finance_officer',
+    'support_officer',
+]);

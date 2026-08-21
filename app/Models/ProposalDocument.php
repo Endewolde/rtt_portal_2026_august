@@ -14,6 +14,16 @@ class ProposalDocument extends Model
      *  supporting documents can carry identifying info and aren't relevant to scoring. */
     public const REVIEWER_VISIBLE_TYPES = ['proposal_document', 'budget_spreadsheet'];
 
+    /** Officer roles that must never see PI CVs — only central_officer (and super_admin/admin/the PI) may. */
+    public const CV_RESTRICTED_ROLES = [
+        'research_officer',
+        'community_officer',
+        'technology_officer',
+        'college_officer',
+        'finance_officer',
+        'support_officer',
+    ];
+
     protected $primaryKey = 'id';
 
     public $incrementing = false;

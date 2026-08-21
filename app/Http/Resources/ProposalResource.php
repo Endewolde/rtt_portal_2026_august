@@ -22,6 +22,11 @@ class ProposalResource extends JsonResource
         // they're not blind reviewers, just college-scoped oversight.
         $hideDocs = ! $isOwner && $isReviewer;
 
+        // PI CVs are restricted to the PI themselves and central_officer — every other
+        // officer role (college/research/community/technology/finance/support) must
+        // never see them, even though they can see the rest of the proposal's documents.
+        $hideCv = ! $isOwner && $user && $user->hasAnyRole(ProposalDocument::CV_RESTRICTED_ROLES);
+
         return [
             'id' => $this->id,
             'tracker_number' => $this->tracker_number,
@@ -61,9 +66,17 @@ class ProposalResource extends JsonResource
             'members' => $hidePI ? [] : $this->whenLoaded('members'),
             'members_hidden' => $hidePI,
             'history_hidden' => $hidePI,
-            'documents' => $this->whenLoaded('documents', fn () => $hideDocs
-                ? $this->documents->whereIn('document_type', ProposalDocument::REVIEWER_VISIBLE_TYPES)->values()
-                : $this->documents),
+            'documents' => $this->whenLoaded('documents', function () use ($hideDocs, $hideCv) {
+                if ($hideDocs) {
+                    return $this->documents->whereIn('document_type', ProposalDocument::REVIEWER_VISIBLE_TYPES)->values();
+                }
+
+                if ($hideCv) {
+                    return $this->documents->where('document_type', '!=', 'pi_cv')->values();
+                }
+
+                return $this->documents;
+            }),
             'budgets' => $this->whenLoaded('budgets'),
 
             'proposal_call' => $this->whenLoaded('proposalCall', fn () => new ProposalCallResource($this->proposalCall)),

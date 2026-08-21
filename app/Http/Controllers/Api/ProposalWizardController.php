@@ -158,11 +158,18 @@ class ProposalWizardController extends Controller
         ], 201);
     }
 
-    public function downloadDocument(string $proposalId, string $docId): StreamedResponse|Response
+    public function downloadDocument(Request $request, string $proposalId, string $docId): StreamedResponse|Response
     {
         $doc = ProposalDocument::where('proposal_id', $proposalId)
             ->where('id', $docId)
             ->firstOrFail();
+
+        $user = $request->user();
+        $isOwner = $user && $user->id === $doc->proposal?->pi_user_id;
+
+        if ($doc->document_type === 'pi_cv' && ! $isOwner && $user?->hasAnyRole(ProposalDocument::CV_RESTRICTED_ROLES)) {
+            abort(403, 'You are not authorized to view this document.');
+        }
 
         if (! Storage::disk('private')->exists($doc->stored_path)) {
             abort(404, 'Document not found.');
