@@ -51,11 +51,10 @@ class OngoingProposalsController extends Controller
     // Matches WorkflowStageSeeder's $adminCore for the completed -> archived transition.
     private const ARCHIVE_ROLES = ['super_admin', 'central_officer'];
 
-    // Deliberately tighter than ARCHIVE_ROLES: this bypasses the entire
-    // submit/review/validate/blind-review/open-defence workflow, so it's
-    // restricted to the single most trusted role rather than the usual
-    // central_officer-inclusive admin-core pattern.
-    private const LEGACY_GRANT_ROLES = ['super_admin'];
+    // Bypasses the entire submit/review/validate/blind-review/open-defence
+    // workflow, so it's restricted to the admin-core roles rather than the
+    // broader officer set that can use the rest of this dashboard.
+    private const LEGACY_GRANT_ROLES = ['super_admin', 'admin', 'central_officer'];
 
     public function __construct(
         private WorkflowService $workflowService,

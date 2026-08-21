@@ -1205,9 +1205,8 @@ export default function OngoingProposals() {
     const isCategoryOfficer = hasAnyRole(['research_officer', 'community_officer', 'technology_officer']);
     // Matches ARCHIVE_ROLES server-side — no plain 'admin', that's intentional.
     const canArchive = hasAnyRole(['super_admin', 'central_officer']);
-    // Matches LEGACY_GRANT_ROLES server-side — tighter than canArchive, since this
-    // bypasses the entire review workflow rather than closing out an already-vetted one.
-    const canGrantLegacy = hasRole('super_admin');
+    // Matches LEGACY_GRANT_ROLES server-side.
+    const canGrantLegacy = hasAnyRole(['super_admin', 'admin', 'central_officer']);
 
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);

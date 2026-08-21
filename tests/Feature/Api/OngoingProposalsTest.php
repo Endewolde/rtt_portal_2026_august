@@ -431,11 +431,13 @@ test('outputs_count reflects the number of recorded research outputs', function 
         ->and($rows[$withoutOutputs->id]['outputs_count'])->toBe(0);
 });
 
-test('a central_officer cannot grant a legacy proposal, only super_admin can', function () {
+test('a college_officer cannot grant a legacy proposal, only admin-core roles can', function () {
     [$college, $dept, $central, $call] = op_makeBase();
     $proposal = op_proposal($college, $dept, $call, 'under_blind_review');
+    $officer = User::factory()->create(['college_id' => $college->id]);
+    $officer->assignRole('college_officer');
 
-    $this->actingAs($central, 'sanctum')
+    $this->actingAs($officer, 'sanctum')
         ->postJson("/api/v1/ongoing-proposals/{$proposal->id}/grant-legacy", [
             'justification' => 'Actually funded externally in 2024.',
             'awarded_amount' => 10000,
@@ -443,6 +445,36 @@ test('a central_officer cannot grant a legacy proposal, only super_admin can', f
         ->assertForbidden();
 
     expect(Proposal::find($proposal->id)->status)->toBe('under_blind_review');
+});
+
+test('a central_officer can grant a legacy proposal', function () {
+    [$college, $dept, $central, $call] = op_makeBase();
+    $proposal = op_proposal($college, $dept, $call, 'under_blind_review');
+
+    $response = $this->actingAs($central, 'sanctum')
+        ->postJson("/api/v1/ongoing-proposals/{$proposal->id}/grant-legacy", [
+            'justification' => 'Actually funded externally in 2024.',
+            'awarded_amount' => 10000,
+        ]);
+
+    $response->assertOk();
+    expect(Proposal::find($proposal->id)->status)->toBe('funded');
+});
+
+test('an admin can grant a legacy proposal', function () {
+    [$college, $dept, $central, $call] = op_makeBase();
+    $proposal = op_proposal($college, $dept, $call, 'under_blind_review');
+    $admin = User::factory()->create();
+    $admin->assignRole('admin');
+
+    $response = $this->actingAs($admin, 'sanctum')
+        ->postJson("/api/v1/ongoing-proposals/{$proposal->id}/grant-legacy", [
+            'justification' => 'Actually funded externally in 2024.',
+            'awarded_amount' => 10000,
+        ]);
+
+    $response->assertOk();
+    expect(Proposal::find($proposal->id)->status)->toBe('funded');
 });
 
 test('super_admin can grant a legacy proposal, which transitions it to funded and creates an award', function () {
@@ -554,10 +586,18 @@ test('grantable search excludes proposals already funded/ongoing/archived and th
     expect($ids)->toBe([$eligible->id]);
 });
 
-test('a non-super_admin cannot search grantable proposals', function () {
+function op_nonLegacyGrantActor(College $college): User
+{
+    $officer = User::factory()->create(['college_id' => $college->id]);
+    $officer->assignRole('college_officer');
+
+    return $officer;
+}
+
+test('a role outside the admin core cannot search grantable proposals', function () {
     [$college, $dept, $central, $call] = op_makeBase();
 
-    $this->actingAs($central, 'sanctum')
+    $this->actingAs(op_nonLegacyGrantActor($college), 'sanctum')
         ->getJson('/api/v1/ongoing-proposals/grantable')
         ->assertForbidden();
 });
@@ -572,15 +612,16 @@ function op_csv(array $rows): UploadedFile
     return UploadedFile::fake()->createWithContent('legacy.csv', implode("\n", $lines));
 }
 
-test('a non-super_admin cannot access the bulk legacy grant import endpoints', function () {
+test('a role outside the admin core cannot access the bulk legacy grant import endpoints', function () {
     [$college, $dept, $central, $call] = op_makeBase();
     $proposal = op_proposal($college, $dept, $call, 'rejected');
+    $actor = op_nonLegacyGrantActor($college);
 
-    $this->actingAs($central, 'sanctum')
+    $this->actingAs($actor, 'sanctum')
         ->getJson('/api/v1/ongoing-proposals/grant-legacy/import-template')
         ->assertForbidden();
 
-    $this->actingAs($central, 'sanctum')
+    $this->actingAs($actor, 'sanctum')
         ->post('/api/v1/ongoing-proposals/grant-legacy/import', [
             'file' => op_csv([[$proposal->tracker_number, 5000]]),
             'justification' => 'Bulk migrating legacy grants.',
@@ -715,12 +756,12 @@ function op_createLegacyPayload(array $overrides = []): array
     ], $overrides);
 }
 
-test('a non-super_admin cannot create-and-grant a brand new legacy proposal', function () {
+test('a role outside the admin core cannot create-and-grant a brand new legacy proposal', function () {
     [$college, $dept, $central, $call] = op_makeBase();
     $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
     $pi->assignRole('staff');
 
-    $this->actingAs($central, 'sanctum')
+    $this->actingAs(op_nonLegacyGrantActor($college), 'sanctum')
         ->postJson('/api/v1/ongoing-proposals/grant-legacy/create', op_createLegacyPayload([
             'college_id' => $college->id, 'department_id' => $dept->id, 'pi_user_id' => $pi->id,
         ]))
@@ -948,10 +989,10 @@ test('creating a legacy proposal rejects a duplicate co-investigator', function 
         ->assertStatus(422);
 });
 
-test('a non-super_admin cannot list academic years for the legacy grant form', function () {
+test('a role outside the admin core cannot list academic years for the legacy grant form', function () {
     [$college, $dept, $central, $call] = op_makeBase();
 
-    $this->actingAs($central, 'sanctum')
+    $this->actingAs(op_nonLegacyGrantActor($college), 'sanctum')
         ->getJson('/api/v1/ongoing-proposals/grant-legacy/academic-years')
         ->assertForbidden();
 });
