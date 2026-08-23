@@ -3,7 +3,9 @@
 namespace App\Services;
 
 use App\Exceptions\InvalidScoreException;
+use App\Exceptions\InvalidTransitionException;
 use App\Exceptions\ReviewAlreadySubmittedException;
+use App\Exceptions\UnauthorizedTransitionException;
 use App\Models\DefenceSession;
 use App\Models\EvaluationQuestion;
 use App\Models\Proposal;
@@ -506,5 +508,26 @@ class ReviewScoreService
                 ['average_score' => $rawAvg, 'score_label' => $scoreLabel, 'threshold' => $threshold]
             );
         }
+    }
+
+    /**
+     * Manual admin action: pull a proposal out of blind review (under_blind_review or
+     * blind_review_passed) when the issue isn't a scoring problem but something noticed
+     * during review that means it should never have reached this stage — duplicate,
+     * ineligible, plagiarism, etc. The automatic score-based correction
+     * (reviews:correct-blind-review) only fires for scoring mismatches, so this is the
+     * manual counterpart for everything else.
+     *
+     * @throws InvalidTransitionException|UnauthorizedTransitionException
+     */
+    public function rejectFromBlindReview(Proposal $proposal, User $actor, string $reason): Proposal
+    {
+        return $this->workflowService->transition(
+            $proposal,
+            'fail_blind_review',
+            $actor,
+            $reason,
+            ['manual' => true]
+        );
     }
 }

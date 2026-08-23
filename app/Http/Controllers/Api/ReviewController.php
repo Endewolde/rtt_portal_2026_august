@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Exceptions\UnauthorizedTransitionException;
 use App\Http\Controllers\Controller;
 use App\Jobs\SendRawMailJob;
 use App\Jobs\StoreInAppNotificationJob;
@@ -96,6 +97,38 @@ class ReviewController extends Controller
         );
 
         return response()->json(['data' => $result]);
+    }
+
+    /**
+     * Manual admin action: reject a proposal currently under_blind_review or
+     * blind_review_passed — for issues noticed during review that mean it should
+     * never have reached this stage (duplicate, ineligible, etc.), not a scoring
+     * problem (that's reviews:correct-blind-review's job).
+     */
+    public function rejectFromBlindReview(string $id, Request $request): JsonResponse
+    {
+        $request->validate(['reason' => 'required|string|min:10']);
+
+        $proposal = Proposal::findOrFail($id);
+
+        try {
+            $result = $this->scoreService->rejectFromBlindReview($proposal, $request->user(), $request->reason);
+
+            AuditLogger::log(
+                'review.rejected_from_blind_review',
+                Proposal::class,
+                $proposal->id,
+                $request->user()->id,
+                null,
+                ['reason' => $request->reason],
+            );
+
+            return response()->json(['data' => $result, 'message' => 'Proposal rejected and removed from blind review.', 'errors' => [], 'meta' => []]);
+        } catch (UnauthorizedTransitionException $e) {
+            return response()->json(['data' => null, 'message' => $e->getMessage(), 'errors' => [], 'meta' => []], 403);
+        } catch (\Exception $e) {
+            return response()->json(['data' => null, 'message' => $e->getMessage(), 'errors' => [], 'meta' => []], 422);
+        }
     }
 
     public function scheduleDefence(string $id, Request $request): JsonResponse

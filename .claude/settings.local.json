@@ -88,7 +88,10 @@
       "Bash(php -l routes/console.php)",
       "Bash(php -l app/Http/Controllers/Api/ProposalValidationController.php)",
       "Bash(php -l app/Services/ProposalValidationService.php)",
-      "Bash(grep -n '\\\\$adminWithCol\\\\s*=\\\\|\\\\$adminFull\\\\s*=' database/seeders/WorkflowStageSeeder.php)"
+      "Bash(grep -n '\\\\$adminWithCol\\\\s*=\\\\|\\\\$adminFull\\\\s*=' database/seeders/WorkflowStageSeeder.php)",
+      "Bash(grep -n \"confirmAction\\\\|dialog ===\\\\|const confirm\\\\|setDialog\\\\|/validation/\\\\${dialog}\\\\|api.post.*validation\" resources/js/Pages/Proposals/Show.jsx)",
+      "Bash(php -l app/Http/Controllers/Api/ReviewController.php)",
+      "Bash(php -l app/Services/ReviewScoreService.php)"
     ]
   },
   "enableAllProjectMcpServers": true,

@@ -559,11 +559,24 @@ function ActionButtons({ proposal, onAction, onProcessDefenceResult, isAdmin }) 
         </Link>
     );
 
+    if (status === 'under_blind_review') return (
+        <button onClick={() => onAction('reject_blind_review')}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700">
+            <XCircle size={15} /> Reject From Blind Review
+        </button>
+    );
+
     if (status === 'blind_review_passed') return (
-        <Link href={`/proposals/${id}/defence`}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-purple-700 text-white rounded-lg hover:bg-purple-800">
-            <Calendar size={15} /> Schedule Open Defence
-        </Link>
+        <div className="flex flex-wrap gap-2">
+            <Link href={`/proposals/${id}/defence`}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-purple-700 text-white rounded-lg hover:bg-purple-800">
+                <Calendar size={15} /> Schedule Open Defence
+            </Link>
+            <button onClick={() => onAction('reject_blind_review')}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700">
+                <XCircle size={15} /> Reject
+            </button>
+        </div>
     );
 
     if (status === 'under_open_defence') return (
@@ -1374,10 +1387,15 @@ export default function ProposalShow() {
         if (dialog !== 'approve' && !reason.trim()) { toast.warning('Reason is required.'); return; }
         setSubmitting(true);
         try {
-            await post(`/proposals/${id}/validation/${dialog}`, { reason });
-            if (dialog === 'approve') toast.success('Proposal approved for review.');
-            if (dialog === 'return')  toast.warning('Proposal returned to PI for correction.');
-            if (dialog === 'reject')  toast.error('Proposal has been rejected.');
+            if (dialog === 'reject_blind_review') {
+                await post(`/proposals/${id}/blind-review/reject`, { reason });
+                toast.error('Proposal rejected and removed from blind review.');
+            } else {
+                await post(`/proposals/${id}/validation/${dialog}`, { reason });
+                if (dialog === 'approve') toast.success('Proposal approved for review.');
+                if (dialog === 'return')  toast.warning('Proposal returned to PI for correction.');
+                if (dialog === 'reject')  toast.error('Proposal has been rejected.');
+            }
             setDialog(null);
             setReason('');
             load();
@@ -1677,7 +1695,9 @@ export default function ProposalShow() {
             {dialog && dialog !== 'approve' && (
                 <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
-                        <h2 className="text-base font-semibold mb-3 capitalize">{dialog} Proposal</h2>
+                        <h2 className="text-base font-semibold mb-3">
+                            {dialog === 'reject_blind_review' ? 'Reject From Blind Review' : <span className="capitalize">{dialog} Proposal</span>}
+                        </h2>
                         <textarea value={reason} onChange={(e) => setReason(e.target.value)}
                             placeholder="Reason (required)…" rows={3}
                             className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 mb-4 focus:outline-none resize-none focus:ring-2 focus:ring-blue-500" />
@@ -1686,7 +1706,7 @@ export default function ProposalShow() {
                                 className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
                             <button onClick={confirmAction} disabled={submitting}
                                 className={`px-4 py-2 text-sm font-medium rounded-lg text-white disabled:opacity-60 ${
-                                    dialog === 'reject' ? 'bg-red-600 hover:bg-red-700' : 'bg-yellow-600 hover:bg-yellow-700'
+                                    dialog === 'reject' || dialog === 'reject_blind_review' ? 'bg-red-600 hover:bg-red-700' : 'bg-yellow-600 hover:bg-yellow-700'
                                 }`}>
                                 {submitting ? 'Processing…' : 'Confirm'}
                             </button>

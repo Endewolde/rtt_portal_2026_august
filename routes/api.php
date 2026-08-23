@@ -330,6 +330,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/review-assignments/my', [ReviewController::class, 'myAssignments']);
         Route::get('/review-assignments/{id}', [ReviewController::class, 'showAssignment']);
         Route::post('/review-assignments/{id}/score', [ReviewController::class, 'submitScore']);
+        Route::post('/proposals/{id}/blind-review/reject', [ReviewController::class, 'rejectFromBlindReview']);
         Route::post('/proposals/{id}/defence/schedule', [ReviewController::class, 'scheduleDefence']);
         Route::post('/proposals/{id}/defence/process-result', [ReviewController::class, 'processDefenceResultByProposal']);
         Route::post('/defence-sessions/{id}/process-result', [ReviewController::class, 'processDefenceResult']);
