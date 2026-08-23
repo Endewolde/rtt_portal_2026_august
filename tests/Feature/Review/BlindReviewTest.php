@@ -493,3 +493,33 @@ test('add-reviewer endpoint rejects an overloaded reviewer with 422, then succee
         ]);
     $allowed->assertCreated();
 });
+
+test('assigning a conflicting reviewer via HTTP returns a clean 422, not a raw 500', function () {
+    // Regression: ConflictingReviewerException extends RuntimeException, which had no
+    // matching $exceptions->render() mapping in bootstrap/app.php (unlike its sibling
+    // ReviewerOverloadedException, which extends InvalidArgumentException and IS mapped).
+    // In production (APP_DEBUG=false) this fell through to a raw, unhelpful 500 the
+    // moment an admin's reviewer selection included a co-investigator or the PI —
+    // easy to hit once 3+ reviewers are being picked at once.
+    [$proposal, $pi] = makeProposalInState('validated');
+    $co = User::factory()->create();
+    $co->assignRole('reviewer');
+    ProposalMember::create([
+        'proposal_id' => $proposal->id, 'user_id' => $co->id,
+        'role' => 'co_investigator', 'status' => 'active', 'joined_at' => now(),
+    ]);
+    $validReviewer = User::factory()->create();
+    $validReviewer->assignRole('reviewer');
+    $type = makeBlindType();
+
+    $response = $this->actingAs($this->centralUser, 'sanctum')
+        ->postJson("/api/v1/proposals/{$proposal->id}/review/assign", [
+            'reviewer_ids' => [$validReviewer->id, $co->id],
+            'evaluation_type_id' => $type->id,
+            'due_date' => now()->addDays(7)->toDateString(),
+        ]);
+
+    $response->assertStatus(422);
+    expect($response->json('message'))->toContain('cannot review this proposal');
+    expect(Proposal::find($proposal->id)->status)->toBe('validated');
+});

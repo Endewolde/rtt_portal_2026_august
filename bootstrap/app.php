@@ -1,6 +1,7 @@
 <?php
 
 use App\Exceptions\ComplaintAlreadyFiledException;
+use App\Exceptions\ConflictingReviewerException;
 use App\Exceptions\UnauthorizedResolutionException;
 use App\Http\Middleware\EnsureCategoryScope;
 use App\Http\Middleware\EnsureCollegeScope;
@@ -89,6 +90,15 @@ return Application::configure(basePath: dirname(__DIR__))
 
         // Service-layer argument violations (wrong stage, non-funded proposal, etc.) → 422
         $exceptions->render(function (InvalidArgumentException $e, Request $request) {
+            if ($request->is('api/*')) {
+                return response()->json(['data' => null, 'message' => $e->getMessage(), 'errors' => [], 'meta' => []], 422);
+            }
+        });
+
+        // A selected reviewer is a PI/team member on the proposal → 422. Was previously
+        // unmapped (extends RuntimeException, not InvalidArgumentException like its sibling
+        // ReviewerOverloadedException above), so it fell through to a raw 500 in production.
+        $exceptions->render(function (ConflictingReviewerException $e, Request $request) {
             if ($request->is('api/*')) {
                 return response()->json(['data' => null, 'message' => $e->getMessage(), 'errors' => [], 'meta' => []], 422);
             }

@@ -95,7 +95,10 @@
       "Bash(php -l app/Http/Controllers/Api/ProposalApprovalReportController.php)",
       "Bash(php -l app/Models/ProposalApprovalReport.php)",
       "Bash(grep -n \"const { hasRole, hasAnyRole\\\\|hasAnyRole\\\\|const isAdmin\\\\|const isOfficer\\\\|const isCollegeOfficer\\\\|const isCategoryOfficer\" resources/js/Pages/Proposals/Show.jsx)",
-      "Bash(grep -n \"setAppeal\\\\|/appeal\\\\`\\\\|appeal &&\\\\|showAppealModal\" resources/js/Pages/Proposals/Show.jsx)"
+      "Bash(grep -n \"setAppeal\\\\|/appeal\\\\`\\\\|appeal &&\\\\|showAppealModal\" resources/js/Pages/Proposals/Show.jsx)",
+      "Bash(xargs -I{} sh -c 'echo ===={}====; cat {}')",
+      "Bash(php -r \"require 'vendor/autoload.php'; echo 'ok';\")",
+      "Bash(php -l bootstrap/app.php)"
     ]
   },
   "enableAllProjectMcpServers": true,
