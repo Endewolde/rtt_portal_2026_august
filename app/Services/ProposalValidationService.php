@@ -140,4 +140,31 @@ class ProposalValidationService
 
         return $query->get();
     }
+
+    /**
+     * Proposals rejected specifically at this validation step — 'rejected' is a shared
+     * terminal status also reached from blind review (fail_blind_review), open defence
+     * (fail_defence), and central evaluation (central_reject), so this filters to the
+     * 'reject' action specifically rather than just status='rejected'.
+     */
+    public function getRejectedQueue(User $validator, ?string $collegeScope = null): Collection
+    {
+        $query = Proposal::where('status', 'rejected')
+            ->whereHas('workflowLogs', fn ($q) => $q->where('action', 'reject'))
+            ->with(['pi', 'college', 'proposalCall'])
+            ->orderBy('rejected_at', 'desc');
+
+        foreach (self::ROLE_CATEGORY_MAP as $role => $category) {
+            if ($validator->hasRole($role)) {
+                $query->where('category', $category);
+                break;
+            }
+        }
+
+        if ($collegeScope) {
+            $query->where('college_id', $collegeScope);
+        }
+
+        return $query->get();
+    }
 }

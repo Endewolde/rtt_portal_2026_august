@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { CheckCircle, RotateCcw, XCircle, Clock, ShieldCheck, RefreshCw, FileQuestion, X } from 'lucide-react';
+import { CheckCircle, RotateCcw, XCircle, Clock, ShieldCheck, RefreshCw, FileQuestion, X, Ban } from 'lucide-react';
 import { Link } from '@inertiajs/react';
 import AppLayout from '../../Layouts/AppLayout';
 import WorkflowBreadcrumb from '../../Components/WorkflowBreadcrumb';
@@ -85,8 +85,35 @@ function ProposalCard({ proposal, onAction, num, checked, onToggle }) {
     );
 }
 
+function RejectedCard({ proposal }) {
+    return (
+        <div className="bg-white border border-red-200 rounded-xl flex items-stretch overflow-hidden">
+            <div className="w-0.5 bg-red-500 shrink-0" />
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 flex-1 min-w-0 px-4 py-3.5">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <span className="font-mono text-xs font-bold text-red-700 bg-red-50 px-2.5 py-1 rounded-lg shrink-0">
+                        {proposal.tracker_number}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                        <a href={`/proposals/${proposal.id}`} className="text-sm font-semibold text-gray-900 truncate hover:text-blue-700 hover:underline block">
+                            {proposal.title}
+                        </a>
+                        <p className="text-xs text-gray-500 mt-0.5 truncate">
+                            {proposal.pi?.name ?? '—'} · {proposal.college?.name ?? '—'} · Rejected {formatDate(proposal.rejected_at)}
+                        </p>
+                        {proposal.rejection_reason && (
+                            <p className="text-xs text-red-600 mt-1 line-clamp-2">{proposal.rejection_reason}</p>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function ValidationQueue() {
     const toast = useToast();
+    const [tab, setTab]             = useState('queue');
     const [data, setData]           = useState([]);
     const [categoryFilter, setCategoryFilter] = useState('');
     const [collegeFilter, setCollegeFilter] = useState('');
@@ -100,6 +127,12 @@ export default function ValidationQueue() {
     const [selectedIds, setSelectedIds]   = useState(new Set());
     const [bulkApproving, setBulkApproving] = useState(false);
 
+    // Rejected tab — proposals rejected specifically at this step (not blind
+    // review / open defence / central evaluation, which also end in 'rejected').
+    const [rejectedData, setRejectedData]   = useState([]);
+    const [rejectedLoading, setRejectedLoading] = useState(false);
+    const [rejectedLoaded, setRejectedLoaded] = useState(false);
+
     const load = () => {
         setLoading(true);
         get('/proposals/validation-queue')
@@ -111,7 +144,16 @@ export default function ValidationQueue() {
             .finally(() => setLoading(false));
     };
 
+    const loadRejected = () => {
+        setRejectedLoading(true);
+        get('/proposals/validation-queue/rejected')
+            .then((r) => setRejectedData(r.data?.data ?? r.data ?? []))
+            .catch(() => {})
+            .finally(() => { setRejectedLoading(false); setRejectedLoaded(true); });
+    };
+
     useEffect(() => { load(); }, []);
+    useEffect(() => { if (tab === 'rejected' && !rejectedLoaded) loadRejected(); }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const openDialog = (action, proposalId) => { setDialog({ action, proposalId }); setReason(''); };
 
@@ -203,7 +245,21 @@ export default function ValidationQueue() {
                         </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
-                        {availableColleges.length > 1 && (
+                        <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+                            <button
+                                onClick={() => setTab('queue')}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${tab === 'queue' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                            >
+                                Queue
+                            </button>
+                            <button
+                                onClick={() => setTab('rejected')}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${tab === 'rejected' ? 'bg-white text-red-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                            >
+                                Rejected{rejectedLoaded && rejectedData.length > 0 ? ` (${rejectedData.length})` : ''}
+                            </button>
+                        </div>
+                        {tab === 'queue' && availableColleges.length > 1 && (
                             <select
                                 value={collegeFilter}
                                 onChange={e => setCollegeFilter(e.target.value)}
@@ -215,7 +271,7 @@ export default function ValidationQueue() {
                                 ))}
                             </select>
                         )}
-                        {availableCategories.length > 1 && (
+                        {tab === 'queue' && availableCategories.length > 1 && (
                             <select
                                 value={categoryFilter}
                                 onChange={e => setCategoryFilter(e.target.value)}
@@ -227,7 +283,7 @@ export default function ValidationQueue() {
                                 ))}
                             </select>
                         )}
-                        {!loading && (
+                        {tab === 'queue' && !loading && (
                             <>
                                 {awaitingDeadline.length > 0 && (
                                     <span className="flex items-center gap-1.5 text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 px-2.5 py-1.5 rounded-lg">
@@ -241,14 +297,17 @@ export default function ValidationQueue() {
                                 )}
                             </>
                         )}
-                        <ViewToggle view={view} onChange={setView} />
-                        <button onClick={load} className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors">
+                        {tab === 'queue' && <ViewToggle view={view} onChange={setView} />}
+                        <button
+                            onClick={tab === 'queue' ? load : loadRejected}
+                            className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 transition-colors"
+                        >
                             <RefreshCw size={14} /> Refresh
                         </button>
                     </div>
                 </div>
 
-                {loading ? (
+                {tab === 'queue' ? (loading ? (
                     <div className="flex justify-center py-20">
                         <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
                     </div>
@@ -385,6 +444,24 @@ export default function ValidationQueue() {
                             </div>
                         )}
                     </div>
+                )) : (
+                    rejectedLoading ? (
+                        <div className="flex justify-center py-20">
+                            <div className="w-8 h-8 border-4 border-red-600 border-t-transparent rounded-full animate-spin" />
+                        </div>
+                    ) : rejectedData.length === 0 ? (
+                        <div className="bg-white border border-gray-200 rounded-2xl p-16 text-center">
+                            <div className="h-14 w-14 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                <Ban size={28} className="text-gray-400" />
+                            </div>
+                            <h3 className="text-gray-700 font-semibold mb-1">No rejected proposals</h3>
+                            <p className="text-sm text-gray-400">Nothing has been rejected at this validation step.</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-2">
+                            {rejectedData.map(p => <RejectedCard key={p.id} proposal={p} />)}
+                        </div>
+                    )
                 )}
             </div>
 

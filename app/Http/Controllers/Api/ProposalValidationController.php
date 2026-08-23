@@ -21,6 +21,16 @@ class ProposalValidationController extends Controller
         return response()->json(['data' => $this->service->getValidationQueue($request->user(), $request->_college_scope)]);
     }
 
+    /** Proposals rejected at this validation step — a separate list so a rejection isn't a dead end. */
+    public function rejected(Request $request): JsonResponse
+    {
+        if (! $request->user()?->can('proposals.validate')) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.'], 403);
+        }
+
+        return response()->json(['data' => $this->service->getRejectedQueue($request->user(), $request->_college_scope)]);
+    }
+
     public function approve(string $id, Request $request): JsonResponse
     {
         $proposal = Proposal::findOrFail($id);

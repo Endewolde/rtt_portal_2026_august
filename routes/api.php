@@ -301,6 +301,7 @@ Route::prefix('v1')->group(function () {
         // Proposal Wizard — static segments before apiResource to avoid {id} collision
         Route::post('/proposals/draft', [ProposalWizardController::class, 'createDraft']);
         Route::get('/proposals/validation-queue', [ProposalValidationController::class, 'index']);
+        Route::get('/proposals/validation-queue/rejected', [ProposalValidationController::class, 'rejected']);
         Route::get('/proposals/involved', [ProposalController::class, 'involved']);
         Route::get('/proposals/my', [ProposalController::class, 'myProposals']);
         Route::get('/proposals/statistics', [ProposalController::class, 'statistics']);

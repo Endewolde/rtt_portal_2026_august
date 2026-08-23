@@ -6,6 +6,7 @@ use App\Models\Proposal;
 use App\Models\ProposalCall;
 use App\Models\User;
 use App\Services\ProposalValidationService;
+use App\Services\WorkflowService;
 use Database\Seeders\RolePermissionSeeder;
 use Database\Seeders\WorkflowStageSeeder;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -162,4 +163,70 @@ test('validation queue is unscoped for central officers across categories', func
 
     expect($ids)->toContain($researchProposal->id);
     expect($ids)->toContain($communityProposal->id);
+});
+
+test('a proposal rejected at validation shows up in the rejected queue', function () {
+    $validator = User::factory()->create();
+    $validator->assignRole('central_officer');
+
+    $proposal = makeSubmittedProposal();
+    $this->service->reject($proposal, $validator, 'Out of scope for this call.');
+
+    $response = $this->actingAs($validator, 'sanctum')
+        ->getJson('/api/v1/proposals/validation-queue/rejected');
+
+    $response->assertOk();
+    $rows = collect($response->json('data'))->keyBy('id');
+    expect($rows->has($proposal->id))->toBeTrue()
+        ->and($rows[$proposal->id]['rejection_reason'])->toBe('Out of scope for this call.');
+});
+
+test('a proposal rejected during blind review does NOT show up in the validation-rejected queue', function () {
+    $validator = User::factory()->create();
+    $validator->assignRole('central_officer');
+
+    $proposal = makeSubmittedProposal();
+    $this->service->approve($proposal, $validator);
+    app(WorkflowService::class)->transition($proposal->fresh(), 'assign_for_review', $validator, 'Sent to blind review.');
+    $proposal->refresh();
+    app(WorkflowService::class)->transition($proposal, 'fail_blind_review', $validator, 'Failed blind review scoring.');
+
+    expect(Proposal::find($proposal->id)->status)->toBe('rejected');
+
+    $response = $this->actingAs($validator, 'sanctum')
+        ->getJson('/api/v1/proposals/validation-queue/rejected');
+
+    $response->assertOk();
+    $ids = collect($response->json('data'))->pluck('id');
+    expect($ids)->not->toContain($proposal->id);
+});
+
+test('the rejected queue is scoped to the officer\'s category', function () {
+    $centralValidator = User::factory()->create();
+    $centralValidator->assignRole('central_officer');
+
+    $researchProposal = makeSubmittedProposal('research');
+    $communityProposal = makeSubmittedProposal('community_engagement');
+    $this->service->reject($researchProposal, $centralValidator, 'Not eligible.');
+    $this->service->reject($communityProposal, $centralValidator, 'Not eligible.');
+
+    $researchOfficer = User::factory()->create();
+    $researchOfficer->assignRole('research_officer');
+
+    $response = $this->actingAs($researchOfficer, 'sanctum')
+        ->getJson('/api/v1/proposals/validation-queue/rejected');
+
+    $response->assertOk();
+    $ids = collect($response->json('data'))->pluck('id');
+    expect($ids)->toContain($researchProposal->id)
+        ->and($ids)->not->toContain($communityProposal->id);
+});
+
+test('a PI cannot access the rejected validation queue', function () {
+    $pi = User::factory()->create();
+    $pi->assignRole('pi');
+
+    $this->actingAs($pi, 'sanctum')
+        ->getJson('/api/v1/proposals/validation-queue/rejected')
+        ->assertForbidden();
 });
