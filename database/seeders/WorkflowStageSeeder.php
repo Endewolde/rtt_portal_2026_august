@@ -46,6 +46,7 @@ class WorkflowStageSeeder extends Seeder
             'return_for_correction',
             'reject',
             'assign_for_review',
+            'unassign_reviewers',
             'pass_blind_review',
             'fail_blind_review',
             'schedule_defence',
@@ -83,6 +84,12 @@ class WorkflowStageSeeder extends Seeder
             ['from' => 'submitted',          'action' => 'return_for_correction', 'to' => 'draft',               'roles' => $adminFull],
             ['from' => 'submitted',          'action' => 'reject',                'to' => 'rejected',            'roles' => $adminFull],
             ['from' => 'validated',          'action' => 'assign_for_review',     'to' => 'under_blind_review',  'roles' => $adminWithCol],
+            // Symmetric reverse of assign_for_review — fired when the last active
+            // reviewer is removed from a proposal that hasn't been scored yet, so the
+            // proposal doesn't get stuck at under_blind_review with nothing to review
+            // it and no way to re-open the Assign Reviewers UI (which only shows for
+            // status=validated).
+            ['from' => 'under_blind_review', 'action' => 'unassign_reviewers',    'to' => 'validated',           'roles' => $adminWithCol],
             ['from' => 'under_blind_review', 'action' => 'pass_blind_review',     'to' => 'blind_review_passed', 'roles' => $adminFull],
             ['from' => 'under_blind_review', 'action' => 'fail_blind_review',     'to' => 'rejected',            'roles' => $adminFull],
             // Same action, a second edge: lets an admin-tier actor (or the

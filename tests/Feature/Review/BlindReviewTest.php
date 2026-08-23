@@ -523,3 +523,59 @@ test('assigning a conflicting reviewer via HTTP returns a clean 422, not a raw 5
     expect($response->json('message'))->toContain('cannot review this proposal');
     expect(Proposal::find($proposal->id)->status)->toBe('validated');
 });
+
+test('removing the last reviewer reverts the proposal from under_blind_review back to validated', function () {
+    [$proposal] = makeProposalInState('validated');
+    $reviewer = User::factory()->create();
+    $reviewer->assignRole('reviewer');
+    $type = makeBlindType();
+
+    $assignments = $this->assignmentService->assign($proposal, [$reviewer->id], $type->id, $this->centralUser);
+    expect(Proposal::find($proposal->id)->status)->toBe('under_blind_review');
+
+    $assignmentId = $assignments[0]->id;
+
+    $response = $this->actingAs($this->centralUser, 'sanctum')
+        ->deleteJson("/api/v1/review-assignments/{$assignmentId}/remove");
+
+    $response->assertOk();
+    expect(Proposal::find($proposal->id)->status)->toBe('validated');
+    $this->assertDatabaseHas('workflow_logs', [
+        'proposal_id' => $proposal->id, 'from_stage' => 'under_blind_review',
+        'action' => 'unassign_reviewers', 'to_stage' => 'validated',
+    ]);
+});
+
+test('removing one of two reviewers does NOT revert the proposal while another reviewer remains', function () {
+    [$proposal] = makeProposalInState('validated');
+    $reviewerA = User::factory()->create();
+    $reviewerA->assignRole('reviewer');
+    $reviewerB = User::factory()->create();
+    $reviewerB->assignRole('reviewer');
+    $type = makeBlindType();
+
+    $assignments = $this->assignmentService->assign($proposal, [$reviewerA->id, $reviewerB->id], $type->id, $this->centralUser);
+    expect(Proposal::find($proposal->id)->status)->toBe('under_blind_review');
+
+    $this->actingAs($this->centralUser, 'sanctum')
+        ->deleteJson("/api/v1/review-assignments/{$assignments[0]->id}/remove")
+        ->assertOk();
+
+    expect(Proposal::find($proposal->id)->status)->toBe('under_blind_review');
+});
+
+test('removing a reviewer whose review was already submitted is still rejected', function () {
+    [$proposal] = makeProposalInState('validated');
+    $reviewer = User::factory()->create();
+    $reviewer->assignRole('reviewer');
+    $type = makeBlindType();
+
+    $assignments = $this->assignmentService->assign($proposal, [$reviewer->id], $type->id, $this->centralUser);
+    $assignments[0]->update(['status' => 'submitted']);
+
+    $response = $this->actingAs($this->centralUser, 'sanctum')
+        ->deleteJson("/api/v1/review-assignments/{$assignments[0]->id}/remove");
+
+    $response->assertStatus(422);
+    expect(Proposal::find($proposal->id)->status)->toBe('under_blind_review');
+});

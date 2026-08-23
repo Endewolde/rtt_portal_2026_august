@@ -21,6 +21,7 @@ use App\Services\DefenceSessionService;
 use App\Services\MailConfigService;
 use App\Services\ReviewAssignmentService;
 use App\Services\ReviewScoreService;
+use App\Services\WorkflowService;
 use App\Support\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -37,7 +38,8 @@ class ReviewController extends Controller
         private ReviewAssignmentService $assignmentService,
         private ReviewScoreService $scoreService,
         private DefenceSessionService $defenceService,
-        private MailConfigService $mailConfig
+        private MailConfigService $mailConfig,
+        private WorkflowService $workflowService
     ) {}
 
     public function availableReviewers(string $id, Request $request): JsonResponse
@@ -841,7 +843,7 @@ class ReviewController extends Controller
         ], 201);
     }
 
-    public function removeReviewer(string $id): JsonResponse
+    public function removeReviewer(string $id, Request $request): JsonResponse
     {
         $assignment = ReviewAssignment::with('proposal')->findOrFail($id);
 
@@ -854,7 +856,31 @@ class ReviewController extends Controller
             ], 422);
         }
 
+        $proposal = $assignment->proposal;
         $assignment->delete();
+
+        // Removing the last active blind-review reviewer would otherwise leave the
+        // proposal stuck at under_blind_review with nobody assigned and no way to
+        // reopen the Assign Reviewers UI (which only shows for status=validated) —
+        // revert it back so it re-enters the awaiting-assignment list.
+        if ($proposal && $proposal->status === 'under_blind_review') {
+            $remaining = ReviewAssignment::where('proposal_id', $proposal->id)
+                ->whereIn('status', ['pending', 'accepted', 'in_progress'])
+                ->exists();
+
+            if (! $remaining) {
+                try {
+                    $this->workflowService->transition(
+                        $proposal,
+                        'unassign_reviewers',
+                        $request->user(),
+                        'All reviewers removed — reverted to validated.'
+                    );
+                } catch (\Exception $e) {
+                    Log::error("Failed to revert proposal to validated after last reviewer removed: {$e->getMessage()}");
+                }
+            }
+        }
 
         return response()->json([
             'data' => null,
