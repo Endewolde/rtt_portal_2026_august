@@ -84,7 +84,8 @@
       "Bash(php -l app/Services/AwardService.php)",
       "Bash(php -l routes/api.php)",
       "Bash(grep -n 'protected $fillable\\\\|belongsTo\\\\|college_id' app/Models/Department.php)",
-      "Bash(grep -n 'protected $fillable' -A 30 app/Models/Proposal.php)"
+      "Bash(grep -n 'protected $fillable' -A 30 app/Models/Proposal.php)",
+      "Bash(php -l routes/console.php)"
     ]
   },
   "enableAllProjectMcpServers": true,

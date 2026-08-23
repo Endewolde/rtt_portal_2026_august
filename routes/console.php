@@ -14,9 +14,13 @@ Schedule::command('users:deactivate-expired-guests')->daily();
 Schedule::command('rtt:deadline-reminders')->dailyAt('08:00');
 Schedule::command('rtt:review-deadline-reminders')->dailyAt('08:15');
 
-$backupTime = AppSetting::where('key', 'backup_time')->value('value') ?? '02:00';
+// Backups run 3x/day at fixed times (6:00 AM, 6:00 PM, midnight) rather than
+// the single admin-configurable backup_time — replaces it entirely.
+$autoBackupEnabled = fn () => AppSetting::where('key', 'auto_backup_enabled')->value('value') === 'true';
 
-Schedule::command('backup:run')
-    ->dailyAt($backupTime)
-    ->when(fn () => AppSetting::where('key', 'auto_backup_enabled')->value('value') === 'true')
-    ->onFailure(fn () => Log::error('[Scheduler] Daily backup failed.'));
+foreach (['06:00', '18:00', '00:00'] as $backupRunTime) {
+    Schedule::command('backup:run')
+        ->dailyAt($backupRunTime)
+        ->when($autoBackupEnabled)
+        ->onFailure(fn () => Log::error("[Scheduler] Backup failed (scheduled {$backupRunTime})."));
+}

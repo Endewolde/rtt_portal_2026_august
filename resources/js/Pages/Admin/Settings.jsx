@@ -2684,7 +2684,7 @@ export default function SettingsPage() {
                                                 }
                                             </button>
                                             <p className="text-xs text-gray-400">
-                                                Automated backups run daily at {values.backup_time || '02:00'} when auto backup is enabled.
+                                                Automated backups run 3× daily — 6:00 AM, 6:00 PM, and midnight — when auto backup is enabled.
                                             </p>
                                         </div>
                                     </div>
