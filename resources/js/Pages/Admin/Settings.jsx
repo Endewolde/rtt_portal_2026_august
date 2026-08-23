@@ -113,7 +113,7 @@ const KEY_LABELS = {
     ongoing_midterm_overdue_days: 'Ongoing Proposals — Midterm Overdue After (days)',
     audit_log_retention_days: 'Audit Log Retention (days)', activity_logging: 'Activity Logging',
     error_logging: 'Error Logging', login_history_enabled: 'Login History',
-    backup_schedule: 'Backup Schedule', backup_time: 'Backup Time', backup_retention_days: 'Backup Retention (days)',
+    backup_schedule: 'Backup Schedule', backup_time: 'Backup Time 1', backup_time_2: 'Backup Time 2', backup_time_3: 'Backup Time 3', backup_retention_days: 'Backup Retention (days)',
     auto_backup_enabled: 'Auto Backup',
     backup_notify_email: 'Notify via Email', backup_notify_telegram: 'Notify via Telegram',
     backup_email_recipient: 'Backup Email Recipient', backup_telegram_chat_id: 'Telegram Chat ID',
@@ -2645,6 +2645,59 @@ export default function SettingsPage() {
                                     </div>
                                 )}
 
+                                {/* ── Backup schedule (times + enable toggle) ───── */}
+                                {activeSection === 'backup' && (
+                                    <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-4">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <h3 className="text-sm font-bold text-gray-800">Backup Schedule</h3>
+                                                <p className="text-xs text-gray-400 mt-0.5">Automated backups run up to 3× daily at these times.</p>
+                                            </div>
+                                            <label className="flex items-center gap-2 cursor-pointer shrink-0">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={values.auto_backup_enabled === 'true'}
+                                                    onChange={e => {
+                                                        const val = e.target.checked ? 'true' : 'false'
+                                                        handleChange('auto_backup_enabled', val)
+                                                        handleSave('auto_backup_enabled', val)
+                                                    }}
+                                                    className="h-4 w-4 rounded border-gray-300 text-cyan-600"
+                                                />
+                                                <span className="text-xs font-semibold text-gray-600">Auto Backup Enabled</span>
+                                            </label>
+                                        </div>
+                                        <div className="grid sm:grid-cols-3 gap-3">
+                                            {[
+                                                { key: 'backup_time', label: 'Backup Time 1', fallback: '06:00' },
+                                                { key: 'backup_time_2', label: 'Backup Time 2', fallback: '18:00' },
+                                                { key: 'backup_time_3', label: 'Backup Time 3', fallback: '00:00' },
+                                            ].map(({ key, label: fieldLabel, fallback }) => (
+                                                <div key={key}>
+                                                    <label className="text-xs text-gray-500 mb-1 block">{fieldLabel}</label>
+                                                    <input
+                                                        type="time"
+                                                        value={values[key] || fallback}
+                                                        onChange={e => handleChange(key, e.target.value)}
+                                                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm
+                                                                   focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                    />
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <button
+                                            onClick={async () => {
+                                                await handleSave('backup_time', values.backup_time || '06:00')
+                                                await handleSave('backup_time_2', values.backup_time_2 || '18:00')
+                                                await handleSave('backup_time_3', values.backup_time_3 || '00:00')
+                                            }}
+                                            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white
+                                                       rounded-xl text-xs font-semibold hover:bg-blue-700 transition-all">
+                                            <Save size={13} /> Save Backup Times
+                                        </button>
+                                    </div>
+                                )}
+
                                 {/* ── Backup section extras ─────────────────────── */}
                                 {activeSection === 'backup' && (
                                     <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-4">
@@ -2684,7 +2737,9 @@ export default function SettingsPage() {
                                                 }
                                             </button>
                                             <p className="text-xs text-gray-400">
-                                                Automated backups run 3× daily — 6:00 AM, 6:00 PM, and midnight — when auto backup is enabled.
+                                                Automated backups run daily at{' '}
+                                                {[values.backup_time || '06:00', values.backup_time_2 || '18:00', values.backup_time_3 || '00:00'].join(', ')}
+                                                {values.auto_backup_enabled === 'true' ? '.' : ' — currently disabled.'}
                                             </p>
                                         </div>
                                     </div>
