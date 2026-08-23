@@ -41,6 +41,7 @@ use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OngoingProposalsController;
 use App\Http\Controllers\Api\ProposalAiScoreController;
 use App\Http\Controllers\Api\ProposalAppealController;
+use App\Http\Controllers\Api\ProposalApprovalReportController;
 use App\Http\Controllers\Api\ProposalArchiveController;
 use App\Http\Controllers\Api\ProposalCallController;
 use App\Http\Controllers\Api\ProposalController;
@@ -378,6 +379,11 @@ Route::prefix('v1')->group(function () {
         Route::get('/proposals/{id}/appeal', [ProposalAppealController::class, 'show']);
         Route::get('/appeals', [ProposalAppealController::class, 'index']);
         Route::post('/appeals/{id}/resolve', [ProposalAppealController::class, 'resolve']);
+
+        // Approval reports — college officer flags a possibly mistaken approval sitting in blind review
+        Route::post('/proposals/{id}/approval-reports', [ProposalApprovalReportController::class, 'store']);
+        Route::get('/proposals/{id}/approval-reports', [ProposalApprovalReportController::class, 'index']);
+        Route::post('/approval-reports/{id}/review', [ProposalApprovalReportController::class, 'markReviewed']);
 
         // Proposal pipeline — cross-phase status overview
         Route::get('/proposal-pipeline', [ProposalPipelineController::class, 'index']);

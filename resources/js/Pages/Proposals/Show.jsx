@@ -531,11 +531,11 @@ function ComplaintsTab({ proposal, userId, isProposalMember, isOfficer, isAdmin 
     );
 }
 
-function ActionButtons({ proposal, onAction, onProcessDefenceResult, isAdmin }) {
-    if (!isAdmin) return null;
+function ActionButtons({ proposal, onAction, onProcessDefenceResult, isAdmin, canRejectBlindReview, canReportMistakenApproval, hasOpenReport }) {
+    if (!isAdmin && !canRejectBlindReview && !canReportMistakenApproval) return null;
     const { status, id } = proposal;
 
-    if (status === 'submitted') return (
+    if (isAdmin && status === 'submitted') return (
         <div className="flex flex-wrap gap-2">
             <button onClick={() => onAction('approve')}
                 className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700">
@@ -552,34 +552,54 @@ function ActionButtons({ proposal, onAction, onProcessDefenceResult, isAdmin }) 
         </div>
     );
 
-    if (status === 'validated') return (
+    if (isAdmin && status === 'validated') return (
         <Link href={`/proposals/${id}/assign-reviewers`}
             className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-blue-700 text-white rounded-lg hover:bg-blue-800">
             <UserCheck size={15} /> Assign Reviewers
         </Link>
     );
 
-    if (status === 'under_blind_review') return (
-        <button onClick={() => onAction('reject_blind_review')}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700">
-            <XCircle size={15} /> Reject From Blind Review
-        </button>
-    );
-
-    if (status === 'blind_review_passed') return (
+    if (status === 'under_blind_review' && (canRejectBlindReview || canReportMistakenApproval)) return (
         <div className="flex flex-wrap gap-2">
-            <Link href={`/proposals/${id}/defence`}
-                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-purple-700 text-white rounded-lg hover:bg-purple-800">
-                <Calendar size={15} /> Schedule Open Defence
-            </Link>
-            <button onClick={() => onAction('reject_blind_review')}
-                className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700">
-                <XCircle size={15} /> Reject
-            </button>
+            {canRejectBlindReview && (
+                <button onClick={() => onAction('reject_blind_review')}
+                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700">
+                    <XCircle size={15} /> Reject From Blind Review
+                </button>
+            )}
+            {canReportMistakenApproval && !hasOpenReport && (
+                <button onClick={() => onAction('report_mistaken_approval')}
+                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-amber-500 text-white rounded-lg hover:bg-amber-600">
+                    <AlertCircle size={15} /> Report Mistaken Approval
+                </button>
+            )}
         </div>
     );
 
-    if (status === 'under_open_defence') return (
+    if (status === 'blind_review_passed' && (isAdmin || canRejectBlindReview || canReportMistakenApproval)) return (
+        <div className="flex flex-wrap gap-2">
+            {isAdmin && (
+                <Link href={`/proposals/${id}/defence`}
+                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-purple-700 text-white rounded-lg hover:bg-purple-800">
+                    <Calendar size={15} /> Schedule Open Defence
+                </Link>
+            )}
+            {canRejectBlindReview && (
+                <button onClick={() => onAction('reject_blind_review')}
+                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700">
+                    <XCircle size={15} /> Reject
+                </button>
+            )}
+            {canReportMistakenApproval && !hasOpenReport && (
+                <button onClick={() => onAction('report_mistaken_approval')}
+                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-amber-500 text-white rounded-lg hover:bg-amber-600">
+                    <AlertCircle size={15} /> Report Mistaken Approval
+                </button>
+            )}
+        </div>
+    );
+
+    if (isAdmin && status === 'under_open_defence') return (
         <button
             onClick={onProcessDefenceResult}
             className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
@@ -588,7 +608,7 @@ function ActionButtons({ proposal, onAction, onProcessDefenceResult, isAdmin }) 
         </button>
     );
 
-    if (status === 'accepted') return (
+    if (isAdmin && status === 'accepted') return (
         <Link href={`/proposals/${id}/award`}
             className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-emerald-700 text-white rounded-lg hover:bg-emerald-800">
             <Award size={15} /> Generate Award
@@ -1351,9 +1371,17 @@ export default function ProposalShow() {
     const [submitting, setSubmitting] = useState(false);
     const [appeal, setAppeal] = useState(null);
     const [showAppealModal, setShowAppealModal] = useState(false);
+    const [approvalReports, setApprovalReports] = useState([]);
+    const [reviewingReportId, setReviewingReportId] = useState(null);
 
     const isAdmin    = hasAnyRole(['super_admin', 'admin', 'central_officer']);
     const isOfficer  = hasAnyRole(['college_officer', 'research_officer', 'community_officer', 'technology_officer']);
+    // Matches ReviewController::rejectFromBlindReview / WorkflowStageSeeder's fail_blind_review
+    // roles — wider than isAdmin, since category officers are also authorized server-side.
+    const canRejectBlindReview = hasAnyRole(['super_admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer']);
+    const canReportMistakenApproval = hasAnyRole(['college_officer']);
+    const canReviewApprovalReports = canRejectBlindReview;
+    const hasOpenReport = approvalReports.some(r => r.status === 'open');
 
     const load = () => {
         setLoading(true);
@@ -1367,7 +1395,24 @@ export default function ProposalShow() {
         get(`/proposals/${id}/appeal`).then(r => setAppeal(r.data)).catch(() => {});
     };
 
-    useEffect(() => { load(); loadAppeal(); }, [id]);
+    const loadApprovalReports = () => {
+        if (!canReportMistakenApproval && !canReviewApprovalReports) return;
+        get(`/proposals/${id}/approval-reports`).then(r => setApprovalReports(r.data ?? [])).catch(() => {});
+    };
+
+    useEffect(() => { load(); loadAppeal(); loadApprovalReports(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const markReportReviewed = async (reportId) => {
+        setReviewingReportId(reportId);
+        try {
+            await post(`/approval-reports/${reportId}/review`, {});
+            toast.success('Report marked reviewed.');
+            loadApprovalReports();
+        } catch (e) {
+            toast.error(e.response?.data?.message ?? 'Could not mark report reviewed.');
+        }
+        setReviewingReportId(null);
+    };
 
     const handleAction = (action) => { setDialog(action); setReason(''); };
 
@@ -1390,6 +1435,10 @@ export default function ProposalShow() {
             if (dialog === 'reject_blind_review') {
                 await post(`/proposals/${id}/blind-review/reject`, { reason });
                 toast.error('Proposal rejected and removed from blind review.');
+            } else if (dialog === 'report_mistaken_approval') {
+                await post(`/proposals/${id}/approval-reports`, { reason });
+                toast.success('Reported. Central office and the category officer have been notified.');
+                loadApprovalReports();
             } else {
                 await post(`/proposals/${id}/validation/${dialog}`, { reason });
                 if (dialog === 'approve') toast.success('Proposal approved for review.');
@@ -1504,10 +1553,57 @@ export default function ProposalShow() {
                         <ContractUploadSection proposal={proposal} onUploaded={() => router.reload({ only: ['proposal'] })} />
                     )}
 
+                    {/* Approval reports — college officer flagged this as possibly mistakenly approved */}
+                    {approvalReports.length > 0 && (canReviewApprovalReports || canReportMistakenApproval) && (
+                        <div className="mt-4 space-y-2">
+                            {approvalReports.map(r => (
+                                <div key={r.id} className={`rounded-xl border p-4 ${r.status === 'open' ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'}`}>
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="flex items-start gap-2">
+                                            <AlertCircle size={16} className={r.status === 'open' ? 'text-amber-600 mt-0.5 shrink-0' : 'text-gray-400 mt-0.5 shrink-0'} />
+                                            <div>
+                                                <p className={`text-sm font-semibold ${r.status === 'open' ? 'text-amber-800' : 'text-gray-600'}`}>
+                                                    {r.status === 'open' ? 'Possible mistaken approval reported' : 'Approval report reviewed'}
+                                                </p>
+                                                <p className="text-xs text-gray-500 mt-0.5">
+                                                    By {r.reported_by?.name ?? 'a college officer'} · {formatDate(r.created_at)}
+                                                </p>
+                                                <p className="text-sm text-gray-700 mt-1.5">{r.reason}</p>
+                                                {r.status === 'reviewed' && (
+                                                    <p className="text-xs text-gray-500 mt-1.5">
+                                                        Reviewed by {r.reviewed_by?.name ?? '—'} · {formatDate(r.reviewed_at)}
+                                                        {r.resolution_notes && <> — {r.resolution_notes}</>}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                        {r.status === 'open' && canReviewApprovalReports && (
+                                            <button
+                                                onClick={() => markReportReviewed(r.id)}
+                                                disabled={reviewingReportId === r.id}
+                                                className="shrink-0 px-3 py-1.5 text-xs font-semibold bg-white border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-100 disabled:opacity-60"
+                                            >
+                                                {reviewingReportId === r.id ? 'Marking…' : 'Mark Reviewed'}
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
                     {/* Workflow actions */}
-                    {isAdmin && (
+                    {(isAdmin || canRejectBlindReview || canReportMistakenApproval) && (
                         <div className="mt-4 pt-4 border-t border-gray-100">
-                            <ActionButtons proposal={proposal} onAction={handleAction} onProcessDefenceResult={handleProcessDefenceResult} isAdmin={isAdmin} />
+                            <ActionButtons
+                                proposal={proposal}
+                                onAction={handleAction}
+                                onProcessDefenceResult={handleProcessDefenceResult}
+                                isAdmin={isAdmin}
+                                canRejectBlindReview={canRejectBlindReview}
+                                canReportMistakenApproval={canReportMistakenApproval}
+                                hasOpenReport={hasOpenReport}
+                            />
                         </div>
                     )}
                 </div>
@@ -1696,7 +1792,9 @@ export default function ProposalShow() {
                 <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
                         <h2 className="text-base font-semibold mb-3">
-                            {dialog === 'reject_blind_review' ? 'Reject From Blind Review' : <span className="capitalize">{dialog} Proposal</span>}
+                            {dialog === 'reject_blind_review' ? 'Reject From Blind Review'
+                                : dialog === 'report_mistaken_approval' ? 'Report Mistaken Approval'
+                                : <span className="capitalize">{dialog} Proposal</span>}
                         </h2>
                         <textarea value={reason} onChange={(e) => setReason(e.target.value)}
                             placeholder="Reason (required)…" rows={3}
@@ -1706,7 +1804,9 @@ export default function ProposalShow() {
                                 className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
                             <button onClick={confirmAction} disabled={submitting}
                                 className={`px-4 py-2 text-sm font-medium rounded-lg text-white disabled:opacity-60 ${
-                                    dialog === 'reject' || dialog === 'reject_blind_review' ? 'bg-red-600 hover:bg-red-700' : 'bg-yellow-600 hover:bg-yellow-700'
+                                    dialog === 'reject' || dialog === 'reject_blind_review' ? 'bg-red-600 hover:bg-red-700'
+                                        : dialog === 'report_mistaken_approval' ? 'bg-amber-500 hover:bg-amber-600'
+                                        : 'bg-yellow-600 hover:bg-yellow-700'
                                 }`}>
                                 {submitting ? 'Processing…' : 'Confirm'}
                             </button>

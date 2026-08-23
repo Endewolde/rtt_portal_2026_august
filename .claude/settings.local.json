@@ -91,7 +91,11 @@
       "Bash(grep -n '\\\\$adminWithCol\\\\s*=\\\\|\\\\$adminFull\\\\s*=' database/seeders/WorkflowStageSeeder.php)",
       "Bash(grep -n \"confirmAction\\\\|dialog ===\\\\|const confirm\\\\|setDialog\\\\|/validation/\\\\${dialog}\\\\|api.post.*validation\" resources/js/Pages/Proposals/Show.jsx)",
       "Bash(php -l app/Http/Controllers/Api/ReviewController.php)",
-      "Bash(php -l app/Services/ReviewScoreService.php)"
+      "Bash(php -l app/Services/ReviewScoreService.php)",
+      "Bash(php -l app/Http/Controllers/Api/ProposalApprovalReportController.php)",
+      "Bash(php -l app/Models/ProposalApprovalReport.php)",
+      "Bash(grep -n \"const { hasRole, hasAnyRole\\\\|hasAnyRole\\\\|const isAdmin\\\\|const isOfficer\\\\|const isCollegeOfficer\\\\|const isCategoryOfficer\" resources/js/Pages/Proposals/Show.jsx)",
+      "Bash(grep -n \"setAppeal\\\\|/appeal\\\\`\\\\|appeal &&\\\\|showAppealModal\" resources/js/Pages/Proposals/Show.jsx)"
     ]
   },
   "enableAllProjectMcpServers": true,
