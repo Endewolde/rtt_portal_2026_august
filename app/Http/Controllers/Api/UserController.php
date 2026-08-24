@@ -167,6 +167,13 @@ class UserController extends Controller
 
         $target = User::findOrFail($id);
         $oldRole = $target->getRoleNames()->first() ?? 'none';
+
+        // roles.assign (held by 'admin' too) is deliberately not enough on its own to
+        // cross the super_admin boundary in either direction — see store()/update().
+        if ($validated['role'] === 'super_admin' || $oldRole === 'super_admin') {
+            return response()->json(['data' => null, 'message' => 'The super_admin role cannot be granted or removed here.', 'errors' => []], 403);
+        }
+
         $target->syncRoles([$validated['role']]);
 
         DB::table('audit_logs')->insert([
@@ -263,6 +270,15 @@ class UserController extends Controller
             'expertise.*' => 'string|max:100',
         ]);
 
+        // super_admin is never grantable through the general create-user form, even by an
+        // existing super_admin — users.create alone (which 'admin' also holds) must never
+        // be enough to mint a peer-or-higher account, and the frontend already hides this
+        // option from the role dropdown unconditionally. Use createSuperAdmin() below,
+        // which adds its own safeguards (password re-confirmation).
+        if ($request->role === 'super_admin') {
+            return response()->json(['message' => 'super_admin cannot be granted here — use the dedicated Create Super Admin action.'], 403);
+        }
+
         $user = User::create([
             'name' => $request->name,
             'title' => $request->title,
@@ -304,6 +320,63 @@ class UserController extends Controller
         ], 201);
     }
 
+    /**
+     * The only path that can ever grant the super_admin role — deliberately separate
+     * from store()/update()/updateRole()/bulkAction(), all of which now hard-block it.
+     * Requires the acting super_admin to re-enter their own password (step-up auth),
+     * since this is the single highest-privilege action in the system.
+     */
+    public function createSuperAdmin(Request $request): JsonResponse
+    {
+        if (! $request->user()?->hasRole('super_admin')) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email',
+            'password' => 'required|string|min:8',
+            'current_password' => 'required|string',
+        ]);
+
+        if (! Hash::check($request->current_password, $request->user()->password)) {
+            return response()->json(['message' => 'Your password is incorrect.'], 422);
+        }
+
+        $user = User::create([
+            'name' => $request->name,
+            'email' => $request->email,
+            'password' => Hash::make($request->password),
+            'status' => 'active',
+            'email_verified_at' => now(),
+            'registration_method' => 'admin_created',
+        ]);
+
+        $user->assignRole('super_admin');
+
+        NotificationPreference::create(['user_id' => $user->id]);
+
+        DB::table('audit_logs')->insert([
+            'id' => Str::uuid()->toString(),
+            'auditable_type' => User::class,
+            'auditable_id' => $user->id,
+            'event' => 'user.super_admin_created',
+            'actor_id' => $request->user()->id,
+            'old_values' => null,
+            'new_values' => json_encode(['email' => $user->email]),
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent() ?? '',
+            'created_at' => now(),
+        ]);
+
+        return response()->json([
+            'data' => $user->load('roles'),
+            'message' => 'Super admin account created.',
+            'errors' => [],
+            'meta' => [],
+        ], 201);
+    }
+
     public function update(Request $request, string $id): JsonResponse
     {
         if (! $request->user()?->can('users.update')) {
@@ -325,6 +398,18 @@ class UserController extends Controller
             'expertise' => 'nullable|array',
             'expertise.*' => 'string|max:100',
         ]);
+
+        // Neither direction of the super_admin boundary is editable here — not promoting
+        // someone to it (must go through the dedicated, password-confirmed Create Super
+        // Admin action) and not demoting an existing super_admin away from it (a plain
+        // admin stripping the only other super_admin's access is the same class of
+        // privilege manipulation as granting it, just in reverse). Only blocks an actual
+        // change — resubmitting a super_admin's unchanged role while editing their other
+        // fields (name, phone, etc.) still works fine.
+        $roleChanging = $request->filled('role') && $request->role !== $user->getRoleNames()->first();
+        if ($roleChanging && ($request->role === 'super_admin' || $user->hasRole('super_admin'))) {
+            return response()->json(['message' => 'The super_admin role cannot be granted or removed here.'], 403);
+        }
 
         $user->update($request->only('name', 'title', 'email', 'college_id', 'department_id', 'employee_id', 'phone', 'gender', 'status', 'expertise'));
 
@@ -816,10 +901,18 @@ class UserController extends Controller
                 return response()->json(['message' => 'Forbidden.'], 403);
             }
 
+            // Bulk-granting super_admin to multiple accounts at once is never allowed
+            // through this path — same boundary as store()/update()/updateRole().
+            if ($request->role === 'super_admin') {
+                return response()->json(['message' => 'The super_admin role cannot be bulk-assigned here.'], 403);
+            }
+
             $role = $request->role;
             $users = User::whereIn('id', $ids)
                 ->where('id', '!=', $actorId)
-                ->get();
+                ->get()
+                // Existing super_admins are also protected from bulk demotion.
+                ->reject(fn (User $u) => $u->hasRole('super_admin'));
 
             $now = now();
             foreach ($users as $u) {

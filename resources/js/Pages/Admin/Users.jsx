@@ -7,7 +7,7 @@ import {
     CheckCircle2, XCircle, AlertTriangle, User, Clock,
     Upload, Download, FileDown, FileUp, AlertCircle, CheckCircle,
     FileText, ChevronDown, ChevronUp, ChevronsUpDown, LogIn, TrendingUp, UserPlus, Activity,
-    MoreVertical,
+    MoreVertical, ShieldAlert, Lock,
 } from 'lucide-react';
 import { Link } from '@inertiajs/react';
 import AppLayout from '../../Layouts/AppLayout';
@@ -432,6 +432,97 @@ function UserFormModal({ title, initial, colleges, allRoles, onSave, onClose }) 
                         className="flex items-center gap-2 px-5 py-2 bg-indigo-600 text-white text-sm font-semibold
                                    rounded-xl hover:bg-indigo-700 disabled:opacity-50 transition-colors">
                         {saving ? <><RefreshCw size={13} className="animate-spin" /> Saving…</> : isEdit ? 'Save Changes' : 'Create User'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ─── Create Super Admin modal ─────────────────────────────────────────────────
+
+function CreateSuperAdminModal({ onSave, onClose }) {
+    const [form, setForm] = useState({ name: '', email: '', password: '', current_password: '' });
+    const [saving, setSaving] = useState(false);
+    const { error } = useToast();
+    const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+
+    const submit = async () => {
+        if (!form.name.trim() || !form.email.trim() || !form.password.trim()) {
+            error('Name, email and password are required.');
+            return;
+        }
+        if (!form.current_password.trim()) {
+            error('Re-enter your own password to confirm this action.');
+            return;
+        }
+        setSaving(true);
+        try {
+            await onSave(form);
+        } catch (e) {
+            error(e.response?.data?.message || 'Could not create super admin account.');
+        }
+        setSaving(false);
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-start justify-center p-4 pt-10 overflow-y-auto">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-amber-200">
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-amber-100 bg-amber-50/50">
+                    <div className="flex items-center gap-3">
+                        <div className="h-9 w-9 bg-amber-100 rounded-xl flex items-center justify-center">
+                            <ShieldAlert size={16} className="text-amber-600" />
+                        </div>
+                        <div>
+                            <h2 className="text-base font-bold text-gray-900">Create Super Admin</h2>
+                            <p className="text-xs text-gray-400">Grants full, unrestricted system access</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+                        <X size={18} />
+                    </button>
+                </div>
+
+                <div className="px-6 py-5 space-y-4">
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+                        This creates a new account with the same level of access you have. Only do this for someone you trust completely.
+                    </p>
+
+                    <Field label="Full Name" required>
+                        <input value={form.name} onChange={e => set('name', e.target.value)}
+                            placeholder="Full name" className={inputCls} />
+                    </Field>
+                    <Field label="Email" required>
+                        <input type="email" value={form.email} onChange={e => set('email', e.target.value)}
+                            placeholder="email@example.com" className={inputCls} />
+                    </Field>
+                    <Field label="Password" required>
+                        <input type="password" value={form.password} onChange={e => set('password', e.target.value)}
+                            placeholder="Set a strong password" className={inputCls} />
+                    </Field>
+
+                    <div className="pt-2 border-t border-gray-100">
+                        <Field label="Your Password" required hint="Confirm it's you — re-enter your own account password.">
+                            <div className="relative">
+                                <Lock size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300" />
+                                <input type="password" value={form.current_password} onChange={e => set('current_password', e.target.value)}
+                                    placeholder="Your current password" className={cn(inputCls, 'pl-8')} />
+                            </div>
+                        </Field>
+                    </div>
+                </div>
+
+                {/* Footer */}
+                <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex items-center justify-end gap-3">
+                    <button onClick={onClose}
+                        className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-100 transition-colors">
+                        Cancel
+                    </button>
+                    <button onClick={submit} disabled={saving}
+                        className="flex items-center gap-2 px-5 py-2 bg-amber-600 text-white text-sm font-semibold
+                                   rounded-xl hover:bg-amber-700 disabled:opacity-50 transition-colors">
+                        {saving ? <><RefreshCw size={13} className="animate-spin" /> Creating…</> : 'Create Super Admin'}
                     </button>
                 </div>
             </div>
@@ -1199,6 +1290,7 @@ export default function AdminUsers() {
     const [sortDir, setSortDir]                   = useState('asc');
 
     const [createModal,   setCreateModal]   = useState(false);
+    const [createSuperAdminModal, setCreateSuperAdminModal] = useState(false);
     const [editModal,     setEditModal]     = useState(null);
     const [assignModal,   setAssignModal]   = useState(null);
     const [deleteConfirm, setDeleteConfirm] = useState(null);
@@ -1286,6 +1378,7 @@ export default function AdminUsers() {
     };
 
     const handleCreate      = async (form) => { await api.post('/users', form); success('User created.'); setCreateModal(false); load(); };
+    const handleCreateSuperAdmin = async (form) => { await api.post('/users/create-super-admin', form); success('Super admin account created.'); setCreateSuperAdminModal(false); load(); };
     const handleEdit        = async (form) => { await api.put(`/users/${editModal.id}`, form); success('User updated.'); setEditModal(null); load(); };
     const handleAssignRoles = async (roles) => { await api.put(`/users/${assignModal.id}/roles`, { roles }); success('Roles updated.'); setAssignModal(null); load(); };
 
@@ -1413,6 +1506,12 @@ export default function AdminUsers() {
                             <button onClick={() => setCreateModal(true)}
                                 className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 shadow-sm transition-colors whitespace-nowrap">
                                 <Plus size={15} /> Add User
+                            </button>
+                        )}
+                        {isSuperAdmin && (
+                            <button onClick={() => setCreateSuperAdminModal(true)} title="Create Super Admin"
+                                className="p-2 rounded-xl border border-amber-200 text-amber-500 hover:bg-amber-50 hover:text-amber-600 transition-colors">
+                                <ShieldAlert size={15} />
                             </button>
                         )}
                     </div>
@@ -1796,6 +1895,11 @@ export default function AdminUsers() {
                     }}
                     colleges={colleges} allRoles={allRoles}
                     onSave={handleEdit} onClose={() => setEditModal(null)} />
+            )}
+
+            {createSuperAdminModal && (
+                <CreateSuperAdminModal
+                    onSave={handleCreateSuperAdmin} onClose={() => setCreateSuperAdminModal(false)} />
             )}
 
             {assignModal && (

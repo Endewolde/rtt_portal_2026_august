@@ -147,6 +147,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/users/stats', [UserController::class, 'stats']);
         Route::post('/users/bulk', [UserController::class, 'bulkAction']);
         Route::post('/users', [UserController::class, 'store']);
+        Route::post('/users/create-super-admin', [UserController::class, 'createSuperAdmin']);
         Route::get('/users/export', [UserController::class, 'export']);
         Route::get('/users/import-template', [UserController::class, 'importTemplate']);
         Route::post('/users/import', [UserController::class, 'import']);
