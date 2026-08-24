@@ -222,13 +222,9 @@ class ReviewController extends Controller
         return response()->json(['data' => $types]);
     }
 
-    // Matches the Evaluation Criteria sidebar entry's own visibility condition
-    // (AppLayout.jsx ALL_ADMIN) — that was never actually enforced server-side.
-    private const EVALUATION_CRITERIA_ROLES = ['super_admin', 'admin', 'central_officer'];
-
     public function storeEvaluationType(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::EVALUATION_CRITERIA_ROLES)) {
+        if (! $request->user()?->can('evaluation_criteria.manage')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
         }
 
@@ -246,7 +242,7 @@ class ReviewController extends Controller
 
     public function updateEvaluationType(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::EVALUATION_CRITERIA_ROLES)) {
+        if (! $request->user()?->can('evaluation_criteria.manage')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
         }
 
@@ -268,7 +264,7 @@ class ReviewController extends Controller
 
     public function storeCategory(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::EVALUATION_CRITERIA_ROLES)) {
+        if (! $request->user()?->can('evaluation_criteria.manage')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
         }
 
@@ -290,7 +286,7 @@ class ReviewController extends Controller
 
     public function updateCategory(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::EVALUATION_CRITERIA_ROLES)) {
+        if (! $request->user()?->can('evaluation_criteria.manage')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
         }
 
@@ -302,7 +298,7 @@ class ReviewController extends Controller
 
     public function destroyCategory(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::EVALUATION_CRITERIA_ROLES)) {
+        if (! $request->user()?->can('evaluation_criteria.manage')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
         }
 
@@ -332,7 +328,7 @@ class ReviewController extends Controller
 
     public function storeQuestion(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::EVALUATION_CRITERIA_ROLES)) {
+        if (! $request->user()?->can('evaluation_criteria.manage')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
         }
 
@@ -357,7 +353,7 @@ class ReviewController extends Controller
 
     public function updateQuestion(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::EVALUATION_CRITERIA_ROLES)) {
+        if (! $request->user()?->can('evaluation_criteria.manage')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
         }
 
@@ -369,7 +365,7 @@ class ReviewController extends Controller
 
     public function destroyQuestion(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::EVALUATION_CRITERIA_ROLES)) {
+        if (! $request->user()?->can('evaluation_criteria.manage')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
         }
 

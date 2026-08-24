@@ -206,10 +206,8 @@ class ContractController extends Controller
         $proposal = Proposal::findOrFail($id);
 
         $isOwner = $user && $proposal->pi_user_id === $user->id;
-        $isOfficer = $user?->hasAnyRole(['super_admin', 'admin', 'central_officer', 'college_officer',
-            'research_officer', 'community_officer', 'technology_officer', 'support_officer']);
 
-        if (! $isOwner && ! $isOfficer) {
+        if (! $isOwner && ! $user?->can('contracts.download')) {
             abort(403, 'Unauthorized.');
         }
 

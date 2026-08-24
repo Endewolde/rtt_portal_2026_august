@@ -47,6 +47,13 @@ class RolePermissionSeeder extends Seeder
             'proposal_ai_scores' => ['view', 'generate'],
             'reviewer_match' => ['view'],
             'lookup_options' => ['view_any', 'view', 'create', 'update', 'delete', 'reorder'],
+            'faqs' => ['view_any', 'create', 'update', 'delete', 'reorder'],
+            // Single broad permission — the 8 mutation endpoints span 3 sub-resources
+            // (evaluation types/categories/questions) that only ever change together
+            // as one "who can touch the scoring rubric" decision, same shape as
+            // settings.manage / features.manage below.
+            'evaluation_criteria' => ['manage'],
+            'contracts' => ['download'],
             'repository' => ['view_any', 'view', 'export'],
             'reports' => ['view_any', 'view', 'create', 'export'],
             'users' => ['view_any', 'view', 'create', 'update', 'delete', 'import', 'impersonate'],
@@ -186,6 +193,10 @@ class RolePermissionSeeder extends Seeder
             // Lookup options management
             'lookup_options.view_any', 'lookup_options.view',
             'lookup_options.create', 'lookup_options.update', 'lookup_options.delete', 'lookup_options.reorder',
+            // Public FAQs, evaluation scoring rubric, contract downloads
+            'faqs.view_any', 'faqs.create', 'faqs.update', 'faqs.delete', 'faqs.reorder',
+            'evaluation_criteria.manage',
+            'contracts.download',
         ]);
 
         // ── central_officer: cross-college oversight ──────────────────────────
@@ -232,6 +243,8 @@ class RolePermissionSeeder extends Seeder
             'reviewer_match.view',
             // Lookup options (read-only for officers)
             'lookup_options.view_any', 'lookup_options.view',
+            'evaluation_criteria.manage',
+            'contracts.download',
         ]);
 
         // ── research_officer ─────────────────────────────────────────────────
@@ -264,6 +277,7 @@ class RolePermissionSeeder extends Seeder
             'proposal_ai_scores.view', 'proposal_ai_scores.generate',
             'reviewer_match.view',
             'lookup_options.view_any', 'lookup_options.view',
+            'contracts.download',
         ]);
 
         // ── community_officer ────────────────────────────────────────────────
@@ -292,6 +306,7 @@ class RolePermissionSeeder extends Seeder
             'proposal_ai_scores.view', 'proposal_ai_scores.generate',
             'reviewer_match.view',
             'lookup_options.view_any', 'lookup_options.view',
+            'contracts.download',
         ]);
 
         // ── technology_officer ───────────────────────────────────────────────
@@ -320,6 +335,7 @@ class RolePermissionSeeder extends Seeder
             'proposal_ai_scores.view', 'proposal_ai_scores.generate',
             'reviewer_match.view',
             'lookup_options.view_any', 'lookup_options.view',
+            'contracts.download',
         ]);
 
         // ── college_officer: college-scoped management ───────────────────────
@@ -352,6 +368,7 @@ class RolePermissionSeeder extends Seeder
             'disbursements.create', 'disbursements.update',
             'settlements.view_any', 'settlements.view',
             'settlements.create', 'settlements.update',
+            'contracts.download',
         ]);
 
         // ── finance_officer: college-scoped budget approvals & disbursements ────
@@ -381,6 +398,7 @@ class RolePermissionSeeder extends Seeder
             'reports.view_any', 'reports.view',
             'proposals.view_any', 'proposals.view',
             'complaints.view_any', 'complaints.view',
+            'contracts.download',
         ]);
 
         // ── reviewer: scoped read access for assigned proposals & reviews ────

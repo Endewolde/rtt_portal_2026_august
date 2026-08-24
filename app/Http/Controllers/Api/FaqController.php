@@ -21,7 +21,7 @@ class FaqController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('faqs.view_any')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -32,7 +32,7 @@ class FaqController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('faqs.create')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -50,7 +50,7 @@ class FaqController extends Controller
 
     public function update(Request $request, Faq $faq): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('faqs.update')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -68,7 +68,7 @@ class FaqController extends Controller
 
     public function destroy(Request $request, Faq $faq): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('faqs.delete')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -79,7 +79,7 @@ class FaqController extends Controller
 
     public function reorder(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('faqs.reorder')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
