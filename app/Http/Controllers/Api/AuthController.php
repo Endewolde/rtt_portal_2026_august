@@ -166,6 +166,15 @@ class AuthController extends Controller
             'expertise.*' => ['string', 'max:100'],
         ]);
 
+        // College/department are locked to admin correction (see users.update via
+        // UserController::update) — a self-service change here is how wrong data
+        // spreads silently. Only admin/super_admin may change their own via this
+        // endpoint too; everyone else has these two fields dropped from the update
+        // regardless of what the request contains.
+        if (! $user->hasAnyRole(['admin', 'super_admin'])) {
+            unset($validated['college_id'], $validated['department_id']);
+        }
+
         $user->update($validated);
 
         $user = $user->fresh()->load('roles');

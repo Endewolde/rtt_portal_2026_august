@@ -120,8 +120,12 @@ function Input({ ...props }) {
 function Select({ children, ...props }) {
     return (
         <select {...props}
-            className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm bg-white
-                       focus:outline-none focus:ring-2 focus:ring-indigo-500 hover:border-gray-400">
+            className={`w-full border rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2
+                        focus:ring-indigo-500 transition-colors
+                        ${props.disabled
+                            ? 'bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed'
+                            : 'border-gray-300 bg-white hover:border-gray-400'
+                        }`}>
             {children}
         </select>
     )
@@ -407,6 +411,8 @@ function SecuritySection({ user, onUpdated }) {
 
 function AcademicInfoForm({ user, onUpdated }) {
     const { success, error } = useToast()
+    const { hasAnyRole } = useAuth()
+    const canEditCollegeDept = hasAnyRole(['admin', 'super_admin'])
     const [collegeId, setCollegeId]       = useState(user?.college_id ?? '')
     const [departmentId, setDepartmentId] = useState(user?.department_id ?? '')
     const [expertiseTags, setExpertiseTags] = useState(user?.expertise ?? [])
@@ -473,15 +479,15 @@ function AcademicInfoForm({ user, onUpdated }) {
     return (
         <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Field label="College / Faculty">
-                    <Select value={collegeId} onChange={e => setCollegeId(e.target.value)}>
+                <Field label="College / Faculty" hint={!canEditCollegeDept ? 'Contact admin to change your college' : undefined}>
+                    <Select value={collegeId} onChange={e => setCollegeId(e.target.value)} disabled={!canEditCollegeDept}>
                         <option value="">Select college…</option>
                         {colleges.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </Select>
                 </Field>
-                <Field label="Department">
+                <Field label="Department" hint={!canEditCollegeDept ? 'Contact admin to change your department' : undefined}>
                     <Select value={departmentId} onChange={e => setDepartmentId(e.target.value)}
-                            disabled={!collegeId || departments.length === 0}>
+                            disabled={!canEditCollegeDept || !collegeId || departments.length === 0}>
                         <option value="">{!collegeId ? 'Select a college first' : departments.length === 0 ? 'No departments' : 'Select department…'}</option>
                         {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                     </Select>
