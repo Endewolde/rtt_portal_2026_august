@@ -50,7 +50,13 @@ class RolePermissionSeeder extends Seeder
             'repository' => ['view_any', 'view', 'export'],
             'reports' => ['view_any', 'view', 'create', 'export'],
             'users' => ['view_any', 'view', 'create', 'update', 'delete', 'import', 'impersonate'],
-            'roles' => ['view_any', 'view', 'create', 'update', 'delete', 'assign'],
+            // view_any/view/create/update/delete deliberately excluded — RoleController
+            // hard-gates every role-management endpoint to hasRole('super_admin') literally,
+            // so granting these to any other role (via the Roles & Permissions UI) would have
+            // zero real effect. 'assign' is the one exception — genuinely enforced by
+            // UserController::store/update — assigning an EXISTING role to a user is a
+            // different, safer capability than editing what roles themselves can do.
+            'roles' => ['assign'],
             'colleges' => ['view_any', 'view', 'create', 'update', 'delete'],
             'departments' => ['view_any', 'view', 'create', 'update', 'delete'],
             'settings' => ['view_any', 'view', 'update', 'manage'],
@@ -64,14 +70,26 @@ class RolePermissionSeeder extends Seeder
             ],
         ];
 
+        $expected = [];
+
         foreach ($map as $resource => $actions) {
             foreach ($actions as $action) {
+                $name = "{$resource}.{$action}";
+                $expected[] = $name;
+
                 Permission::updateOrCreate(
-                    ['name' => "{$resource}.{$action}", 'guard_name' => 'web'],
-                    ['name' => "{$resource}.{$action}", 'guard_name' => 'web'],
+                    ['name' => $name, 'guard_name' => 'web'],
+                    ['name' => $name, 'guard_name' => 'web'],
                 );
             }
         }
+
+        // Drop any permission no longer defined above — e.g. roles.view_any/create/
+        // update/delete, removed because they were dead (see the 'roles' entry).
+        // Without this, a permission dropped from $map lingers in the permissions
+        // table (and the Roles & Permissions UI) forever, implying a capability that
+        // no longer exists anywhere in code. Pivot rows cascade-delete automatically.
+        Permission::where('guard_name', 'web')->whereNotIn('name', $expected)->delete();
     }
 
     private function createRoles(): void
@@ -132,7 +150,14 @@ class RolePermissionSeeder extends Seeder
             'awards.view_any', 'awards.view', 'awards.create', 'awards.update',
             'users.view_any', 'users.view', 'users.create', 'users.update',
             'users.import', 'users.delete', 'users.impersonate',
-            'roles.view_any', 'roles.view', 'roles.create', 'roles.update', 'roles.assign', 'roles.delete',
+            // roles.view_any/view/create/update/delete are deliberately NOT granted here —
+            // RoleController hard-gates every role-management endpoint to hasRole('super_admin')
+            // literally (managing roles/permissions is the one place a permission-based check
+            // would be self-defeating: whoever can edit a role's permissions can grant
+            // themselves anything). roles.assign is the one exception — it IS enforced
+            // (see UserController::store/update), since assigning an EXISTING role to a user
+            // is a different, safer capability than editing what roles themselves can do.
+            'roles.assign',
             'colleges.view_any', 'colleges.view', 'colleges.create', 'colleges.update', 'colleges.delete',
             'departments.view_any', 'departments.view', 'departments.create', 'departments.update', 'departments.delete',
             'settings.view_any', 'settings.view', 'settings.update', 'settings.manage',

@@ -44,11 +44,13 @@ const ROLE_GRADIENTS = {
 
 // Resources and the actions that exist for each
 const RESOURCE_ORDER = [
-    'proposals', 'proposal_calls', 'reviews', 'review_assignments', 'defence_sessions',
-    'budget_requests', 'budget_allocations', 'disbursements', 'settlements',
-    'midterm_evaluations', 'completion_workshops', 'research_outputs',
+    'proposals', 'proposal_calls', 'proposal_ai_scores', 'reviews', 'review_assignments',
+    'reviewer_match', 'defence_sessions',
+    'budget_requests', 'budget_allocations', 'budget_milestones', 'disbursements', 'settlements',
+    'midterm_evaluations', 'completion_workshops', 'research_outputs', 'research_impacts',
     'repository', 'reports', 'complaints', 'users', 'roles', 'colleges',
-    'departments', 'settings', 'awards', 'audit_logs', 'features',
+    'departments', 'lookup_options', 'settings', 'awards', 'external_funds',
+    'audit_logs', 'system_monitor', 'features',
 ];
 
 export default function Roles() {
