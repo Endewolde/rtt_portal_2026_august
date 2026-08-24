@@ -229,3 +229,43 @@ test('resubmitting after rejection clears rejection reason and sets status to pe
     expect($fresh->contract_status)->toBe('pending')
         ->and($fresh->contract_rejection_reason)->toBeNull();
 });
+
+// ─── Download ─────────────────────────────────────────────────────────────────
+
+test('the owning PI can download their own contract', function () {
+    [$proposal, $pi] = contract_makeFundedProposal();
+    Storage::disk('private')->put("contracts/{$proposal->id}/x.pdf", 'pdf-bytes');
+    $proposal->update(['contract_document_path' => "contracts/{$proposal->id}/x.pdf"]);
+
+    $token = $pi->createToken('test')->plainTextToken;
+
+    $this->withToken($token)
+        ->get("/api/v1/proposals/{$proposal->id}/contract/download")
+        ->assertOk();
+});
+
+test('an officer can download any proposal\'s contract', function () {
+    [$proposal, $pi, $officer] = contract_makeFundedProposal();
+    Storage::disk('private')->put("contracts/{$proposal->id}/x.pdf", 'pdf-bytes');
+    $proposal->update(['contract_document_path' => "contracts/{$proposal->id}/x.pdf"]);
+
+    $token = $officer->createToken('test')->plainTextToken;
+
+    $this->withToken($token)
+        ->get("/api/v1/proposals/{$proposal->id}/contract/download")
+        ->assertOk();
+});
+
+test('an unrelated authenticated user cannot download someone else\'s contract', function () {
+    [$proposal, $pi] = contract_makeFundedProposal();
+    Storage::disk('private')->put("contracts/{$proposal->id}/x.pdf", 'pdf-bytes');
+    $proposal->update(['contract_document_path' => "contracts/{$proposal->id}/x.pdf"]);
+
+    $stranger = User::factory()->create();
+    $stranger->assignRole('pi');
+    $token = $stranger->createToken('test')->plainTextToken;
+
+    $this->withToken($token)
+        ->get("/api/v1/proposals/{$proposal->id}/contract/download")
+        ->assertForbidden();
+});

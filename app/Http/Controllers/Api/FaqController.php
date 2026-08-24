@@ -19,8 +19,12 @@ class FaqController extends Controller
         return response()->json(['data' => $faqs]);
     }
 
-    public function index(): JsonResponse
+    public function index(Request $request): JsonResponse
     {
+        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
         $faqs = Faq::orderBy('sort_order')->orderBy('created_at')->get();
 
         return response()->json(['data' => $faqs]);
@@ -28,6 +32,10 @@ class FaqController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
         $data = $request->validate([
             'question' => ['required', 'string', 'max:500'],
             'answer' => ['required', 'string'],
@@ -42,6 +50,10 @@ class FaqController extends Controller
 
     public function update(Request $request, Faq $faq): JsonResponse
     {
+        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
         $data = $request->validate([
             'question' => ['required', 'string', 'max:500'],
             'answer' => ['required', 'string'],
@@ -54,8 +66,12 @@ class FaqController extends Controller
         return response()->json(['data' => $faq->fresh()]);
     }
 
-    public function destroy(Faq $faq): JsonResponse
+    public function destroy(Request $request, Faq $faq): JsonResponse
     {
+        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
         $faq->delete();
 
         return response()->json(['message' => 'Deleted.']);
@@ -63,6 +79,10 @@ class FaqController extends Controller
 
     public function reorder(Request $request): JsonResponse
     {
+        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
         $request->validate([
             'ids' => ['required', 'array'],
             'ids.*' => ['string'],

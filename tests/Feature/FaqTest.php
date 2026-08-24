@@ -40,10 +40,10 @@ test('admin can create a faq', function () {
     $admin->assignRole('super_admin');
 
     $response = $this->actingAs($admin)->postJson('/api/v1/faqs', [
-        'question'   => 'What is RTT?',
-        'answer'     => 'RTT is the Research Tracking and Transparency platform.',
+        'question' => 'What is RTT?',
+        'answer' => 'RTT is the Research Tracking and Transparency platform.',
         'sort_order' => 0,
-        'is_active'  => true,
+        'is_active' => true,
     ]);
 
     $response->assertCreated();
@@ -56,10 +56,10 @@ test('admin can update a faq', function () {
     $faq = Faq::create(['question' => 'Old Q?', 'answer' => 'Old A.', 'sort_order' => 0, 'is_active' => true]);
 
     $response = $this->actingAs($admin)->putJson("/api/v1/faqs/{$faq->id}", [
-        'question'   => 'Updated Q?',
-        'answer'     => 'Updated A.',
+        'question' => 'Updated Q?',
+        'answer' => 'Updated A.',
         'sort_order' => 0,
-        'is_active'  => true,
+        'is_active' => true,
     ]);
 
     $response->assertOk();
@@ -80,4 +80,22 @@ test('admin can delete a faq', function () {
 test('unauthenticated user cannot access admin faq endpoints', function () {
     $this->getJson('/api/v1/faqs')->assertUnauthorized();
     $this->postJson('/api/v1/faqs', [])->assertUnauthorized();
+});
+
+test('a non-admin authenticated user cannot manage faqs', function () {
+    $staff = User::factory()->create();
+    $staff->assignRole('staff');
+    $faq = Faq::create(['question' => 'Q?', 'answer' => 'A.', 'sort_order' => 0, 'is_active' => true]);
+
+    $this->actingAs($staff)->getJson('/api/v1/faqs')->assertForbidden();
+    $this->actingAs($staff)->postJson('/api/v1/faqs', [
+        'question' => 'New?', 'answer' => 'New.', 'sort_order' => 0, 'is_active' => true,
+    ])->assertForbidden();
+    $this->actingAs($staff)->putJson("/api/v1/faqs/{$faq->id}", [
+        'question' => 'Edited?', 'answer' => 'Edited.', 'sort_order' => 0, 'is_active' => true,
+    ])->assertForbidden();
+    $this->actingAs($staff)->deleteJson("/api/v1/faqs/{$faq->id}")->assertForbidden();
+    $this->actingAs($staff)->putJson('/api/v1/faqs/reorder', ['ids' => [$faq->id]])->assertForbidden();
+
+    expect(Faq::find($faq->id)->question)->toBe('Q?');
 });

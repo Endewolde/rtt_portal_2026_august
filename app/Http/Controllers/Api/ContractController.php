@@ -197,11 +197,21 @@ class ContractController extends Controller
     }
 
     /**
-     * Download the signed contract PDF.
+     * Download the signed contract PDF — the proposal's own PI, or an officer role
+     * (same set that can approve/reject contracts above).
      */
-    public function download(string $id)
+    public function download(Request $request, string $id)
     {
+        $user = $request->user();
         $proposal = Proposal::findOrFail($id);
+
+        $isOwner = $user && $proposal->pi_user_id === $user->id;
+        $isOfficer = $user?->hasAnyRole(['super_admin', 'admin', 'central_officer', 'college_officer',
+            'research_officer', 'community_officer', 'technology_officer', 'support_officer']);
+
+        if (! $isOwner && ! $isOfficer) {
+            abort(403, 'Unauthorized.');
+        }
 
         if (! $proposal->contract_document_path) {
             abort(404, 'No contract document uploaded.');

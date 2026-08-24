@@ -222,8 +222,16 @@ class ReviewController extends Controller
         return response()->json(['data' => $types]);
     }
 
+    // Matches the Evaluation Criteria sidebar entry's own visibility condition
+    // (AppLayout.jsx ALL_ADMIN) — that was never actually enforced server-side.
+    private const EVALUATION_CRITERIA_ROLES = ['super_admin', 'admin', 'central_officer'];
+
     public function storeEvaluationType(Request $request): JsonResponse
     {
+        if (! $request->user()?->hasAnyRole(self::EVALUATION_CRITERIA_ROLES)) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
+        }
+
         $request->validate([
             'name' => 'required|string|unique:evaluation_types,name',
             'label' => 'required|string',
@@ -238,6 +246,10 @@ class ReviewController extends Controller
 
     public function updateEvaluationType(Request $request, string $id): JsonResponse
     {
+        if (! $request->user()?->hasAnyRole(self::EVALUATION_CRITERIA_ROLES)) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
+        }
+
         $type = EvaluationType::findOrFail($id);
         $type->update($request->only('label', 'description', 'is_active'));
 
@@ -256,6 +268,10 @@ class ReviewController extends Controller
 
     public function storeCategory(Request $request, string $id): JsonResponse
     {
+        if (! $request->user()?->hasAnyRole(self::EVALUATION_CRITERIA_ROLES)) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
+        }
+
         $request->validate([
             'name' => 'required|string',
             'weight' => 'required|numeric|min:0|max:100',
@@ -274,14 +290,22 @@ class ReviewController extends Controller
 
     public function updateCategory(Request $request, string $id): JsonResponse
     {
+        if (! $request->user()?->hasAnyRole(self::EVALUATION_CRITERIA_ROLES)) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
+        }
+
         $category = EvaluationCategory::findOrFail($id);
         $category->update($request->only('name', 'description', 'weight', 'order_index'));
 
         return response()->json(['data' => $category->fresh(), 'message' => 'Updated.', 'errors' => [], 'meta' => []]);
     }
 
-    public function destroyCategory(string $id): JsonResponse
+    public function destroyCategory(Request $request, string $id): JsonResponse
     {
+        if (! $request->user()?->hasAnyRole(self::EVALUATION_CRITERIA_ROLES)) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
+        }
+
         $category = EvaluationCategory::findOrFail($id);
 
         if ($category->questions()->count() > 0) {
@@ -308,6 +332,10 @@ class ReviewController extends Controller
 
     public function storeQuestion(Request $request, string $id): JsonResponse
     {
+        if (! $request->user()?->hasAnyRole(self::EVALUATION_CRITERIA_ROLES)) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
+        }
+
         $request->validate([
             'question_text' => 'required|string',
             'max_score' => 'required|integer|min:1|max:10',
@@ -329,14 +357,22 @@ class ReviewController extends Controller
 
     public function updateQuestion(Request $request, string $id): JsonResponse
     {
+        if (! $request->user()?->hasAnyRole(self::EVALUATION_CRITERIA_ROLES)) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
+        }
+
         $question = EvaluationQuestion::findOrFail($id);
         $question->update($request->only('question_text', 'max_score', 'weight', 'is_required', 'order_index'));
 
         return response()->json(['data' => $question->fresh(), 'message' => 'Updated.', 'errors' => [], 'meta' => []]);
     }
 
-    public function destroyQuestion(string $id): JsonResponse
+    public function destroyQuestion(Request $request, string $id): JsonResponse
     {
+        if (! $request->user()?->hasAnyRole(self::EVALUATION_CRITERIA_ROLES)) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
+        }
+
         EvaluationQuestion::findOrFail($id)->delete();
 
         return response()->json(['data' => null, 'message' => 'Question deleted.', 'errors' => [], 'meta' => []]);
