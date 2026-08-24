@@ -39,6 +39,13 @@ const COMPLAINT_STAGE_MAP = {
     under_open_defence: 'open_defence',
 };
 
+// Once rejected, proposal.status no longer identifies which review phase to complain
+// about — the workflow action that caused the rejection does instead.
+const REJECTION_ACTION_STAGE_MAP = {
+    fail_blind_review: 'blind_review',
+    fail_defence: 'open_defence',
+};
+
 const COMPLAINT_STAGE_LABELS = {
     blind_review:  'Blind Review',
     open_defence:  'Open Defence',
@@ -67,9 +74,9 @@ const LEVEL_COLORS = {
 
 // ── File Complaint Modal ─────────────────────────────────────────────────────
 
-function FileComplaintModal({ proposal, level, onSave, onClose }) {
+function FileComplaintModal({ proposal, level, rejectedVia, onSave, onClose }) {
     const isOfficer = level === 'officer';
-    const stage     = COMPLAINT_STAGE_MAP[proposal.status] ?? null;
+    const stage     = COMPLAINT_STAGE_MAP[proposal.status] ?? REJECTION_ACTION_STAGE_MAP[rejectedVia] ?? null;
 
     const [description,   setDescription]   = useState('');
     const [complaintType, setComplaintType] = useState('budget');
@@ -312,7 +319,7 @@ function WithdrawConfirmModal({ complaint, onConfirm, onClose }) {
 
 // ── Complaints Tab Content ───────────────────────────────────────────────────
 
-function ComplaintsTab({ proposal, userId, isProposalMember, isOfficer, isAdmin }) {
+function ComplaintsTab({ proposal, userId, isProposalMember, isOfficer, isAdmin, rejectedVia }) {
     const [complaints,  setComplaints]  = useState([]);
     const [loading,     setLoading]     = useState(true);
     const [filing,      setFiling]      = useState(null); // 'college' | 'officer'
@@ -322,7 +329,13 @@ function ComplaintsTab({ proposal, userId, isProposalMember, isOfficer, isAdmin 
     const [expanded,    setExpanded]    = useState(null);
     const { success, error } = useToast();
 
-    const canFileCollege = isProposalMember && COLLEGE_COMPLAINT_STATUSES.includes(proposal.status);
+    // Also stays open after a terminal rejection specifically caused by failing the
+    // blind review or open defence score threshold — the PI should still be able to
+    // dispute how THAT review was conducted even though the decision itself is final
+    // (disputing the decision is Request Reconsideration's job, scoped separately to
+    // central-evaluation rejections only).
+    const rejectedOnReviewScore = proposal.status === 'rejected' && rejectedVia in REJECTION_ACTION_STAGE_MAP;
+    const canFileCollege = isProposalMember && (COLLEGE_COMPLAINT_STATUSES.includes(proposal.status) || rejectedOnReviewScore);
     const canFileOfficer = isProposalMember && FUNDED_STATUSES.includes(proposal.status);
 
     const load = () => {
@@ -460,7 +473,8 @@ function ComplaintsTab({ proposal, userId, isProposalMember, isOfficer, isAdmin 
                 </div>
                 {!canFileCollege && isProposalMember && !FUNDED_STATUSES.includes(proposal.status) && (
                     <p className="text-xs text-gray-400 italic">
-                        Complaints can be filed during the Blind Review or Open Defence phases.
+                        Complaints can be filed during the Blind Review or Open Defence phases, or afterward if the
+                        proposal was rejected for not meeting the review score threshold.
                     </p>
                 )}
                 {collegeComplaints.length === 0
@@ -502,6 +516,7 @@ function ComplaintsTab({ proposal, userId, isProposalMember, isOfficer, isAdmin 
                 <FileComplaintModal
                     proposal={proposal}
                     level={filing}
+                    rejectedVia={rejectedVia}
                     onSave={() => handleSaved('Complaint submitted successfully.')}
                     onClose={() => setFiling(null)}
                 />
@@ -1473,6 +1488,15 @@ export default function ProposalShow() {
     const isProposalMember  = user?.id === proposal.pi_user_id
         || members.some(m => m.user_id === user?.id && m.status === 'active');
 
+    // 'rejected' is a shared terminal status reached from four very different places
+    // (validation, blind review score, open defence score, central evaluation) — the
+    // workflow_logs entry that transitioned the proposal INTO 'rejected' is the only
+    // way to tell which one actually happened, so Reconsideration/Complaint visibility
+    // can be scoped to the right origin instead of showing for every rejection alike.
+    const rejectionEntries = history.filter(h => h.to_stage === 'rejected');
+    const rejectedVia = rejectionEntries.length ? rejectionEntries[rejectionEntries.length - 1].action : null;
+    const canRequestReconsideration = proposal.status === 'rejected' && rejectedVia === 'central_reject';
+
     return (
         <AppLayout breadcrumb={`Proposals / ${proposal.tracker_number ?? 'Draft'}`}>
             <div className="max-w-4xl mx-auto space-y-6">
@@ -1522,14 +1546,21 @@ export default function ProposalShow() {
                                     {appeal.resolution_notes && <p className="text-sm text-gray-600">{appeal.resolution_notes}</p>}
                                 </div>
                             ) : user?.id === proposal.pi_user_id && (
-                                <div className="flex justify-end">
-                                    <button
-                                        onClick={() => setShowAppealModal(true)}
-                                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-                                    >
-                                        <RotateCcw size={14} /> Request Reconsideration
-                                    </button>
-                                </div>
+                                canRequestReconsideration ? (
+                                    <div className="flex justify-end">
+                                        <button
+                                            onClick={() => setShowAppealModal(true)}
+                                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                                        >
+                                            <RotateCcw size={14} /> Request Reconsideration
+                                        </button>
+                                    </div>
+                                ) : ['fail_blind_review', 'fail_defence'].includes(rejectedVia) && (
+                                    <p className="text-xs text-gray-400 italic text-right">
+                                        This proposal was rejected for not meeting the review score threshold —
+                                        use the Complaints tab to raise a concern about that review.
+                                    </p>
+                                )
                             )}
                         </div>
                     )}
@@ -1781,6 +1812,7 @@ export default function ProposalShow() {
                                 isProposalMember={isProposalMember}
                                 isOfficer={isOfficer}
                                 isAdmin={isAdmin}
+                                rejectedVia={rejectedVia}
                             />
                         )}
                     </div>
