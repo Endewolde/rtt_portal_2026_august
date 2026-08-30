@@ -27,12 +27,12 @@ class AcademicYearTransition extends Command
         $this->info("Starting academic year transition → {$newYear}");
 
         // 1. Close all open proposal calls
-        $openCalls = ProposalCall::where('status', 'open')->get();
+        $openCalls = ProposalCall::where('status', 'active')->get();
         $this->info("Found {$openCalls->count()} open proposal call(s) to close.");
 
         if (! $dryRun) {
             foreach ($openCalls as $call) {
-                $call->update(['status' => 'closed']);
+                $call->update(['status' => 'closed', 'is_open' => false]);
                 $this->line("  Closed: {$call->title}");
             }
         } else {

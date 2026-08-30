@@ -38,7 +38,7 @@ class DeactivateExpiredGuestUsers extends Command
                 'actor_id' => null,
                 'old_values' => json_encode(['status' => 'active', 'role' => 'guest']),
                 'new_values' => json_encode(['status' => 'inactive', 'reason' => 'Guest account expired after 2 weeks']),
-                'ip_address' => null,
+                'ip_address' => '127.0.0.1',
                 'user_agent' => 'system',
                 'created_at' => now(),
             ]);

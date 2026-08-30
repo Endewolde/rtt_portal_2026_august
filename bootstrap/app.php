@@ -2,7 +2,9 @@
 
 use App\Exceptions\ComplaintAlreadyFiledException;
 use App\Exceptions\ConflictingReviewerException;
+use App\Exceptions\InvalidScoreException;
 use App\Exceptions\UnauthorizedResolutionException;
+use App\Exceptions\UnauthorizedReviewException;
 use App\Http\Middleware\EnsureCategoryScope;
 use App\Http\Middleware\EnsureCollegeScope;
 use App\Http\Middleware\EnsureFeatureEnabled;
@@ -103,9 +105,32 @@ return Application::configure(basePath: dirname(__DIR__))
                 return response()->json(['data' => null, 'message' => $e->getMessage(), 'errors' => [], 'meta' => []], 422);
             }
         });
+
+        // Score submission rejected (out-of-range score, missing required question,
+        // declared conflict of interest, etc.) → 422. Also unmapped until now — every
+        // one of these has been a raw 500 in production, not just the new COI case.
+        $exceptions->render(function (InvalidScoreException $e, Request $request) {
+            if ($request->is('api/*')) {
+                return response()->json(['data' => null, 'message' => $e->getMessage(), 'errors' => [], 'meta' => []], 422);
+            }
+        });
+
+        // Someone other than the assigned reviewer tried to submit a score → 403.
+        $exceptions->render(function (UnauthorizedReviewException $e, Request $request) {
+            if ($request->is('api/*')) {
+                return response()->json(['data' => null, 'message' => $e->getMessage(), 'errors' => [], 'meta' => []], 403);
+            }
+        });
     })
     ->withSchedule(function (Schedule $schedule): void {
-        $schedule->command('rtt:open-for-validation')->hourly();
+        // rtt:open-for-validation deliberately NOT scheduled: its actual purpose
+        // (surfacing proposals into the validation queue via a 'pending_validation'
+        // status + 'open_for_validation' workflow action) is unreachable dead code —
+        // neither exists anywhere else in the app; the real validation queue runs off
+        // status = 'submitted' directly, no separate "opening" step needed. The only
+        // thing this command actually did was close expired calls, which duplicated
+        // and raced against rtt:expire-calls below on the same rows. See the command
+        // file for the full explanation if this ever needs to be revived properly.
         $schedule->command('rtt:deadline-reminders')->dailyAt('08:00');
         $schedule->command('rtt:expire-calls')->everyMinute();
         $schedule->command('rtt:cleanup-telegram-tokens')->weekly();
