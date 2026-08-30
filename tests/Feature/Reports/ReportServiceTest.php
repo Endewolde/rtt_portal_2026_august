@@ -138,6 +138,51 @@ test('proposal_count_by_college returns college names with counts', function () 
         ->and($found->total_proposals)->toBeGreaterThanOrEqual(2);
 });
 
+test('proposal_trend_by_year groups by academic year regardless of the academic_year filter', function () {
+    [$college, $dept, $central, $call] = rpt_makeBase();
+
+    $callYearOne = ProposalCall::create([
+        'academic_year' => '2025', 'category' => 'research',
+        'title' => 'Call 2025', 'slug' => 'rpt-y1-'.rand(10000, 99999),
+        'start_date' => now()->subYear()->toDateString(), 'end_date' => now()->subMonths(9)->toDateString(),
+        'status' => 'closed', 'is_open' => false, 'created_by' => $central->id,
+    ]);
+    $piYearOne = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
+    $piYearOne->assignRole('pi');
+    Proposal::create([
+        'tracker_number' => 'TRK-'.rand(100000, 999999), 'proposal_call_id' => $callYearOne->id,
+        'category' => 'research', 'title' => 'Old year proposal', 'status' => 'funded',
+        'pi_user_id' => $piYearOne->id, 'college_id' => $college->id, 'department_id' => $dept->id,
+        'academic_year' => '2025', 'created_by' => $piYearOne->id,
+    ]);
+
+    rpt_proposal($college, $dept, $call, 'research', 'funded');
+    rpt_proposal($college, $dept, $call, 'research', 'rejected');
+
+    // Passing a specific academic_year filter must NOT narrow this report — the
+    // whole point is comparing across years.
+    $result = app(ReportService::class)->runReport('proposal_trend_by_year', ['academic_year' => '2026']);
+    $years = array_column($result, 'academic_year');
+
+    expect($years)->toContain('2025')->toContain('2026');
+
+    $row2026 = collect($result)->firstWhere('academic_year', '2026');
+    expect((int) $row2026->submitted)->toBe(2)
+        ->and((int) $row2026->funded)->toBe(1)
+        ->and((int) $row2026->rejected)->toBe(1);
+});
+
+test('proposal_trend_by_year respects college_id filter', function () {
+    [$collegeA, $deptA, $central, $callA] = rpt_makeBase();
+    [$collegeB, $deptB] = rpt_makeBase();
+
+    rpt_proposal($collegeA, $deptA, $callA, 'research', 'funded');
+
+    $result = app(ReportService::class)->runReport('proposal_trend_by_year', ['college_id' => $collegeB->id]);
+
+    expect($result)->toBe([]);
+});
+
 test('reviewer_workload returns reviewer names and assignment counts', function () {
     [$college, $dept, $central, $call] = rpt_makeBase();
     $proposal = rpt_proposal($college, $dept, $call, 'research', 'under_blind_review');

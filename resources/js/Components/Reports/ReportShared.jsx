@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-    ResponsiveContainer, Cell, PieChart, Pie,
+    ResponsiveContainer, Cell, PieChart, Pie, LineChart, Line,
 } from 'recharts';
 import {
     TrendingUp, Users, TrendingDown, Building2, BookOpen, AlertCircle,
     Sliders, FileSpreadsheet, ChevronRight, CheckCircle2, BarChart2, Layers,
+    CalendarRange,
 } from 'lucide-react';
 import { formatCurrency } from '../../lib/utils';
 
@@ -65,6 +66,12 @@ export const REPORT_META = {
         icon:  Building2,
         color: 'blue',
         desc:  'Submission and acceptance rates per college',
+    },
+    proposal_trend_by_year: {
+        label: 'Year-over-Year Trends',
+        icon:  CalendarRange,
+        color: 'indigo',
+        desc:  'Submissions, funding, and funding rate compared across every academic year',
     },
     college_performance: {
         label: 'College Performance',
@@ -181,6 +188,37 @@ function ProposalStatisticsChart({ data }) {
             <SummaryTable
                 columns={['Category', 'Total', 'In Review', 'Accepted', 'Rejected']}
                 rows={rows.map(r => [r.name, r['Total'], r['In Review'], r['Accepted'], r['Rejected']])}
+            />
+        </div>
+    );
+}
+
+function ProposalTrendChart({ data }) {
+    const rows = data.map(r => ({
+        name:      r.academic_year,
+        Submitted: r.submitted ?? 0,
+        Funded:    r.funded ?? 0,
+        Rejected:  r.rejected ?? 0,
+        'Funded %': parseFloat(r.funded_rate_percent ?? 0),
+    }));
+
+    return (
+        <div className="space-y-6">
+            <ResponsiveContainer width="100%" height={320}>
+                <LineChart data={rows} margin={{ top: 8, right: 24, bottom: 8, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                    <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+                    <Tooltip />
+                    <Legend />
+                    <Line type="monotone" dataKey="Submitted" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
+                    <Line type="monotone" dataKey="Funded"    stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
+                    <Line type="monotone" dataKey="Rejected"  stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} />
+                </LineChart>
+            </ResponsiveContainer>
+            <SummaryTable
+                columns={['Academic Year', 'Submitted', 'Funded', 'Rejected', 'Funded %']}
+                rows={rows.map(r => [r.name, r['Submitted'], r['Funded'], r['Rejected'], `${r['Funded %']}%`])}
             />
         </div>
     );
@@ -513,6 +551,7 @@ export function renderChart(type, data) {
     switch (type) {
         case 'proposal_count_by_category':  return <ProposalStatisticsChart data={data} />;
         case 'proposal_count_by_college':   return <ProposalsByCollegeChart data={data} />;
+        case 'proposal_trend_by_year':      return <ProposalTrendChart data={data} />;
         case 'college_performance':          return <CollegePerformanceChart data={data} />;
         case 'reviewer_workload':            return <ReviewerWorkloadChart data={data} />;
         case 'budget_utilization':           return <BudgetUtilizationChart data={data} />;

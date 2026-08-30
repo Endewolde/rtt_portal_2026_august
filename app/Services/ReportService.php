@@ -136,6 +136,7 @@ class ReportService
         return match ($type) {
             'proposal_count_by_category' => $this->proposalCountByCategory($filters),
             'proposal_count_by_college' => $this->proposalCountByCollege($filters),
+            'proposal_trend_by_year' => $this->proposalTrendByYear($filters),
             'reviewer_workload' => $this->reviewerWorkload($filters),
             'approval_rate_by_category' => $this->approvalRateByCategory($filters),
             'budget_utilization' => $this->budgetUtilization($filters),
@@ -268,6 +269,31 @@ class ReportService
             DB::raw("SUM(CASE WHEN p.status IN ('accepted','funded','midterm_evaluation','completed','archived') THEN 1 ELSE 0 END) as accepted"),
             DB::raw("ROUND(SUM(CASE WHEN p.status = 'rejected' THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 2) as rejection_rate_percent")
         )->groupBy('c.id', 'c.name')->get()->toArray();
+    }
+
+    /**
+     * Year-over-year trend — deliberately ignores the academic_year filter (the
+     * whole point is comparing across years) but still respects college_id, so a
+     * college officer can see their own multi-year trend rather than the whole
+     * institution's.
+     */
+    private function proposalTrendByYear(array $filters): array
+    {
+        $query = DB::table('proposals')->whereNull('deleted_at')->whereNotNull('academic_year');
+
+        if (! empty($filters['college_id'])) {
+            $query->where('college_id', $filters['college_id']);
+        }
+
+        return $query->select(
+            'academic_year',
+            DB::raw('COUNT(*) as total'),
+            DB::raw("SUM(CASE WHEN status NOT IN ('draft') THEN 1 ELSE 0 END) as submitted"),
+            DB::raw("SUM(CASE WHEN status IN ('funded','midterm_evaluation','completed','archived') THEN 1 ELSE 0 END) as funded"),
+            DB::raw("SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected"),
+            DB::raw("ROUND(SUM(CASE WHEN status IN ('funded','midterm_evaluation','completed','archived') THEN 1 ELSE 0 END) * 100.0 / NULLIF(SUM(CASE WHEN status NOT IN ('draft') THEN 1 ELSE 0 END), 0), 1) as funded_rate_percent"
+            )
+        )->groupBy('academic_year')->orderBy('academic_year')->get()->toArray();
     }
 
     private function reviewerWorkload(array $filters): array
