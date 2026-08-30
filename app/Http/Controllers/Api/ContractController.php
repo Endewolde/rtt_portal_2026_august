@@ -59,7 +59,11 @@ class ContractController extends Controller
             'contract_status' => 'pending',
             'contract_submitted_at' => now(),
             'contract_submitted_by' => $user->id,
+            'contract_submitted_ip' => $request->ip(),
             'contract_rejection_reason' => null,
+            'contract_rejected_at' => null,
+            'contract_rejected_by' => null,
+            'contract_rejected_ip' => null,
         ]);
 
         $this->notifyOfficersOfSubmission($proposal);
@@ -102,6 +106,7 @@ class ContractController extends Controller
             'contract_status' => 'approved',
             'contract_signed_at' => now(),
             'contract_signed_by' => $user->id,
+            'contract_signed_ip' => $request->ip(),
             'contract_rejection_reason' => null,
         ]);
 
@@ -143,6 +148,9 @@ class ContractController extends Controller
         $proposal->update([
             'contract_status' => 'rejected',
             'contract_rejection_reason' => $request->input('reason'),
+            'contract_rejected_at' => now(),
+            'contract_rejected_by' => $user->id,
+            'contract_rejected_ip' => $request->ip(),
         ]);
 
         $this->notifyPiOfRejection($proposal);
@@ -185,7 +193,11 @@ class ContractController extends Controller
             'contract_status' => null,
             'contract_submitted_at' => null,
             'contract_submitted_by' => null,
+            'contract_submitted_ip' => null,
             'contract_rejection_reason' => null,
+            'contract_rejected_at' => null,
+            'contract_rejected_by' => null,
+            'contract_rejected_ip' => null,
         ]);
 
         return response()->json([

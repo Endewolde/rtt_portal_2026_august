@@ -42,11 +42,16 @@ class Proposal extends Model
         'status_entered_at',
         'contract_signed_at',
         'contract_signed_by',
+        'contract_signed_ip',
         'contract_document_path',
         'contract_status',
         'contract_submitted_at',
         'contract_submitted_by',
+        'contract_submitted_ip',
         'contract_rejection_reason',
+        'contract_rejected_at',
+        'contract_rejected_by',
+        'contract_rejected_ip',
         'submitted_at',
         'validated_at',
         'rejected_at',
@@ -61,6 +66,7 @@ class Proposal extends Model
         'status_entered_at' => 'datetime',
         'contract_signed_at' => 'datetime',
         'contract_submitted_at' => 'datetime',
+        'contract_rejected_at' => 'datetime',
         'submitted_at' => 'datetime',
         'validated_at' => 'datetime',
         'rejected_at' => 'datetime',
@@ -75,6 +81,11 @@ class Proposal extends Model
     public function pi(): BelongsTo
     {
         return $this->belongsTo(User::class, 'pi_user_id');
+    }
+
+    public function contractSignedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'contract_signed_by');
     }
 
     public function college(): BelongsTo
