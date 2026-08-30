@@ -110,6 +110,34 @@ class AuthController extends Controller
         ]);
     }
 
+    /** List the authenticated user's own active sessions (Sanctum tokens) — self-service, no admin needed. */
+    public function sessions(Request $request): JsonResponse
+    {
+        $currentTokenId = $request->user()->currentAccessToken()?->id;
+
+        $sessions = DB::table('personal_access_tokens')
+            ->where('tokenable_id', $request->user()->id)
+            ->where('tokenable_type', User::class)
+            ->select(['id', 'name', 'last_used_at', 'created_at'])
+            ->orderByDesc('last_used_at')
+            ->get()
+            ->map(fn ($row) => (array) $row + ['is_current' => (string) $row->id === (string) $currentTokenId]);
+
+        return response()->json(['data' => $sessions, 'message' => '', 'errors' => []]);
+    }
+
+    /** Revoke one of the authenticated user's own sessions by token id. */
+    public function revokeSession(Request $request, string $tokenId): JsonResponse
+    {
+        $deleted = $request->user()->tokens()->where('id', $tokenId)->delete();
+
+        if (! $deleted) {
+            return response()->json(['data' => null, 'message' => 'Session not found.', 'errors' => []], 404);
+        }
+
+        return response()->json(['data' => null, 'message' => 'Session revoked.', 'errors' => []]);
+    }
+
     public function me(Request $request): JsonResponse
     {
         $user = $request->user()->load('roles');

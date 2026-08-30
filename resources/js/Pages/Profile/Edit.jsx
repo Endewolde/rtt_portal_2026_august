@@ -3,12 +3,13 @@ import {
     User, Mail, Phone, CreditCard, Shield, Lock,
     Camera, Save, Eye, EyeOff, CheckCircle2, AlertCircle,
     Building2, Layers, ExternalLink, ShieldCheck,
-    BookOpen, X, GraduationCap,
+    BookOpen, X, GraduationCap, Monitor, Trash2,
 } from 'lucide-react'
 import AppLayout from '../../Layouts/AppLayout'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../Components/Toast'
 import api from '../../lib/api'
+import { timeAgo } from '../../lib/utils'
 
 // ─── Avatar uploader ──────────────────────────────────────────────────────────
 
@@ -407,6 +408,89 @@ function SecuritySection({ user, onUpdated }) {
     )
 }
 
+// ─── Active sessions ──────────────────────────────────────────────────────────
+
+function ActiveSessionsSection() {
+    const { success, error } = useToast()
+    const { logout } = useAuth()
+    const [sessions, setSessions] = useState(null)
+    const [revoking, setRevoking] = useState(null)
+
+    const load = useCallback(() => {
+        api.get('/auth/sessions')
+            .then(r => setSessions(r.data?.data ?? []))
+            .catch(() => error('Failed to load sessions.'))
+    }, [])
+
+    useEffect(() => { load() }, [load])
+
+    const revoke = async (session) => {
+        setRevoking(session.id)
+        try {
+            await api.delete(`/auth/sessions/${session.id}`)
+            if (session.is_current) {
+                // Revoking your own current token leaves the local app holding a
+                // dead token — treat it exactly like signing out.
+                await logout()
+                return
+            }
+            success('Session revoked.')
+            setSessions(prev => prev.filter(s => s.id !== session.id))
+        } catch (e) {
+            error(e.response?.data?.message ?? 'Failed to revoke session.')
+        } finally {
+            setRevoking(null)
+        }
+    }
+
+    if (sessions === null) {
+        return (
+            <div className="space-y-2 animate-pulse">
+                {[1, 2].map(i => <div key={i} className="h-14 bg-gray-100 rounded-xl" />)}
+            </div>
+        )
+    }
+
+    return (
+        <div className="space-y-2">
+            <p className="text-xs text-gray-400 -mt-1 mb-1">
+                Every device currently signed in to your account. Revoke any you don't recognize.
+            </p>
+            {sessions.map(s => (
+                <div key={s.id} className="flex items-center justify-between gap-3 border border-gray-100 rounded-xl px-4 py-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${
+                            s.is_current ? 'bg-green-100' : 'bg-gray-100'
+                        }`}>
+                            <Monitor size={15} className={s.is_current ? 'text-green-600' : 'text-gray-400'} />
+                        </div>
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                                <p className="text-sm font-medium text-gray-800 truncate">{s.name || 'Session'}</p>
+                                {s.is_current && (
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 shrink-0">
+                                        This device
+                                    </span>
+                                )}
+                            </div>
+                            <p className="text-xs text-gray-400">
+                                {s.last_used_at ? `Active ${timeAgo(s.last_used_at)}` : 'Never used'} · Signed in {timeAgo(s.created_at)}
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => revoke(s)}
+                        disabled={revoking === s.id}
+                        className="flex items-center gap-1.5 text-xs font-medium text-red-500 hover:text-red-700 disabled:opacity-50 shrink-0"
+                    >
+                        <Trash2 size={12} /> {revoking === s.id ? 'Revoking…' : s.is_current ? 'Sign out' : 'Revoke'}
+                    </button>
+                </div>
+            ))}
+        </div>
+    )
+}
+
 // ─── Academic info section ────────────────────────────────────────────────────
 
 function AcademicInfoForm({ user, onUpdated }) {
@@ -622,6 +706,11 @@ export default function ProfileEdit() {
                     <SecuritySection user={currentUser} onUpdated={handleUpdated} />
                 </Card>
 
+                {/* Active sessions */}
+                <Card title="Active Sessions" icon={Monitor}
+                      iconColor="bg-slate-100 text-slate-600">
+                    <ActiveSessionsSection />
+                </Card>
 
             </div>
         </AppLayout>
