@@ -77,6 +77,7 @@ class User extends Authenticatable
             'expertise' => 'array',
             'two_factor_enabled' => 'boolean',
             'alert_preferences' => 'array',
+            'locked_until' => 'datetime',
         ];
     }
 

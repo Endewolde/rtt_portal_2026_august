@@ -16,6 +16,10 @@ use Illuminate\Validation\ValidationException;
 
 class AuthService
 {
+    private const MAX_FAILED_LOGIN_ATTEMPTS = 5;
+
+    private const LOCKOUT_MINUTES = 15;
+
     /**
      * Register a new user, assign guest role, create notification preferences.
      *
@@ -85,9 +89,40 @@ class AuthService
     {
         $user = User::where('email', $credentials['email'])->first();
 
+        // super_admin always keeps a password-login fallback, even when password
+        // login is disabled site-wide (e.g. to force SSO-only for everyone else) —
+        // otherwise a misconfigured SSO provider could lock every admin out at once.
+        $passwordLoginDisabled = AppSetting::where('key', 'password_login_enabled')->value('value') === 'false';
+        if ($passwordLoginDisabled && ! $user?->hasRole('super_admin')) {
+            throw ValidationException::withMessages([
+                'email' => ['Password login is currently disabled. Please sign in with your organization account.'],
+            ]);
+        }
+
+        // Locked accounts are rejected outright — even a correct password shouldn't
+        // succeed mid-lockout, otherwise the lockout is just a speed bump for an
+        // attacker who eventually guesses right.
+        if ($user && $user->locked_until && $user->locked_until->isFuture()) {
+            $minutesLeft = max(1, now()->diffInMinutes($user->locked_until, false));
+            throw ValidationException::withMessages([
+                'email' => ["Too many failed login attempts. Try again in {$minutesLeft} minute(s)."],
+            ]);
+        }
+
         if (! $user || ! Hash::check($credentials['password'], $user->password)) {
+            if ($user) {
+                $this->registerFailedLoginAttempt($user);
+            }
+
             throw ValidationException::withMessages([
                 'email' => ['The provided credentials are incorrect.'],
+            ]);
+        }
+
+        if ($user->failed_login_attempts > 0 || $user->locked_until) {
+            DB::table('users')->where('id', $user->id)->update([
+                'failed_login_attempts' => 0,
+                'locked_until' => null,
             ]);
         }
 
@@ -116,6 +151,22 @@ class AuthService
         }
 
         return $this->issueToken($user);
+    }
+
+    /**
+     * Increment the failed-login counter and lock the account for
+     * self::LOCKOUT_MINUTES once self::MAX_FAILED_LOGIN_ATTEMPTS is reached.
+     */
+    private function registerFailedLoginAttempt(User $user): void
+    {
+        $attempts = $user->failed_login_attempts + 1;
+
+        DB::table('users')->where('id', $user->id)->update([
+            'failed_login_attempts' => $attempts,
+            'locked_until' => $attempts >= self::MAX_FAILED_LOGIN_ATTEMPTS
+                ? now()->addMinutes(self::LOCKOUT_MINUTES)
+                : null,
+        ]);
     }
 
     /**
