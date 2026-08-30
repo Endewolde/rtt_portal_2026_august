@@ -17,6 +17,7 @@ use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -140,19 +141,39 @@ class ProposalWizardController extends Controller
         $file = $request->file('file');
         $path = $file->store("proposals/{$id}/documents", 'private');
 
-        $document = ProposalDocument::create([
-            'proposal_id' => $proposal->id,
-            'document_type' => $request->document_type,
-            'original_filename' => $file->getClientOriginalName(),
-            'stored_path' => $path,
-            'file_size' => $file->getSize(),
-            'mime_type' => $file->getMimeType(),
-            'uploaded_by' => $request->user()->id,
-        ]);
+        $document = DB::transaction(function () use ($proposal, $request, $file, $path) {
+            // Superseding the prior current document of the same type (rather than
+            // just adding another unrelated row) is what makes "version 2" mean
+            // something — the old file stays on disk and in the list, just no
+            // longer flagged current, so reviewers always see the latest by default
+            // but nothing is silently lost.
+            $previous = ProposalDocument::where('proposal_id', $proposal->id)
+                ->where('document_type', $request->document_type)
+                ->where('is_current', true)
+                ->first();
+
+            if ($previous) {
+                $previous->update(['is_current' => false]);
+            }
+
+            return ProposalDocument::create([
+                'proposal_id' => $proposal->id,
+                'document_type' => $request->document_type,
+                'version' => ($previous?->version ?? 0) + 1,
+                'is_current' => true,
+                'original_filename' => $file->getClientOriginalName(),
+                'stored_path' => $path,
+                'file_size' => $file->getSize(),
+                'mime_type' => $file->getMimeType(),
+                'uploaded_by' => $request->user()->id,
+            ]);
+        });
 
         return response()->json([
-            'data' => ['id' => $document->id, 'filename' => $file->getClientOriginalName()],
-            'message' => 'Document uploaded successfully.',
+            'data' => ['id' => $document->id, 'filename' => $file->getClientOriginalName(), 'version' => $document->version],
+            'message' => $document->version > 1
+                ? "Document uploaded as version {$document->version}, replacing the previous one."
+                : 'Document uploaded successfully.',
             'errors' => [],
             'meta' => [],
         ], 201);
@@ -196,8 +217,21 @@ class ProposalWizardController extends Controller
             ], 403);
         }
 
-        Storage::disk('private')->delete($doc->stored_path);
-        $doc->delete();
+        DB::transaction(function () use ($doc) {
+            $wasCurrent = $doc->is_current;
+            Storage::disk('private')->delete($doc->stored_path);
+            $doc->delete();
+
+            // Deleting the current version shouldn't leave the type with no
+            // current document at all when an older version still exists.
+            if ($wasCurrent) {
+                ProposalDocument::where('proposal_id', $doc->proposal_id)
+                    ->where('document_type', $doc->document_type)
+                    ->orderByDesc('version')
+                    ->first()
+                    ?->update(['is_current' => true]);
+            }
+        });
 
         return response()->json([
             'data' => null,

@@ -33,11 +33,17 @@ class ProposalDocument extends Model
     protected $fillable = [
         'proposal_id',
         'document_type',
+        'version',
+        'is_current',
         'original_filename',
         'stored_path',
         'file_size',
         'mime_type',
         'uploaded_by',
+    ];
+
+    protected $casts = [
+        'is_current' => 'boolean',
     ];
 
     public function uploadedBy(): BelongsTo

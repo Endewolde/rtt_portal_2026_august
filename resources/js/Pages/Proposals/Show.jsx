@@ -742,70 +742,103 @@ function DocumentsTab({ proposalId, documents, userId, isPI, hideIdentity, onRef
                 </div>
             )}
 
-            {/* Document list */}
+            {/* Document list — grouped by type, current version first, older versions collapsed */}
             {documents.length === 0 ? (
                 <p className="text-sm text-gray-400">No documents uploaded yet.</p>
             ) : (
-                <ul className="divide-y divide-gray-100">
-                    {documents.map(doc => {
-                        const isOwner  = (doc.uploaded_by?.id ?? doc.uploaded_by) === userId;
-                        const typeColor = DOC_TYPE_COLORS[doc.document_type] ?? 'bg-gray-100 text-gray-600';
-                        const typeLabel = DOC_TYPE_LABELS[doc.document_type] ?? doc.document_type?.replace(/_/g, ' ');
+                <div className="space-y-4">
+                    {Object.entries(
+                        documents.reduce((groups, doc) => {
+                            (groups[doc.document_type] ??= []).push(doc);
+                            return groups;
+                        }, {})
+                    ).map(([type, docs]) => {
+                        const sorted = [...docs].sort((a, b) => (b.version ?? 1) - (a.version ?? 1));
+                        const current = sorted.find(d => d.is_current) ?? sorted[0];
+                        const older = sorted.filter(d => d.id !== current.id);
+                        const typeColor = DOC_TYPE_COLORS[type] ?? 'bg-gray-100 text-gray-600';
+                        const typeLabel = DOC_TYPE_LABELS[type] ?? type?.replace(/_/g, ' ');
 
-                        return (
-                            <li key={doc.id} className="flex items-center justify-between py-3 gap-4">
-                                <div className="flex items-start gap-3 min-w-0">
-                                    <FileText size={18} className="text-gray-400 mt-0.5 shrink-0" />
-                                    <div className="min-w-0">
-                                        <p className="text-sm font-medium text-gray-800 truncate">{doc.original_filename}</p>
-                                        <div className="flex flex-wrap items-center gap-2 mt-0.5">
-                                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${typeColor}`}>
-                                                {typeLabel}
-                                            </span>
-                                            {!hideIdentity && doc.uploaded_by?.name && (
-                                                <span className="text-xs text-gray-400">
-                                                    by {doc.uploaded_by.name}
-                                                </span>
-                                            )}
-                                            {doc.file_size && (
-                                                <span className="text-xs text-gray-400">
-                                                    {(doc.file_size / 1024 / 1024).toFixed(2)} MB
-                                                </span>
-                                            )}
-                                            {doc.created_at && (
-                                                <span className="text-xs text-gray-400">
-                                                    {new Date(doc.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                                                </span>
-                                            )}
+                        const row = (doc, faded = false) => {
+                            const isOwner = (doc.uploaded_by?.id ?? doc.uploaded_by) === userId;
+                            return (
+                                <li key={doc.id} className={`flex items-center justify-between py-3 gap-4 ${faded ? 'opacity-60' : ''}`}>
+                                    <div className="flex items-start gap-3 min-w-0">
+                                        <FileText size={18} className="text-gray-400 mt-0.5 shrink-0" />
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-medium text-gray-800 truncate">{doc.original_filename}</p>
+                                            <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                                                {docs.length > 1 && (
+                                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700">
+                                                        v{doc.version ?? 1}
+                                                    </span>
+                                                )}
+                                                {!hideIdentity && doc.uploaded_by?.name && (
+                                                    <span className="text-xs text-gray-400">
+                                                        by {doc.uploaded_by.name}
+                                                    </span>
+                                                )}
+                                                {doc.file_size && (
+                                                    <span className="text-xs text-gray-400">
+                                                        {(doc.file_size / 1024 / 1024).toFixed(2)} MB
+                                                    </span>
+                                                )}
+                                                {doc.created_at && (
+                                                    <span className="text-xs text-gray-400">
+                                                        {new Date(doc.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                    </span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                                <div className="flex items-center gap-2 shrink-0">
-                                    <button
-                                        type="button"
-                                        onClick={() => downloadFile(
-                                            `/proposals/${proposalId}/documents/${doc.id}/download`,
-                                            doc.original_filename
-                                        ).catch(() => toastError('Download failed.'))}
-                                        className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
-                                    >
-                                        <ExternalLink size={12} /> Download
-                                    </button>
-                                    {isOwner && (
+                                    <div className="flex items-center gap-2 shrink-0">
                                         <button
                                             type="button"
-                                            onClick={() => handleDelete(doc.id)}
-                                            disabled={deleting === doc.id}
-                                            className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 disabled:opacity-50"
+                                            onClick={() => downloadFile(
+                                                `/proposals/${proposalId}/documents/${doc.id}/download`,
+                                                doc.original_filename
+                                            ).catch(() => toastError('Download failed.'))}
+                                            className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
                                         >
-                                            <Trash2 size={12} /> {deleting === doc.id ? '…' : 'Remove'}
+                                            <ExternalLink size={12} /> Download
                                         </button>
-                                    )}
-                                </div>
-                            </li>
+                                        {isOwner && (
+                                            <button
+                                                type="button"
+                                                onClick={() => handleDelete(doc.id)}
+                                                disabled={deleting === doc.id}
+                                                className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 disabled:opacity-50"
+                                            >
+                                                <Trash2 size={12} /> {deleting === doc.id ? '…' : 'Remove'}
+                                            </button>
+                                        )}
+                                    </div>
+                                </li>
+                            );
+                        };
+
+                        return (
+                            <div key={type}>
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${typeColor}`}>
+                                    {typeLabel}
+                                </span>
+                                <ul className="divide-y divide-gray-100 mt-1">
+                                    {row(current)}
+                                </ul>
+                                {older.length > 0 && (
+                                    <details className="mt-1">
+                                        <summary className="text-xs text-gray-400 hover:text-gray-600 cursor-pointer select-none">
+                                            {older.length} earlier version{older.length !== 1 ? 's' : ''}
+                                        </summary>
+                                        <ul className="divide-y divide-gray-100 mt-1">
+                                            {older.map(doc => row(doc, true))}
+                                        </ul>
+                                    </details>
+                                )}
+                            </div>
                         );
                     })}
-                </ul>
+                </div>
             )}
         </div>
     );
@@ -1706,31 +1739,49 @@ export default function ProposalShow() {
                             : members.length === 0
                                 ? <p className="text-sm text-gray-400">No team members on record.</p>
                                 : (
-                                    <div className="overflow-x-auto">
-                                        <table className="w-full text-sm">
-                                            <thead className="bg-gray-50 text-xs uppercase text-gray-500">
-                                                <tr>
-                                                    {['Member', 'Email', 'Role', 'Contribution'].map((h) => (
-                                                        <th key={h} className="px-4 py-2 text-left font-medium">{h}</th>
-                                                    ))}
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-gray-100">
-                                                {members.filter(m => m.status === 'active').map((m) => (
-                                                    <tr key={m.id}>
-                                                        <td className="px-4 py-2.5 font-medium text-gray-800">{m.user?.name ?? '—'}</td>
-                                                        <td className="px-4 py-2.5 text-gray-500">{m.user?.email ?? '—'}</td>
-                                                        <td className="px-4 py-2.5">
-                                                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${m.role === 'pi' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
-                                                                {m.role === 'pi' ? 'PI' : 'Co-PI'}
-                                                            </span>
-                                                        </td>
-                                                        <td className="px-4 py-2.5 text-gray-600">{m.contribution_percentage}%</td>
+                                    <>
+                                        <div className="hidden sm:block overflow-x-auto">
+                                            <table className="w-full text-sm">
+                                                <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+                                                    <tr>
+                                                        {['Member', 'Email', 'Role', 'Contribution'].map((h) => (
+                                                            <th key={h} className="px-4 py-2 text-left font-medium">{h}</th>
+                                                        ))}
                                                     </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-100">
+                                                    {members.filter(m => m.status === 'active').map((m) => (
+                                                        <tr key={m.id}>
+                                                            <td className="px-4 py-2.5 font-medium text-gray-800">{m.user?.name ?? '—'}</td>
+                                                            <td className="px-4 py-2.5 text-gray-500">{m.user?.email ?? '—'}</td>
+                                                            <td className="px-4 py-2.5">
+                                                                <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${m.role === 'pi' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
+                                                                    {m.role === 'pi' ? 'PI' : 'Co-PI'}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-4 py-2.5 text-gray-600">{m.contribution_percentage}%</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+
+                                        {/* Mobile: stacked cards */}
+                                        <div className="sm:hidden space-y-2">
+                                            {members.filter(m => m.status === 'active').map((m) => (
+                                                <div key={m.id} className="border border-gray-200 rounded-xl p-3">
+                                                    <div className="flex items-start justify-between gap-2 mb-1">
+                                                        <p className="font-medium text-gray-800 text-sm">{m.user?.name ?? '—'}</p>
+                                                        <span className={`shrink-0 px-2 py-0.5 rounded-full text-xs font-medium ${m.role === 'pi' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
+                                                            {m.role === 'pi' ? 'PI' : 'Co-PI'}
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-xs text-gray-500 truncate">{m.user?.email ?? '—'}</p>
+                                                    <p className="text-xs text-gray-600 mt-1">Contribution: {m.contribution_percentage}%</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </>
                                 )
                         )}
 
@@ -1739,7 +1790,7 @@ export default function ProposalShow() {
                                 ? <p className="text-sm text-gray-400">No budget items on record.</p>
                                 : (
                                     <div className="space-y-3">
-                                        <div className="overflow-x-auto">
+                                        <div className="hidden sm:block overflow-x-auto">
                                             <table className="w-full text-sm">
                                                 <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                                                     <tr>
@@ -1766,6 +1817,24 @@ export default function ProposalShow() {
                                                     </tr>
                                                 </tfoot>
                                             </table>
+                                        </div>
+
+                                        {/* Mobile: stacked cards */}
+                                        <div className="sm:hidden space-y-2">
+                                            {budgets.map((b) => (
+                                                <div key={b.id} className="border border-gray-200 rounded-xl p-3">
+                                                    <div className="flex items-start justify-between gap-2 mb-1">
+                                                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700 capitalize">{b.category}</span>
+                                                        <span className="shrink-0 font-semibold text-gray-900 text-sm">{formatCurrency(b.amount)}</span>
+                                                    </div>
+                                                    <p className="text-sm text-gray-800">{b.item_description}</p>
+                                                    {b.justification && <p className="text-xs text-gray-500 mt-1">{b.justification}</p>}
+                                                </div>
+                                            ))}
+                                            <div className="flex items-center justify-between border-t border-gray-200 pt-2 px-1">
+                                                <span className="text-sm font-semibold text-gray-700">Total</span>
+                                                <span className="text-sm font-bold text-gray-900">{formatCurrency(budgetTotal)}</span>
+                                            </div>
                                         </div>
                                     </div>
                                 )
