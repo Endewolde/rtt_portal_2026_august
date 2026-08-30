@@ -617,10 +617,15 @@ class ReviewController extends Controller
         // Reviewers who only have abstract assignments (no proposal reviews at all) still
         // need a row, since combined_pending should reflect all their outstanding work.
         $proposalReviewerIds = $grouped->keys();
-        $abstractOnlyStats = $abstractGrouped
-            ->reject(fn ($items, $reviewerId) => $proposalReviewerIds->contains($reviewerId))
-            ->map(function ($items) {
-                $reviewer = User::with('roles:id,name')->find($items->first()->reviewer_id);
+        $abstractOnlyGroups = $abstractGrouped
+            ->reject(fn ($items, $reviewerId) => $proposalReviewerIds->contains($reviewerId));
+        $abstractOnlyReviewers = User::with('roles:id,name')
+            ->whereIn('id', $abstractOnlyGroups->keys())
+            ->get()
+            ->keyBy('id');
+        $abstractOnlyStats = $abstractOnlyGroups
+            ->map(function ($items) use ($abstractOnlyReviewers) {
+                $reviewer = $abstractOnlyReviewers->get($items->first()->reviewer_id);
                 $abstractTotal = $items->count();
                 $abstractCompleted = $items->whereNotNull('submitted_at')->count();
                 $abstractPending = $abstractTotal - $abstractCompleted;
@@ -1018,7 +1023,7 @@ class ReviewController extends Controller
 
     public function declareCoi(string $id, Request $request): JsonResponse
     {
-        $assignment = ReviewAssignment::findOrFail($id);
+        $assignment = ReviewAssignment::with(['proposal:id,tracker_number,title', 'assignedBy'])->findOrFail($id);
 
         if ($assignment->reviewer_id !== $request->user()->id) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.'], 403);
@@ -1028,9 +1033,56 @@ class ReviewController extends Controller
             return response()->json(['data' => $assignment, 'message' => 'COI already declared.']);
         }
 
-        $assignment->update(['coi_declared_at' => now()]);
+        $validated = $request->validate([
+            'has_conflict' => ['sometimes', 'boolean'],
+            'reason' => ['required_if:has_conflict,true', 'nullable', 'string', 'max:1000'],
+        ]);
 
-        return response()->json(['data' => $assignment->fresh(), 'message' => 'Conflict of interest declaration recorded.']);
+        $hasConflict = $validated['has_conflict'] ?? false;
+
+        $assignment->update([
+            'coi_declared_at' => now(),
+            'coi_has_conflict' => $hasConflict,
+            'coi_reason' => $hasConflict ? $validated['reason'] : null,
+        ]);
+
+        if ($hasConflict) {
+            $this->notifyConflictDeclared($assignment->fresh(['proposal', 'assignedBy']), $request->user());
+        }
+
+        return response()->json([
+            'data' => $assignment->fresh(),
+            'message' => $hasConflict
+                ? 'Conflict reported. The assigning officer has been notified to reassign this review.'
+                : 'Conflict of interest declaration recorded.',
+        ]);
+    }
+
+    private function notifyConflictDeclared(ReviewAssignment $assignment, User $reviewer): void
+    {
+        $officer = $assignment->assignedBy;
+        if (! $officer?->email) {
+            return;
+        }
+
+        $data = [
+            'tracker_number' => $assignment->proposal?->tracker_number,
+            'title' => $assignment->proposal?->title,
+            'reviewer_name' => $reviewer->name,
+            'reason' => $assignment->coi_reason,
+        ];
+
+        try {
+            StoreInAppNotificationJob::dispatchSync($officer->id, 'review_coi_conflict', $data);
+            SendRawMailJob::dispatchSync(
+                "<p>Dear {$officer->name},</p><p><strong>{$reviewer->name}</strong> has declared a conflict of interest reviewing <strong>{$assignment->proposal?->title}</strong> ({$assignment->proposal?->tracker_number}) and will not be scoring it.</p><p><strong>Reason given:</strong> ".e($assignment->coi_reason).'</p><p>Please reassign this review to another reviewer.</p>',
+                $officer->email,
+                $officer->name,
+                "Reviewer Conflict of Interest — {$assignment->proposal?->tracker_number}"
+            );
+        } catch (\Exception $e) {
+            Log::error("COI conflict notify failed: {$e->getMessage()}");
+        }
     }
 
     public function respondInvitation(string $id, Request $request): JsonResponse

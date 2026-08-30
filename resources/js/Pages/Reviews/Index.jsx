@@ -274,20 +274,37 @@ function isNewAssignment(assignment) {
     return hoursOld <= 168; // 7 days
 }
 
-function CoiDeclarationModal({ assignment, onDeclared, onClose }) {
-    const { error } = useToast();
+function CoiDeclarationModal({ assignment, onDeclared, onConflictReported, onClose }) {
+    const { error, success } = useToast();
     const [confirmed, setConfirmed] = useState(false);
     const [declaring, setDeclaring] = useState(false);
+    const [reporting, setReporting] = useState(false);
+    const [showConflictForm, setShowConflictForm] = useState(false);
+    const [reason, setReason] = useState('');
 
     const handleProceed = async () => {
         setDeclaring(true);
         try {
-            await api.post(`/review-assignments/${assignment.id}/declare-coi`);
+            await api.post(`/review-assignments/${assignment.id}/declare-coi`, { has_conflict: false });
             onDeclared();
         } catch (err) {
             error(err?.response?.data?.message ?? 'Failed to record declaration.');
         } finally {
             setDeclaring(false);
+        }
+    };
+
+    const handleReportConflict = async () => {
+        if (reason.trim().length < 5) { error('Briefly describe the conflict.'); return; }
+        setReporting(true);
+        try {
+            await api.post(`/review-assignments/${assignment.id}/declare-coi`, { has_conflict: true, reason });
+            success('Conflict reported. The assigning officer has been notified to reassign this review.');
+            onConflictReported();
+        } catch (err) {
+            error(err?.response?.data?.message ?? 'Failed to report the conflict.');
+        } finally {
+            setReporting(false);
         }
     };
 
@@ -316,37 +333,83 @@ function CoiDeclarationModal({ assignment, onDeclared, onClose }) {
                     </div>
 
                     <p className="text-sm text-gray-600 leading-relaxed">
-                        Before proceeding, you must declare whether you have any conflict of interest with this proposal or its investigators.
+                        Before proceeding, you must declare whether you have any conflict of interest with this proposal or its investigators — e.g. you're in the same department, have collaborated with the PI before, or have a personal relationship with them.
                     </p>
 
-                    <label className="flex items-start gap-3 cursor-pointer group">
-                        <input
-                            type="checkbox"
-                            checked={confirmed}
-                            onChange={e => setConfirmed(e.target.checked)}
-                            className="mt-0.5 h-4 w-4 rounded border-gray-300 text-violet-600 cursor-pointer"
-                        />
-                        <span className="text-sm text-gray-700 group-hover:text-gray-900 leading-relaxed">
-                            I confirm that I have <strong>no conflict of interest</strong> with this proposal and that I can review it fairly and objectively.
-                        </span>
-                    </label>
+                    {!showConflictForm ? (
+                        <>
+                            <label className="flex items-start gap-3 cursor-pointer group">
+                                <input
+                                    type="checkbox"
+                                    checked={confirmed}
+                                    onChange={e => setConfirmed(e.target.checked)}
+                                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-violet-600 cursor-pointer"
+                                />
+                                <span className="text-sm text-gray-700 group-hover:text-gray-900 leading-relaxed">
+                                    I confirm that I have <strong>no conflict of interest</strong> with this proposal and that I can review it fairly and objectively.
+                                </span>
+                            </label>
 
-                    <div className="flex gap-3 pt-2">
-                        <button
-                            onClick={handleProceed}
-                            disabled={!confirmed || declaring}
-                            className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-violet-600 text-white rounded-xl text-sm font-semibold hover:bg-violet-700 disabled:opacity-50 transition-colors"
-                        >
-                            {declaring ? <Loader2 size={15} className="animate-spin" /> : <ShieldAlert size={15} />}
-                            Declare &amp; Proceed
-                        </button>
-                        <button
-                            onClick={onClose}
-                            className="px-5 py-2.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
-                        >
-                            Cancel
-                        </button>
-                    </div>
+                            <div className="flex gap-3 pt-2">
+                                <button
+                                    onClick={handleProceed}
+                                    disabled={!confirmed || declaring}
+                                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-violet-600 text-white rounded-xl text-sm font-semibold hover:bg-violet-700 disabled:opacity-50 transition-colors"
+                                >
+                                    {declaring ? <Loader2 size={15} className="animate-spin" /> : <ShieldAlert size={15} />}
+                                    Declare &amp; Proceed
+                                </button>
+                                <button
+                                    onClick={onClose}
+                                    className="px-5 py-2.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+
+                            <button
+                                onClick={() => setShowConflictForm(true)}
+                                className="flex items-center gap-1.5 text-xs font-medium text-red-500 hover:text-red-700 transition-colors"
+                            >
+                                <AlertCircle size={12} /> I actually have a conflict — report it instead
+                            </button>
+                        </>
+                    ) : (
+                        <>
+                            <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                                <label className="block text-xs font-semibold text-red-700 mb-1.5">
+                                    Briefly describe the conflict
+                                </label>
+                                <textarea
+                                    value={reason}
+                                    onChange={e => setReason(e.target.value)}
+                                    rows={3}
+                                    placeholder="e.g. The PI is my former PhD supervisor."
+                                    className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 bg-white"
+                                />
+                                <p className="text-xs text-red-600 mt-1.5">
+                                    You will not be able to score this proposal. The officer who assigned you will be notified to reassign it.
+                                </p>
+                            </div>
+
+                            <div className="flex gap-3 pt-2">
+                                <button
+                                    onClick={handleReportConflict}
+                                    disabled={reporting || reason.trim().length < 5}
+                                    className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 disabled:opacity-50 transition-colors"
+                                >
+                                    {reporting ? <Loader2 size={15} className="animate-spin" /> : <AlertCircle size={15} />}
+                                    Report Conflict
+                                </button>
+                                <button
+                                    onClick={() => setShowConflictForm(false)}
+                                    className="px-5 py-2.5 text-sm font-medium text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors"
+                                >
+                                    Back
+                                </button>
+                            </div>
+                        </>
+                    )}
                 </div>
             </div>
         </div>,
@@ -354,7 +417,7 @@ function CoiDeclarationModal({ assignment, onDeclared, onClose }) {
     );
 }
 
-function AssignmentCard({ assignment, tabKey, onCoiDeclared }) {
+function AssignmentCard({ assignment, tabKey, onCoiDeclared, onConflictReported }) {
     const daysLeft  = getDaysRemaining(assignment.due_date);
     const isDone    = assignment.status === 'submitted';
     const isNew     = isNewAssignment(assignment);
@@ -364,6 +427,7 @@ function AssignmentCard({ assignment, tabKey, onCoiDeclared }) {
     const { hasSubFeature } = useFeature();
 
     const [showCoiModal, setShowCoiModal] = useState(false);
+    const hasReportedConflict = assignment.coi_has_conflict === true;
     const needsCoiDeclaration = hasSubFeature('workflow.coi_declaration') && !assignment.coi_declared_at;
 
     const handleScoreClick = (e) => {
@@ -377,6 +441,11 @@ function AssignmentCard({ assignment, tabKey, onCoiDeclared }) {
         setShowCoiModal(false);
         onCoiDeclared(assignment.id);
         router.visit(`/reviews/${assignment.id}/score`);
+    };
+
+    const handleConflictReported = () => {
+        setShowCoiModal(false);
+        onConflictReported(assignment.id);
     };
 
     return (
@@ -435,6 +504,10 @@ function AssignmentCard({ assignment, tabKey, onCoiDeclared }) {
                             <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl">
                                 <CheckCircle2 size={13} /> Submitted
                             </span>
+                        ) : hasReportedConflict ? (
+                            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-700 bg-red-50 border border-red-200 px-3 py-1.5 rounded-xl">
+                                <AlertCircle size={13} /> Conflict Reported
+                            </span>
                         ) : (
                             <Link
                                 href={`/reviews/${assignment.id}/score`}
@@ -458,6 +531,7 @@ function AssignmentCard({ assignment, tabKey, onCoiDeclared }) {
                 <CoiDeclarationModal
                     assignment={assignment}
                     onDeclared={handleCoiDeclared}
+                    onConflictReported={handleConflictReported}
                     onClose={() => setShowCoiModal(false)}
                 />
             )}
@@ -798,6 +872,12 @@ export default function ReviewIndex() {
         ));
     };
 
+    const handleConflictReported = (assignmentId) => {
+        setAllAssignments(prev => prev.map(a =>
+            a.id === assignmentId ? { ...a, coi_declared_at: new Date().toISOString(), coi_has_conflict: true } : a
+        ));
+    };
+
     const loadAbstracts = () => {
         setAbstractsLoading(true);
         api.get('/reviewer/abstracts')
@@ -1013,6 +1093,7 @@ export default function ReviewIndex() {
                                         assignment={assignment}
                                         tabKey={activeTab}
                                         onCoiDeclared={handleCoiDeclared}
+                                        onConflictReported={handleConflictReported}
                                     />
                                 ))}
                             </div>

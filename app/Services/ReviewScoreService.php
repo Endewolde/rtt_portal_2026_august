@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Exceptions\InvalidScoreException;
 use App\Exceptions\InvalidTransitionException;
 use App\Exceptions\ReviewAlreadySubmittedException;
+use App\Exceptions\UnauthorizedReviewException;
 use App\Exceptions\UnauthorizedTransitionException;
 use App\Models\DefenceSession;
 use App\Models\EvaluationQuestion;
@@ -32,10 +33,23 @@ class ReviewScoreService
     public function submitScore(
         ReviewAssignment $assignment,
         array $answers,
-        User $_reviewer
+        User $reviewer
     ): ReviewAssignment {
+        // This was previously unchecked — any authenticated user hitting the endpoint
+        // directly (not just via the UI, which only ever links a reviewer to their own
+        // assignments) could submit a score for someone else's review assignment.
+        if ($assignment->reviewer_id !== $reviewer->id) {
+            throw new UnauthorizedReviewException;
+        }
+
         if ($assignment->status === 'submitted') {
             throw new ReviewAlreadySubmittedException('This review has already been submitted.');
+        }
+
+        // A reviewer who declared a conflict of interest must never be able to score
+        // this proposal, regardless of what the frontend does or doesn't show them.
+        if ($assignment->coi_has_conflict) {
+            throw new InvalidScoreException('You have declared a conflict of interest on this review and cannot submit a score.');
         }
 
         // Issue 2: Block open-defence submissions outside the scheduled date
@@ -238,8 +252,11 @@ class ReviewScoreService
             return collect();
         }
 
-        $scoresByQuestion = ReviewScore::where('review_assignment_id', $assignment->id)
-            ->pluck('score', 'evaluation_question_id');
+        // Reuse an already eager-loaded `scores` relation when the caller preloaded
+        // it (e.g. Central Evaluation's queue) instead of re-querying per assignment.
+        $scoresByQuestion = $assignment->relationLoaded('scores')
+            ? $assignment->scores->pluck('score', 'evaluation_question_id')
+            : ReviewScore::where('review_assignment_id', $assignment->id)->pluck('score', 'evaluation_question_id');
 
         return $categories->map(function ($category) use ($scoresByQuestion) {
             $earned = 0.0;
@@ -312,14 +329,23 @@ class ReviewScoreService
      */
     public function recalculateSnapshot(Proposal $proposal): array
     {
-        $blindAssignments = ReviewAssignment::where('proposal_id', $proposal->id)
-            ->whereHas('evaluationType', fn ($q) => $q->where('name', 'like', 'blind_review%'))
-            ->where('status', 'submitted')
-            ->get();
-        $defenceAssignments = ReviewAssignment::where('proposal_id', $proposal->id)
-            ->whereHas('evaluationType', fn ($q) => $q->where('name', 'like', 'open_defence%'))
-            ->where('status', 'submitted')
-            ->get();
+        // Reuse an already eager-loaded `reviewAssignments` relation when the caller
+        // preloaded it (e.g. Central Evaluation's queue) instead of re-querying per
+        // proposal; otherwise fall back to the original per-call query unchanged.
+        if ($proposal->relationLoaded('reviewAssignments')) {
+            $submitted = $proposal->reviewAssignments->where('status', 'submitted');
+            $blindAssignments = $submitted->filter(fn ($a) => str_starts_with($a->evaluationType?->name ?? '', 'blind_review'))->values();
+            $defenceAssignments = $submitted->filter(fn ($a) => str_starts_with($a->evaluationType?->name ?? '', 'open_defence'))->values();
+        } else {
+            $blindAssignments = ReviewAssignment::where('proposal_id', $proposal->id)
+                ->whereHas('evaluationType', fn ($q) => $q->where('name', 'like', 'blind_review%'))
+                ->where('status', 'submitted')
+                ->get();
+            $defenceAssignments = ReviewAssignment::where('proposal_id', $proposal->id)
+                ->whereHas('evaluationType', fn ($q) => $q->where('name', 'like', 'open_defence%'))
+                ->where('status', 'submitted')
+                ->get();
+        }
 
         $blindDisplayInfos = $blindAssignments->map(fn ($a) => $this->calculateWeightedDisplay($a));
         $defenceDisplayInfos = $defenceAssignments->map(fn ($a) => $this->calculateWeightedDisplay($a));
