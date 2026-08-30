@@ -31,7 +31,7 @@ class CentralEvaluationController extends Controller
             ->with([
                 'pi:id,name,email',
                 'college:id,name',
-                'reviewAssignments.evaluationType:id,name',
+                'reviewAssignments.evaluationType.categories.questions',
                 'reviewAssignments.scores',
                 'budgets',
             ])

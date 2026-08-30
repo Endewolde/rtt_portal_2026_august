@@ -7,6 +7,7 @@ use App\Models\Proposal;
 use App\Services\ProposalValidationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class ProposalValidationController extends Controller
 {
@@ -72,8 +73,9 @@ class ProposalValidationController extends Controller
             try {
                 $this->service->approve($proposal, $user);
                 $approved++;
-            } catch (\Exception) {
+            } catch (\Exception $e) {
                 $skipped[] = $proposal->tracker_number ?? $id;
+                Log::warning("Bulk proposal validation-approve skipped {$proposal->id}: {$e->getMessage()}");
             }
         }
 

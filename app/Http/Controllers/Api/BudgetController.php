@@ -82,7 +82,7 @@ class BudgetController extends Controller
     }
 
     /** Single budget request with all relations. */
-    public function show(string $id): JsonResponse
+    public function show(Request $request, string $id): JsonResponse
     {
         $budgetRequest = BudgetRequest::with([
             'proposal:id,tracker_number,title,pi_user_id,college_id,category',
@@ -94,12 +94,76 @@ class BudgetController extends Controller
             'settlement',
         ])->findOrFail($id);
 
+        if (! $this->budgetRequestVisibleTo($request->user(), $budgetRequest)) {
+            return response()->json(['message' => 'Unauthorized.', 'errors' => []], 403);
+        }
+
         return response()->json([
             'data' => $budgetRequest,
             'message' => '',
             'errors' => [],
             'meta' => [],
         ]);
+    }
+
+    /**
+     * Same visibility rule as index()'s query-builder scoping, applied to a single
+     * record — kept in sync deliberately since index() lists exactly what show()
+     * must also allow opening by direct ID.
+     */
+    private function budgetRequestVisibleTo(User $user, BudgetRequest $budgetRequest): bool
+    {
+        if (! $budgetRequest->proposal) {
+            return $this->hasAnyBudgetAdminRole($user);
+        }
+
+        if ($this->proposalBudgetVisibleTo($user, $budgetRequest->proposal)) {
+            return true;
+        }
+
+        // A signer who isn't the PI or an active member (e.g. a co-PI removed after
+        // signing) still needs to see the request they signed.
+        return $budgetRequest->signatures()->where('user_id', $user->id)->exists();
+    }
+
+    /**
+     * Same visibility rule as above, keyed off the proposal directly — used by the
+     * proposal-scoped budget endpoints (summary, list-by-proposal) where there may
+     * not be a single BudgetRequest in scope yet.
+     */
+    private function proposalBudgetVisibleTo(User $user, Proposal $proposal): bool
+    {
+        if ($user->hasRole('college_officer') ||
+            ($user->hasRole('support_officer') && $user->college_id)) {
+            return $proposal->college_id === $user->college_id;
+        }
+
+        if ($user->hasRole('research_officer')) {
+            return $proposal->category === 'research';
+        }
+
+        if ($user->hasRole('community_officer')) {
+            return $proposal->category === 'community_engagement';
+        }
+
+        if ($user->hasRole('technology_officer')) {
+            return $proposal->category === 'technology_transfer';
+        }
+
+        if ($this->hasAnyBudgetAdminRole($user)) {
+            return true;
+        }
+
+        // PI, staff, or any other non-admin: owner or active member.
+        return $proposal->pi_user_id === $user->id
+            || $proposal->members()->where('user_id', $user->id)->where('status', 'active')->exists();
+    }
+
+    private function hasAnyBudgetAdminRole(User $user): bool
+    {
+        return $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'support_officer',
+            'college_officer', 'finance_officer',
+            'research_officer', 'community_officer', 'technology_officer']);
     }
 
     /** Create a budget request via flat POST /budget-requests (not nested under proposal). */
@@ -271,9 +335,13 @@ class BudgetController extends Controller
      * Budget summary for a proposal: awarded amount, total already spent, remaining.
      * Used by the PI's Create form to show available budget in real time.
      */
-    public function budgetSummary(string $id): JsonResponse
+    public function budgetSummary(Request $request, string $id): JsonResponse
     {
         $proposal = Proposal::findOrFail($id);
+
+        if (! $this->proposalBudgetVisibleTo($request->user(), $proposal)) {
+            return response()->json(['message' => 'Unauthorized.', 'errors' => []], 403);
+        }
 
         $awarded = (float) \DB::table('awards')
             ->where('proposal_id', $proposal->id)
@@ -340,8 +408,14 @@ class BudgetController extends Controller
     }
 
     /** List budget requests for a specific proposal. */
-    public function listRequests(string $id): JsonResponse
+    public function listRequests(Request $request, string $id): JsonResponse
     {
+        $proposal = Proposal::findOrFail($id);
+
+        if (! $this->proposalBudgetVisibleTo($request->user(), $proposal)) {
+            return response()->json(['message' => 'Unauthorized.', 'errors' => []], 403);
+        }
+
         $requests = BudgetRequest::with(['items', 'signatures.user', 'disbursements', 'settlement'])
             ->where('proposal_id', $id)
             ->orderByDesc('created_at')
@@ -932,7 +1006,8 @@ class BudgetController extends Controller
             );
             try {
                 StoreInAppNotificationJob::dispatchSync($officer->id, 'budget_request_approved', $data);
-            } catch (\Exception) {
+            } catch (\Exception $e) {
+                Log::error("Budget college-approval notify failed: {$e->getMessage()}");
             }
         }
     }
@@ -972,7 +1047,8 @@ class BudgetController extends Controller
             );
             try {
                 StoreInAppNotificationJob::dispatchSync($user->id, 'budget_request_approved', $data);
-            } catch (\Exception) {
+            } catch (\Exception $e) {
+                Log::error("Budget college-rejection notify failed: {$e->getMessage()}");
             }
         }
     }
@@ -1007,7 +1083,8 @@ class BudgetController extends Controller
             );
             try {
                 StoreInAppNotificationJob::dispatchSync($officer->id, 'budget_request_approved', $data);
-            } catch (\Exception) {
+            } catch (\Exception $e) {
+                Log::error("Budget finance-return notify failed: {$e->getMessage()}");
             }
         }
     }
@@ -1052,8 +1129,8 @@ class BudgetController extends Controller
             // Store in-app notification
             try {
                 StoreInAppNotificationJob::dispatchSync($user->id, 'budget_request_approved', $data);
-            } catch (\Exception) {
-                // Non-critical
+            } catch (\Exception $e) {
+                Log::error("Budget request-approved notify failed: {$e->getMessage()}");
             }
         }
     }

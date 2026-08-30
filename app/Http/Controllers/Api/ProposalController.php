@@ -396,10 +396,11 @@ class ProposalController extends Controller
         $isAdmin = $user?->hasAnyRole(['super_admin', 'central_officer']);
 
         $history = WorkflowLog::where('proposal_id', $proposal->id)
+            ->with('actor')
             ->orderBy('created_at', 'asc')
             ->get()
             ->map(function ($log) use ($isAdmin) {
-                $actor = User::find($log->actor_id);
+                $actor = $log->actor;
                 $actorLabel = $actor?->name ?? 'System';
 
                 if (! $isAdmin && $actor?->hasRole('staff')) {

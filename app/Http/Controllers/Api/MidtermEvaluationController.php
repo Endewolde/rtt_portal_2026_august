@@ -10,6 +10,7 @@ use App\Support\AuditLogger;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class MidtermEvaluationController extends Controller
 {
@@ -185,8 +186,9 @@ class MidtermEvaluationController extends Controller
             try {
                 $this->service->schedule($proposal, $date, $user, $time, $venue);
                 $scheduled++;
-            } catch (\Exception) {
+            } catch (\Exception $e) {
                 $skipped++;
+                Log::warning("Bulk midterm-evaluation schedule skipped proposal {$proposal->id}: {$e->getMessage()}");
             }
         }
 

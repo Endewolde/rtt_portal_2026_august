@@ -9,6 +9,7 @@ use App\Models\WorkshopQuestion;
 use App\Services\CompletionWorkshopService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class CompletionWorkshopController extends Controller
 {
@@ -182,8 +183,9 @@ class CompletionWorkshopController extends Controller
             try {
                 $this->service->schedule($proposal, $data, $user);
                 $scheduled++;
-            } catch (\Exception) {
+            } catch (\Exception $e) {
                 $skipped++;
+                Log::warning("Bulk completion-workshop schedule skipped proposal {$proposal->id}: {$e->getMessage()}");
             }
         }
 

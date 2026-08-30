@@ -92,7 +92,7 @@ class ApplicationController extends Controller
         ], 201);
     }
 
-    public function show(string $id): JsonResponse
+    public function show(Request $request, string $id): JsonResponse
     {
         $application = ExternalFundApplication::with([
             'agency',
@@ -106,6 +106,11 @@ class ApplicationController extends Controller
             'award',
             'documents.uploadedBy:id,name',
         ])->findOrFail($id);
+
+        $user = $request->user();
+        if (! $user->hasAnyRole(self::MANAGERS) && $application->created_by !== $user->id) {
+            return response()->json(['message' => 'Forbidden.'], 403);
+        }
 
         return response()->json(['data' => $application, 'message' => '', 'errors' => [], 'meta' => []]);
     }
