@@ -7,15 +7,28 @@ use App\Models\AuditLog;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AuditLogController extends Controller
 {
-    public function index(Request $request): JsonResponse
-    {
-        if (! $request->user()?->can('audit_logs.view_any')) {
-            return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
-        }
+    /** Category-to-event-prefix map, shared by index()'s stats and the category filter. */
+    private const CATEGORY_PREFIXES = [
+        'auth' => ['user.login', 'user.logout', 'user.registered', 'user.impersonation', 'user.session'],
+        'proposals' => ['proposal'],
+        'people' => ['user.created', 'user.updated', 'user.deleted', 'user.status', 'user.role', 'user.roles', 'user.bulk', 'user.imported', 'role'],
+        'finance' => ['budget', 'award', 'settlement', 'disbursement'],
+        'system' => ['setting', 'feature', 'college', 'department', 'repository', 'thematic'],
+        'monitoring' => ['midterm', 'completion', 'research'],
+    ];
 
+    /**
+     * Shared filtering — event/actor/type/date-range/search/category — used by
+     * both index() and export() so the two never drift out of sync (an export
+     * that silently included different rows than what the screen shows would
+     * be worse than no export at all).
+     */
+    private function filteredQuery(Request $request)
+    {
         $excludeSuperAdmin = function ($q) {
             $q->whereNull('actor_id')
                 ->orWhereHas('actor', fn ($a) => $a->whereDoesntHave('roles', fn ($r) => $r->where('name', 'super_admin')));
@@ -55,21 +68,8 @@ class AuditLogController extends Controller
             });
         }
 
-        // per_page: caller may request 25, 50, or 100; default 50
-        $perPage = min((int) ($request->query('per_page', 50)), 100);
-
-        // Category-to-prefix map
-        $categoryPrefixes = [
-            'auth' => ['user.login', 'user.logout', 'user.registered', 'user.impersonation', 'user.session'],
-            'proposals' => ['proposal'],
-            'people' => ['user.created', 'user.updated', 'user.deleted', 'user.status', 'user.role', 'user.roles', 'user.bulk', 'user.imported', 'role'],
-            'finance' => ['budget', 'award', 'settlement', 'disbursement'],
-            'system' => ['setting', 'feature', 'college', 'department', 'repository', 'thematic'],
-            'monitoring' => ['midterm', 'completion', 'research'],
-        ];
-
         if ($category = $request->query('category')) {
-            $prefixes = $categoryPrefixes[$category] ?? [];
+            $prefixes = self::CATEGORY_PREFIXES[$category] ?? [];
             if ($prefixes) {
                 $query->where(function ($q) use ($prefixes) {
                     foreach ($prefixes as $prefix) {
@@ -79,9 +79,31 @@ class AuditLogController extends Controller
             }
         }
 
+        return $query;
+    }
+
+    public function index(Request $request): JsonResponse
+    {
+        if (! $request->user()?->can('audit_logs.view_any')) {
+            return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
+        }
+
+        $excludeSuperAdmin = function ($q) {
+            $q->whereNull('actor_id')
+                ->orWhereHas('actor', fn ($a) => $a->whereDoesntHave('roles', fn ($r) => $r->where('name', 'super_admin')));
+        };
+
+        $query = $this->filteredQuery($request);
+
+        // per_page: caller may request 25, 50, or 100; default 50
+        $perPage = min((int) ($request->query('per_page', 50)), 100);
+
+        $categoryPrefixes = self::CATEGORY_PREFIXES;
+
         // Lightweight stats (last 30 days, excluding super_admin)
         $statsBase = AuditLog::where('created_at', '>=', now()->subDays(30))
-            ->where($excludeSuperAdmin);
+            ->where(fn ($q) => $q->whereNull('actor_id')
+                ->orWhereHas('actor', fn ($a) => $a->whereDoesntHave('roles', fn ($r) => $r->where('name', 'super_admin'))));
 
         $topActors = (clone $statsBase)
             ->whereNotNull('actor_id')
@@ -123,5 +145,43 @@ class AuditLogController extends Controller
             'errors' => [],
             'meta' => ['stats' => $stats],
         ]);
+    }
+
+    /** CSV export of the audit log — same filters and same super_admin exclusion as index(). */
+    public function export(Request $request): StreamedResponse
+    {
+        if (! $request->user()?->can('audit_logs.view_any')) {
+            abort(403, 'Forbidden.');
+        }
+
+        $logs = $this->filteredQuery($request)->get();
+
+        $headers = [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="audit_log_export_'.date('Y-m-d').'.csv"',
+            'Cache-Control' => 'no-cache',
+        ];
+
+        return response()->stream(function () use ($logs) {
+            $handle = fopen('php://output', 'w');
+            fwrite($handle, "\xEF\xBB\xBF");
+
+            fputcsv($handle, ['Timestamp', 'Event', 'Actor', 'Actor Email', 'Model', 'Record ID', 'IP Address', 'User Agent']);
+
+            foreach ($logs as $log) {
+                fputcsv($handle, [
+                    $log->created_at?->format('Y-m-d H:i:s'),
+                    $log->event,
+                    $log->actor?->name ?? 'System',
+                    $log->actor?->email ?? '',
+                    class_basename($log->auditable_type ?? ''),
+                    $log->auditable_id,
+                    $log->ip_address,
+                    $log->user_agent,
+                ]);
+            }
+
+            fclose($handle);
+        }, 200, $headers);
     }
 }

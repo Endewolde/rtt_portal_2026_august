@@ -149,6 +149,15 @@ class AwardController extends Controller
     {
         $user = $request->user();
 
+        // Previously unchecked — a plain staff/PI user doesn't match any of the
+        // category-officer roles below, so $allowedCategories stayed null ("all")
+        // and they could bulk-export every awarded proposal's PI/co-PI names,
+        // emails, and amounts. Same officer set approveLetters() already uses.
+        if (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'college_officer',
+            'research_officer', 'community_officer', 'technology_officer', 'support_officer'])) {
+            abort(403, 'Unauthorized.');
+        }
+
         $roleCategories = [
             'research_officer' => 'research',
             'community_officer' => 'community_engagement',
@@ -178,6 +187,7 @@ class AwardController extends Controller
             'department:id,name',
             'award',
             'activeMembers.user:id,name,email',
+            'contractSignedBy:id,name',
         ])
             ->whereIn('status', $fundedStatuses)
             ->orderBy('academic_year', 'desc')
@@ -228,6 +238,7 @@ class AwardController extends Controller
                 'Co-Investigators', 'Co-Investigator Emails',
                 'College', 'Department', 'Academic Year', 'Status',
                 'Awarded Amount (ETB)', 'Award Date', 'Approval Notes',
+                'Contract Status', 'Contract Submitted', 'Contract Signed', 'Contract Signed By', 'Contract Rejection Reason',
             ]);
 
             foreach ($proposals as $p) {
@@ -249,6 +260,11 @@ class AwardController extends Controller
                     $award ? number_format((float) $award->awarded_amount, 2) : '',
                     $award?->approved_at?->format('Y-m-d') ?? '',
                     $award?->approval_notes ?? '',
+                    $p->contract_status ? ucfirst($p->contract_status) : 'Not submitted',
+                    $p->contract_submitted_at?->format('Y-m-d') ?? '',
+                    $p->contract_signed_at?->format('Y-m-d') ?? '',
+                    $p->contractSignedBy?->name ?? '',
+                    $p->contract_rejection_reason ?? '',
                 ]);
             }
 

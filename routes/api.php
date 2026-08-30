@@ -141,6 +141,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/auth/change-password', [AuthController::class, 'changePassword']);
         Route::post('/auth/telegram/generate-token', [AuthController::class, 'generateTelegramToken']);
         Route::put('/auth/2fa/toggle', [AuthController::class, 'toggle2FA']);
+        Route::get('/auth/sessions', [AuthController::class, 'sessions']);
+        Route::delete('/auth/sessions/{tokenId}', [AuthController::class, 'revokeSession']);
 
         // Users
         Route::get('/users', [UserController::class, 'index']);
@@ -231,6 +233,7 @@ Route::prefix('v1')->group(function () {
 
         // Audit logs
         Route::get('/audit-logs', [AuditLogController::class, 'index']);
+        Route::get('/audit-logs/export', [AuditLogController::class, 'export']);
 
         // System monitoring
         Route::prefix('system-monitor')->group(function () {
