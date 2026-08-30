@@ -876,7 +876,7 @@ export default function SystemMonitor() {
                     {/* Slowest requests table */}
                     {reqStats?.top_slow?.length > 0 && (
                         <ChartPanel title="Slowest Requests" subtitle="Top 10 by response time">
-                            <div className="overflow-x-auto -mx-1">
+                            <div className="hidden sm:block overflow-x-auto -mx-1">
                                 <table className="w-full text-xs">
                                     <thead>
                                         <tr className="border-b border-white/6">
@@ -907,6 +907,24 @@ export default function SystemMonitor() {
                                         ))}
                                     </tbody>
                                 </table>
+                            </div>
+
+                            {/* Mobile: stacked rows */}
+                            <div className="sm:hidden divide-y divide-white/4">
+                                {reqStats.top_slow.map((row, i) => (
+                                    <div key={i} className="py-2.5">
+                                        <div className="flex items-center justify-between gap-2 mb-1">
+                                            <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-300 font-mono font-semibold text-[10px]">
+                                                {row.method}
+                                            </span>
+                                            <span className="font-bold tabular-nums text-amber-400 text-xs">{fmtMs(row.duration_ms)}</span>
+                                        </div>
+                                        <p className="text-slate-400 font-mono text-[11px] truncate mb-1">{row.path}</p>
+                                        <span className={`text-[10px] font-semibold ${row.status_code >= 400 ? 'text-red-400' : 'text-emerald-400'}`}>
+                                            {row.status_code}
+                                        </span>
+                                    </div>
+                                ))}
                             </div>
                         </ChartPanel>
                     )}

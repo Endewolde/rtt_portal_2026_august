@@ -1278,39 +1278,55 @@ export default function BudgetRequests() {
                             </div>
                         ) : (
                             /* Table view */
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm">
-                                    <thead className="border-b border-gray-200">
-                                        <tr>
-                                            {['#', 'Proposal', 'Round', 'Amount', 'Status', 'Signatures', 'Date', ''].map(h => (
-                                                <th key={h} className="px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide">{h}</th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-50">
-                                        {filtered.map((r, i) => (
-                                            <tr key={r.id} className="hover:bg-gray-50">
-                                                <td className="px-3 py-3 text-xs font-medium text-gray-400 tabular-nums w-10">{i + 1}</td>
-                                                <td className="px-3 py-3">
-                                                    <p className="font-mono text-xs font-bold text-blue-600">{r.proposal?.tracker_number}</p>
-                                                    <p className="text-xs text-gray-500 truncate max-w-48">{r.proposal?.title}</p>
-                                                </td>
-                                                <td className="px-3 py-3 text-xs font-bold text-gray-700">Round {r.funding_round}</td>
-                                                <td className="px-3 py-3 text-sm font-semibold text-gray-900">{formatCurrency(r.total_amount)}</td>
-                                                <td className="px-3 py-3"><StatusBadge status={r.status} /></td>
-                                                <td className="px-3 py-3"><SigProgress signatures={r.signatures ?? []} /></td>
-                                                <td className="px-3 py-3 text-xs text-gray-500">{formatDate(r.created_at)}</td>
-                                                <td className="px-3 py-3 text-right">
-                                                    <Link href={`/budget-requests/${r.id}`}
-                                                        className="text-xs text-blue-600 hover:underline font-semibold">
-                                                        View →
-                                                    </Link>
-                                                </td>
+                            <>
+                                <div className="hidden sm:block overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                        <thead className="border-b border-gray-200">
+                                            <tr>
+                                                {['#', 'Proposal', 'Round', 'Amount', 'Status', 'Signatures', 'Date', ''].map(h => (
+                                                    <th key={h} className="px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide">{h}</th>
+                                                ))}
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-50">
+                                            {filtered.map((r, i) => (
+                                                <tr key={r.id} className="hover:bg-gray-50">
+                                                    <td className="px-3 py-3 text-xs font-medium text-gray-400 tabular-nums w-10">{i + 1}</td>
+                                                    <td className="px-3 py-3">
+                                                        <p className="font-mono text-xs font-bold text-blue-600">{r.proposal?.tracker_number}</p>
+                                                        <p className="text-xs text-gray-500 truncate max-w-48">{r.proposal?.title}</p>
+                                                    </td>
+                                                    <td className="px-3 py-3 text-xs font-bold text-gray-700">Round {r.funding_round}</td>
+                                                    <td className="px-3 py-3 text-sm font-semibold text-gray-900">{formatCurrency(r.total_amount)}</td>
+                                                    <td className="px-3 py-3"><StatusBadge status={r.status} /></td>
+                                                    <td className="px-3 py-3"><SigProgress signatures={r.signatures ?? []} /></td>
+                                                    <td className="px-3 py-3 text-xs text-gray-500">{formatDate(r.created_at)}</td>
+                                                    <td className="px-3 py-3 text-right">
+                                                        <Link href={`/budget-requests/${r.id}`}
+                                                            className="text-xs text-blue-600 hover:underline font-semibold">
+                                                            View →
+                                                        </Link>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                {/* Mobile: fall back to the same cards used by card view */}
+                                <div className="sm:hidden space-y-4">
+                                    {filtered.map(r => (
+                                        <RequestCard
+                                            key={r.id}
+                                            request={r}
+                                            userId={user?.id}
+                                            isOfficer={isAdmin && !hasAnyRole(['super_admin', 'central_officer', 'finance_officer'])}
+                                            isAdmin={isAdmin}
+                                            onRefresh={load}
+                                        />
+                                    ))}
+                                </div>
+                            </>
                         )}
                     </div>
                 </div>

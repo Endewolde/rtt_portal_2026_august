@@ -685,9 +685,13 @@ function SettlementCard({ settlement, onRefresh, canVerifyCollege, canVerifyFina
 }
 
 function SettlementsTable({ settlements }) {
+    const fmtDate = (d) => d
+        ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+        : '—'
+
     return (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-            <div className="overflow-x-auto">
+            <div className="hidden sm:block overflow-x-auto">
                 <table className="w-full text-sm">
                     <thead className="bg-gray-50 border-b border-gray-200">
                         <tr>
@@ -735,17 +739,50 @@ function SettlementsTable({ settlements }) {
                                         </span>
                                     </td>
                                     <td className="px-4 py-3 text-xs text-gray-500">
-                                        {s.created_at
-                                            ? new Date(s.created_at).toLocaleDateString('en-GB', {
-                                                day: 'numeric', month: 'short', year: 'numeric',
-                                              })
-                                            : '—'}
+                                        {fmtDate(s.created_at)}
                                     </td>
                                 </tr>
                             )
                         })}
                     </tbody>
                 </table>
+            </div>
+
+            {/* Mobile: stacked cards */}
+            <div className="sm:hidden divide-y divide-gray-100">
+                {settlements.map(s => {
+                    const statusConf = STATUS_CONFIG[s.status] || STATUS_CONFIG.submitted
+                    return (
+                        <div key={s.id} className="px-4 py-3">
+                            <div className="flex items-center justify-between gap-2 mb-1">
+                                <p className="font-mono text-xs text-blue-600 font-bold">
+                                    {s.budget_request?.proposal?.tracker_number}
+                                </p>
+                                <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusConf.color}`}>
+                                    {statusConf.icon} {statusConf.label}
+                                </span>
+                            </div>
+                            <p className="text-xs text-gray-600 mb-2">{s.budget_request?.proposal?.title}</p>
+                            <div className="grid grid-cols-3 gap-2 text-xs mb-1.5">
+                                <div>
+                                    <p className="text-gray-400">Approved</p>
+                                    <p className="font-semibold text-gray-900">ETB {parseFloat(s.budget_request?.total_amount || 0).toLocaleString()}</p>
+                                </div>
+                                <div>
+                                    <p className="text-gray-400">Spent</p>
+                                    <p className="font-semibold text-blue-700">ETB {parseFloat(s.total_spent || 0).toLocaleString()}</p>
+                                </div>
+                                <div>
+                                    <p className="text-gray-400">Unspent</p>
+                                    <p className={`font-semibold ${parseFloat(s.unspent_amount || 0) > 0 ? 'text-amber-600' : 'text-green-600'}`}>
+                                        ETB {parseFloat(s.unspent_amount || 0).toLocaleString()}
+                                    </p>
+                                </div>
+                            </div>
+                            <p className="text-[11px] text-gray-400">Round {s.budget_request?.funding_round} · Submitted {fmtDate(s.created_at)}</p>
+                        </div>
+                    )
+                })}
             </div>
         </div>
     )

@@ -399,12 +399,12 @@ function ProposalCallModal({ initial, defaultAcademicYear, onClose, onSaved }) {
                 </div>
 
                 {/* ── Footer ── */}
-                <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 bg-gray-50/80 rounded-b-2xl gap-3">
+                <div className="flex flex-col-reverse gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/80 rounded-b-2xl sm:flex-row sm:items-center sm:justify-between">
                     <button type="button" onClick={onClose}
                         className="px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-600 hover:bg-gray-100 font-medium transition-colors">
                         Cancel
                     </button>
-                    <div className="flex gap-2.5">
+                    <div className="flex flex-wrap gap-2.5">
                         <button type="button" onClick={() => handleSubmit(false)} disabled={saving}
                             className="px-5 py-2.5 rounded-xl border border-blue-300 text-blue-700 text-sm font-semibold hover:bg-blue-50 disabled:opacity-50 transition-colors">
                             {saving ? <><RefreshCw size={13} className="animate-spin inline mr-1.5" />Saving…</> : isEdit ? 'Save Changes' : 'Save as Draft'}

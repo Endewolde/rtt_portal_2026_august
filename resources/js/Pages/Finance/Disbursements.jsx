@@ -438,48 +438,58 @@ export default function Disbursements() {
 
                         ) : (
                             /* Table view */
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm">
-                                    <thead className="border-b border-gray-200">
-                                        <tr>
-                                            {['#', 'Proposal', 'Round', 'Amount', 'Transaction', 'Disbursed By', 'Date'].map(h => (
-                                                <th key={h} className="px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide">{h}</th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-50">
-                                        {disbursements.map((d, i) => (
-                                            <tr key={d.id} className="hover:bg-gray-50">
-                                                <td className="px-3 py-3 text-xs font-medium text-gray-400 tabular-nums w-10">{i + 1}</td>
-                                                <td className="px-3 py-3">
-                                                    <p className="font-mono text-xs font-bold text-blue-600">{d.budget_request?.proposal?.tracker_number}</p>
-                                                    <p className="text-xs text-gray-500 truncate max-w-48">{d.budget_request?.proposal?.title}</p>
-                                                </td>
-                                                <td className="px-3 py-3 text-xs font-bold text-gray-700">Round {d.budget_request?.funding_round}</td>
-                                                <td className="px-3 py-3 text-sm font-bold text-teal-700">{formatCurrency(d.amount)}</td>
-                                                <td className="px-3 py-3 text-xs">
-                                                    {d.transaction_id
-                                                        ? <code className="bg-gray-100 px-1.5 py-0.5 rounded">{d.transaction_id}</code>
-                                                        : d.cheque_number
-                                                        ? <code className="bg-gray-100 px-1.5 py-0.5 rounded">CHQ: {d.cheque_number}</code>
-                                                        : <span className="text-gray-400">—</span>}
-                                                </td>
-                                                <td className="px-3 py-3 text-xs text-gray-700">{d.disbursed_by?.name ?? '—'}</td>
-                                                <td className="px-3 py-3 text-xs text-gray-500">{d.disbursed_at ? formatDate(d.disbursed_at) : '—'}</td>
+                            <>
+                                <div className="hidden sm:block overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                        <thead className="border-b border-gray-200">
+                                            <tr>
+                                                {['#', 'Proposal', 'Round', 'Amount', 'Transaction', 'Disbursed By', 'Date'].map(h => (
+                                                    <th key={h} className="px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide">{h}</th>
+                                                ))}
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                    <tfoot className="border-t border-gray-200 bg-gray-50">
-                                        <tr>
-                                            <td className="px-3 py-2.5 text-sm font-semibold text-gray-700" colSpan={3}>
-                                                {disbursements.length} disbursement{disbursements.length !== 1 ? 's' : ''}
-                                            </td>
-                                            <td className="px-3 py-2.5 text-sm font-bold text-blue-700">{formatCurrency(disbursedTotal)}</td>
-                                            <td colSpan={3} />
-                                        </tr>
-                                    </tfoot>
-                                </table>
-                            </div>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-50">
+                                            {disbursements.map((d, i) => (
+                                                <tr key={d.id} className="hover:bg-gray-50">
+                                                    <td className="px-3 py-3 text-xs font-medium text-gray-400 tabular-nums w-10">{i + 1}</td>
+                                                    <td className="px-3 py-3">
+                                                        <p className="font-mono text-xs font-bold text-blue-600">{d.budget_request?.proposal?.tracker_number}</p>
+                                                        <p className="text-xs text-gray-500 truncate max-w-48">{d.budget_request?.proposal?.title}</p>
+                                                    </td>
+                                                    <td className="px-3 py-3 text-xs font-bold text-gray-700">Round {d.budget_request?.funding_round}</td>
+                                                    <td className="px-3 py-3 text-sm font-bold text-teal-700">{formatCurrency(d.amount)}</td>
+                                                    <td className="px-3 py-3 text-xs">
+                                                        {d.transaction_id
+                                                            ? <code className="bg-gray-100 px-1.5 py-0.5 rounded">{d.transaction_id}</code>
+                                                            : d.cheque_number
+                                                            ? <code className="bg-gray-100 px-1.5 py-0.5 rounded">CHQ: {d.cheque_number}</code>
+                                                            : <span className="text-gray-400">—</span>}
+                                                    </td>
+                                                    <td className="px-3 py-3 text-xs text-gray-700">{d.disbursed_by?.name ?? '—'}</td>
+                                                    <td className="px-3 py-3 text-xs text-gray-500">{d.disbursed_at ? formatDate(d.disbursed_at) : '—'}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                        <tfoot className="border-t border-gray-200 bg-gray-50">
+                                            <tr>
+                                                <td className="px-3 py-2.5 text-sm font-semibold text-gray-700" colSpan={3}>
+                                                    {disbursements.length} disbursement{disbursements.length !== 1 ? 's' : ''}
+                                                </td>
+                                                <td className="px-3 py-2.5 text-sm font-bold text-blue-700">{formatCurrency(disbursedTotal)}</td>
+                                                <td colSpan={3} />
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+
+                                {/* Mobile: fall back to the same cards used by card view */}
+                                <div className="sm:hidden space-y-3">
+                                    <p className="text-xs text-gray-400">
+                                        {disbursements.length} disbursement{disbursements.length !== 1 ? 's' : ''} · Total: <strong className="text-gray-700">{formatCurrency(disbursedTotal)}</strong>
+                                    </p>
+                                    {disbursements.map(d => <DisbursementCard key={d.id} disbursement={d} />)}
+                                </div>
+                            </>
                         )}
                     </div>
                 </div>

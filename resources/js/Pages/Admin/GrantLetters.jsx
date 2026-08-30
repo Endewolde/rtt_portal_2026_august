@@ -627,7 +627,7 @@ export default function GrantLetters() {
         const url  = URL.createObjectURL(blob);
         const win  = window.open(url, '_blank');
         if (!win) {
-            alert('Please allow pop-ups for this site to print/download grant letters.');
+            toastError('Please allow pop-ups for this site to print/download grant letters.');
         }
         setTimeout(() => URL.revokeObjectURL(url), 15000);
     };
@@ -704,7 +704,7 @@ export default function GrantLetters() {
 
             <div className="max-w-screen-2xl mx-auto">
                 {/* Header */}
-                <div className="flex items-center justify-between mb-5">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-5">
                     <div className="flex items-center gap-3">
                         <div className="h-11 w-11 bg-slate-900 rounded-2xl flex items-center justify-center shrink-0">
                             <FileText size={20} className="text-white" />
@@ -719,7 +719,7 @@ export default function GrantLetters() {
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                         {currentHtml && !templateLocked && (
                             <>
                                 <button

@@ -240,7 +240,7 @@ export default function BudgetRequestDetail() {
                                 <p className="text-sm text-gray-400">No items.</p>
                             ) : (
                                 <>
-                                    <div className="overflow-x-auto">
+                                    <div className="hidden sm:block overflow-x-auto">
                                         <table className="w-full text-sm">
                                             <thead>
                                                 <tr className="border-b border-gray-100">
@@ -262,6 +262,21 @@ export default function BudgetRequestDetail() {
                                             </tbody>
                                         </table>
                                     </div>
+
+                                    {/* Mobile: stacked cards */}
+                                    <div className="sm:hidden space-y-2">
+                                        {request.items.map((item, i) => (
+                                            <div key={i} className="border border-gray-100 rounded-xl p-3">
+                                                <div className="flex items-start justify-between gap-2 mb-1">
+                                                    <span className="text-xs font-medium text-gray-700">{item.category}</span>
+                                                    <span className="shrink-0 font-semibold text-gray-900 text-sm">{formatCurrency(item.amount)}</span>
+                                                </div>
+                                                <p className="text-sm text-gray-600">{item.description}</p>
+                                                {item.justification && <p className="text-xs text-gray-400 mt-1">{item.justification}</p>}
+                                            </div>
+                                        ))}
+                                    </div>
+
                                     <div className="flex justify-between items-center mt-3 px-4 py-2.5 bg-blue-50 border border-blue-100 rounded-xl">
                                         <span className="text-sm font-bold text-blue-800">Total Requested</span>
                                         <span className="text-lg font-bold text-blue-900">{formatCurrency(request.total_amount)}</span>

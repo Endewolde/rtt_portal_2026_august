@@ -1745,7 +1745,7 @@ export default function AdminUsers() {
                         </div>
                     ) : (
                         <>
-                            <div className="overflow-x-auto">
+                            <div className="hidden sm:block overflow-x-auto">
                                 {/* Table header */}
                                 <div className="grid grid-cols-[40px_2.5fr_1.5fr_1.5fr_1fr_1fr_1fr_1.5fr_44px] items-center
                                                 gap-4 px-5 py-3 bg-gray-50/80 border-b border-gray-100
@@ -1860,6 +1860,73 @@ export default function AdminUsers() {
                                         );
                                     })}
                                 </div>
+                            </div>
+
+                            {/* Mobile: stacked cards */}
+                            <div className="sm:hidden divide-y divide-gray-50">
+                                {visibleUsers.map(u => {
+                                    const allRoleNames = (u.roles ?? []).map(r => typeof r === 'string' ? r : r.name);
+                                    return (
+                                        <div key={u.id} className={`p-4 ${selectedIds.has(u.id) ? 'bg-indigo-50' : ''}`}>
+                                            <div className="flex items-start gap-3">
+                                                <input
+                                                    type="checkbox"
+                                                    className="h-4 w-4 mt-1 rounded border-gray-300 text-indigo-600 cursor-pointer shrink-0"
+                                                    checked={selectedIds.has(u.id)}
+                                                    onChange={() => toggleOne(u.id)}
+                                                    aria-label={`Select ${u.name}`}
+                                                />
+                                                <Avatar user={u} />
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="flex items-start justify-between gap-2">
+                                                        <div className="min-w-0">
+                                                            <p className="text-sm font-semibold text-gray-900 truncate leading-snug">{u.name}</p>
+                                                            <p className="text-xs text-gray-400 truncate">{u.email}</p>
+                                                        </div>
+                                                        <RowMenu
+                                                            user={u}
+                                                            canEditUser={canEditUser}
+                                                            isSuperAdmin={isSuperAdmin}
+                                                            canImpersonate={canImpersonate}
+                                                            canManageUsers={canManageUsers}
+                                                            currentUser={currentUser}
+                                                            onEdit={setEditModal}
+                                                            onAssign={setAssignModal}
+                                                            onImpersonate={setImpersonateTarget}
+                                                            onStatusChange={setStatusConfirm}
+                                                            onDelete={setDeleteConfirm}
+                                                        />
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-1 mt-2">
+                                                        {allRoleNames.slice(0, 2).map(r => <RoleBadge key={r} role={r} />)}
+                                                        {allRoleNames.length > 2 && (
+                                                            <span className="text-xs font-medium px-2 py-1 rounded-full bg-gray-100 text-gray-500">
+                                                                +{allRoleNames.length - 2}
+                                                            </span>
+                                                        )}
+                                                        <StatusBadge status={u.status ?? 'active'} />
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-y-1 gap-x-3 mt-2.5 text-xs text-gray-400">
+                                                        <div className="flex items-center gap-1.5 min-w-0">
+                                                            {u.college ? (
+                                                                <><Building2 size={11} className="text-gray-300 shrink-0" /><span className="truncate">{u.college.name}</span></>
+                                                            ) : <span className="text-gray-300">No college</span>}
+                                                        </div>
+                                                        <div className="flex items-center gap-1">
+                                                            <Calendar size={11} className="text-gray-300 shrink-0" />
+                                                            {u.created_at ? formatDate(u.created_at) : '—'}
+                                                        </div>
+                                                        <div className="flex items-center gap-1">
+                                                            <Clock size={11} className="text-gray-300 shrink-0" />
+                                                            <span className="truncate">{timeAgo(u.last_login_at)}</span>
+                                                        </div>
+                                                        <div><RegistrationBadge method={u.registration_method} /></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                             </div>
 
                             {/* Pagination */}

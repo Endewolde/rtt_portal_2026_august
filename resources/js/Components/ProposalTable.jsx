@@ -80,9 +80,26 @@ export default function ProposalTable({
     const fmtCurrency = (n) =>
         n != null ? `ETB ${parseFloat(n).toLocaleString()}` : '—';
 
+    // Secondary fields shown in the mobile card grid — tracker/grant_reference,
+    // title and status get dedicated placement above this grid instead.
+    const mobileFields = (p) => [
+        col('category') && { label: 'Category', value: <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${CATEGORY_COLORS[p.category] ?? 'bg-gray-100 text-gray-700'}`}>{p.category?.replace(/_/g, ' ') ?? '—'}</span> },
+        col('pi') && { label: 'PI', value: p.pi?.name ?? '—' },
+        col('college') && { label: 'College', value: p.college?.name ?? '—' },
+        col('date') && { label: 'Submitted', value: fmtDate(p.submitted_at) },
+        col('deadline') && { label: 'Deadline', value: fmtDate(p.proposal_call?.end_date) },
+        col('blind_score') && { label: 'Blind', value: <ScoreChip value={p.blind_score_raw ?? p.blind_score} max={p.blind_max ?? 100} /> },
+        col('defence_score') && { label: 'Defence', value: <ScoreChip value={p.defence_score_raw ?? p.defence_score} max={p.defence_max ?? 100} /> },
+        col('combined_score') && { label: 'Total', value: <ScoreChip value={p.combined_score} max={(p.blind_max ?? 0) + (p.defence_max ?? 0)} bold /> },
+        col('awarded_amount') && { label: 'Awarded', value: <span className="font-semibold text-emerald-700">{fmtCurrency(p.award?.awarded_amount ?? p.awarded_amount)}</span> },
+        col('reviewers') && { label: 'Reviews', value: p.review_assignments ? `${p.review_assignments.filter(a => a.status === 'submitted').length}/${p.review_assignments.length}` : '—' },
+        col('defence_date') && { label: 'Defence Date', value: fmtDate(p.defence_session?.scheduled_date) },
+    ].filter(Boolean);
+
     return (
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-            <div className="overflow-x-auto">
+            {/* Desktop / tablet table */}
+            <div className="hidden sm:block overflow-x-auto">
                 <table className="w-full text-sm">
                     <thead>
                         <tr className="bg-gray-50 border-b border-gray-200">
@@ -235,6 +252,64 @@ export default function ProposalTable({
                     </tbody>
                 </table>
             </div>
+
+            {/* Mobile: stacked cards — no horizontal scrolling */}
+            <div className="sm:hidden divide-y divide-gray-100">
+                {proposals.map(p => (
+                    <div key={p.id} className="p-4">
+                        {selectable && (
+                            <label className="flex items-center gap-2 mb-2.5 text-xs text-gray-500">
+                                <input
+                                    type="checkbox"
+                                    className="h-4 w-4 rounded border-gray-300 text-green-600 cursor-pointer"
+                                    checked={!!selectedIds?.has(p.id)}
+                                    onChange={() => onToggle?.(p.id)}
+                                />
+                                Select
+                            </label>
+                        )}
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                                {col('tracker') && (
+                                    <a href={`/proposals/${p.id}`}
+                                        className="font-mono text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded hover:bg-blue-100 transition-colors">
+                                        {p.tracker_number ?? '—'}
+                                    </a>
+                                )}
+                                {col('grant_reference') && (
+                                    <span className="font-mono text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-1 rounded">
+                                        {p.award?.grant_reference ?? '—'}
+                                    </span>
+                                )}
+                            </div>
+                            {col('status') && (
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium border shrink-0 ${STATUS_COLORS[p.status] ?? 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                                    {p.status?.replace(/_/g, ' ') ?? '—'}
+                                </span>
+                            )}
+                        </div>
+                        {col('title') && (
+                            <a href={`/proposals/${p.id}`}
+                                className="font-medium text-gray-900 text-sm leading-snug hover:text-blue-600 transition-colors block mb-2.5">
+                                {p.title || 'Untitled'}
+                            </a>
+                        )}
+                        {mobileFields(p).length > 0 && (
+                            <div className="grid grid-cols-2 gap-y-1.5 gap-x-3 text-xs mb-2.5">
+                                {mobileFields(p).map(f => (
+                                    <p key={f.label}><span className="text-gray-400">{f.label}:</span> <span className="text-gray-600">{f.value}</span></p>
+                                ))}
+                            </div>
+                        )}
+                        {actions && (
+                            <div className="flex flex-wrap items-center justify-end gap-1.5 pt-1">
+                                {actions(p)}
+                            </div>
+                        )}
+                    </div>
+                ))}
+            </div>
+
             <div className="px-4 py-2.5 bg-gray-50 border-t border-gray-200 text-xs text-gray-400">
                 {proposals.length} proposal{proposals.length !== 1 ? 's' : ''}
             </div>

@@ -290,7 +290,7 @@ export default function CollegeDashboard() {
                         <div className="px-5 py-4 border-b border-gray-100">
                             <p className="text-sm font-bold text-gray-800">Department Breakdown</p>
                         </div>
-                        <div className="overflow-x-auto">
+                        <div className="hidden sm:block overflow-x-auto">
                             <table className="w-full text-sm">
                                 <thead>
                                     <tr className="bg-gray-50 border-b border-gray-100">
@@ -326,6 +326,33 @@ export default function CollegeDashboard() {
                                     })}
                                 </tbody>
                             </table>
+                        </div>
+
+                        {/* Mobile: stacked cards */}
+                        <div className="sm:hidden divide-y divide-gray-50">
+                            {(stats?.by_department ?? []).map((d, i) => {
+                                const rate = d.total > 0 ? Math.round((d.funded / d.total) * 100) : 0
+                                return (
+                                    <div key={i} className="px-4 py-3 flex items-center justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <p className="font-medium text-gray-800 text-sm truncate">{d.department_name}</p>
+                                            <p className="text-xs text-gray-400">{d.code}</p>
+                                        </div>
+                                        <div className="flex items-center gap-3 shrink-0 text-sm">
+                                            <span className="text-gray-900 font-semibold">{d.total}</span>
+                                            <span className="text-green-600 font-semibold">{d.funded}</span>
+                                            <span className={cn(
+                                                'text-xs font-bold px-2 py-0.5 rounded-full',
+                                                rate >= 50 ? 'bg-green-100 text-green-700' :
+                                                rate >= 25 ? 'bg-amber-100 text-amber-700' :
+                                                'bg-gray-100 text-gray-500'
+                                            )}>
+                                                {rate}%
+                                            </span>
+                                        </div>
+                                    </div>
+                                )
+                            })}
                         </div>
                     </div>
                 )}

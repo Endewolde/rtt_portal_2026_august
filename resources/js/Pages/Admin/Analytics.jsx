@@ -335,7 +335,7 @@ export default function Analytics() {
                                         <Bar dataKey="rejected" name="Rejected" fill="#f43f5e" radius={[4, 4, 0, 0]} />
                                     </BarChart>
                                 </ResponsiveContainer>
-                                <div className="mt-4 overflow-x-auto rounded-xl border border-gray-100">
+                                <div className="hidden sm:block mt-4 overflow-x-auto rounded-xl border border-gray-100">
                                     <table className="w-full text-xs">
                                         <thead>
                                             <tr className="bg-gray-50 border-b border-gray-100">
@@ -364,6 +364,23 @@ export default function Analytics() {
                                             ))}
                                         </tbody>
                                     </table>
+                                </div>
+
+                                {/* Mobile: stacked cards */}
+                                <div className="sm:hidden mt-4 divide-y divide-gray-50 rounded-xl border border-gray-100">
+                                    {collegePerf.map((c, i) => (
+                                        <div key={i} className="px-4 py-2.5 flex items-center justify-between gap-3">
+                                            <span className="text-gray-700 font-medium text-sm truncate">{c.college}</span>
+                                            <div className="flex items-center gap-2.5 text-xs shrink-0">
+                                                <span className="text-gray-600">{c.total}</span>
+                                                <span className="text-emerald-600 font-semibold">{c.funded}F</span>
+                                                <span className="text-rose-500">{c.rejected}R</span>
+                                                <span className={`font-semibold ${c.pass_rate >= 50 ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                                    {c.pass_rate != null ? `${c.pass_rate}%` : '–'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
                             </>
                         )

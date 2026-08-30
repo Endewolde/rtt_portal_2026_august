@@ -5,6 +5,7 @@ import FilterBar from '../../Components/FilterBar';
 import StatusBadge from '../../Components/StatusBadge';
 import { get } from '../../lib/api';
 import { getStatusLabel, getCategoryLabel, formatDate } from '../../lib/utils';
+import { useToast } from '../../Components/Toast';
 
 // 'draft' is deliberately excluded — a draft was never submitted, so it has no
 // place in a pipeline built to track submitted proposals (matches the backend,
@@ -215,6 +216,7 @@ function PipelineTable({ proposals, loading, emptyMessage, sortKey, sortDir, onS
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ProposalPipeline() {
+    const { error: toastError } = useToast();
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [downloading, setDownloading] = useState(false);
@@ -282,7 +284,7 @@ export default function ProposalPipeline() {
             a.click();
             URL.revokeObjectURL(url);
         } catch {
-            alert('Export failed. Please try again.');
+            toastError('Export failed. Please try again.');
         }
         setDownloading(false);
     };

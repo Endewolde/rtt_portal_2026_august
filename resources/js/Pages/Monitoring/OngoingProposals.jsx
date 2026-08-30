@@ -1275,7 +1275,7 @@ export default function OngoingProposals() {
             a.click();
             URL.revokeObjectURL(url);
         } catch {
-            alert('Export failed. Please try again.');
+            toast.error('Export failed. Please try again.');
         }
         setDownloading(false);
     };

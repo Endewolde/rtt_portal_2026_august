@@ -12,6 +12,7 @@ import {
     DownloadExcelButton, ReportBuilderTable,
     builderLabel, SubjectIcon,
 } from '../../Components/Reports/ReportShared';
+import { useToast } from '../../Components/Toast';
 
 const STEPS = [
     { n: 1, label: 'Subject' },
@@ -124,6 +125,7 @@ function FilterControl({ subject, filterKey, value, onChange, colleges, lockedCo
 }
 
 export default function ReportBuilder() {
+    const { error: toastError } = useToast();
     const { user: currentUser, hasRole } = useAuth();
     const isCollegeOfficer = hasRole('college_officer');
     const [options,      setOptions]      = useState(null);
@@ -203,7 +205,7 @@ export default function ReportBuilder() {
             setResult(snap);
             loadHistory();
         } catch (e) {
-            alert(e.response?.data?.message ?? 'Generation failed.');
+            toastError(e.response?.data?.message ?? 'Generation failed.');
         }
         setGenerating(false);
     };

@@ -339,7 +339,7 @@ export default function SimilarityFlags() {
                     </div>
                 ) : (
                     <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-                        <div className="overflow-x-auto">
+                        <div className="hidden sm:block overflow-x-auto">
                             <table className="w-full text-sm">
                                 <thead>
                                     <tr className="bg-gray-50 border-b border-gray-200">
@@ -390,6 +390,37 @@ export default function SimilarityFlags() {
                                     ))}
                                 </tbody>
                             </table>
+                        </div>
+
+                        {/* Mobile: stacked cards */}
+                        <div className="sm:hidden divide-y divide-gray-100">
+                            {visible.map(f => (
+                                <div key={f.id}
+                                    className={`p-4 active:bg-gray-50 ${f.flagged ? 'bg-red-50/20' : ''}`}
+                                    onClick={() => setSelected(f)}>
+                                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                                        <span className="font-mono text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
+                                            {f.proposal?.tracker_number ?? '—'}
+                                        </span>
+                                        <RiskBadge score={f.score} />
+                                    </div>
+                                    <p className="text-sm text-gray-900 line-clamp-2 mb-1">{f.proposal?.title ?? '—'}</p>
+                                    <p className="text-xs text-gray-400 mb-2">{f.proposal?.college?.name} · {CATEGORY_LABELS[f.proposal?.category] ?? f.proposal?.category}</p>
+                                    <div className="mb-2"><ScoreBar score={f.score} /></div>
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <span className="font-mono text-xs font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded">
+                                                {f.similar_proposal?.tracker_number ?? '—'}
+                                            </span>
+                                            <p className="text-[11px] text-gray-400 mt-0.5 max-w-40 truncate">{f.similar_proposal?.title}</p>
+                                        </div>
+                                        <button onClick={e => { e.stopPropagation(); setSelected(f) }}
+                                            className="flex items-center gap-1 px-2 py-1 border border-gray-300 text-gray-600 rounded text-xs hover:bg-gray-100 shrink-0">
+                                            <Eye size={11} /> Compare
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
 
                         {/* Pagination */}

@@ -2,8 +2,10 @@ import { useState, useEffect } from 'react';
 import { usePage, router } from '@inertiajs/react';
 import AppLayout from '../../Layouts/AppLayout';
 import { get, post } from '../../lib/api';
+import { useToast } from '../../Components/Toast';
 
 export default function ReviewAssignment() {
+    const { error: toastError } = useToast();
     const { url } = usePage();
     const id = url.split('/').pop();
     const [proposal, setProposal] = useState(null);
@@ -27,12 +29,12 @@ export default function ReviewAssignment() {
     const toggleReviewer = (rid) => setSelected((s) => s.includes(rid) ? s.filter((x) => x !== rid) : [...s, rid]);
 
     const assign = async () => {
-        if (!selected.length || !evalType) return alert('Select at least one reviewer and evaluation type.');
+        if (!selected.length || !evalType) return toastError('Select at least one reviewer and evaluation type.');
         setSubmitting(true);
         try {
             await post(`/proposals/${id}/review/assign`, { reviewer_ids: selected, evaluation_type_id: evalType });
             router.visit('/proposals');
-        } catch (e) { alert(e.response?.data?.message ?? 'Assignment failed.'); }
+        } catch (e) { toastError(e.response?.data?.message ?? 'Assignment failed.'); }
         setSubmitting(false);
     };
 

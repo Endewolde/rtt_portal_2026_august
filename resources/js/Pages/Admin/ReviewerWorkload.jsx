@@ -575,7 +575,7 @@ function SummaryTable({ proposals }) {
 
     return (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
+            <div className="hidden sm:block overflow-x-auto">
                 <table className="min-w-full">
                     <thead>
                         <tr className="bg-linear-to-r from-indigo-600 to-indigo-700">
@@ -591,8 +591,54 @@ function SummaryTable({ proposals }) {
                     </tbody>
                 </table>
             </div>
+
+            {/* Mobile: stacked, expandable cards */}
+            <div className="sm:hidden divide-y divide-gray-50">
+                {proposals.map(p => (
+                    <details key={p.id} className="group">
+                        <summary className="list-none cursor-pointer px-4 py-3.5">
+                            <div className="flex items-center justify-between gap-2 mb-1.5">
+                                <span className="font-mono text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded font-bold">
+                                    {p.tracker_number}
+                                </span>
+                                <ChevronRight size={14} className="text-gray-400 transition-transform group-open:rotate-90 shrink-0" />
+                            </div>
+                            <p className="text-sm font-semibold text-gray-900 line-clamp-2 mb-1.5">{p.title}</p>
+                            <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-2">
+                                <Building2 size={12} className="text-gray-400 shrink-0" />
+                                <span className="truncate">{p.college_name ?? '—'}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold ${p.blind_count > 0 ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-400'}`}>
+                                    <EyeOff size={11} /> {p.blind_count}
+                                </span>
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold ${p.open_count > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'}`}>
+                                    <Presentation size={11} /> {p.open_count}
+                                </span>
+                                <span className="text-xs text-gray-400">{(p.assignments ?? []).length} total</span>
+                            </div>
+                        </summary>
+                        <div className="px-4 pb-3.5 space-y-2">
+                            {(p.assignments ?? []).map(a => (
+                                <div key={a.id} className="bg-indigo-50/40 border-l-2 border-indigo-300 rounded-r-lg px-3 py-2">
+                                    <div className="flex items-center gap-1.5">
+                                        <p className="text-xs font-medium text-gray-800">{a.reviewer?.name ?? '—'}</p>
+                                        <ReviewerTypeBadge reviewer={a.reviewer} />
+                                    </div>
+                                    <p className="text-[11px] text-gray-400 mb-1">{a.reviewer?.email}</p>
+                                    <div className="flex items-center gap-2">
+                                        <EvalBadge name={a.evaluationType?.name} label={a.evaluationType?.label} />
+                                        <AssignmentBadge status={a.status} />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </details>
+                ))}
+            </div>
+
             <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 text-xs text-gray-400">
-                {proposals.length} proposal{proposals.length !== 1 ? 's' : ''} · Click a row to see individual reviewers
+                {proposals.length} proposal{proposals.length !== 1 ? 's' : ''} · Tap a row to see individual reviewers
             </div>
         </div>
     );
@@ -643,7 +689,7 @@ function AllAssignmentsTable({ assignments }) {
                         </div>
                     </div>
 
-                    <div className="overflow-x-auto">
+                    <div className="hidden sm:block overflow-x-auto">
                         <table className="min-w-full text-sm">
                             <thead>
                                 <tr className="text-xs text-gray-400 uppercase border-b border-gray-50">
@@ -688,6 +734,32 @@ function AllAssignmentsTable({ assignments }) {
                                 ))}
                             </tbody>
                         </table>
+                    </div>
+
+                    {/* Mobile: stacked cards */}
+                    <div className="sm:hidden divide-y divide-gray-50">
+                        {items.map(a => (
+                            <div key={a.id} className="px-4 py-3">
+                                <div className="flex items-center justify-between gap-2 mb-1.5">
+                                    <span className="font-mono text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded font-bold">
+                                        {a.proposal?.tracker_number ?? '—'}
+                                    </span>
+                                    <AssignmentBadge status={a.status} />
+                                </div>
+                                <p className="text-sm font-medium text-gray-900 line-clamp-2 mb-1.5">{a.proposal?.title ?? '—'}</p>
+                                <div className="flex items-center gap-1.5 mb-1">
+                                    <p className="text-xs font-medium text-gray-800">{a.reviewer?.name ?? '—'}</p>
+                                    <ReviewerTypeBadge reviewer={a.reviewer} />
+                                </div>
+                                <p className="text-[11px] text-gray-400 mb-2">{a.reviewer?.email}</p>
+                                <div className="flex items-center justify-between">
+                                    <EvalBadge name={a.evaluation_type?.name} label={a.evaluation_type?.label} />
+                                    <span className="text-[11px] text-gray-400">
+                                        {a.assigned_at ? new Date(a.assigned_at).toLocaleDateString() : '—'}
+                                    </span>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 </div>
             ))}
@@ -844,7 +916,8 @@ function AnalyticsTab({ analytics, loading, onDownload, reviewerTypeFilter = 'al
                         <p className="text-sm">No reviewer data yet.</p>
                     </div>
                 ) : (
-                    <div className="overflow-x-auto">
+                    <>
+                    <div className="hidden sm:block overflow-x-auto">
                         <table className="min-w-full">
                             <thead>
                                 <tr className="bg-linear-to-r from-indigo-600 to-indigo-700">
@@ -921,9 +994,34 @@ function AnalyticsTab({ analytics, loading, onDownload, reviewerTypeFilter = 'al
                             </tbody>
                         </table>
                     </div>
+
+                    {/* Mobile: condensed stacked cards */}
+                    <div className="sm:hidden divide-y divide-gray-50">
+                        {sortedReviewers.map(r => (
+                            <div key={r.reviewer_id} className="px-4 py-3.5">
+                                <div className="flex items-center gap-1.5 mb-0.5">
+                                    <p className="text-sm font-medium text-gray-900">{r.reviewer?.name ?? '—'}</p>
+                                    <ReviewerTypeBadge reviewer={r.reviewer} />
+                                </div>
+                                <p className="text-xs text-gray-400 mb-2">{r.reviewer?.email}</p>
+                                <div className="grid grid-cols-4 gap-2 mb-2 text-center">
+                                    <div><p className="text-sm font-semibold text-gray-700">{r.total}</p><p className="text-[10px] text-gray-400">Total</p></div>
+                                    <div><p className="text-sm font-semibold text-emerald-600">{r.completed}</p><p className="text-[10px] text-gray-400">Done</p></div>
+                                    <div><p className="text-sm text-amber-600">{r.pending}</p><p className="text-[10px] text-gray-400">Pending</p></div>
+                                    <div><p className={`text-sm font-semibold ${r.overdue > 0 ? 'text-red-600' : 'text-gray-400'}`}>{r.overdue}</p><p className="text-[10px] text-gray-400">Overdue</p></div>
+                                </div>
+                                <OnTimeBar rate={r.on_time_rate} />
+                                <div className="flex items-center justify-between mt-2 text-xs">
+                                    <span className="text-gray-500">Avg score: <span className="font-medium text-gray-700">{r.avg_score ?? '—'}</span></span>
+                                    <span className={`font-bold ${r.combined_pending > 0 ? 'text-amber-700' : 'text-gray-400'}`}>{r.combined_pending} total pending</span>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    </>
                 )}
                 <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 text-xs text-gray-400">
-                    {sortedReviewers.length} reviewer{sortedReviewers.length !== 1 ? 's' : ''} · Click column headers to sort · On-time rate: green ≥80%, amber ≥50%, red &lt;50%
+                    {sortedReviewers.length} reviewer{sortedReviewers.length !== 1 ? 's' : ''} · Click column headers to sort (desktop) · On-time rate: green ≥80%, amber ≥50%, red &lt;50%
                 </div>
             </div>
         </div>

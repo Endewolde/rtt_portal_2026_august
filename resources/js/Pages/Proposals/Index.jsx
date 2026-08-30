@@ -254,31 +254,31 @@ export default function ProposalIndex() {
 
     return (
         <AppLayout breadcrumb="All Proposals">
-            <div className="p-6 max-w-7xl mx-auto space-y-6">
+            <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
 
                 {/* Page header */}
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div>
-                        <h1 className="text-2xl font-bold text-gray-900">All Proposals</h1>
+                        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">All Proposals</h1>
                         <p className="text-sm text-gray-500 mt-1">
                             {stats?.totals?.submitted || 0} submitted proposals
                             {filters.academic_year && <span className="ml-1 text-indigo-500 font-medium">· {filters.academic_year}</span>}
                         </p>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                         <button
                             onClick={() => setShowStats(!showStats)}
                             className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
                         >
                             <BarChart2 size={14} />
-                            {showStats ? 'Hide' : 'Show'} Stats
+                            <span className="hidden sm:inline">{showStats ? 'Hide' : 'Show'} Stats</span>
                         </button>
                         <button
                             onClick={handleExport}
                             disabled={exporting}
                             className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50"
                         >
-                            <Download size={14} /> {exporting ? 'Exporting…' : 'Export Excel'}
+                            <Download size={14} /> <span className="hidden sm:inline">{exporting ? 'Exporting…' : 'Export Excel'}</span>
                         </button>
                         <button
                             onClick={handlePdfExport}
@@ -286,7 +286,7 @@ export default function ProposalIndex() {
                             className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50 transition-colors"
                         >
                             <FileText size={14} />
-                            {pdfExporting ? 'Generating…' : 'PDF Report'}
+                            <span className="hidden sm:inline">{pdfExporting ? 'Generating…' : 'PDF Report'}</span>
                         </button>
                         <ViewToggle view={view} onChange={setView} />
                     </div>
@@ -326,7 +326,7 @@ export default function ProposalIndex() {
                                     <button
                                         key={tab.key}
                                         onClick={() => setActiveStatTab(tab.key)}
-                                        className={`shrink-0 flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+                                        className={`shrink-0 flex-1 px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors ${
                                             activeStatTab === tab.key
                                                 ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50'
                                                 : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
@@ -354,19 +354,19 @@ export default function ProposalIndex() {
                                             const fundedPct = college.total > 0 ? Math.round((college.funded / college.total) * 100) : 0
                                             return (
                                                 <div key={college.id} className={`border ${colorSet.border} ${colorSet.light} rounded-xl p-4`}>
-                                                    <div className="flex items-center justify-between mb-2">
-                                                        <div className="flex items-center gap-3">
+                                                    <div className="flex items-center justify-between gap-3 mb-2">
+                                                        <div className="flex items-center gap-3 min-w-0">
                                                             <div className={`w-10 h-10 ${colorSet.bg} rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0`}>
                                                                 {college.code}
                                                             </div>
-                                                            <div>
-                                                                <p className={`text-sm font-semibold ${colorSet.text}`}>{college.college_name}</p>
-                                                                <p className="text-xs text-gray-500">
+                                                            <div className="min-w-0">
+                                                                <p className={`text-sm font-semibold ${colorSet.text} truncate`}>{college.college_name}</p>
+                                                                <p className="text-xs text-gray-500 truncate">
                                                                     {college.funded} funded · {college.rejected} rejected · {college.active} active
                                                                 </p>
                                                             </div>
                                                         </div>
-                                                        <div className="text-right">
+                                                        <div className="text-right shrink-0">
                                                             <span className={`text-2xl font-bold ${colorSet.text}`}>{college.total}</span>
                                                             <p className="text-xs text-gray-400">proposals</p>
                                                         </div>
@@ -398,15 +398,15 @@ export default function ProposalIndex() {
                                             ) : (() => {
                                                 const maxDeptTotal = Math.max(1, ...(stats?.by_department || []).map(d => d.total))
                                                 return (stats?.by_department || []).map((dept, i) => (
-                                                    <div key={dept.id} className="flex items-center gap-3">
-                                                        <span className="w-6 text-xs text-gray-400 text-right shrink-0">{i + 1}</span>
-                                                        <div className="flex-1">
-                                                            <div className="flex items-center justify-between mb-1">
-                                                                <div>
+                                                    <div key={dept.id} className="flex items-start gap-3">
+                                                        <span className="w-6 text-xs text-gray-400 text-right shrink-0 mt-0.5">{i + 1}</span>
+                                                        <div className="flex-1 min-w-0">
+                                                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-1 gap-0.5">
+                                                                <div className="min-w-0 truncate">
                                                                     <span className="text-sm font-medium text-gray-900">{dept.department_name}</span>
                                                                     <span className="text-xs text-gray-400 ml-2">{dept.college_name}</span>
                                                                 </div>
-                                                                <div className="text-right shrink-0 ml-4">
+                                                                <div className="text-left sm:text-right shrink-0 sm:ml-4">
                                                                     <span className="text-sm font-bold text-gray-700">{dept.total}</span>
                                                                     {dept.funded > 0 && (
                                                                         <span className="text-xs text-green-600 ml-1">({dept.funded} funded)</span>

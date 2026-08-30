@@ -975,7 +975,7 @@ export default function AdminUserShow() {
                                 <h3 className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest flex-1">Audit log — recent 15</h3>
                                 <span className="text-[11px] font-semibold tabular-nums bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{s.audit_actions ?? 0} total</span>
                             </div>
-                            <div className="overflow-x-auto">
+                            <div className="hidden sm:block overflow-x-auto">
                                 <table className="w-full text-[11px]">
                                     <thead>
                                         <tr className="border-b border-gray-50">
@@ -996,6 +996,19 @@ export default function AdminUserShow() {
                                         ))}
                                     </tbody>
                                 </table>
+                            </div>
+
+                            {/* Mobile: stacked cards */}
+                            <div className="sm:hidden divide-y divide-gray-50">
+                                {(profile?.recent_audit_logs ?? []).map((l, i) => (
+                                    <div key={i} className="px-4 py-2.5 text-[11px]">
+                                        <div className="flex items-center justify-between gap-2 mb-0.5">
+                                            <span className="font-semibold text-indigo-600">{l.event}</span>
+                                            <span className="font-mono text-gray-400 shrink-0">{formatDateTime(l.created_at)}</span>
+                                        </div>
+                                        <p className="text-gray-500">{l.auditable_type?.split('\\').pop()} · <span className="font-mono">{l.auditable_id?.slice(-8)}</span> · {l.ip_address}</p>
+                                    </div>
+                                ))}
                             </div>
                         </div>
 

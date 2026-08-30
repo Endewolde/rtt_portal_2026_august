@@ -7,10 +7,12 @@ import AppLayout from '../../Layouts/AppLayout';
 import { post, get } from '../../lib/api';
 import { formatDateTime } from '../../lib/utils';
 import { REPORT_META, COLOR_MAP, DownloadExcelButton, renderChart } from '../../Components/Reports/ReportShared';
+import { useToast } from '../../Components/Toast';
 
 // ─── Typed report view ────────────────────────────────────────────────────────
 
 function TypedReportView({ type }) {
+    const { error: toastError } = useToast();
     const meta = REPORT_META[type];
     const colors = COLOR_MAP[meta?.color ?? 'indigo'];
     const Icon = meta?.icon ?? BarChart2;
@@ -65,7 +67,7 @@ function TypedReportView({ type }) {
                 return;
             }
         } catch (e) {
-            alert(e.response?.data?.message ?? 'Report generation failed.');
+            toastError(e.response?.data?.message ?? 'Report generation failed.');
         }
         setGenerating(false);
     };
@@ -131,6 +133,7 @@ function TypedReportView({ type }) {
 // ─── Generate & history view ──────────────────────────────────────────────────
 
 function GenerateView() {
+    const { error: toastError } = useToast();
     const [snapshots,  setSnapshots]  = useState([]);
     const [loading,    setLoading]    = useState(true);
     const [type,       setType]       = useState('proposal_count_by_category');
@@ -153,7 +156,7 @@ function GenerateView() {
             await load();
             setSelected(res.data?.data ?? res.data ?? null);
         } catch (e) {
-            alert(e.response?.data?.message ?? 'Generation failed.');
+            toastError(e.response?.data?.message ?? 'Generation failed.');
         }
         setGenerating(false);
     };
