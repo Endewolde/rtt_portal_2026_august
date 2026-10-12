@@ -3,10 +3,14 @@
 namespace App\Services;
 
 use App\Models\Proposal;
+use App\Models\ProposalDocument;
 use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Smalot\PdfParser\Parser as PdfParser;
 
 class SimilarityService
 {
@@ -16,9 +20,16 @@ class SimilarityService
      */
     public function check(Proposal $proposal): void
     {
+        $proposal->loadMissing(['documents' => function ($query) {
+            $query->where('document_type', 'proposal_document')->where('is_current', true);
+        }]);
+
         $comparisons = Proposal::where('category', $proposal->category)
             ->where('id', '!=', $proposal->id)
             ->whereNotIn('status', ['draft'])
+            ->with(['documents' => function ($query) {
+                $query->where('document_type', 'proposal_document')->where('is_current', true);
+            }])
             ->get(['id', 'title', 'abstract', 'keywords']);
 
         if ($comparisons->isEmpty()) {
@@ -91,8 +102,59 @@ class SimilarityService
         return strtolower(
             ($proposal->title ?? '').' '.
             ($proposal->abstract ?? '').' '.
-            ($proposal->keywords ?? '')
+            ($proposal->keywords ?? '').' '.
+            $this->documentText($proposal)
         );
+    }
+
+    /**
+     * Pull the extracted text of the proposal's current proposal_document, caching it on
+     * the document row so repeat similarity checks don't reparse the same PDF every time.
+     */
+    private function documentText(Proposal $proposal): string
+    {
+        $document = $proposal->relationLoaded('documents')
+            ? $proposal->documents->first()
+            : $proposal->documents()
+                ->where('document_type', 'proposal_document')
+                ->where('is_current', true)
+                ->first();
+
+        if (! $document) {
+            return '';
+        }
+
+        if ($document->extracted_text !== null) {
+            return $document->extracted_text;
+        }
+
+        $text = $this->extractPdfText($document);
+
+        $document->forceFill(['extracted_text' => $text])->save();
+
+        return $text;
+    }
+
+    private function extractPdfText(ProposalDocument $document): string
+    {
+        if ($document->mime_type !== 'application/pdf') {
+            return '';
+        }
+
+        if (! Storage::disk('private')->exists($document->stored_path)) {
+            return '';
+        }
+
+        try {
+            $pdf = (new PdfParser)->parseFile(Storage::disk('private')->path($document->stored_path));
+            $text = strtolower(preg_replace('/\s+/', ' ', $pdf->getText()) ?? '');
+        } catch (\Throwable $e) {
+            Log::warning("SimilarityService: could not extract PDF text for document {$document->id}: {$e->getMessage()}");
+
+            return '';
+        }
+
+        return Str::limit(trim($text), 20000, '');
     }
 
     /** @param Collection<int, Proposal> $comparisons */

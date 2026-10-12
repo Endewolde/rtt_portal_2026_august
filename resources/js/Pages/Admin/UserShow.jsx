@@ -16,7 +16,7 @@ import AppLayout from '../../Layouts/AppLayout';
 import ConfirmDialog from '../../Components/ConfirmDialog';
 import { useAuth } from '../../hooks/useAuth';
 import { get, put } from '../../lib/api';
-import { formatDate, formatDateTime, formatCurrency, cn } from '../../lib/utils';
+import { formatDate, formatDateTime, formatCurrency, cn, getStatusLabel } from '../../lib/utils';
 
 // ── CONSTANTS ─────────────────────────────────────────────────────────────────
 const ROLE_LABELS = {
@@ -153,7 +153,7 @@ function ProposalRow({ p, roleLabel }) {
                     <div className="flex items-center flex-wrap gap-1.5 mt-1">
                         <span className="text-[10px] font-mono text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{p.tracker_number}</span>
                         <span className={cn('text-[10px] font-medium px-1.5 py-0.5 rounded-full capitalize', statusCls)}>
-                            {p.status?.replace(/_/g, ' ')}
+                            {getStatusLabel(p.status)}
                         </span>
                         {roleLabel && <span className="text-[10px] font-medium bg-violet-50 text-violet-700 px-1.5 py-0.5 rounded-full capitalize">{roleLabel}</span>}
                         {p.college_name && <span className="text-[10px] text-gray-400">{p.college_name}</span>}
@@ -675,7 +675,7 @@ export default function AdminUserShow() {
                                 {(profile?.workflow_actions ?? []).slice(0, 6).map((w, i) => (
                                     <SimpleRow key={i} icon={ChevronRight} iconColor="text-teal-400"
                                         label={`${w.action?.replace(/_/g, ' ')} — ${w.proposal_title}`}
-                                        sub={`${w.from_stage?.replace(/_/g, ' ')} → ${w.to_stage?.replace(/_/g, ' ')}`}
+                                        sub={`${getStatusLabel(w.from_stage)} → ${getStatusLabel(w.to_stage)}`}
                                         right={<span className="text-[11px] text-gray-400">{formatDate(w.created_at)}</span>}
                                     />
                                 ))}
@@ -755,7 +755,7 @@ export default function AdminUserShow() {
                                     profile.proposals_as_pi.reduce((acc, p) => { acc[p.status] = (acc[p.status] ?? 0) + 1; return acc; }, {})
                                 ).sort((a, b) => b[1] - a[1]).map(([status, count]) => (
                                     <div key={status} className="flex items-center gap-3 mb-2 last:mb-0">
-                                        <span className="text-[11px] text-gray-500 w-40 shrink-0 capitalize font-medium">{status.replace(/_/g, ' ')}</span>
+                                        <span className="text-[11px] text-gray-500 w-40 shrink-0 capitalize font-medium">{getStatusLabel(status)}</span>
                                         <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                                             <div className="h-full bg-indigo-500 rounded-full transition-all duration-700"
                                                 style={{ width: `${Math.round((count / s.proposals_as_pi) * 100)}%` }} />
@@ -913,7 +913,7 @@ export default function AdminUserShow() {
                             {(profile?.workflow_actions ?? []).map((w, i) => (
                                 <SimpleRow key={i} icon={ChevronRight} iconColor="text-teal-400"
                                     label={`${w.action?.replace(/_/g, ' ')} — ${w.proposal_title}`}
-                                    sub={`${w.from_stage?.replace(/_/g, ' ')} → ${w.to_stage?.replace(/_/g, ' ')}${w.notes ? ` · ${w.notes}` : ''}`}
+                                    sub={`${getStatusLabel(w.from_stage)} → ${getStatusLabel(w.to_stage)}${w.notes ? ` · ${w.notes}` : ''}`}
                                     right={<span className="text-[11px] text-gray-400">{formatDate(w.created_at)}</span>}
                                 />
                             ))}

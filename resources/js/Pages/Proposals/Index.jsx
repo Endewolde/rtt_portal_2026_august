@@ -6,8 +6,9 @@ import ViewToggle from '../../Components/ViewToggle'
 import ProposalTable from '../../Components/ProposalTable'
 import { useViewPreference } from '../../hooks/useViewPreference'
 import { useAuth } from '../../hooks/useAuth'
-import { BarChart2, Users, Building, GraduationCap, TrendingUp, Download, FileText, ArrowRight } from 'lucide-react'
+import { BarChart2, Users, Building, GraduationCap, TrendingUp, Download, FileText, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react'
 import api from '../../lib/api'
+import { getStatusLabel } from '../../lib/utils'
 
 // ── Kanban board ──────────────────────────────────────────────────────────────
 
@@ -17,7 +18,7 @@ const KANBAN_COLUMNS = [
     { key: 'under_blind_review',  label: 'Blind Review',     color: 'bg-yellow-500',  light: 'bg-yellow-50',  text: 'text-yellow-700'  },
     { key: 'blind_review_passed', label: 'Review Passed',    color: 'bg-orange-500',  light: 'bg-orange-50',  text: 'text-orange-700'  },
     { key: 'under_open_defence',  label: 'Open Defence',     color: 'bg-purple-500',  light: 'bg-purple-50',  text: 'text-purple-700'  },
-    { key: 'accepted',            label: 'Accepted',         color: 'bg-green-500',   light: 'bg-green-50',   text: 'text-green-700'   },
+    { key: 'accepted',            label: 'Central Evaluation',       color: 'bg-green-500',   light: 'bg-green-50',   text: 'text-green-700'   },
     { key: 'funded',              label: 'Funded',           color: 'bg-emerald-600', light: 'bg-emerald-50', text: 'text-emerald-700' },
     { key: 'completed',           label: 'Completed',        color: 'bg-cyan-600',    light: 'bg-cyan-50',    text: 'text-cyan-700'    },
     { key: 'rejected',            label: 'Rejected',         color: 'bg-red-500',     light: 'bg-red-50',     text: 'text-red-700'     },
@@ -140,6 +141,8 @@ export default function ProposalIndex() {
     const [view, setView] = useViewPreference('proposals_index', 'table')
     const [stats, setStats] = useState(null)
     const [proposals, setProposals] = useState([])
+    const [pagination, setPagination] = useState(null)
+    const [page, setPage] = useState(1)
     const [loading, setLoading] = useState(true)
     const [statsLoading, setStatsLoading] = useState(true)
     const [filters, setFilters] = useState({
@@ -166,10 +169,16 @@ export default function ProposalIndex() {
         loadStats(filters.academic_year)
     }, [filters.academic_year])
 
-    // Reload proposals on any filter change
+    // A filter change means the current page number may no longer make sense
+    // against the new result set — jump back to page 1.
+    useEffect(() => {
+        setPage(1)
+    }, [filters.status, filters.category, filters.college_id, filters.academic_year, filters.search])
+
+    // Reload proposals on any filter or page change
     useEffect(() => {
         loadProposals()
-    }, [filters])
+    }, [filters, page])
 
     const loadStats = async (academicYear) => {
         setStatsLoading(true)
@@ -188,10 +197,16 @@ export default function ProposalIndex() {
     const loadProposals = async () => {
         setLoading(true)
         try {
-            const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== ''))
+            const params = { ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '')), page }
             const res = await api.get('/proposals', { params })
             const data = res.data?.data || []
-            setProposals(Array.isArray(data) ? data : data?.data || [])
+            if (Array.isArray(data)) {
+                setProposals(data)
+                setPagination(null)
+            } else {
+                setProposals(data?.data || [])
+                setPagination(data)
+            }
         } catch (_) {
             error('Failed to load proposals.')
         }
@@ -498,7 +513,7 @@ export default function ProposalIndex() {
                                                         <div className={`w-3 h-3 rounded-full ${color} shrink-0`} />
                                                         <div className="flex-1">
                                                             <div className="flex justify-between mb-1">
-                                                                <span className="text-sm text-gray-700 capitalize">{status.replace(/_/g, ' ')}</span>
+                                                                <span className="text-sm text-gray-700 capitalize">{getStatusLabel(status)}</span>
                                                                 <span className="text-sm font-semibold text-gray-900">
                                                                     {count}
                                                                     <span className="text-xs text-gray-400 ml-1">({pct}%)</span>
@@ -573,7 +588,7 @@ export default function ProposalIndex() {
                             <option value="under_blind_review">Blind Review</option>
                             <option value="blind_review_passed">Blind Review Passed</option>
                             <option value="under_open_defence">Open Defence</option>
-                            <option value="accepted">Accepted</option>
+                            <option value="accepted">Central Evaluation</option>
                             <option value="funded">Funded</option>
                             <option value="rejected">Rejected</option>
                             <option value="completed">Completed</option>
@@ -655,7 +670,7 @@ export default function ProposalIndex() {
                                                     ? 'bg-red-100 text-red-700'
                                                     : 'bg-blue-100 text-blue-700'
                                             }`}>
-                                                {proposal.status?.replace(/_/g, ' ')}
+                                                {getStatusLabel(proposal.status)}
                                             </span>
                                         </div>
                                         <h3 className="text-sm font-semibold text-gray-900 line-clamp-2 mb-2 group-hover:text-blue-700 transition-colors">
@@ -673,6 +688,31 @@ export default function ProposalIndex() {
                                 ))}
                             </div>
                         )}
+                    </div>
+                )}
+
+                {/* PAGINATION */}
+                {pagination && pagination.last_page > 1 && (
+                    <div className="flex items-center justify-between px-1">
+                        <p className="text-xs text-gray-400">
+                            Page {pagination.current_page} of {pagination.last_page} · {pagination.total}
+                        </p>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setPage(p => Math.max(1, p - 1))}
+                                disabled={pagination.current_page <= 1}
+                                className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                                <ChevronLeft size={13} /> Prev
+                            </button>
+                            <button
+                                onClick={() => setPage(p => Math.min(pagination.last_page, p + 1))}
+                                disabled={pagination.current_page >= pagination.last_page}
+                                className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                                Next <ChevronRight size={13} />
+                            </button>
+                        </div>
                     </div>
                 )}
             </div>

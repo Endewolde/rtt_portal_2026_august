@@ -159,3 +159,75 @@ test('a reviewer who declared no conflict can submit a score normally', function
 
     expect($assignment->fresh()->status)->toBe('submitted');
 });
+
+// ─── coiConflicts() dashboard ──────────────────────────────────────────────────
+
+test('a reviewer cannot view the officer COI conflicts dashboard', function () {
+    [$reviewer] = coi_assignment();
+
+    $this->actingAs($reviewer, 'sanctum')
+        ->getJson('/api/v1/review-assignments/coi-conflicts')
+        ->assertStatus(403);
+});
+
+test('officer sees an unresolved reported conflict on the dashboard', function () {
+    [$reviewer, $officer, $assignment] = coi_assignment();
+
+    $this->actingAs($reviewer, 'sanctum')
+        ->postJson("/api/v1/review-assignments/{$assignment->id}/declare-coi", [
+            'has_conflict' => true, 'reason' => 'The PI is my former PhD supervisor.',
+        ])
+        ->assertOk();
+
+    $response = $this->actingAs($officer, 'sanctum')
+        ->getJson('/api/v1/review-assignments/coi-conflicts')
+        ->assertOk();
+
+    expect($response->json('data'))->toHaveCount(1)
+        ->and($response->json('data.0.id'))->toBe($assignment->id)
+        ->and($response->json('data.0.coi_reason'))->toBe('The PI is my former PhD supervisor.')
+        ->and($response->json('data.0.reviewer.name'))->toBe($reviewer->name)
+        ->and($response->json('data.0.assigned_by.name'))->toBe($officer->name)
+        ->and($response->json('data.0.proposal.tracker_number'))->not->toBeNull();
+});
+
+test('a declined-conflict declaration never appears on the dashboard', function () {
+    [$reviewer, $officer, $assignment] = coi_assignment();
+
+    $this->actingAs($reviewer, 'sanctum')
+        ->postJson("/api/v1/review-assignments/{$assignment->id}/declare-coi", ['has_conflict' => false])
+        ->assertOk();
+
+    $response = $this->actingAs($officer, 'sanctum')
+        ->getJson('/api/v1/review-assignments/coi-conflicts')
+        ->assertOk();
+
+    expect($response->json('data'))->toHaveCount(0);
+});
+
+test('reassigning a conflicted review resolves it and drops it off the dashboard', function () {
+    [$reviewer, $officer, $assignment] = coi_assignment();
+    $newReviewer = User::factory()->create();
+    $newReviewer->assignRole('reviewer');
+
+    $this->actingAs($reviewer, 'sanctum')
+        ->postJson("/api/v1/review-assignments/{$assignment->id}/declare-coi", [
+            'has_conflict' => true, 'reason' => 'Conflict of interest.',
+        ])
+        ->assertOk();
+
+    $this->actingAs($officer, 'sanctum')
+        ->putJson("/api/v1/review-assignments/{$assignment->id}/reassign", [
+            'new_reviewer_id' => $newReviewer->id,
+            'due_date' => now()->addDays(7)->toDateString(),
+        ])
+        ->assertOk();
+
+    expect($assignment->fresh()->coi_resolved_at)->not->toBeNull();
+
+    $response = $this->actingAs($officer, 'sanctum')
+        ->getJson('/api/v1/review-assignments/coi-conflicts')
+        ->assertOk();
+
+    expect($response->json('data'))->toHaveCount(0);
+});

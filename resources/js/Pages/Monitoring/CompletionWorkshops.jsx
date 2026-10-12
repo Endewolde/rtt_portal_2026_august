@@ -4,12 +4,22 @@ import {
     FileText, Upload, Star, AlertTriangle, Plus,
     Calendar, MapPin, Link, XCircle, PauseCircle,
     MessageCircle, Send, Reply, Loader2, Paperclip,
+    ListChecks, Square, CheckSquare,
 } from 'lucide-react'
 import AppLayout from '../../Layouts/AppLayout'
 import { useAuth } from '../../hooks/useAuth'
+import { useFeature } from '../../hooks/useFeature'
 import { useToast } from '../../Components/Toast'
 import { formatDate } from '../../lib/utils'
 import api from '../../lib/api'
+
+const CLOSURE_CHECKLIST_LABELS = {
+    final_report_submitted: 'Final project report submitted',
+    financial_settlement_verified: 'Financial settlement verified',
+    research_outputs_recorded: 'Research outputs recorded',
+    equipment_returned: 'Equipment / assets returned',
+    ip_disclosures_filed: 'IP disclosures filed',
+}
 
 // ─── Status config ─────────────────────────────────────────────────────────────
 
@@ -170,13 +180,40 @@ function ScheduleModal({ eligibleProposals, onClose, onSuccess }) {
 
 function FinalizeModal({ workshop, onClose, onSuccess }) {
     const { error } = useToast()
+    const { hasSubFeature } = useFeature()
+    const proposalId = workshop.proposal_id ?? workshop.proposal?.id
+    const checklistEnabled = hasSubFeature('workflow.closure_checklist')
+
     const [score,   setScore]   = useState('')
     const [remarks, setRemarks] = useState('')
     const [saving,  setSaving]  = useState(false)
+    const [checklist, setChecklist] = useState(null)
+    const [togglingKey, setTogglingKey] = useState(null)
+
+    useEffect(() => {
+        if (!checklistEnabled || !proposalId) return
+        api.get(`/proposals/${proposalId}/closure-checklist`)
+            .then(r => setChecklist(r.data?.data ?? null))
+            .catch(() => {})
+    }, [checklistEnabled, proposalId])
+
+    const toggleItem = async (key, checked) => {
+        setTogglingKey(key)
+        try {
+            const res = await api.post(`/proposals/${proposalId}/closure-checklist`, { key, checked })
+            setChecklist(res.data?.data ?? null)
+        } catch (e) {
+            error(e.response?.data?.message ?? 'Failed to update checklist.')
+        }
+        setTogglingKey(null)
+    }
+
+    const checklistBlocking = checklistEnabled && !checklist?.is_complete
 
     const submit = async () => {
         const s = parseFloat(score)
         if (isNaN(s) || s < 0 || s > 100) return error('Enter a valid score between 0 and 100.')
+        if (checklistBlocking) return error('Complete the closure checklist before finalizing.')
         setSaving(true)
         try {
             await api.post(`/completion-workshops/${workshop.id}/finalize`, { final_score: s, evaluator_remarks: remarks })
@@ -214,10 +251,39 @@ function FinalizeModal({ workshop, onClose, onSuccess }) {
                             placeholder="Overall feedback on the presentation…"
                             className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 resize-none" />
                     </div>
+                    {checklistEnabled && (
+                        <div>
+                            <label className="flex items-center gap-1.5 text-sm font-medium text-gray-700 mb-2">
+                                <ListChecks size={15} /> Closure Checklist
+                            </label>
+                            <div className="border border-gray-200 rounded-xl divide-y divide-gray-100 overflow-hidden">
+                                {Object.entries(CLOSURE_CHECKLIST_LABELS).map(([key, label]) => {
+                                    const checked = !!checklist?.items?.[key]
+                                    return (
+                                        <button
+                                            key={key}
+                                            type="button"
+                                            onClick={() => toggleItem(key, !checked)}
+                                            disabled={togglingKey === key}
+                                            className="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left hover:bg-gray-50 disabled:opacity-60"
+                                        >
+                                            {checked
+                                                ? <CheckSquare size={16} className="text-green-600 shrink-0" />
+                                                : <Square size={16} className="text-gray-300 shrink-0" />}
+                                            <span className={checked ? 'text-gray-700' : 'text-gray-500'}>{label}</span>
+                                        </button>
+                                    )
+                                })}
+                            </div>
+                            {checklistBlocking && (
+                                <p className="text-xs text-amber-600 mt-1.5">All items must be checked before this workshop can be finalized.</p>
+                            )}
+                        </div>
+                    )}
                 </div>
                 <div className="flex gap-3 px-6 pb-6">
                     <button onClick={onClose} className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-700 hover:bg-gray-50 font-medium">Cancel</button>
-                    <button onClick={submit} disabled={saving}
+                    <button onClick={submit} disabled={saving || checklistBlocking}
                         className="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 disabled:opacity-50">
                         {saving ? 'Finalizing…' : 'Finalize & Complete'}
                     </button>
@@ -621,7 +687,7 @@ function WorkshopCard({ workshop, isOfficer, currentUserId, onRefresh }) {
                     )}
 
                     {/* Proposal info grid */}
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         {proposal?.duration_months && (
                             <div className="bg-white border border-gray-200 rounded-xl p-3 text-center">
                                 <p className="text-xs text-gray-500">Duration</p>
@@ -870,15 +936,15 @@ export default function CompletionWorkshops() {
 
                 {/* Eligible proposals reminder for officers */}
                 {isOfficer && eligibleProposals.length > 0 && (
-                    <div className="flex items-center justify-between bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3">
-                        <div className="flex items-center gap-2 text-sm text-yellow-800">
-                            <AlertTriangle size={16} className="text-yellow-600 shrink-0" />
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-yellow-50 border border-yellow-200 rounded-xl px-4 py-3">
+                        <div className="flex items-start sm:items-center gap-2 text-sm text-yellow-800">
+                            <AlertTriangle size={16} className="text-yellow-600 shrink-0 mt-0.5 sm:mt-0" />
                             <span>
                                 <strong>{eligibleProposals.length}</strong> proposal(s) have passed midterm and are awaiting a completion workshop.
                             </span>
                         </div>
                         <button onClick={() => setShowSchedule(true)}
-                            className="text-xs font-semibold text-yellow-700 hover:underline shrink-0 ml-4">
+                            className="text-xs font-semibold text-yellow-700 hover:underline shrink-0 self-start sm:self-auto sm:ml-4">
                             Schedule now →
                         </button>
                     </div>

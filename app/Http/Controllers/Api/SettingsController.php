@@ -7,6 +7,7 @@ use App\Models\AppSetting;
 use App\Models\ThresholdSetting;
 use App\Models\User;
 use App\Services\MailConfigService;
+use App\Services\ReviewScoreService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -20,6 +21,35 @@ use Illuminate\Support\Str;
 
 class SettingsController extends Controller
 {
+    public function __construct(private ReviewScoreService $reviewScoreService) {}
+
+    /** Threshold/decision-mode keys whose review-pipeline effects can go stale. */
+    private const REVIEW_DECISION_KEYS = ['blind_threshold', 'defence_threshold', 'combined_threshold', 'combined_decision_mode'];
+
+    /**
+     * Recalculate every blind-review/open-defence decision against the now-current
+     * settings so proposal statuses never go stale against a threshold change — see
+     * ReviewScoreService::recalculateAllDecisions for exactly what is and isn't
+     * auto-corrected. Never lets a recalculation failure block the settings save.
+     */
+    private function recalculateReviewDecisions(): array
+    {
+        $systemActor = User::role('super_admin')->first() ?? User::role('central_officer')->first();
+        if (! $systemActor) {
+            Log::error('recalculateReviewDecisions: no super_admin or central_officer found to act as the correcting actor.');
+
+            return ['corrected' => [], 'needs_review' => []];
+        }
+
+        try {
+            return $this->reviewScoreService->recalculateAllDecisions($systemActor);
+        } catch (\Throwable $e) {
+            Log::error("recalculateReviewDecisions failed: {$e->getMessage()}");
+
+            return ['corrected' => [], 'needs_review' => []];
+        }
+    }
+
     // ── Threshold settings (legacy endpoint used by reviews) ─────────────────
 
     public function index(): JsonResponse
@@ -81,7 +111,17 @@ class SettingsController extends Controller
             }
         });
 
-        return response()->json(['data' => $updated, 'message' => 'Settings updated.', 'errors' => []]);
+        $recalc = ['corrected' => [], 'needs_review' => []];
+        if (array_intersect(array_keys($validated), self::REVIEW_DECISION_KEYS)) {
+            $recalc = $this->recalculateReviewDecisions();
+        }
+
+        return response()->json([
+            'data' => $updated,
+            'message' => 'Settings updated.',
+            'errors' => [],
+            'meta' => ['decisions_corrected' => $recalc['corrected'], 'decisions_needing_review' => $recalc['needs_review']],
+        ]);
     }
 
     // ── App settings ──────────────────────────────────────────────────────────
@@ -122,6 +162,9 @@ class SettingsController extends Controller
             'max_reviewer_active_assignments' => ['integer', 'min:1', 'max:50'],
             'overdue_reminder_interval_days' => ['integer', 'min:1', 'max:30'],
             'ongoing_midterm_overdue_days' => ['integer', 'min:7', 'max:365'],
+            // 0 = unlimited, same convention as max_concurrent_sessions.
+            'max_active_pi_proposals' => ['integer', 'min:0', 'max:50'],
+            'max_active_coinvestigator_proposals' => ['integer', 'min:0', 'max:50'],
         ];
         if (isset($thresholdRules[$key])) {
             $request->validate(['value' => $thresholdRules[$key]]);
@@ -197,7 +240,17 @@ class SettingsController extends Controller
             $this->enforceConcurrentSessionLimitGlobally((int) $value);
         }
 
-        return response()->json(['data' => $setting, 'message' => 'Setting updated.', 'errors' => [], 'meta' => []]);
+        $recalc = ['corrected' => [], 'needs_review' => []];
+        if (in_array($key, self::REVIEW_DECISION_KEYS, true)) {
+            $recalc = $this->recalculateReviewDecisions();
+        }
+
+        return response()->json([
+            'data' => $setting,
+            'message' => 'Setting updated.',
+            'errors' => [],
+            'meta' => ['decisions_corrected' => $recalc['corrected'], 'decisions_needing_review' => $recalc['needs_review']],
+        ]);
     }
 
     /**

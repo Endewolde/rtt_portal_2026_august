@@ -13,6 +13,10 @@ Artisan::command('inspire', function () {
 Schedule::command('users:deactivate-expired-guests')->daily();
 Schedule::command('rtt:deadline-reminders')->dailyAt('08:00');
 Schedule::command('rtt:review-deadline-reminders')->dailyAt('08:15');
+Schedule::command('notifications:send-digests daily')->dailyAt('07:00');
+Schedule::command('notifications:send-digests weekly')->weeklyOn(1, '07:00');
+Schedule::command('rtt:track-ethical-clearance-expiry')->dailyAt('08:30');
+Schedule::command('rtt:defence-deadlines')->everyFifteenMinutes()->withoutOverlapping();
 
 // Backups run 3x/day, admin-configurable via Settings — Backup & Recovery
 // (backup_time / backup_time_2 / backup_time_3), defaulting to 6 AM / 6 PM / midnight.

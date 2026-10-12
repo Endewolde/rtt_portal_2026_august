@@ -118,6 +118,7 @@ class AuthController extends Controller
         $sessions = DB::table('personal_access_tokens')
             ->where('tokenable_id', $request->user()->id)
             ->where('tokenable_type', User::class)
+            ->where('name', '!=', 'impersonation_token')
             ->select(['id', 'name', 'last_used_at', 'created_at'])
             ->orderByDesc('last_used_at')
             ->get()

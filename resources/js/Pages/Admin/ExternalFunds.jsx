@@ -286,7 +286,7 @@ function OpportunityModal({ opp, agencies, onSave, onClose }) {
                         {errors.title && <p className="text-xs text-red-500 mt-1">{errors.title[0]}</p>}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Type *</label>
                             <select {...f('type')} className={cls}>
@@ -301,7 +301,7 @@ function OpportunityModal({ opp, agencies, onSave, onClose }) {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div>
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Min Amount</label>
                             <input type="number" {...f('amount_min')} placeholder="0" className={cls} />
@@ -316,7 +316,7 @@ function OpportunityModal({ opp, agencies, onSave, onClose }) {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div>
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Opening Date</label>
                             <input type="date" {...f('opening_date')} className={cls} />
@@ -341,7 +341,7 @@ function OpportunityModal({ opp, agencies, onSave, onClose }) {
                         <textarea {...f('eligibility')} rows={2} placeholder="Who can apply, required qualifications…" className={cn(cls, 'resize-none')} />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4 items-end">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
                         <div>
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Status *</label>
                             <select {...f('status')} className={cls}>
@@ -418,8 +418,8 @@ function AwardModal({ application, onSave, onClose }) {
                         <input {...f('title')} className={cls} />
                         {errors.title && <p className="text-xs text-red-500 mt-1">{errors.title[0]}</p>}
                     </div>
-                    <div className="grid grid-cols-3 gap-3">
-                        <div className="col-span-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="sm:col-span-2">
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Amount Awarded *</label>
                             <input type="number" {...f('amount_awarded')} placeholder="0" className={cls} />
                             {errors.amount_awarded && <p className="text-xs text-red-500 mt-1">{errors.amount_awarded[0]}</p>}
@@ -429,7 +429,7 @@ function AwardModal({ application, onSave, onClose }) {
                             <input {...f('currency')} placeholder="USD" className={cls} />
                         </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Start Date *</label>
                             <input type="date" {...f('start_date')} className={cls} />
@@ -1293,7 +1293,7 @@ function ApplicationModal({ app, agencies, colleges, departments, onSave, onClos
                         {err('title')}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Award Reference Number (Donor's)</label>
                             <input {...f('donor_ref_number')} placeholder="Donor's reference #…" className={cls} />
@@ -1314,7 +1314,7 @@ function ApplicationModal({ app, agencies, colleges, departments, onSave, onClos
                         <input {...f('partner_institutions')} placeholder="e.g. MIT, Addis Ababa University" className={cls} />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Theme</label>
                             <input {...f('theme')} placeholder="e.g. Climate Change, Public Health…" className={cls} />
@@ -1336,7 +1336,7 @@ function ApplicationModal({ app, agencies, colleges, departments, onSave, onClos
                     {/* ── Budget ── */}
                     <SectionHeading>Budget</SectionHeading>
 
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div>
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Annual Budget (USD) *</label>
                             <input type="number" {...f('annual_budget')} placeholder="0" className={cls} />
@@ -1368,7 +1368,7 @@ function ApplicationModal({ app, agencies, colleges, departments, onSave, onClos
                         {err('lead_institution')}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">College Hosting the Project</label>
                             <select {...f('college_id')} className={cls}>
@@ -1388,7 +1388,7 @@ function ApplicationModal({ app, agencies, colleges, departments, onSave, onClos
                     {/* ── Project Period ── */}
                     <SectionHeading>Project Period</SectionHeading>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Project Start Date *</label>
                             <input type="date" {...f('start_date')} className={cls} />
@@ -1404,8 +1404,8 @@ function ApplicationModal({ app, agencies, colleges, departments, onSave, onClos
                     {/* ── PI ── */}
                     <SectionHeading>Project Coordinator / Principal Investigator</SectionHeading>
 
-                    <div className="grid grid-cols-2 gap-3">
-                        <div className="col-span-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="sm:col-span-2">
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Name of Project Coordinator / PI *</label>
                             <input {...f('pi_name')} placeholder="Full name…" className={cls} />
                             {err('pi_name')}
@@ -1447,7 +1447,7 @@ function ApplicationModal({ app, agencies, colleges, departments, onSave, onClos
                             {cois.map((coi, i) => (
                                 <div key={i} className="bg-gray-50 rounded-xl p-4 space-y-3">
                                     <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Member {i + 1}</p>
-                                    <div className="grid grid-cols-3 gap-2">
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                         <div>
                                             <label className="block text-[11px] font-semibold text-gray-600 mb-1">Name</label>
                                             <input value={coi.name}
@@ -2148,8 +2148,8 @@ function AgencyModal({ agency, onSave, onClose }) {
                     <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg"><X size={16} /></button>
                 </div>
                 <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
-                    <div className="grid grid-cols-2 gap-3">
-                        <div className="col-span-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="sm:col-span-2">
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Name *</label>
                             <input {...f('name')} className={cls} />
                             {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name[0]}</p>}
@@ -2184,11 +2184,11 @@ function AgencyModal({ agency, onSave, onClose }) {
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Contact Phone</label>
                             <input {...f('contact_phone')} className={cls} />
                         </div>
-                        <div className="col-span-2">
+                        <div className="sm:col-span-2">
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Description</label>
                             <textarea {...f('description')} rows={3} className={cn(cls, 'resize-none')} />
                         </div>
-                        <div className="col-span-2 flex items-center gap-2">
+                        <div className="sm:col-span-2 flex items-center gap-2">
                             <input type="checkbox" id="is_active" checked={!!form.is_active}
                                 onChange={e => setForm(p => ({ ...p, is_active: e.target.checked }))}
                                 className="rounded border-gray-300 text-indigo-600" />

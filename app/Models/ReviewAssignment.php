@@ -30,6 +30,7 @@ class ReviewAssignment extends Model
         'coi_declared_at',
         'coi_has_conflict',
         'coi_reason',
+        'coi_resolved_at',
     ];
 
     protected $casts = [
@@ -38,6 +39,7 @@ class ReviewAssignment extends Model
         'submitted_at' => 'datetime',
         'coi_declared_at' => 'datetime',
         'coi_has_conflict' => 'boolean',
+        'coi_resolved_at' => 'datetime',
         'is_external' => 'boolean',
     ];
 

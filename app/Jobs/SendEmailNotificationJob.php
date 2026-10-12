@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\NotificationPreference;
 use App\Models\User;
 use App\Services\MailConfigService;
 use Illuminate\Bus\Queueable;
@@ -30,6 +31,16 @@ class SendEmailNotificationJob implements ShouldQueue
 
     public function handle(): void
     {
+        // Users who opted into a digest get this notification summarized later
+        // (see SendNotificationDigests) instead of an individual real-time email —
+        // it was already stored as an in-app notification regardless of this setting.
+        $digestFrequency = NotificationPreference::where('user_id', $this->recipient->id)
+            ->value('digest_frequency');
+
+        if (in_array($digestFrequency, ['daily', 'weekly'], true)) {
+            return;
+        }
+
         app(MailConfigService::class)->applyFromDatabase();
 
         $subject = $this->getSubject();
@@ -76,12 +87,29 @@ class SendEmailNotificationJob implements ShouldQueue
             'proposal_submitted_officer' => 'New Proposal Submitted — '.($this->data['tracker_number'] ?? ''),
             'appeal_submitted' => 'Appeal Received — '.($this->data['tracker_number'] ?? ''),
             'appeal_resolved' => 'Your Appeal Has Been Resolved — '.($this->data['tracker_number'] ?? ''),
+            'deadline_extension_requested' => 'Deadline Extension Requested — '.($this->data['tracker_number'] ?? ''),
+            'deadline_extension_resolved' => 'Your Deadline Extension Request Was '.ucfirst($this->data['decision'] ?? '').' — '.($this->data['tracker_number'] ?? ''),
+            'ethical_clearance_submitted' => 'Ethical Clearance Submitted for Review — '.($this->data['tracker_number'] ?? ''),
+            'ethical_clearance_resolved' => 'Ethical Clearance '.ucfirst($this->data['decision'] ?? '').' — '.($this->data['tracker_number'] ?? ''),
+            'ethical_clearance_expiring' => 'Ethical Clearance Expiring Soon — '.($this->data['tracker_number'] ?? ''),
+            'ethical_clearance_expired' => 'Ethical Clearance Has Expired — '.($this->data['tracker_number'] ?? ''),
+            'budget_revision_requested' => 'Budget Revision Requested — '.($this->data['tracker_number'] ?? ''),
+            'budget_revision_resolved' => 'Budget Revision '.ucfirst($this->data['decision'] ?? '').' — '.($this->data['tracker_number'] ?? ''),
+            'no_cost_extension_requested' => 'No-Cost Extension Requested — '.($this->data['tracker_number'] ?? ''),
+            'no_cost_extension_resolved' => 'No-Cost Extension '.ucfirst($this->data['decision'] ?? '').' — '.($this->data['tracker_number'] ?? ''),
+            'review_assignment_cancelled' => 'Review Assignment Cancelled — '.($this->data['tracker_number'] ?? ''),
             'approval_report_submitted' => 'Possible Mistaken Approval Reported — '.($this->data['tracker_number'] ?? ''),
+            'approval_report_resolved' => 'Your Mistaken-Approval Report Was Reviewed — '.($this->data['tracker_number'] ?? ''),
             'budget_request_submitted' => 'New Budget Request Submitted — '.($this->data['tracker_number'] ?? ''),
             'funding_revoked' => 'Funding Revoked — '.($this->data['tracker_number'] ?? ''),
             'contract_submitted' => 'Contract Submitted for Review — '.($this->data['tracker_number'] ?? ''),
             'contract_approved' => 'Research Contract Approved — '.($this->data['tracker_number'] ?? ''),
             'contract_rejected' => 'Contract Submission Returned — '.($this->data['tracker_number'] ?? ''),
+            'defence_extension_requested' => 'Defence Score Deadline Extension Requested — '.($this->data['tracker_number'] ?? ''),
+            'defence_extension_resolved' => 'Defence Deadline Extension '.ucfirst($this->data['decision'] ?? '').' — '.($this->data['tracker_number'] ?? ''),
+            'defence_deadline_extended' => 'Defence Score Deadline Extended — '.($this->data['tracker_number'] ?? ''),
+            'defence_deadline_reminder' => 'Defence Score Due Today — '.($this->data['tracker_number'] ?? ''),
+            'defence_deadline_passed' => 'Defence Score Deadline Passed — '.($this->data['tracker_number'] ?? ''),
             default => 'RTT Platform Notification',
         };
     }
@@ -107,6 +135,17 @@ class SendEmailNotificationJob implements ShouldQueue
             'blind_review_passed_officer' => 'generic',
             'appeal_submitted' => 'generic',
             'appeal_resolved' => 'decision_result',
+            'deadline_extension_requested' => 'generic',
+            'deadline_extension_resolved' => 'generic',
+            'ethical_clearance_submitted' => 'generic',
+            'ethical_clearance_resolved' => 'generic',
+            'ethical_clearance_expiring' => 'generic',
+            'ethical_clearance_expired' => 'generic',
+            'budget_revision_requested' => 'generic',
+            'budget_revision_resolved' => 'generic',
+            'no_cost_extension_requested' => 'generic',
+            'no_cost_extension_resolved' => 'generic',
+            'review_assignment_cancelled' => 'generic',
             'approval_report_submitted' => 'generic',
             'budget_request_submitted' => 'generic',
             'funding_revoked' => 'decision_result',

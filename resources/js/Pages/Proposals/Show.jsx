@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { usePage, Link, router } from '@inertiajs/react';
-import { UserCheck, Calendar, Award, CheckCircle, RotateCcw, XCircle, ExternalLink, AlertCircle, ChevronDown, ChevronUp, ArrowUpCircle, MessageSquare, PlusCircle, Pencil, Trash2, Upload, FileText, Eye, Sparkles, RefreshCw, Star } from 'lucide-react';
+import { UserCheck, Calendar, Award, CheckCircle, RotateCcw, XCircle, ExternalLink, AlertCircle, ChevronDown, ChevronUp, ArrowUpCircle, MessageSquare, PlusCircle, Pencil, Trash2, Upload, FileText, Eye, Sparkles, RefreshCw, Star, CalendarClock, ClipboardList } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import StatusBadge from '../../Components/StatusBadge';
 import TrackerNumberDisplay from '../../Components/TrackerNumberDisplay';
@@ -8,8 +8,10 @@ import ProposalTimeline from '../../Components/ProposalTimeline';
 import api, { get, post, put, del } from '../../lib/api';
 import { useAuth } from '../../hooks/useAuth';
 import { useFeature } from '../../hooks/useFeature';
-import { formatDate, formatCurrency, getCategoryLabel } from '../../lib/utils';
+import { formatDate, formatCurrency, getCategoryLabel, getStatusLabel } from '../../lib/utils';
 import { useToast } from '../../Components/Toast';
+import ConfirmDialog from '../../Components/ConfirmDialog';
+import ResolveApprovalReportModal from '../../Components/ResolveApprovalReportModal';
 import { downloadFile } from '../../lib/download';
 
 const TABS = ['Overview', 'Team', 'Budget', 'Documents', 'History', 'Reviews', 'Complaints'];
@@ -21,7 +23,7 @@ function SlaIndicator({ enteredAt, status }) {
     return (
         <div className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-lg bg-red-50 border border-red-200 text-red-700">
             <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
-            Overdue — {daysInStage} days in {status.replace(/_/g, ' ')} stage
+            Overdue — {daysInStage} days in {getStatusLabel(status)} stage
         </div>
     );
 }
@@ -567,11 +569,27 @@ function ActionButtons({ proposal, onAction, onProcessDefenceResult, isAdmin, ca
         </div>
     );
 
-    if (isAdmin && status === 'validated') return (
-        <Link href={`/proposals/${id}/assign-reviewers`}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-blue-700 text-white rounded-lg hover:bg-blue-800">
-            <UserCheck size={15} /> Assign Reviewers
-        </Link>
+    if (status === 'validated' && (isAdmin || canRejectBlindReview || canReportMistakenApproval)) return (
+        <div className="flex flex-wrap gap-2">
+            {isAdmin && (
+                <Link href={`/proposals/${id}/assign-reviewers`}
+                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-blue-700 text-white rounded-lg hover:bg-blue-800">
+                    <UserCheck size={15} /> Assign Reviewers
+                </Link>
+            )}
+            {canRejectBlindReview && (
+                <button onClick={() => onAction('reject')}
+                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700">
+                    <XCircle size={15} /> Reject
+                </button>
+            )}
+            {canReportMistakenApproval && !hasOpenReport && (
+                <button onClick={() => onAction('report_mistaken_approval')}
+                    className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-amber-500 text-white rounded-lg hover:bg-amber-600">
+                    <AlertCircle size={15} /> Report Mistaken Approval
+                </button>
+            )}
+        </div>
     );
 
     if (status === 'under_blind_review' && (canRejectBlindReview || canReportMistakenApproval)) return (
@@ -630,6 +648,13 @@ function ActionButtons({ proposal, onAction, onProcessDefenceResult, isAdmin, ca
         </Link>
     );
 
+    if (status === 'rejected' && canRejectBlindReview) return (
+        <button onClick={() => onAction('reopen')}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
+            <RotateCcw size={15} /> Reopen for Reconsideration
+        </button>
+    );
+
     return null;
 }
 
@@ -641,13 +666,15 @@ const DOC_TYPE_LABELS = {
     pi_cv:              'PI CV',
     supporting_document:'Supporting Document',
     shared_document:    'Shared by PI',
+    ethical_clearance_certificate: 'Ethical Clearance Certificate',
 };
 
 const DOC_TYPE_COLORS = {
     shared_document: 'bg-blue-100 text-blue-700',
+    ethical_clearance_certificate: 'bg-purple-100 text-purple-700',
 };
 
-function DocumentsTab({ proposalId, documents, userId, isPI, hideIdentity, onRefresh }) {
+function DocumentsTab({ proposalId, documents, userId, isPI, isDraft, hideIdentity, onRefresh, showEthicalClearanceOption }) {
     const { success, error: toastError } = useToast();
     const [uploading,  setUploading]  = useState(false);
     const [docType,    setDocType]    = useState('shared_document');
@@ -704,6 +731,9 @@ function DocumentsTab({ proposalId, documents, userId, isPI, hideIdentity, onRef
                                 <option value="supporting_document">Supporting Document</option>
                                 <option value="budget_spreadsheet">Budget Spreadsheet</option>
                                 <option value="pi_cv">PI CV</option>
+                                {showEthicalClearanceOption && (
+                                    <option value="ethical_clearance_certificate">Ethical Clearance Certificate</option>
+                                )}
                             </select>
                         </div>
                         <div
@@ -739,6 +769,15 @@ function DocumentsTab({ proposalId, documents, userId, isPI, hideIdentity, onRef
                             {uploading ? 'Uploading…' : 'Upload'}
                         </button>
                     </div>
+                </div>
+            )}
+
+            {!isDraft && documents.length > 0 && (
+                <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3.5">
+                    <span className="text-amber-500 text-base mt-0.5">🔒</span>
+                    <p className="text-sm text-amber-800">
+                        This proposal has been submitted — documents can no longer be removed.
+                    </p>
                 </div>
             )}
 
@@ -802,7 +841,7 @@ function DocumentsTab({ proposalId, documents, userId, isPI, hideIdentity, onRef
                                         >
                                             <ExternalLink size={12} /> Download
                                         </button>
-                                        {isOwner && (
+                                        {isOwner && isDraft && (
                                             <button
                                                 type="button"
                                                 onClick={() => handleDelete(doc.id)}
@@ -883,6 +922,308 @@ function AppealModal({ proposal, onSave, onClose }) {
                     <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 rounded-lg border border-gray-200 hover:bg-gray-50">Cancel</button>
                     <button onClick={submit} disabled={saving} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
                         {saving ? 'Submitting…' : 'Submit Appeal'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ─── Ethical Clearance Modal ────────────────────────────────────────────────────
+function EthicalClearanceModal({ proposal, onSave, onClose }) {
+    const [clearanceNumber, setClearanceNumber] = useState(proposal.ethical_clearance_number ?? '');
+    const [expiryDate, setExpiryDate] = useState('');
+    const [saving, setSaving] = useState(false);
+    const { error, success } = useToast();
+
+    const submit = async () => {
+        if (!clearanceNumber.trim()) { error('Please enter the certificate/reference number.'); return; }
+        if (!expiryDate) { error('Please choose the certificate\'s expiry date.'); return; }
+        setSaving(true);
+        try {
+            const res = await post(`/proposals/${proposal.id}/ethical-clearance/submit`, {
+                clearance_number: clearanceNumber, expiry_date: expiryDate,
+            });
+            success(res?.message || 'Submitted for verification.');
+            onSave();
+        } catch (e) {
+            error(e.response?.data?.message || 'Failed to submit.');
+        }
+        setSaving(false);
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
+                <h2 className="text-base font-semibold text-gray-900 mb-1">Submit Ethical Clearance for Verification</h2>
+                <p className="text-xs text-gray-500 mb-4 font-mono">{proposal.tracker_number}</p>
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
+                    Upload your certificate in the Documents tab (type "Ethical Clearance Certificate") before submitting here.
+                </p>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Certificate / Reference Number <span className="text-red-500">*</span>
+                </label>
+                <input
+                    type="text"
+                    value={clearanceNumber}
+                    onChange={e => setClearanceNumber(e.target.value)}
+                    placeholder="e.g. IRB-2026-0042"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+                />
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Expiry Date <span className="text-red-500">*</span>
+                </label>
+                <input
+                    type="date"
+                    value={expiryDate}
+                    onChange={e => setExpiryDate(e.target.value)}
+                    min={new Date(Date.now() + 86400000).toISOString().slice(0, 10)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+                />
+                <div className="flex justify-end gap-2">
+                    <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 rounded-lg border border-gray-200 hover:bg-gray-50">Cancel</button>
+                    <button onClick={submit} disabled={saving} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                        {saving ? 'Submitting…' : 'Submit for Verification'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ─── Deadline Extension Modal ──────────────────────────────────────────────────
+function ExtensionModal({ proposal, onSave, onClose }) {
+    const [reason, setReason] = useState('');
+    const [requestedUntil, setRequestedUntil] = useState('');
+    const [saving, setSaving] = useState(false);
+    const { error, success } = useToast();
+
+    const submit = async () => {
+        if (reason.trim().length < 20) { error('Please provide at least 20 characters explaining your request.'); return; }
+        if (!requestedUntil) { error('Please choose the date you need until.'); return; }
+        setSaving(true);
+        try {
+            const res = await post(`/proposals/${proposal.id}/deadline-extension`, {
+                reason, requested_until: requestedUntil,
+            });
+            success(res?.message || 'Extension request submitted successfully.');
+            onSave();
+        } catch (e) {
+            error(e.response?.data?.message || 'Failed to submit extension request.');
+        }
+        setSaving(false);
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
+                <h2 className="text-base font-semibold text-gray-900 mb-1">Request a Deadline Extension</h2>
+                <p className="text-xs text-gray-500 mb-4 font-mono">{proposal.tracker_number}</p>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                    I need until <span className="text-red-500">*</span>
+                </label>
+                <input
+                    type="datetime-local"
+                    value={requestedUntil}
+                    onChange={e => setRequestedUntil(e.target.value)}
+                    min={new Date(Date.now() + 3600000).toISOString().slice(0, 16)}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+                />
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Reason <span className="text-red-500">*</span>
+                    <span className="ml-1 font-normal text-gray-400">(min 20 characters)</span>
+                </label>
+                <textarea
+                    value={reason}
+                    onChange={e => setReason(e.target.value)}
+                    rows={5}
+                    placeholder="Explain why you need more time…"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4 resize-none"
+                />
+                <div className="flex justify-end gap-2">
+                    <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 rounded-lg border border-gray-200 hover:bg-gray-50">Cancel</button>
+                    <button onClick={submit} disabled={saving} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                        {saving ? 'Submitting…' : 'Submit Request'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ─── Budget Revision Modal ──────────────────────────────────────────────────────
+function BudgetRevisionModal({ proposal, onSave, onClose }) {
+    const [reason, setReason] = useState('');
+    const [items, setItems] = useState(
+        (proposal.budgets ?? []).map(b => ({
+            category: b.category ?? '', item_description: b.item_description ?? '',
+            amount: String(b.amount ?? ''), justification: b.justification ?? '',
+        }))
+    );
+    const [saving, setSaving] = useState(false);
+    const { error, success } = useToast();
+
+    const updateItem = (idx, field, value) => {
+        setItems(items.map((it, i) => (i === idx ? { ...it, [field]: value } : it)));
+    };
+    const addItem = () => setItems([...items, { category: '', item_description: '', amount: '', justification: '' }]);
+    const removeItem = (idx) => setItems(items.filter((_, i) => i !== idx));
+
+    const total = items.reduce((s, it) => s + (Number(it.amount) || 0), 0);
+
+    const submit = async () => {
+        if (reason.trim().length < 20) { error('Please provide at least 20 characters explaining your request.'); return; }
+        if (items.length === 0) { error('Add at least one budget item.'); return; }
+        if (items.some(it => !it.category.trim() || !it.item_description.trim() || !it.amount)) {
+            error('Every item needs a category, description, and amount.');
+            return;
+        }
+        setSaving(true);
+        try {
+            const res = await post(`/proposals/${proposal.id}/budget-revision`, {
+                reason,
+                items: items.map(it => ({ ...it, amount: Number(it.amount) })),
+            });
+            success(res?.message || 'Budget revision request submitted successfully.');
+            onSave();
+        } catch (e) {
+            error(e.response?.data?.message || 'Failed to submit budget revision request.');
+        }
+        setSaving(false);
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
+                <h2 className="text-base font-semibold text-gray-900 mb-1">Request a Budget Revision</h2>
+                <p className="text-xs text-gray-500 mb-4 font-mono">{proposal.tracker_number}</p>
+
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Reason <span className="text-red-500">*</span>
+                    <span className="ml-1 font-normal text-gray-400">(min 20 characters)</span>
+                </label>
+                <textarea
+                    value={reason}
+                    onChange={e => setReason(e.target.value)}
+                    rows={3}
+                    placeholder="Explain why the budget needs to change…"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4 resize-none"
+                />
+
+                <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-medium text-gray-700">Revised Budget Items <span className="text-red-500">*</span></p>
+                    <button onClick={addItem} className="text-xs font-semibold text-blue-600 hover:text-blue-700">+ Add Item</button>
+                </div>
+
+                <div className="space-y-3 mb-4">
+                    {items.map((it, idx) => (
+                        <div key={idx} className="border border-gray-200 rounded-xl p-3 space-y-2">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                <input
+                                    type="text" placeholder="Category" value={it.category}
+                                    onChange={e => updateItem(idx, 'category', e.target.value)}
+                                    className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <input
+                                    type="number" placeholder="Amount" value={it.amount} min="0"
+                                    onChange={e => updateItem(idx, 'amount', e.target.value)}
+                                    className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                            </div>
+                            <input
+                                type="text" placeholder="Item description" value={it.item_description}
+                                onChange={e => updateItem(idx, 'item_description', e.target.value)}
+                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                            <div className="flex gap-2">
+                                <input
+                                    type="text" placeholder="Justification (optional)" value={it.justification}
+                                    onChange={e => updateItem(idx, 'justification', e.target.value)}
+                                    className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <button onClick={() => removeItem(idx)} className="px-3 text-xs text-red-500 hover:text-red-700 shrink-0">Remove</button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+
+                <div className="flex items-center justify-between border-t border-gray-100 pt-3 mb-4">
+                    <span className="text-sm font-semibold text-gray-700">New Total</span>
+                    <span className="text-sm font-bold text-gray-900">{formatCurrency(total)}</span>
+                </div>
+
+                <div className="flex justify-end gap-2">
+                    <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 rounded-lg border border-gray-200 hover:bg-gray-50">Cancel</button>
+                    <button onClick={submit} disabled={saving} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                        {saving ? 'Submitting…' : 'Submit Request'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ─── No-Cost Extension Modal ────────────────────────────────────────────────────
+function NoCostExtensionModal({ proposal, onSave, onClose }) {
+    const [reason, setReason] = useState('');
+    const [requestedDuration, setRequestedDuration] = useState(String((proposal.duration_months ?? 0) + 6));
+    const [saving, setSaving] = useState(false);
+    const { error, success } = useToast();
+
+    const submit = async () => {
+        if (reason.trim().length < 20) { error('Please provide at least 20 characters explaining your request.'); return; }
+        const months = Number(requestedDuration);
+        if (!months || months <= (proposal.duration_months ?? 0)) {
+            error('The requested duration must be longer than the current project duration.');
+            return;
+        }
+        setSaving(true);
+        try {
+            const res = await post(`/proposals/${proposal.id}/no-cost-extension`, {
+                reason, requested_duration_months: months,
+            });
+            success(res?.message || 'No-cost extension request submitted successfully.');
+            onSave();
+        } catch (e) {
+            error(e.response?.data?.message || 'Failed to submit no-cost extension request.');
+        }
+        setSaving(false);
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
+                <h2 className="text-base font-semibold text-gray-900 mb-1">Request a No-Cost Extension</h2>
+                <p className="text-xs text-gray-500 mb-4 font-mono">{proposal.tracker_number}</p>
+                <p className="text-xs text-gray-500 mb-4">Current project duration: <strong>{proposal.duration_months} months</strong></p>
+
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                    New Total Duration (months) <span className="text-red-500">*</span>
+                </label>
+                <input
+                    type="number"
+                    value={requestedDuration}
+                    onChange={e => setRequestedDuration(e.target.value)}
+                    min={(proposal.duration_months ?? 0) + 1}
+                    max="120"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+                />
+
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Reason <span className="text-red-500">*</span>
+                    <span className="ml-1 font-normal text-gray-400">(min 20 characters)</span>
+                </label>
+                <textarea
+                    value={reason}
+                    onChange={e => setReason(e.target.value)}
+                    rows={5}
+                    placeholder="Explain why more time is needed to complete this project…"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4 resize-none"
+                />
+                <div className="flex justify-end gap-2">
+                    <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 rounded-lg border border-gray-200 hover:bg-gray-50">Cancel</button>
+                    <button onClick={submit} disabled={saving} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                        {saving ? 'Submitting…' : 'Submit Request'}
                     </button>
                 </div>
             </div>
@@ -1057,88 +1398,220 @@ function AiScorePanel({ proposalId }) {
     );
 }
 
-function RecalculatePanel({ proposalId, proposalStatus }) {
-    const { error } = useToast();
-    const [recalculating, setRecalculating] = useState(false);
-    const [snapshot, setSnapshot] = useState(null);
+const PHASE_LABELS = { blind_review: 'Blind Review', open_defence: 'Open Defence' };
 
-    const recalculate = async () => {
-        setRecalculating(true);
-        try {
-            const r = await get(`/proposals/${proposalId}/review-results/recalculate`);
-            setSnapshot(r.data ?? null);
-        } catch (e) {
-            error(e.response?.data?.message ?? 'Could not recalculate the score.');
-        }
-        setRecalculating(false);
-    };
+function CorrectionsNotice({ corrections, canApply, applying, onApply }) {
+    if (!corrections?.length) {
+        return (
+            <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
+                <CheckCircle size={12} className="text-green-600 shrink-0" />
+                <p className="text-[11px] text-green-700">Recorded decisions match the current thresholds — nothing to correct.</p>
+            </div>
+        );
+    }
+
+    const applicable = corrections.filter(c => c.applicable);
 
     return (
-        <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-4 space-y-3">
-            <div className="flex items-center justify-between gap-2">
-                <div>
-                    <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">Verify Current Score</p>
-                    <p className="text-xs text-gray-400 mt-0.5">
-                        Recomputes live against the current threshold settings and evaluation criteria — useful after either was edited.
-                    </p>
-                </div>
-                <button
-                    onClick={recalculate}
-                    disabled={recalculating}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold border border-gray-300 text-gray-600 hover:bg-white disabled:opacity-60 transition-colors shrink-0"
-                >
-                    <RefreshCw size={12} className={recalculating ? 'animate-spin' : ''} />
-                    {recalculating ? 'Recalculating…' : 'Recalculate'}
-                </button>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 space-y-2">
+            <div className="flex items-start gap-2">
+                <AlertCircle size={13} className="text-amber-600 mt-0.5 shrink-0" />
+                <p className="text-xs font-semibold text-amber-800">Recorded decision differs from the recalculated result</p>
             </div>
-
-            {snapshot && (
-                <div className="space-y-2.5 pt-2 border-t border-gray-200">
-                    <div className="grid grid-cols-3 gap-2 text-center">
-                        <div className="bg-white rounded-lg border border-gray-200 px-2 py-2">
-                            <p className="text-sm font-bold text-gray-800 tabular-nums">
-                                {snapshot.blind ? `${snapshot.blind.score}/${snapshot.blind.max}` : '—'}
-                            </p>
-                            <p className="text-[10px] text-gray-400 mt-0.5">
-                                Blind ({snapshot.blind_passes === null ? 'n/a' : snapshot.blind_passes ? 'passes' : 'fails'} · min {snapshot.blind_threshold})
-                            </p>
-                        </div>
-                        <div className="bg-white rounded-lg border border-gray-200 px-2 py-2">
-                            <p className="text-sm font-bold text-gray-800 tabular-nums">
-                                {snapshot.defence ? `${snapshot.defence.score}/${snapshot.defence.max}` : '—'}
-                            </p>
-                            <p className="text-[10px] text-gray-400 mt-0.5">
-                                Defence {snapshot.defence_below_threshold ? '(below min ' + snapshot.defence_threshold + ')' : snapshot.defence ? '(ok)' : ''}
-                            </p>
-                        </div>
-                        <div className="bg-white rounded-lg border border-gray-200 px-2 py-2">
-                            <p className="text-sm font-bold text-gray-800 tabular-nums">{snapshot.combined}/{snapshot.combined_max}</p>
-                            <p className="text-[10px] text-gray-400 mt-0.5">
-                                Combined ({snapshot.combined_passes === null ? 'n/a' : snapshot.combined_passes ? 'passes' : 'fails'} · min {snapshot.combined_threshold})
-                            </p>
-                        </div>
-                    </div>
-
-                    {snapshot.defence_below_threshold && (
-                        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                            <AlertCircle size={12} className="text-amber-500 mt-0.5 shrink-0" />
-                            <p className="text-[11px] text-amber-700 leading-relaxed">
-                                Open defence score is below the open defence threshold — flagged for the central evaluation decision.
-                            </p>
-                        </div>
-                    )}
-
-                    <p className="text-[10px] text-gray-400">
-                        Current proposal status: <span className="font-semibold text-gray-600">{proposalStatus}</span>
-                        {' · '}Recalculated {formatDate(snapshot.recalculated_at)}
-                    </p>
+            <ul className="space-y-1.5 pl-5">
+                {corrections.map((c) => (
+                    <li key={c.phase} className="text-[11px] text-amber-800 leading-relaxed">
+                        <span className="font-semibold">{PHASE_LABELS[c.phase] ?? c.phase}:</span>{' '}
+                        {c.issue === 'wrongly_passed' ? 'passed, but now falls below the threshold' : 'rejected, but now clears the threshold'}
+                        {' '}({c.score}) — <span className="font-semibold">{c.change.replace('accepted', 'central evaluation').replace('blind_review_passed', 'blind review passed')}</span>
+                        {!c.applicable && c.reason && (
+                            <span className="block text-amber-700/80 italic">Cannot be applied here: {c.reason}.</span>
+                        )}
+                    </li>
+                ))}
+            </ul>
+            {canApply && applicable.length > 0 && (
+                <div className="flex justify-end">
+                    <button
+                        onClick={onApply}
+                        disabled={applying}
+                        className="flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700 disabled:opacity-60"
+                    >
+                        <RefreshCw size={12} className={applying ? 'animate-spin' : ''} />
+                        {applying ? 'Applying…' : 'Apply Correction'}
+                    </button>
                 </div>
             )}
         </div>
     );
 }
 
-function ReviewResultsTab({ proposalId, isVisible, isStaff, proposalStatus }) {
+function ScoreMeter({ label, score, max, threshold, passes, note }) {
+    const pct = max > 0 ? Math.min(100, (score / max) * 100) : 0;
+    const thresholdPct = max > 0 ? Math.min(100, (threshold / max) * 100) : 0;
+
+    return (
+        <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+                <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">{label}</p>
+                {passes !== null && passes !== undefined && (
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${passes ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                        {passes ? 'Passes' : 'Below threshold'}
+                    </span>
+                )}
+            </div>
+            <p className="text-lg font-bold text-gray-900 tabular-nums">
+                {score}<span className="text-sm font-medium text-gray-400">/{max}</span>
+            </p>
+            <div className="relative h-1.5 rounded-full bg-gray-100">
+                <div className={`h-1.5 rounded-full ${passes === false ? 'bg-red-400' : 'bg-indigo-500'}`} style={{ width: `${pct}%` }} />
+                <div className="absolute -top-1 h-3.5 w-0.5 bg-gray-700/60" style={{ left: `${thresholdPct}%` }} title={`Minimum ${threshold}`} />
+            </div>
+            <p className="text-[10px] text-gray-400">Minimum required: {threshold} · Maximum possible: {max}{note ? ` · ${note}` : ''}</p>
+        </div>
+    );
+}
+
+function PhaseResult({ phase, snapshot }) {
+    if (phase === 'blind_review') {
+        if (!snapshot.blind) {
+            return <p className="text-xs text-gray-400 italic">No submitted blind review scores yet.</p>;
+        }
+        return (
+            <ScoreMeter
+                label="Blind Review Score"
+                score={snapshot.blind.score}
+                max={snapshot.blind.max}
+                threshold={snapshot.blind_threshold}
+                passes={snapshot.blind_passes}
+            />
+        );
+    }
+
+    if (!snapshot.defence) {
+        return <p className="text-xs text-gray-400 italic">No submitted open defence scores yet.</p>;
+    }
+
+    return (
+        <div className="grid gap-2 sm:grid-cols-2">
+            <ScoreMeter
+                label="Open Defence Score"
+                score={snapshot.defence.score}
+                max={snapshot.defence.max}
+                threshold={snapshot.defence_threshold}
+                passes={snapshot.decision_mode === 'strict_all' ? !snapshot.defence_below_threshold : null}
+                note={snapshot.decision_mode === 'strict_all' ? null : 'informational'}
+            />
+            <ScoreMeter
+                label="Combined (Blind + Defence)"
+                score={snapshot.combined}
+                max={snapshot.combined_max}
+                threshold={snapshot.combined_threshold}
+                passes={snapshot.combined_passes}
+                note="decides the outcome"
+            />
+        </div>
+    );
+}
+
+function RecalculatePanel({ proposalId, proposalStatus, onDecisionChanged }) {
+    const { success, error } = useToast();
+    const [recalculating, setRecalculating] = useState(null); // phase being recalculated
+    const [phase, setPhase] = useState(null);
+    const [snapshot, setSnapshot] = useState(null);
+    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [applying, setApplying] = useState(false);
+
+    const recalculate = async (targetPhase) => {
+        setRecalculating(targetPhase);
+        try {
+            const r = await get(`/proposals/${proposalId}/review-results/recalculate`, { phase: targetPhase });
+            setPhase(targetPhase);
+            setSnapshot(r.data ?? null);
+        } catch (e) {
+            error(e.response?.data?.message ?? 'Could not recalculate the score.');
+        }
+        setRecalculating(null);
+    };
+
+    const applyCorrection = async () => {
+        setConfirmOpen(false);
+        setApplying(true);
+        try {
+            const r = await post(`/proposals/${proposalId}/review-results/recalculate/apply`, { phase });
+            success(r.message ?? 'Decision corrected.');
+            onDecisionChanged?.();
+            await recalculate(phase);
+        } catch (e) {
+            error(e.response?.data?.message ?? 'Could not apply the correction.');
+        }
+        setApplying(false);
+    };
+
+    const PHASE_BUTTONS = [
+        { key: 'blind_review', label: 'Recalculate Blind Review', icon: Eye },
+        { key: 'open_defence', label: 'Recalculate Open Defence', icon: Star },
+    ];
+
+    return (
+        <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-4 space-y-3">
+            <div>
+                <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">Verify Current Scores</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                    Recomputes a phase live against the current threshold settings and evaluation criteria. Scores are capped at each phase's maximum.
+                </p>
+            </div>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+                {PHASE_BUTTONS.map(({ key, label, icon: Icon }) => (
+                    <button
+                        key={key}
+                        onClick={() => recalculate(key)}
+                        disabled={recalculating !== null || applying}
+                        className={`flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors disabled:opacity-60 ${
+                            phase === key && snapshot
+                                ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
+                                : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50'
+                        }`}
+                    >
+                        {recalculating === key ? <RefreshCw size={12} className="animate-spin" /> : <Icon size={12} />}
+                        {recalculating === key ? 'Recalculating…' : label}
+                    </button>
+                ))}
+            </div>
+
+            {snapshot && phase && (
+                <div className="space-y-2.5 pt-2 border-t border-gray-200">
+                    <PhaseResult phase={phase} snapshot={snapshot} />
+
+                    <CorrectionsNotice
+                        corrections={snapshot.corrections}
+                        canApply={snapshot.can_apply_corrections}
+                        applying={applying}
+                        onApply={() => setConfirmOpen(true)}
+                    />
+
+                    <p className="text-[10px] text-gray-400">
+                        {PHASE_LABELS[phase]} · Current proposal status: <span className="font-semibold text-gray-600">{getStatusLabel(snapshot.proposal_status ?? proposalStatus)}</span>
+                        {' · '}Recalculated {formatDate(snapshot.recalculated_at)}
+                    </p>
+                </div>
+            )}
+
+            <ConfirmDialog
+                open={confirmOpen}
+                title={`Apply recalculated ${PHASE_LABELS[phase] ?? ''} decision?`}
+                description={`This will change the proposal's status (${(snapshot?.corrections ?? []).filter(c => c.applicable).map(c => c.change.replace('accepted', 'central evaluation')).join(', ')}) based on the current thresholds. The proposal team will be notified of the new outcome, and the change is recorded under your name in the workflow history.`}
+                confirmLabel="Apply Correction"
+                confirmVariant="danger"
+                onConfirm={applyCorrection}
+                onCancel={() => setConfirmOpen(false)}
+            />
+        </div>
+    );
+}
+
+function ReviewResultsTab({ proposalId, isVisible, isStaff, proposalStatus, onDecisionChanged }) {
     const [results, setResults] = useState(null);
     const [loading, setLoading] = useState(true);
     const reviewsReleased = REVIEW_VISIBLE_STATUSES.includes(proposalStatus);
@@ -1209,7 +1682,7 @@ function ReviewResultsTab({ proposalId, isVisible, isStaff, proposalStatus }) {
                 )}
             </div>
 
-            {isStaff && <RecalculatePanel proposalId={proposalId} proposalStatus={proposalStatus} />}
+            {isStaff && <RecalculatePanel proposalId={proposalId} proposalStatus={proposalStatus} onDecisionChanged={onDecisionChanged} />}
 
             {/* Per-review cards (anonymized) */}
             {reviews.length > 0 && (
@@ -1420,7 +1893,16 @@ export default function ProposalShow() {
     const [appeal, setAppeal] = useState(null);
     const [showAppealModal, setShowAppealModal] = useState(false);
     const [approvalReports, setApprovalReports] = useState([]);
-    const [reviewingReportId, setReviewingReportId] = useState(null);
+    const [resolvingReport, setResolvingReport] = useState(null);
+    const [withdrawingReportId, setWithdrawingReportId] = useState(null);
+    const [confirmWithdrawReport, setConfirmWithdrawReport] = useState(null);
+    const [extension, setExtension] = useState(null);
+    const [showExtensionModal, setShowExtensionModal] = useState(false);
+    const [showClearanceModal, setShowClearanceModal] = useState(false);
+    const [budgetRevision, setBudgetRevision] = useState(null);
+    const [showBudgetRevisionModal, setShowBudgetRevisionModal] = useState(false);
+    const [noCostExtension, setNoCostExtension] = useState(null);
+    const [showNoCostExtensionModal, setShowNoCostExtensionModal] = useState(false);
 
     const isAdmin    = hasAnyRole(['super_admin', 'admin', 'central_officer']);
     const isOfficer  = hasAnyRole(['college_officer', 'research_officer', 'community_officer', 'technology_officer']);
@@ -1443,23 +1925,38 @@ export default function ProposalShow() {
         get(`/proposals/${id}/appeal`).then(r => setAppeal(r.data)).catch(() => {});
     };
 
+    const loadExtension = () => {
+        get(`/proposals/${id}/deadline-extension`).then(r => setExtension(r.data)).catch(() => {});
+    };
+
+    const loadBudgetRevision = () => {
+        get(`/proposals/${id}/budget-revision`).then(r => setBudgetRevision(r.data)).catch(() => {});
+    };
+
+    const loadNoCostExtension = () => {
+        get(`/proposals/${id}/no-cost-extension`).then(r => setNoCostExtension(r.data)).catch(() => {});
+    };
+
     const loadApprovalReports = () => {
         if (!canReportMistakenApproval && !canReviewApprovalReports) return;
         get(`/proposals/${id}/approval-reports`).then(r => setApprovalReports(r.data ?? [])).catch(() => {});
     };
 
-    useEffect(() => { load(); loadAppeal(); loadApprovalReports(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+    useEffect(() => { load(); loadAppeal(); loadExtension(); loadBudgetRevision(); loadNoCostExtension(); loadApprovalReports(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const markReportReviewed = async (reportId) => {
-        setReviewingReportId(reportId);
+    const withdrawReport = async () => {
+        const reportId = confirmWithdrawReport;
+        setConfirmWithdrawReport(null);
+        setWithdrawingReportId(reportId);
         try {
-            await post(`/approval-reports/${reportId}/review`, {});
-            toast.success('Report marked reviewed.');
+            const res = await post(`/approval-reports/${reportId}/withdraw`, {});
+            toast.success(res.message ?? 'Report cancelled.');
             loadApprovalReports();
+            load();
         } catch (e) {
-            toast.error(e.response?.data?.message ?? 'Could not mark report reviewed.');
+            toast.error(e.response?.data?.message ?? 'Could not cancel the report.');
         }
-        setReviewingReportId(null);
+        setWithdrawingReportId(null);
     };
 
     const handleAction = (action) => { setDialog(action); setReason(''); };
@@ -1484,9 +1981,12 @@ export default function ProposalShow() {
                 await post(`/proposals/${id}/blind-review/reject`, { reason });
                 toast.error('Proposal rejected and removed from blind review.');
             } else if (dialog === 'report_mistaken_approval') {
-                await post(`/proposals/${id}/approval-reports`, { reason });
-                toast.success('Reported. Central office and the category officer have been notified.');
+                const res = await post(`/proposals/${id}/approval-reports`, { reason });
+                toast.success(res?.message || 'Reported. Central office and the category officer have been notified.');
                 loadApprovalReports();
+            } else if (dialog === 'reopen') {
+                const res = await post(`/proposals/${id}/reopen`, { reason });
+                toast.success(res?.message || 'Proposal reopened for reconsideration.');
             } else {
                 await post(`/proposals/${id}/validation/${dialog}`, { reason });
                 if (dialog === 'approve') toast.success('Proposal approved for review.');
@@ -1529,6 +2029,15 @@ export default function ProposalShow() {
     const rejectionEntries = history.filter(h => h.to_stage === 'rejected');
     const rejectedVia = rejectionEntries.length ? rejectionEntries[rejectionEntries.length - 1].action : null;
     const canRequestReconsideration = proposal.status === 'rejected' && rejectedVia === 'central_reject';
+
+    // Only surface the extension flow once the deadline is actually a concern (passed,
+    // or within 2 weeks) — no need to clutter the page for a proposal with months left.
+    // Once a request exists, keep showing its status regardless of the deadline math.
+    const callEndDate = proposal.proposal_call?.end_date ? new Date(proposal.proposal_call.end_date) : null;
+    const deadlineIsPressing = callEndDate && (callEndDate - new Date()) < 14 * 86400000;
+    const isOwnDraft = proposal.status === 'draft' && user?.id === proposal.pi_user_id;
+    const showExtensionSection = isOwnDraft && (deadlineIsPressing || !!extension);
+    const canRequestExtension = isOwnDraft && (!extension || extension.status !== 'pending');
 
     return (
         <AppLayout breadcrumb={`Proposals / ${proposal.tracker_number ?? 'Draft'}`}>
@@ -1597,6 +2106,113 @@ export default function ProposalShow() {
                             )}
                         </div>
                     )}
+                    {proposal.status === 'accepted' && (
+                        <div className="mt-4 flex items-start gap-3 rounded-xl border border-sky-200 bg-gradient-to-r from-sky-50 to-white px-4 py-3.5">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-700">
+                                <ClipboardList size={18} />
+                            </div>
+                            <div className="min-w-0">
+                                <p className="text-sm font-semibold text-sky-900">In Central Evaluation</p>
+                                <p className="mt-0.5 text-sm leading-relaxed text-sky-800/80">
+                                    This proposal has passed both the Blind Review and Open Defence phases and is now with the
+                                    Central Evaluation Committee. A separate notification will follow once the final funding
+                                    decision has been made.
+                                </p>
+                            </div>
+                        </div>
+                    )}
+                    {/* Deadline extension section */}
+                    {showExtensionSection && (
+                        <div className="mt-4">
+                            {extension ? (
+                                <div className={`rounded-lg border px-4 py-3 ${extension.status === 'pending' ? 'bg-amber-50 border-amber-200' : extension.status === 'approved' ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'}`}>
+                                    <p className={`text-sm font-semibold mb-1 flex items-center gap-1.5 ${extension.status === 'pending' ? 'text-amber-800' : extension.status === 'approved' ? 'text-green-800' : 'text-gray-700'}`}>
+                                        <CalendarClock size={14} />
+                                        Deadline Extension {extension.status === 'pending' ? 'Pending Review' : extension.status === 'approved' ? 'Approved' : 'Denied'}
+                                    </p>
+                                    {extension.status === 'approved' && extension.granted_until && (
+                                        <p className="text-sm text-gray-700">You may now submit until <strong>{formatDate(extension.granted_until)}</strong>.</p>
+                                    )}
+                                    {extension.resolution_notes && <p className="text-sm text-gray-600 mt-1">{extension.resolution_notes}</p>}
+                                    {canRequestExtension && extension.status !== 'pending' && (
+                                        <div className="flex justify-end mt-2">
+                                            <button
+                                                onClick={() => setShowExtensionModal(true)}
+                                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                                            >
+                                                <CalendarClock size={14} /> Request Another Extension
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            ) : (
+                                <div className="flex items-center justify-between gap-3 rounded-lg bg-blue-50 border border-blue-200 px-4 py-3">
+                                    <p className="text-sm text-blue-800">
+                                        {callEndDate && callEndDate < new Date()
+                                            ? 'This call\'s deadline has passed. Request more time to finish and submit your draft.'
+                                            : 'Running out of time? Request more time to finish this draft.'}
+                                    </p>
+                                    <button
+                                        onClick={() => setShowExtensionModal(true)}
+                                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shrink-0"
+                                    >
+                                        <CalendarClock size={14} /> Request Extension
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Ethical clearance section */}
+                    {proposal.ethical_clearance_required && (
+                        <div className="mt-4">
+                            {(() => {
+                                const ecStatus = proposal.ethical_clearance_status;
+                                const isOwner = user?.id === proposal.pi_user_id;
+                                const canSubmit = isOwner && ecStatus !== 'submitted' && ecStatus !== 'approved';
+                                const styles = {
+                                    pending: 'bg-gray-50 border-gray-200 text-gray-700',
+                                    submitted: 'bg-amber-50 border-amber-200 text-amber-800',
+                                    approved: 'bg-green-50 border-green-200 text-green-800',
+                                    rejected: 'bg-red-50 border-red-200 text-red-800',
+                                    expired: 'bg-red-50 border-red-200 text-red-800',
+                                };
+                                const labels = {
+                                    pending: 'Ethical Clearance Required — Not Yet Submitted',
+                                    submitted: 'Ethical Clearance Awaiting Verification',
+                                    approved: 'Ethical Clearance Approved',
+                                    rejected: 'Ethical Clearance Returned for Correction',
+                                    expired: 'Ethical Clearance Expired',
+                                };
+                                return (
+                                    <div className={`rounded-lg border px-4 py-3 ${styles[ecStatus] ?? styles.pending}`}>
+                                        <div className="flex flex-wrap items-center justify-between gap-3">
+                                            <div>
+                                                <p className="text-sm font-semibold flex items-center gap-1.5">
+                                                    <CalendarClock size={14} /> {labels[ecStatus] ?? labels.pending}
+                                                </p>
+                                                {ecStatus === 'approved' && proposal.ethical_clearance_expiry && (
+                                                    <p className="text-sm mt-1">Valid until <strong>{formatDate(proposal.ethical_clearance_expiry)}</strong></p>
+                                                )}
+                                                {ecStatus === 'rejected' && proposal.ethical_clearance_rejection_reason && (
+                                                    <p className="text-sm mt-1">{proposal.ethical_clearance_rejection_reason}</p>
+                                                )}
+                                            </div>
+                                            {canSubmit && (
+                                                <button
+                                                    onClick={() => setShowClearanceModal(true)}
+                                                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shrink-0"
+                                                >
+                                                    {ecStatus === 'rejected' || ecStatus === 'expired' ? 'Resubmit' : 'Submit for Verification'}
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+                        </div>
+                    )}
+
                     {proposal.status === 'funded' && proposal.award && (
                         <div className="mt-4 rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3">
                             <div className="flex flex-wrap items-center gap-6">
@@ -1617,6 +2233,99 @@ export default function ProposalShow() {
                         <ContractUploadSection proposal={proposal} onUploaded={() => router.reload({ only: ['proposal'] })} />
                     )}
 
+                    {/* Budget revision section — PI only, funded/midterm proposals */}
+                    {hasSubFeature('workflow.budget_revision') && ['funded', 'midterm_evaluation'].includes(proposal.status) && user?.id === proposal.pi_user_id && (
+                        <div className="mt-4">
+                            {(() => {
+                                const brStatus = budgetRevision?.status;
+                                const canRequest = !brStatus || brStatus !== 'pending';
+                                const styles = {
+                                    pending: 'bg-amber-50 border-amber-200 text-amber-800',
+                                    approved: 'bg-green-50 border-green-200 text-green-800',
+                                    denied: 'bg-red-50 border-red-200 text-red-800',
+                                };
+                                const labels = {
+                                    pending: 'Budget Revision Awaiting Review',
+                                    approved: 'Budget Revision Approved',
+                                    denied: 'Budget Revision Request Denied',
+                                };
+                                return (
+                                    <div className={`rounded-lg border px-4 py-3 ${brStatus ? styles[brStatus] : 'bg-gray-50 border-gray-200 text-gray-700'}`}>
+                                        <div className="flex flex-wrap items-center justify-between gap-3">
+                                            <div>
+                                                <p className="text-sm font-semibold flex items-center gap-1.5">
+                                                    <CalendarClock size={14} /> {brStatus ? labels[brStatus] : 'Need to change your approved budget?'}
+                                                </p>
+                                                {brStatus === 'denied' && budgetRevision?.resolution_notes && (
+                                                    <p className="text-sm mt-1">{budgetRevision.resolution_notes}</p>
+                                                )}
+                                                {!brStatus && (
+                                                    <p className="text-sm mt-1">Request a revision to your budget line items — an officer will review it.</p>
+                                                )}
+                                            </div>
+                                            {canRequest && (
+                                                <button
+                                                    onClick={() => setShowBudgetRevisionModal(true)}
+                                                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shrink-0"
+                                                >
+                                                    Request Budget Revision
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+                        </div>
+                    )}
+
+                    {/* No-cost extension section — PI only, funded/midterm proposals */}
+                    {hasSubFeature('workflow.no_cost_extension') && ['funded', 'midterm_evaluation'].includes(proposal.status) && user?.id === proposal.pi_user_id && (
+                        <div className="mt-4">
+                            {(() => {
+                                const nceStatus = noCostExtension?.status;
+                                const canRequest = !nceStatus || nceStatus !== 'pending';
+                                const styles = {
+                                    pending: 'bg-amber-50 border-amber-200 text-amber-800',
+                                    approved: 'bg-green-50 border-green-200 text-green-800',
+                                    denied: 'bg-red-50 border-red-200 text-red-800',
+                                };
+                                const labels = {
+                                    pending: 'No-Cost Extension Awaiting Review',
+                                    approved: 'No-Cost Extension Approved',
+                                    denied: 'No-Cost Extension Request Denied',
+                                };
+                                return (
+                                    <div className={`rounded-lg border px-4 py-3 ${nceStatus ? styles[nceStatus] : 'bg-gray-50 border-gray-200 text-gray-700'}`}>
+                                        <div className="flex flex-wrap items-center justify-between gap-3">
+                                            <div>
+                                                <p className="text-sm font-semibold flex items-center gap-1.5">
+                                                    <CalendarClock size={14} /> {nceStatus ? labels[nceStatus] : 'Need more time to complete this project?'}
+                                                </p>
+                                                {nceStatus === 'approved' && (
+                                                    <p className="text-sm mt-1">Project duration extended to <strong>{noCostExtension.requested_duration_months} months</strong>.</p>
+                                                )}
+                                                {nceStatus === 'denied' && noCostExtension?.resolution_notes && (
+                                                    <p className="text-sm mt-1">{noCostExtension.resolution_notes}</p>
+                                                )}
+                                                {!nceStatus && (
+                                                    <p className="text-sm mt-1">Request more time to complete the project at no additional cost — an officer will review it.</p>
+                                                )}
+                                            </div>
+                                            {canRequest && (
+                                                <button
+                                                    onClick={() => setShowNoCostExtensionModal(true)}
+                                                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shrink-0"
+                                                >
+                                                    Request No-Cost Extension
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+                        </div>
+                    )}
+
                     {/* Approval reports — college officer flagged this as possibly mistakenly approved */}
                     {approvalReports.length > 0 && (canReviewApprovalReports || canReportMistakenApproval) && (
                         <div className="mt-4 space-y-2">
@@ -1627,7 +2336,13 @@ export default function ProposalShow() {
                                             <AlertCircle size={16} className={r.status === 'open' ? 'text-amber-600 mt-0.5 shrink-0' : 'text-gray-400 mt-0.5 shrink-0'} />
                                             <div>
                                                 <p className={`text-sm font-semibold ${r.status === 'open' ? 'text-amber-800' : 'text-gray-600'}`}>
-                                                    {r.status === 'open' ? 'Possible mistaken approval reported' : 'Approval report reviewed'}
+                                                    {r.status === 'open'
+                                                        ? 'Possible mistaken approval reported'
+                                                        : r.status === 'withdrawn'
+                                                            ? 'Approval report cancelled'
+                                                            : r.outcome === 'approval_revoked'
+                                                                ? 'Mistaken approval confirmed — proposal rejected'
+                                                                : r.outcome === 'approval_stands' ? 'Approval report reviewed — approval stands' : 'Approval report reviewed'}
                                                 </p>
                                                 <p className="text-xs text-gray-500 mt-0.5">
                                                     By {r.reported_by?.name ?? 'a college officer'} · {formatDate(r.created_at)}
@@ -1639,15 +2354,28 @@ export default function ProposalShow() {
                                                         {r.resolution_notes && <> — {r.resolution_notes}</>}
                                                     </p>
                                                 )}
+                                                {r.status === 'withdrawn' && (
+                                                    <p className="text-xs text-gray-500 mt-1.5">
+                                                        Cancelled by {r.reported_by?.name ?? 'the reporting officer'} · {formatDate(r.withdrawn_at)}
+                                                    </p>
+                                                )}
                                             </div>
                                         </div>
+                                        {r.status === 'open' && r.reported_by?.id === user?.id && proposal.status === 'validated' && (
+                                            <button
+                                                onClick={() => setConfirmWithdrawReport(r.id)}
+                                                disabled={withdrawingReportId === r.id}
+                                                className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-60"
+                                            >
+                                                <XCircle size={13} /> {withdrawingReportId === r.id ? 'Cancelling…' : 'Cancel Report'}
+                                            </button>
+                                        )}
                                         {r.status === 'open' && canReviewApprovalReports && (
                                             <button
-                                                onClick={() => markReportReviewed(r.id)}
-                                                disabled={reviewingReportId === r.id}
-                                                className="shrink-0 px-3 py-1.5 text-xs font-semibold bg-white border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-100 disabled:opacity-60"
+                                                onClick={() => setResolvingReport(r)}
+                                                className="shrink-0 px-3 py-1.5 text-xs font-semibold bg-white border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-100"
                                             >
-                                                {reviewingReportId === r.id ? 'Marking…' : 'Mark Reviewed'}
+                                                Resolve Report
                                             </button>
                                         )}
                                     </div>
@@ -1655,6 +2383,26 @@ export default function ProposalShow() {
                             ))}
                         </div>
                     )}
+
+                    {resolvingReport && (
+                        <ResolveApprovalReportModal
+                            report={resolvingReport}
+                            proposal={proposal}
+                            onClose={() => setResolvingReport(null)}
+                            onSaved={() => { setResolvingReport(null); loadApprovalReports(); load(); }}
+                        />
+                    )}
+
+                    <ConfirmDialog
+                        open={!!confirmWithdrawReport}
+                        title="Cancel this report?"
+                        description="Your mistaken-approval report will be withdrawn and the proposal will return to the stage it was at before you reported it. The central office and category officer will be told no action is needed."
+                        confirmLabel="Cancel Report"
+                        cancelLabel="Keep Report"
+                        confirmVariant="danger"
+                        onConfirm={withdrawReport}
+                        onCancel={() => setConfirmWithdrawReport(null)}
+                    />
 
                     {/* Workflow actions */}
                     {(isAdmin || canRejectBlindReview || canReportMistakenApproval) && (
@@ -1714,7 +2462,7 @@ export default function ProposalShow() {
                                         ['Call', proposal.proposalCall?.title],
                                         ['Academic Year', proposal.academic_year],
                                         ['Category', getCategoryLabel(proposal.category)],
-                                        ['Status', proposal.status?.replace(/_/g, ' ')],
+                                        ['Status', getStatusLabel(proposal.status)],
                                     ].map(([label, val]) => (
                                         <div key={label} className="flex gap-2">
                                             <span className="w-28 shrink-0 text-gray-500">{label}:</span>
@@ -1846,8 +2594,10 @@ export default function ProposalShow() {
                                 documents={documents}
                                 userId={user?.id}
                                 isPI={isProposalMember}
+                                isDraft={proposal.status === 'draft'}
                                 hideIdentity={proposal.members_hidden}
                                 onRefresh={load}
+                                showEthicalClearanceOption={proposal.ethical_clearance_required}
                             />
                         )}
 
@@ -1871,6 +2621,7 @@ export default function ProposalShow() {
                                 isVisible={isProposalMember || isAdmin || isOfficer}
                                 isStaff={isAdmin || isOfficer}
                                 proposalStatus={proposal.status}
+                                onDecisionChanged={load}
                             />
                         )}
 
@@ -1895,8 +2646,14 @@ export default function ProposalShow() {
                         <h2 className="text-base font-semibold mb-3">
                             {dialog === 'reject_blind_review' ? 'Reject From Blind Review'
                                 : dialog === 'report_mistaken_approval' ? 'Report Mistaken Approval'
+                                : dialog === 'reopen' ? 'Reopen for Reconsideration'
                                 : <span className="capitalize">{dialog} Proposal</span>}
                         </h2>
+                        {dialog === 'reopen' && (
+                            <p className="text-xs text-gray-500 mb-3">
+                                This returns the proposal to whichever stage it was rejected from, so it can be re-decided — e.g. after correcting threshold settings. Already-submitted review scores are preserved.
+                            </p>
+                        )}
                         <textarea value={reason} onChange={(e) => setReason(e.target.value)}
                             placeholder="Reason (required)…" rows={3}
                             className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 mb-4 focus:outline-none resize-none focus:ring-2 focus:ring-blue-500" />
@@ -1907,6 +2664,7 @@ export default function ProposalShow() {
                                 className={`px-4 py-2 text-sm font-medium rounded-lg text-white disabled:opacity-60 ${
                                     dialog === 'reject' || dialog === 'reject_blind_review' ? 'bg-red-600 hover:bg-red-700'
                                         : dialog === 'report_mistaken_approval' ? 'bg-amber-500 hover:bg-amber-600'
+                                        : dialog === 'reopen' ? 'bg-indigo-600 hover:bg-indigo-700'
                                         : 'bg-yellow-600 hover:bg-yellow-700'
                                 }`}>
                                 {submitting ? 'Processing…' : 'Confirm'}
@@ -1940,6 +2698,34 @@ export default function ProposalShow() {
                     proposal={proposal}
                     onSave={() => { setShowAppealModal(false); loadAppeal(); }}
                     onClose={() => setShowAppealModal(false)}
+                />
+            )}
+            {showExtensionModal && (
+                <ExtensionModal
+                    proposal={proposal}
+                    onSave={() => { setShowExtensionModal(false); loadExtension(); }}
+                    onClose={() => setShowExtensionModal(false)}
+                />
+            )}
+            {showClearanceModal && (
+                <EthicalClearanceModal
+                    proposal={proposal}
+                    onSave={() => { setShowClearanceModal(false); load(); }}
+                    onClose={() => setShowClearanceModal(false)}
+                />
+            )}
+            {showBudgetRevisionModal && (
+                <BudgetRevisionModal
+                    proposal={proposal}
+                    onSave={() => { setShowBudgetRevisionModal(false); loadBudgetRevision(); }}
+                    onClose={() => setShowBudgetRevisionModal(false)}
+                />
+            )}
+            {showNoCostExtensionModal && (
+                <NoCostExtensionModal
+                    proposal={proposal}
+                    onSave={() => { setShowNoCostExtensionModal(false); loadNoCostExtension(); }}
+                    onClose={() => setShowNoCostExtensionModal(false)}
                 />
             )}
         </AppLayout>

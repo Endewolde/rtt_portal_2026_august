@@ -7,6 +7,7 @@ use App\Models\BudgetSettlement;
 use App\Models\CompletionWorkshop;
 use App\Models\MidtermEvaluation;
 use App\Models\Proposal;
+use App\Models\ProposalClosureChecklist;
 use App\Models\RepositoryRecord;
 use App\Models\ResearchOutput;
 use App\Models\User;
@@ -15,7 +16,8 @@ class CompletionWorkshopService
 {
     public function __construct(
         private WorkflowService $workflowService,
-        private NotificationService $notificationService
+        private NotificationService $notificationService,
+        private FeatureService $featureService
     ) {}
 
     /**
@@ -98,6 +100,18 @@ class CompletionWorkshopService
         float $finalScore,
         User $approvedBy
     ): Proposal {
+        // No actor-based bypass here — this is a governance gate on the workflow
+        // itself, not a UI visibility check, so it applies uniformly once enabled.
+        if ($this->featureService->hasSubFeature('workflow.closure_checklist')) {
+            $checklist = ProposalClosureChecklist::where('proposal_id', $workshop->proposal_id)->first();
+
+            if (! $checklist?->isComplete()) {
+                throw new \Exception(
+                    'The project closure checklist must be fully confirmed before this workshop can be finalized.'
+                );
+            }
+        }
+
         $workshop->update([
             'final_score' => $finalScore,
             'status' => 'completed',

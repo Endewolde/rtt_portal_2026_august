@@ -111,6 +111,8 @@ const KEY_LABELS = {
     max_reviewer_active_assignments: 'Max Active Reviews per Reviewer',
     overdue_reminder_interval_days: 'Overdue Reminder Repeat Interval (days)',
     ongoing_midterm_overdue_days: 'Ongoing Proposals — Midterm Overdue After (days)',
+    max_active_pi_proposals: 'Max Active Proposals as PI (0 = unlimited)',
+    max_active_coinvestigator_proposals: 'Max Active Proposals as Co-Investigator (0 = unlimited)',
     audit_log_retention_days: 'Audit Log Retention (days)', activity_logging: 'Activity Logging',
     error_logging: 'Error Logging', login_history_enabled: 'Login History',
     backup_schedule: 'Backup Schedule', backup_time: 'Backup Time 1', backup_time_2: 'Backup Time 2', backup_time_3: 'Backup Time 3', backup_retention_days: 'Backup Retention (days)',
@@ -219,6 +221,8 @@ const NUMBER_RANGES = {
     max_reviewer_active_assignments: { min: 1, max: 50, step: 1 },
     overdue_reminder_interval_days: { min: 1, max: 30, step: 1 },
     ongoing_midterm_overdue_days: { min: 7, max: 365, step: 1 },
+    max_active_pi_proposals: { min: 0, max: 50, step: 1 },
+    max_active_coinvestigator_proposals: { min: 0, max: 50, step: 1 },
 }
 
 // Keys that are internal / legacy and should not appear in the UI
@@ -2128,8 +2132,17 @@ export default function SettingsPage() {
 
     const handleSave = async (key, val) => {
         try {
-            await api.put(`/settings/app/${key}`, { value: val ?? values[key] })
+            const res = await api.put(`/settings/app/${key}`, { value: val ?? values[key] })
             success(`"${label(key)}" saved.`)
+
+            const corrected = res.data?.meta?.decisions_corrected ?? []
+            const needsReview = res.data?.meta?.decisions_needing_review ?? []
+            if (corrected.length > 0) {
+                success(`${corrected.length} proposal${corrected.length !== 1 ? 's' : ''} recalculated and status changed under the new threshold: ${corrected.map(c => `${c.tracker_number} (${c.change})`).join(', ')}.`)
+            }
+            if (needsReview.length > 0) {
+                error(`${needsReview.length} proposal${needsReview.length !== 1 ? 's' : ''} could not be auto-corrected and need manual review: ${needsReview.map(n => n.tracker_number).join(', ')}.`, { title: 'Needs Review' })
+            }
         } catch (e) {
             error(e.response?.data?.message ?? 'Failed to save.')
         }

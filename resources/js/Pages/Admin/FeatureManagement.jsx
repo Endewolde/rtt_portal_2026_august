@@ -24,6 +24,7 @@ const MODULES = [
             { slug: 'proposals.track',            label: 'Proposal Tracker',    description: 'Public proposal status tracker' },
             { slug: 'proposals.my_proposals',     label: 'My Proposals',        description: 'PI view of their own proposals' },
             { slug: 'proposals.awarded',          label: 'Awarded Proposals',   description: 'View funded and post-award proposals' },
+            { slug: 'proposals.contracts',        label: 'Contracts',           description: 'Track and review contract submission/approval status across all funded proposals' },
             { slug: 'proposals.archive',          label: 'Completed Archive',   description: 'Browse completed and archived projects by year' },
         ],
     },
@@ -39,6 +40,7 @@ const MODULES = [
             { slug: 'evaluation.assigned_reviews',  label: 'Assigned Reviews',    description: 'Reviewer view of their assigned reviews' },
             { slug: 'evaluation.criteria',          label: 'Evaluation Criteria', description: 'Manage scoring rubrics and evaluation types' },
             { slug: 'evaluation.reviewer_workload', label: 'Reviewer Workload',   description: 'Monitor and balance reviewer assignment load' },
+            { slug: 'evaluation.coi_conflicts',     label: 'COI Conflicts',       description: 'Officer dashboard for reported conflicts of interest awaiting reviewer reassignment' },
         ],
     },
     {

@@ -12,10 +12,10 @@ class ProposalApprovalReport extends Model
 
     protected $fillable = [
         'proposal_id', 'reported_by', 'reason',
-        'status', 'reviewed_by', 'reviewed_at', 'resolution_notes',
+        'status', 'outcome', 'returned_from_status', 'reviewed_by', 'reviewed_at', 'withdrawn_at', 'resolution_notes',
     ];
 
-    protected $casts = ['reviewed_at' => 'datetime'];
+    protected $casts = ['reviewed_at' => 'datetime', 'withdrawn_at' => 'datetime'];
 
     public function proposal(): BelongsTo
     {

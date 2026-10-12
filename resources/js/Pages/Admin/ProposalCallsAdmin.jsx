@@ -329,7 +329,7 @@ function ProposalCallModal({ initial, defaultAcademicYear, onClose, onSaved }) {
                     </div>
 
                     <Field label="Max Proposals per PI" icon={Users} error={errors.max_proposals_per_pi?.[0]}
-                        hint="Leave blank for no limit">
+                        hint="How many proposals one PI may submit to this call specifically. Leave blank for no limit — separate from the systemwide active-proposal cap in Settings → Review Thresholds.">
                         <input type="number" min="1" value={form.max_proposals_per_pi}
                             onChange={(e) => set('max_proposals_per_pi', e.target.value)}
                             placeholder="e.g. 2"

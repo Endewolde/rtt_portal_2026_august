@@ -17,9 +17,34 @@ class SendProposalWorkflowNotifications
 
         $fromStage = $event->fromStage ?? null;
 
+        // Reopening a rejected proposal can land on any prior stage depending on where
+        // it was rejected from — none of the toStage handlers below describe what
+        // actually happened ("reconsideration", not a fresh pass/entry), so this gets
+        // its own accurate notification instead of falling into the generic match.
+        if ($event->action === 'reopen') {
+            $this->onReopened($proposal);
+
+            return;
+        }
+
+        // A withdrawn mistaken-approval report just undoes a silent pull-back to
+        // validated — the proposal resumes where it was, so there is nothing new to
+        // tell the PI or the officers.
+        if (in_array($event->action, ['withdraw_report_resume_review', 'withdraw_report_restore_passed'], true)) {
+            return;
+        }
+
         match ($event->toStage) {
             'submitted' => $this->onSubmitted($proposal),
-            'validated' => $this->onValidated($proposal),
+            // Only the genuine first-time validation (submitted -> validated) is a
+            // "you passed" moment worth notifying the PI about. Landing on validated
+            // from under_blind_review/blind_review_passed is always a step BACK —
+            // reviewers unassigned, or a mistaken-approval report pulled it back for
+            // the officer to reconsider — and sending "passed initial validation" in
+            // that case would be actively misleading.
+            'validated' => $fromStage === 'submitted'
+                ? $this->onValidated($proposal)
+                : null,
             'accepted' => $this->onAccepted($proposal),
             'rejected' => $fromStage === 'funded'
                 ? $this->onFundingRevoked($proposal)
@@ -96,9 +121,15 @@ class SendProposalWorkflowNotifications
         }
     }
 
+    /**
+     * Passing open defence lands the proposal at `accepted`, which is the Central
+     * Evaluation phase — it is NOT yet approved or funded, so only the proposal team
+     * is told it has advanced, and the wording must never imply a final decision.
+     */
     private function onAccepted(Proposal $proposal): void
     {
         $data = [
+            'proposal_id' => $proposal->id,
             'tracker_number' => $proposal->tracker_number,
             'title' => $proposal->title,
             'decision' => 'central_eval_approved',
@@ -132,6 +163,20 @@ class SendProposalWorkflowNotifications
             'title' => $proposal->title,
             'decision' => $decision,
             'reason' => $decision === 'rejected' ? ($proposal->rejection_reason ?? null) : null,
+        ];
+
+        foreach ($this->allRecipients($proposal) as $user) {
+            $this->notify($user, 'decision_result', $data, 'decision_result');
+        }
+    }
+
+    private function onReopened(Proposal $proposal): void
+    {
+        $data = [
+            'tracker_number' => $proposal->tracker_number,
+            'title' => $proposal->title,
+            'decision' => 'reopened',
+            'reason' => 'Your proposal\'s earlier rejection is being reconsidered. It has been returned to the review stage it was rejected from — you\'ll be notified again once a new decision is made.',
         ];
 
         foreach ($this->allRecipients($proposal) as $user) {

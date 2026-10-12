@@ -2,18 +2,19 @@ import { useState, useEffect, useMemo } from 'react';
 import {
     Clock, AlertCircle, CheckCircle2, ChevronRight, FileText,
     Users, DollarSign, Upload, Eye, Send, Megaphone, ArrowLeft,
-    Building2, Info, Save, Pencil,
+    Building2, Info, Save, Pencil, LayoutTemplate, X,
 } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import TrackerNumberDisplay from '../../Components/TrackerNumberDisplay';
 import Step3CoInvestigators from './Steps/Step3CoInvestigators';
 import Step5Documents, { DOC_TYPES } from './Steps/Step5Documents';
-import { post, get } from '../../lib/api';
+import { post, get, del } from '../../lib/api';
 import api from '../../lib/api';
 import { useAuth } from '../../hooks/useAuth';
 import { useFeature } from '../../hooks/useFeature';
 import { useToast } from '../../Components/Toast';
 import RoleRestrictedModal from '../../Components/RoleRestrictedModal';
+import ProposalLimitModal from '../../Components/ProposalLimitModal';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -983,12 +984,14 @@ function Step7Submit({ proposalId, stepData, budgetItems, onSuccess, onGoToStep,
 export default function ProposalCreate() {
     const { user } = useAuth();
     const toast    = useToast();
+    const { hasSubFeature } = useFeature();
 
     const [phase, setPhase]           = useState('select_call');
     const [selectedCall, setSelectedCall] = useState(null);
     const [starting, setStarting]     = useState(false);
     const [calls, setCalls]           = useState([]);
     const [callsLoading, setCallsLoading] = useState(true);
+    const [limitModal, setLimitModal] = useState(null);
 
     const [step, setStep]             = useState(0);
     const [proposalId, setProposalId] = useState(null);
@@ -997,6 +1000,10 @@ export default function ProposalCreate() {
     const [completedSteps, setCompletedSteps] = useState(new Set());
     const [saving, setSaving]         = useState(false);
     const [submitted, setSubmitted]   = useState(false);
+
+    const [templates, setTemplates]     = useState([]);
+    const [selectedTemplate, setSelectedTemplate] = useState(null);
+    const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false);
     const [returnReason, setReturnReason] = useState(null);
 
     const [step1Errors, setStep1Errors]       = useState({});
@@ -1037,6 +1044,7 @@ export default function ProposalCreate() {
                 const coInvestigators = (p.members ?? [])
                     .filter(m => m.role === 'co_investigator' && m.status === 'active')
                     .map(m => ({
+                        id:                      m.id,
                         user_id:                 m.user_id,
                         name:                    m.user?.name ?? '',
                         email:                   m.user?.email ?? '',
@@ -1114,6 +1122,46 @@ export default function ProposalCreate() {
         }
     }, [calls]);
 
+    // Load the PI's saved templates for the selected call's category
+    useEffect(() => {
+        setSelectedTemplate(null);
+        if (!selectedCall || !hasSubFeature('workflow.proposal_templates')) { setTemplates([]); return; }
+        get('/proposal-templates', { category: selectedCall.category })
+            .then(r => setTemplates(r.data ?? []))
+            .catch(() => setTemplates([]));
+    }, [selectedCall]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const deleteTemplate = async (id) => {
+        try {
+            await del(`/proposal-templates/${id}`);
+            setTemplates(t => t.filter(tpl => tpl.id !== id));
+            if (selectedTemplate?.id === id) setSelectedTemplate(null);
+        } catch {
+            toast.error('Failed to delete template.');
+        }
+    };
+
+    const saveAsTemplate = async (name) => {
+        try {
+            const d = stepData[0] ?? {};
+            const res = await post('/proposal-templates', {
+                name,
+                category: selectedCall?.category ?? 'research',
+                title: d.title,
+                abstract: d.abstract,
+                keywords: d.keywords,
+                focus_area: d.focus_area,
+                duration_months: d.duration_months ? Number(d.duration_months) : null,
+                research_type: d.research_type,
+                budget_items: budgetItems.filter(i => i.category || i.description || i.amount),
+            });
+            toast.success(res?.message || 'Template saved.');
+            setShowSaveTemplateModal(false);
+        } catch (e) {
+            toast.error(e.response?.data?.message ?? 'Failed to save template.');
+        }
+    };
+
     const handleStartApplication = async () => {
         if (!selectedCall || starting) return;
         setStarting(true);
@@ -1125,10 +1173,26 @@ export default function ProposalCreate() {
             const id = res.data?.id ?? res.id;
             if (!id) throw new Error('Draft creation failed.');
             setProposalId(id);
+            if (selectedTemplate) {
+                const t = selectedTemplate.template_data ?? {};
+                setStepData(prev => prev.map((d, i) => i === 0 ? {
+                    title: t.title ?? '',
+                    abstract: t.abstract ?? '',
+                    keywords: t.keywords ?? '',
+                    focus_area: t.focus_area ?? '',
+                    duration_months: t.duration_months ?? '',
+                    research_type: t.research_type ?? '',
+                } : d));
+                if (t.budget_items?.length) setBudgetItems(t.budget_items);
+            }
             setPhase('wizard');
             setStep(0);
         } catch (e) {
-            toast.error(e.response?.data?.message ?? 'Failed to start application.', { title: 'Error' });
+            if (e.response?.status === 422) {
+                setLimitModal(e.response?.data?.message ?? 'Unable to start a new application right now.');
+            } else {
+                toast.error(e.response?.data?.message ?? 'Failed to start application.', { title: 'Error' });
+            }
         }
         setStarting(false);
     };
@@ -1367,6 +1431,50 @@ export default function ProposalCreate() {
                             })}
                         </div>
                     )}
+
+                    {/* Start from a saved template */}
+                    {selectedCall && templates.length > 0 && (
+                        <div className="mt-6">
+                            <div className="flex items-center gap-2 mb-3">
+                                <LayoutTemplate size={15} className="text-gray-400" />
+                                <p className="text-sm font-semibold text-gray-700">Start from a saved template</p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {templates.map(t => {
+                                    const active = selectedTemplate?.id === t.id;
+                                    return (
+                                        <div
+                                            key={t.id}
+                                            className={`flex items-center gap-2 pl-3 pr-1.5 py-1.5 rounded-full border-2 text-sm transition-all ${
+                                                active ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'
+                                            }`}
+                                        >
+                                            <button
+                                                type="button"
+                                                onClick={() => setSelectedTemplate(active ? null : t)}
+                                                className="font-medium"
+                                            >
+                                                {t.name}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => deleteTemplate(t.id)}
+                                                className="p-1 text-gray-400 hover:text-red-500 rounded-full hover:bg-red-50"
+                                                title="Delete template"
+                                            >
+                                                <X size={12} />
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                            {selectedTemplate && (
+                                <p className="text-xs text-blue-600 mt-2">
+                                    "{selectedTemplate.name}" will pre-fill your application when you start.
+                                </p>
+                            )}
+                        </div>
+                    )}
                 </div>
 
                 {/* Sticky bottom CTA */}
@@ -1391,6 +1499,13 @@ export default function ProposalCreate() {
                         </div>
                     </div>
                 </div>
+
+                <ProposalLimitModal
+                    open={!!limitModal}
+                    onClose={() => setLimitModal(null)}
+                    message={limitModal}
+                    title="Unable to Start Application"
+                />
             </AppLayout>
         );
     }
@@ -1489,6 +1604,16 @@ export default function ProposalCreate() {
                                     >
                                         <Save size={14} /> Save as Draft
                                     </a>
+                                    {hasSubFeature('workflow.proposal_templates') && (step === 0 || step === 3) && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowSaveTemplateModal(true)}
+                                            className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium border border-gray-300 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
+                                            title="Save this content as a reusable template"
+                                        >
+                                            <LayoutTemplate size={14} /> Save as Template
+                                        </button>
+                                    )}
                                 </div>
                                 <button
                                     type="button"
@@ -1507,6 +1632,55 @@ export default function ProposalCreate() {
                     </div>
                 </div>
             </div>
+
+            {showSaveTemplateModal && (
+                <SaveTemplateModal
+                    onSave={saveAsTemplate}
+                    onClose={() => setShowSaveTemplateModal(false)}
+                />
+            )}
         </AppLayout>
+    );
+}
+
+// ─── Save Template Modal ────────────────────────────────────────────────────────
+function SaveTemplateModal({ onSave, onClose }) {
+    const [name, setName] = useState('');
+    const [saving, setSaving] = useState(false);
+
+    const submit = async () => {
+        if (!name.trim()) return;
+        setSaving(true);
+        await onSave(name.trim());
+        setSaving(false);
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+                <h2 className="text-base font-semibold text-gray-900 mb-1 flex items-center gap-2">
+                    <LayoutTemplate size={16} className="text-blue-600" /> Save as Template
+                </h2>
+                <p className="text-xs text-gray-500 mb-4">
+                    Save the title, abstract, and budget items you've entered so far as a reusable starting point for future proposals.
+                </p>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Template Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                    placeholder="e.g. Standard Community Outreach Template"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
+                    autoFocus
+                />
+                <div className="flex justify-end gap-2">
+                    <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 rounded-lg border border-gray-200 hover:bg-gray-50">Cancel</button>
+                    <button onClick={submit} disabled={saving || !name.trim()} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
+                        {saving ? 'Saving…' : 'Save Template'}
+                    </button>
+                </div>
+            </div>
+        </div>
     );
 }

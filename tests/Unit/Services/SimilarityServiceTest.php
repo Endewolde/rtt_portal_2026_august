@@ -1,10 +1,12 @@
 <?php
 
+use App\Jobs\StoreInAppNotificationJob;
 use App\Models\College;
 use App\Models\Department;
 use App\Models\NotificationPreference;
 use App\Models\Proposal;
 use App\Models\ProposalCall;
+use App\Models\ProposalDocument;
 use App\Models\User;
 use App\Services\SimilarityService;
 use Database\Seeders\RolePermissionSeeder;
@@ -24,15 +26,15 @@ beforeEach(function () {
     Queue::fake();
 
     $this->college = College::create(['name' => 'Sim College', 'code' => 'SM'.rand(10, 99)]);
-    $this->dept    = Department::create(['college_id' => $this->college->id, 'name' => 'D', 'code' => 'SD'.rand(10, 99)]);
+    $this->dept = Department::create(['college_id' => $this->college->id, 'name' => 'D', 'code' => 'SD'.rand(10, 99)]);
 
     $this->central = User::factory()->create();
     $this->central->assignRole('central_officer');
     NotificationPreference::create([
-        'user_id'          => $this->central->id,
-        'email_enabled'    => true,
+        'user_id' => $this->central->id,
+        'email_enabled' => true,
         'telegram_enabled' => false,
-        'inapp_enabled'    => true,
+        'inapp_enabled' => true,
     ]);
 
     $this->call = ProposalCall::create([
@@ -51,18 +53,33 @@ function sim_proposal(College $college, Department $dept, ProposalCall $call, ar
     $pi->assignRole('pi');
 
     return Proposal::create(array_merge([
-        'tracker_number'   => 'TRK-'.rand(100000, 999999),
+        'tracker_number' => 'TRK-'.rand(100000, 999999),
         'proposal_call_id' => $call->id,
-        'category'         => 'research',
-        'title'            => 'Default Title',
-        'abstract'         => 'Default abstract content for testing.',
-        'keywords'         => 'default test',
-        'status'           => 'submitted',
-        'pi_user_id'       => $pi->id,
-        'college_id'       => $college->id,
-        'department_id'    => $dept->id,
-        'academic_year'    => '2026',
-        'created_by'       => $pi->id,
+        'category' => 'research',
+        'title' => 'Default Title',
+        'abstract' => 'Default abstract content for testing.',
+        'keywords' => 'default test',
+        'status' => 'submitted',
+        'pi_user_id' => $pi->id,
+        'college_id' => $college->id,
+        'department_id' => $dept->id,
+        'academic_year' => '2026',
+        'created_by' => $pi->id,
+    ], $attrs));
+}
+
+function sim_document(Proposal $proposal, ?string $extractedText, array $attrs = []): ProposalDocument
+{
+    return ProposalDocument::create(array_merge([
+        'proposal_id' => $proposal->id,
+        'document_type' => 'proposal_document',
+        'is_current' => true,
+        'original_filename' => 'proposal.pdf',
+        'stored_path' => 'proposals/'.$proposal->id.'/documents/proposal.pdf',
+        'file_size' => 1024,
+        'mime_type' => 'application/pdf',
+        'extracted_text' => $extractedText,
+        'uploaded_by' => $proposal->pi_user_id,
     ], $attrs));
 }
 
@@ -90,12 +107,12 @@ test('identical text produces score of 1.0', function () {
 
 test('completely different text produces score close to 0', function () {
     $p1 = sim_proposal($this->college, $this->dept, $this->call, [
-        'title'    => 'quantum physics nuclear spectroscopy uranium isotopes reactor',
+        'title' => 'quantum physics nuclear spectroscopy uranium isotopes reactor',
         'abstract' => 'This research investigates nuclear reactor fuel cycle isotope separation',
         'keywords' => 'nuclear physics reactor',
     ]);
     sim_proposal($this->college, $this->dept, $this->call, [
-        'title'    => 'anthropological ethnographic study highland pastoral communities herders',
+        'title' => 'anthropological ethnographic study highland pastoral communities herders',
         'abstract' => 'Ethnographic fieldwork examining traditional pastoral societies nomadic herders',
         'keywords' => 'ethnography anthropology pastoral',
     ]);
@@ -152,12 +169,12 @@ test('proposals above threshold have flagged = true', function () {
 
 test('proposals below threshold have flagged = false', function () {
     $p1 = sim_proposal($this->college, $this->dept, $this->call, [
-        'title'    => 'cellular biology protein folding biochemical pathways metabolism enzyme',
+        'title' => 'cellular biology protein folding biochemical pathways metabolism enzyme',
         'abstract' => 'Investigation of enzyme catalysis in metabolic pathways using spectroscopy',
         'keywords' => 'biochemistry protein enzyme',
     ]);
     sim_proposal($this->college, $this->dept, $this->call, [
-        'title'    => 'sociolinguistic patterns urban youth language shift code switching identity',
+        'title' => 'sociolinguistic patterns urban youth language shift code switching identity',
         'abstract' => 'Analysis of language behavior among urban adolescents in multilingual contexts',
         'keywords' => 'linguistics language youth',
     ]);
@@ -197,7 +214,7 @@ test('similarity_flagged notification dispatched for flagged proposals', functio
 
     app(SimilarityService::class)->check($p1);
 
-    Queue::assertPushed(\App\Jobs\StoreInAppNotificationJob::class, function ($job) {
+    Queue::assertPushed(StoreInAppNotificationJob::class, function ($job) {
         return $job->event === 'similarity_flagged';
     });
 });
@@ -212,4 +229,49 @@ test('check() does nothing if no other proposals in same category', function () 
     $count = DB::table('similarity_scores')->where('proposal_id', $p1->id)->count();
 
     expect($count)->toBe(0);
+});
+
+test('identical uploaded document text flags proposals with unrelated titles/abstracts', function () {
+    $sharedDocText = str_repeat('groundwater aquifer recharge modeling semi-arid basin infiltration rate ', 20);
+
+    $p1 = sim_proposal($this->college, $this->dept, $this->call, [
+        'title' => 'Alpha Proposal', 'abstract' => 'First unrelated abstract about topic A.', 'keywords' => 'alpha',
+    ]);
+    $p2 = sim_proposal($this->college, $this->dept, $this->call, [
+        'title' => 'Beta Proposal', 'abstract' => 'Second unrelated abstract about topic B.', 'keywords' => 'beta',
+    ]);
+    sim_document($p1, $sharedDocText);
+    sim_document($p2, $sharedDocText);
+
+    DB::table('threshold_settings')->where('key', 'similarity_threshold')->update(['value' => 0.5]);
+
+    app(SimilarityService::class)->check($p1);
+
+    $flagged = DB::table('similarity_scores')
+        ->where('proposal_id', $p1->id)
+        ->where('similar_proposal_id', $p2->id)
+        ->value('flagged');
+
+    expect((bool) $flagged)->toBeTrue();
+});
+
+test('non-pdf documents are ignored without error', function () {
+    $p1 = sim_proposal($this->college, $this->dept, $this->call);
+    $p2 = sim_proposal($this->college, $this->dept, $this->call);
+    sim_document($p1, null, ['mime_type' => 'application/msword', 'original_filename' => 'proposal.docx']);
+
+    app(SimilarityService::class)->check($p1);
+
+    expect(DB::table('similarity_scores')->where('proposal_id', $p1->id)->count())->toBeGreaterThan(0)
+        ->and(ProposalDocument::where('proposal_id', $p1->id)->value('extracted_text'))->toBe('');
+});
+
+test('already-extracted document text is reused instead of reparsed', function () {
+    $p1 = sim_proposal($this->college, $this->dept, $this->call);
+    $p2 = sim_proposal($this->college, $this->dept, $this->call);
+    $doc = sim_document($p1, 'cached extraction result text', ['stored_path' => 'nonexistent/path/does-not-exist.pdf']);
+
+    app(SimilarityService::class)->check($p1);
+
+    expect($doc->fresh()->extracted_text)->toBe('cached extraction result text');
 });

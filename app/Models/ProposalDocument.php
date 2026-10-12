@@ -39,6 +39,7 @@ class ProposalDocument extends Model
         'stored_path',
         'file_size',
         'mime_type',
+        'extracted_text',
         'uploaded_by',
     ];
 

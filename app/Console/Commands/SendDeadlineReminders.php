@@ -18,7 +18,7 @@ class SendDeadlineReminders extends Command
 
     public function handle(): void
     {
-        $reminderDays = [5, 3, 1];
+        $reminderDays = [7, 3, 1];
 
         foreach ($reminderDays as $days) {
             $targetDate = now()->addDays($days)->toDateString();

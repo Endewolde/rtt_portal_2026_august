@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Enums\Feature;
 use App\Events\ProposalTransitioned;
+use App\Listeners\CancelReviewAssignmentsOnRejection;
 use App\Listeners\GenerateAwardOnFunding;
 use App\Listeners\SendProposalWorkflowNotifications;
 use App\Models\User;
@@ -26,6 +27,7 @@ class AppServiceProvider extends ServiceProvider
 
         Event::listen(ProposalTransitioned::class, GenerateAwardOnFunding::class);
         Event::listen(ProposalTransitioned::class, SendProposalWorkflowNotifications::class);
+        Event::listen(ProposalTransitioned::class, CancelReviewAssignmentsOnRejection::class);
         Event::listen(SocialiteWasCalled::class, [AzureExtendSocialite::class, 'handle']);
 
         $this->registerFeatureGates();

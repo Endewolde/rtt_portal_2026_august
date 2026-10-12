@@ -67,6 +67,20 @@ export default function Step3CoInvestigators({ proposalId, piUser, onComplete, i
 
     const remove = (id) => setCoIs((prev) => equalSplit(prev.filter((c) => c.user_id !== id)));
 
+    const [resendingId, setResendingId] = useState(null);
+    const resend = async (c) => {
+        if (!c.id) return;
+        setResendingId(c.user_id);
+        try {
+            await api.post(`/proposal-members/${c.id}/resend-invitation`);
+            setCoIs((prev) => prev.map((x) => x.user_id === c.user_id ? { ...x, invitation_status: 'pending' } : x));
+            toast.success(`Invitation resent to ${c.name}.`);
+        } catch (e) {
+            toast.error(e.response?.data?.message ?? 'Failed to resend invitation.');
+        }
+        setResendingId(null);
+    };
+
     const setContrib = (id, val) =>
         setCoIs((prev) => prev.map((c) => c.user_id === id ? { ...c, contribution_percentage: parseFloat(val) || 0 } : c));
 
@@ -226,7 +240,18 @@ export default function Step3CoInvestigators({ proposalId, piUser, onComplete, i
                                     </td>
                                     {showInvitationStatus && (
                                         <td className="px-4 py-3">
-                                            <InvitationBadge status={c.invitation_status ?? 'pending'} />
+                                            <div className="flex items-center gap-2">
+                                                <InvitationBadge status={c.invitation_status ?? 'pending'} />
+                                                {c.invitation_status === 'declined' && c.id && (
+                                                    <button
+                                                        onClick={() => resend(c)}
+                                                        disabled={resendingId === c.user_id}
+                                                        className="text-[10px] font-semibold text-blue-600 hover:text-blue-700 underline disabled:opacity-50 whitespace-nowrap"
+                                                    >
+                                                        {resendingId === c.user_id ? 'Resending…' : 'Resend'}
+                                                    </button>
+                                                )}
+                                            </div>
                                         </td>
                                     )}
                                     <td className="px-4 py-3 text-center">

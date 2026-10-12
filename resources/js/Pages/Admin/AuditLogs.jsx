@@ -129,17 +129,25 @@ function eventSummary(log) {
     const ov    = log.old_values ?? {};
     const { resource, action } = getEventParts(log.event);
 
+    // The person/record acted ON — new-style logs store this explicitly as
+    // target_name; older logs (before this was added) only had a bare `name`
+    // sometimes, so fall back gracefully rather than showing nothing.
+    const target = nv.target_name ?? ov.target_name ?? nv.name ?? ov.name ?? null;
+    const targetSuffix = target ? ` — ${target}` : '';
+
     // Known explicit events
     const explicit = {
         'user.login':                 `${actor} signed in`,
         'user.logout':                `${actor} signed out`,
         'user.registered':            `${actor} created an account`,
-        'user.created':               `New user account created${nv.name ? ` — ${nv.name}` : ''}`,
-        'user.updated':               `${actor} updated user profile${nv.name ? ` of ${nv.name}` : ''}`,
-        'user.deleted':               `${actor} deleted user${nv.name ? ` ${nv.name}` : ''}`,
-        'user.status_changed':        `${actor} ${nv.status === 'inactive' ? 'deactivated' : 'activated'} an account${ov.name ? ` — ${ov.name}` : ''}`,
-        'user.roles_changed':         `${actor} updated roles${nv.name ? ` for ${nv.name}` : ''}`,
-        'user.impersonation_started': `${actor} started impersonation session`,
+        'user.created':               `${actor} created a new user account${targetSuffix}`,
+        'user.super_admin_created':   `${actor} created a new super admin account${targetSuffix}`,
+        'user.updated':               `${actor} updated a user profile${targetSuffix}`,
+        'user.deleted':               `${actor} deleted a user account${targetSuffix}`,
+        'user.status_changed':        `${actor} ${nv.status === 'inactive' || nv.status === 'suspended' ? 'deactivated' : 'activated'} an account${targetSuffix}`,
+        'user.role_changed':          `${actor} changed role${targetSuffix ? ` for${targetSuffix}` : ''}${nv.role ? ` to "${nv.role}"` : ''}`,
+        'user.roles_changed':         `${actor} updated roles${targetSuffix ? ` for${targetSuffix}` : ''}`,
+        'user.impersonation_started': `${actor} started impersonating${targetSuffix || ' another user'}`,
         'user.session_evicted':       `${actor}'s session was terminated`,
         'user.imported':              `${actor} bulk-imported users`,
         'proposal.created':           `${actor} created a new proposal`,

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\NotificationPreference;
 use App\Models\User;
 use App\Services\NotificationService;
 use Illuminate\Http\JsonResponse;
@@ -102,5 +103,28 @@ class NotificationController extends Controller
             ->delete();
 
         return response()->json(['message' => 'Read notifications cleared.']);
+    }
+
+    public function preferences(Request $request): JsonResponse
+    {
+        // firstOrCreate()'s in-memory instance won't reflect column defaults (e.g.
+        // digest_frequency) on a freshly inserted row — refresh from the DB to be sure.
+        $prefs = NotificationPreference::firstOrCreate(['user_id' => $request->user()->id])->fresh();
+
+        return response()->json(['data' => $prefs]);
+    }
+
+    public function updatePreferences(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'email_enabled' => ['sometimes', 'boolean'],
+            'inapp_enabled' => ['sometimes', 'boolean'],
+            'digest_frequency' => ['sometimes', 'in:realtime,daily,weekly'],
+        ]);
+
+        $prefs = NotificationPreference::firstOrCreate(['user_id' => $request->user()->id]);
+        $prefs->update($validated);
+
+        return response()->json(['data' => $prefs->fresh(), 'message' => 'Notification preferences updated.']);
     }
 }

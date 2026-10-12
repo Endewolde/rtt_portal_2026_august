@@ -2,6 +2,7 @@
 
 namespace App\Exports;
 
+use App\Models\Proposal;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
@@ -19,7 +20,7 @@ class ProposalsExport implements FromCollection, ShouldAutoSize, WithHeadings, W
             $p->tracker_number,
             $p->title,
             ucwords(str_replace('_', ' ', $p->category ?? '')),
-            ucwords(str_replace('_', ' ', $p->status ?? '')),
+            Proposal::statusLabel($p->status),
             $p->pi?->name,
             $p->pi?->email,
             ucfirst($p->pi?->gender ?? ''),

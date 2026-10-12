@@ -22,7 +22,7 @@ export default function ProposalTimeline({ history = [], currentStatus }) {
                         <div className="rounded-lg border border-gray-100 bg-white p-3 shadow-sm">
                             <div className="flex items-center justify-between mb-1">
                                 <span className="font-semibold text-sm text-gray-800 capitalize">
-                                    {(entry.to_stage ?? entry.action ?? '').replace(/_/g, ' ')}
+                                    {entry.to_stage ? getStatusLabel(entry.to_stage) : (entry.action ?? '').replace(/_/g, ' ')}
                                 </span>
                                 <span className="text-xs text-gray-400">{formatDateTime(entry.occurred_at)}</span>
                             </div>

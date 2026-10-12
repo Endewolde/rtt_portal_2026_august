@@ -276,7 +276,7 @@ function SubmitReportModal({ evaluation, onClose, onSuccess }) {
                     </div>
 
                     {/* Metrics */}
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
                                 Financial Utilisation (%)
@@ -298,7 +298,7 @@ function SubmitReportModal({ evaluation, onClose, onSuccess }) {
                     </div>
 
                     {/* Milestones */}
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Milestones Achieved</label>
                             <textarea rows={3} value={form.milestones_achieved}
@@ -791,7 +791,7 @@ export default function MidtermEvaluations() {
             <div className="max-w-5xl mx-auto space-y-6 p-6">
 
                 {/* Header */}
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                             <Activity size={24} className="text-blue-600" />
@@ -803,7 +803,7 @@ export default function MidtermEvaluations() {
                     </div>
                     {isOfficer && (
                         <button onClick={() => setShowSchedule(true)}
-                            className="flex items-center gap-2 px-4 py-2 bg-blue-700 text-white rounded-xl text-sm font-semibold hover:bg-blue-800 shadow-sm shrink-0">
+                            className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-700 text-white rounded-xl text-sm font-semibold hover:bg-blue-800 shadow-sm shrink-0">
                             <Plus size={15} /> Schedule Evaluation
                         </button>
                     )}

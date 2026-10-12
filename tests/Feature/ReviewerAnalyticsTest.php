@@ -5,10 +5,13 @@ use App\Models\Conference;
 use App\Models\ConferenceAbstract;
 use App\Models\ConferenceAbstractReview;
 use App\Models\Department;
+use App\Models\EvaluationCategory;
+use App\Models\EvaluationQuestion;
 use App\Models\EvaluationType;
 use App\Models\Proposal;
 use App\Models\ProposalCall;
 use App\Models\ReviewAssignment;
+use App\Models\ReviewScore;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -54,7 +57,7 @@ function ra_base(): array
 
     $evalType = EvaluationType::create(['name' => 'blind_review', 'label' => 'Blind Review', 'is_active' => true]);
 
-    return compact('admin', 'pi', 'reviewer', 'proposal', 'evalType', 'college');
+    return compact('admin', 'pi', 'reviewer', 'proposal', 'evalType', 'college', 'dept');
 }
 
 function ra_makeAbstractReview(User $admin, User $reviewer, ?int $score = null, bool $submitted = false): ConferenceAbstractReview
@@ -83,6 +86,53 @@ function ra_makeAbstractReview(User $admin, User $reviewer, ?int $score = null, 
         'score' => $score,
         'submitted_at' => $submitted ? now() : null,
     ]);
+}
+
+// A fresh proposal for the same PI/college — needed when creating multiple
+// assignments for the same reviewer + evaluation type, since (proposal_id,
+// reviewer_id, evaluation_type_id) is unique on review_assignments.
+function ra_extraProposal(User $admin, User $pi, College $college, Department $dept): Proposal
+{
+    $call = ProposalCall::create([
+        'academic_year' => '2026', 'category' => 'research',
+        'title' => 'RA Extra Call', 'slug' => 'ra-extra-call-'.rand(10000, 99999),
+        'start_date' => now()->toDateString(), 'end_date' => now()->addMonths(2)->toDateString(),
+        'status' => 'active', 'is_open' => true, 'created_by' => $admin->id,
+    ]);
+
+    return Proposal::create([
+        'tracker_number' => 'RA-'.rand(100000, 999999),
+        'proposal_call_id' => $call->id,
+        'category' => 'research',
+        'title' => 'RA Extra Proposal',
+        'status' => 'under_blind_review',
+        'pi_user_id' => $pi->id,
+        'college_id' => $college->id,
+        'department_id' => $dept->id,
+        'academic_year' => '2026',
+        'created_by' => $pi->id,
+    ]);
+}
+
+function ra_scoredEvalType(): array
+{
+    $evalType = EvaluationType::create(['name' => 'blind_review_scored_'.rand(1000, 9999), 'label' => 'Blind Review', 'is_active' => true]);
+    $category = EvaluationCategory::create(['evaluation_type_id' => $evalType->id, 'name' => 'Quality', 'order_index' => 1, 'weight' => 100]);
+    $question = EvaluationQuestion::create(['evaluation_category_id' => $category->id, 'question_text' => 'Q', 'max_score' => 100, 'weight' => 1, 'is_required' => true, 'order_index' => 1]);
+
+    return [$evalType, $question];
+}
+
+function ra_scoredAssignment(User $admin, User $reviewer, Proposal $proposal, EvaluationType $evalType, EvaluationQuestion $question, int $score, ?string $submittedAt = null): ReviewAssignment
+{
+    $assignment = ReviewAssignment::create([
+        'proposal_id' => $proposal->id, 'reviewer_id' => $reviewer->id, 'assigned_by' => $admin->id,
+        'evaluation_type_id' => $evalType->id, 'status' => 'submitted',
+        'assigned_at' => now()->subDays(3), 'submitted_at' => $submittedAt ?? now(), 'due_date' => now()->addDay()->toDateString(),
+    ]);
+    ReviewScore::create(['review_assignment_id' => $assignment->id, 'evaluation_question_id' => $question->id, 'score' => $score]);
+
+    return $assignment;
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -377,4 +427,103 @@ test('college officer cannot see another college\'s reviewer analytics by spoofi
         ->assertOk();
     $reviewerIds = collect($workload->json('data'))->pluck('reviewer_id');
     expect($reviewerIds)->toContain($reviewer->id)->not->toContain($reviewerB->id);
+});
+
+// ─── Leniency, risk flag, score distribution ───────────────────────────────────
+
+test('avg_score_pct reflects the weighted percentage, not the raw score', function () {
+    ['admin' => $admin, 'reviewer' => $reviewer, 'proposal' => $proposal] = ra_base();
+    [$evalType, $question] = ra_scoredEvalType();
+    ra_scoredAssignment($admin, $reviewer, $proposal, $evalType, $question, 80);
+
+    $res = $this->actingAs($admin, 'sanctum')->getJson('/api/v1/admin/reviewer-analytics')->assertOk();
+    $entry = collect($res->json('data.reviewers'))->firstWhere('reviewer_id', $reviewer->id);
+
+    expect($entry['avg_score_pct'])->toEqual(80.0);
+});
+
+test('leniency_delta is positive for a reviewer who scores above their peers on the same rubric', function () {
+    ['admin' => $admin, 'proposal' => $proposal] = ra_base();
+    [$evalType, $question] = ra_scoredEvalType();
+
+    $lenient = User::factory()->create();
+    $lenient->assignRole('reviewer');
+    $strict = User::factory()->create();
+    $strict->assignRole('reviewer');
+
+    ra_scoredAssignment($admin, $lenient, $proposal, $evalType, $question, 95);
+    ra_scoredAssignment($admin, $strict, $proposal, $evalType, $question, 40);
+
+    $res = $this->actingAs($admin, 'sanctum')->getJson('/api/v1/admin/reviewer-analytics')->assertOk();
+    $reviewers = collect($res->json('data.reviewers'));
+    $lenientEntry = $reviewers->firstWhere('reviewer_id', $lenient->id);
+    $strictEntry = $reviewers->firstWhere('reviewer_id', $strict->id);
+
+    expect($lenientEntry['leniency_delta'])->toBeGreaterThan(0)
+        ->and($strictEntry['leniency_delta'])->toBeLessThan(0);
+});
+
+test('risk_flag is true once a reviewer misses over 30% of deadlines with enough history', function () {
+    ['admin' => $admin, 'reviewer' => $reviewer, 'proposal' => $proposal, 'evalType' => $evalType, 'pi' => $pi, 'college' => $college, 'dept' => $dept] = ra_base();
+
+    $proposals = [$proposal, ra_extraProposal($admin, $pi, $college, $dept), ra_extraProposal($admin, $pi, $college, $dept)];
+    foreach ([true, true, false] as $i => $late) {
+        ReviewAssignment::create([
+            'proposal_id' => $proposals[$i]->id, 'reviewer_id' => $reviewer->id, 'assigned_by' => $admin->id,
+            'evaluation_type_id' => $evalType->id, 'status' => 'submitted',
+            'assigned_at' => now()->subDays(10),
+            'due_date' => now()->subDays(5)->toDateString(),
+            'submitted_at' => $late ? now() : now()->subDays(6),
+        ]);
+    }
+
+    $res = $this->actingAs($admin, 'sanctum')->getJson('/api/v1/admin/reviewer-analytics')->assertOk();
+    $entry = collect($res->json('data.reviewers'))->firstWhere('reviewer_id', $reviewer->id);
+
+    expect($entry['risk_flag'])->toBeTrue();
+});
+
+test('risk_flag is true once a reviewer declines over a fifth of their assignments', function () {
+    ['admin' => $admin, 'reviewer' => $reviewer, 'proposal' => $proposal, 'evalType' => $evalType, 'pi' => $pi, 'college' => $college, 'dept' => $dept] = ra_base();
+
+    $proposals = [$proposal, ra_extraProposal($admin, $pi, $college, $dept), ra_extraProposal($admin, $pi, $college, $dept)];
+    foreach (['declined', 'pending', 'pending'] as $i => $status) {
+        ReviewAssignment::create([
+            'proposal_id' => $proposals[$i]->id, 'reviewer_id' => $reviewer->id, 'assigned_by' => $admin->id,
+            'evaluation_type_id' => $evalType->id, 'status' => $status,
+            'assigned_at' => now(), 'due_date' => now()->addDays(7)->toDateString(),
+        ]);
+    }
+
+    $res = $this->actingAs($admin, 'sanctum')->getJson('/api/v1/admin/reviewer-analytics')->assertOk();
+    $entry = collect($res->json('data.reviewers'))->firstWhere('reviewer_id', $reviewer->id);
+
+    expect($entry['risk_flag'])->toBeTrue();
+});
+
+test('risk_flag stays false without enough history, even if every assignment so far was late', function () {
+    ['admin' => $admin, 'reviewer' => $reviewer, 'proposal' => $proposal, 'evalType' => $evalType] = ra_base();
+
+    ReviewAssignment::create([
+        'proposal_id' => $proposal->id, 'reviewer_id' => $reviewer->id, 'assigned_by' => $admin->id,
+        'evaluation_type_id' => $evalType->id, 'status' => 'submitted',
+        'assigned_at' => now()->subDays(10), 'due_date' => now()->subDays(5)->toDateString(), 'submitted_at' => now(),
+    ]);
+
+    $res = $this->actingAs($admin, 'sanctum')->getJson('/api/v1/admin/reviewer-analytics')->assertOk();
+    $entry = collect($res->json('data.reviewers'))->firstWhere('reviewer_id', $reviewer->id);
+
+    expect($entry['risk_flag'])->toBeFalse();
+});
+
+test('score_distribution buckets a reviewer\'s weighted percentages', function () {
+    ['admin' => $admin, 'reviewer' => $reviewer, 'proposal' => $proposal] = ra_base();
+    [$evalType, $question] = ra_scoredEvalType();
+    ra_scoredAssignment($admin, $reviewer, $proposal, $evalType, $question, 90);
+
+    $res = $this->actingAs($admin, 'sanctum')->getJson('/api/v1/admin/reviewer-analytics')->assertOk();
+    $entry = collect($res->json('data.reviewers'))->firstWhere('reviewer_id', $reviewer->id);
+
+    expect($entry['score_distribution']['80-100'])->toBe(1)
+        ->and($entry['score_distribution']['0-19'])->toBe(0);
 });

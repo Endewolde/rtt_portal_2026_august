@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\DefenceDeadlineExtension;
 use App\Models\User;
+use App\Services\DefenceDeadlineService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -281,6 +283,101 @@ class ActionCountController extends Controller
             $overdueReviews = $scopeProposals($q, 'p')->count();
         }
 
+        // ── 22. Contracts submitted by a PI, awaiting officer approval/rejection ─
+        $contractsPendingReview = 0;
+        if ($isCentral || $isOfficer || $isCollegeStaff) {
+            $contractsPendingReview = $scopeProposals(
+                DB::table('proposals as p')->whereNull('p.deleted_at')->where('p.contract_status', 'pending'), 'p'
+            )->count();
+        }
+
+        // ── 23. Reported COI conflicts awaiting reviewer reassignment ──────────
+        $coiConflictsPending = 0;
+        if ($isCentral || $isOfficer || $isCollegeStaff) {
+            $q = DB::table('review_assignments as ra')
+                ->join('proposals as p', 'ra.proposal_id', '=', 'p.id')
+                ->whereNull('p.deleted_at')
+                ->where('ra.coi_has_conflict', true)
+                ->whereNull('ra.coi_resolved_at');
+            $coiConflictsPending = $scopeProposals($q, 'p')->count();
+        }
+
+        // ── 24. Deadline extension requests awaiting an officer decision ───────
+        $deadlineExtensionsPending = 0;
+        if ($isCentral || $isOfficer) {
+            $deadlineExtensionsPending = $scopeProposals(
+                DB::table('deadline_extension_requests as der')
+                    ->join('proposals as p', 'der.proposal_id', '=', 'p.id')
+                    ->whereNull('p.deleted_at')
+                    ->where('der.status', 'pending'),
+                'p'
+            )->count();
+        }
+
+        // ── 24b. Open defence score-deadline extensions awaiting approval ──────
+        $defenceExtensionsPending = 0;
+        if ($isCentral || $isOfficer) {
+            $deadlineService = app(DefenceDeadlineService::class);
+            $defenceExtensionsPending = DefenceDeadlineExtension::with('proposal:id,category')
+                ->where('status', 'pending')
+                ->get()
+                ->filter(fn (DefenceDeadlineExtension $e) => $deadlineService->canApprove($e->proposal, $user))
+                ->count();
+        }
+
+        // ── 25. Ethical clearance certificates awaiting an officer decision ────
+        $ethicalClearancesPending = 0;
+        if ($isCentral || $isOfficer || $isCollegeStaff) {
+            $ethicalClearancesPending = $scopeProposals(
+                DB::table('proposals as p')
+                    ->whereNull('p.deleted_at')
+                    ->where('p.ethical_clearance_status', 'submitted'),
+                'p'
+            )->count();
+        }
+
+        // ── 26. Budget revision requests awaiting an officer decision ──────────
+        $budgetRevisionsPending = 0;
+        if ($isCentral || $isOfficer || $isCollegeStaff || $isFinance || in_array('finance_officer', $roles)) {
+            $budgetRevisionsPending = $scopeProposals(
+                DB::table('budget_revision_requests as brr')
+                    ->join('proposals as p', 'brr.proposal_id', '=', 'p.id')
+                    ->whereNull('p.deleted_at')
+                    ->where('brr.status', 'pending'),
+                'p'
+            )->count();
+        }
+
+        // ── 27. No-cost extension requests awaiting an officer decision ────────
+        $noCostExtensionsPending = 0;
+        if ($isCentral || $isOfficer || $isCollegeStaff) {
+            $noCostExtensionsPending = $scopeProposals(
+                DB::table('no_cost_extension_requests as ncer')
+                    ->join('proposals as p', 'ncer.proposal_id', '=', 'p.id')
+                    ->whereNull('p.deleted_at')
+                    ->where('ncer.status', 'pending'),
+                'p'
+            )->count();
+        }
+
+        // ── 28. Open approval reports awaiting an officer decision (or, for the
+        // college_officer who filed them, still awaiting a response) ───────────
+        $approvalReportsOpen = 0;
+        if ($isCentral || $isOfficer) {
+            $approvalReportsOpen = $scopeProposals(
+                DB::table('proposal_approval_reports as par')
+                    ->join('proposals as p', 'par.proposal_id', '=', 'p.id')
+                    ->whereNull('p.deleted_at')
+                    ->where('par.status', 'open'),
+                'p'
+            )->count();
+        } elseif ($isCollegeStaff) {
+            $approvalReportsOpen = DB::table('proposal_approval_reports')
+                ->where('status', 'open')
+                ->where('reported_by', $userId)
+                ->count();
+        }
+
         return response()->json([
             'data' => [
                 // Existing
@@ -306,6 +403,14 @@ class ActionCountController extends Controller
                 'completion_workshops_pending' => $completionWorkshopsPending,
                 'ongoing_awaiting_midterm' => $ongoingAwaitingMidterm,
                 'overdue_reviews' => $overdueReviews,
+                'contracts_pending_review' => $contractsPendingReview,
+                'coi_conflicts_pending' => $coiConflictsPending,
+                'deadline_extensions_pending' => $deadlineExtensionsPending,
+                'defence_extensions_pending' => $defenceExtensionsPending,
+                'ethical_clearances_pending' => $ethicalClearancesPending,
+                'budget_revisions_pending' => $budgetRevisionsPending,
+                'no_cost_extensions_pending' => $noCostExtensionsPending,
+                'approval_reports_open' => $approvalReportsOpen,
             ],
             'message' => '',
             'errors' => [],

@@ -126,6 +126,7 @@ class FeatureController extends Controller
         );
 
         Cache::forget('inertia_disabled_sub_features');
+        Cache::forget('global:disabled_sub_features');
 
         return response()->json([
             'data' => $disabled,

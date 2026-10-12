@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import AppLayout from '../../Layouts/AppLayout'
 import api from '../../lib/api'
+import { getStatusLabel } from '../../lib/utils'
 
 // ── Risk config ───────────────────────────────────────────────────────────────
 
@@ -121,7 +122,7 @@ function CompareModal({ flag, onClose }) {
                                 </Link>
                                 {flag.proposal?.status && (
                                     <span className={`text-[10px] px-1.5 py-0.5 rounded capitalize font-medium ${STATUS_COLORS[flag.proposal.status] || 'bg-gray-100 text-gray-500'}`}>
-                                        {flag.proposal.status.replace(/_/g, ' ')}
+                                        {getStatusLabel(flag.proposal.status)}
                                     </span>
                                 )}
                             </div>
@@ -148,7 +149,7 @@ function CompareModal({ flag, onClose }) {
                                 </Link>
                                 {flag.similar_proposal?.status && (
                                     <span className={`text-[10px] px-1.5 py-0.5 rounded capitalize font-medium ${STATUS_COLORS[flag.similar_proposal.status] || 'bg-gray-100 text-gray-500'}`}>
-                                        {flag.similar_proposal.status.replace(/_/g, ' ')}
+                                        {getStatusLabel(flag.similar_proposal.status)}
                                     </span>
                                 )}
                             </div>
@@ -365,7 +366,7 @@ export default function SimilarityFlags() {
                                             <td className="px-4 py-3 whitespace-nowrap">
                                                 {f.proposal?.status && (
                                                     <span className={`text-xs px-2 py-0.5 rounded capitalize font-medium ${STATUS_COLORS[f.proposal.status] || 'bg-gray-100 text-gray-500'}`}>
-                                                        {f.proposal.status.replace(/_/g, ' ')}
+                                                        {getStatusLabel(f.proposal.status)}
                                                     </span>
                                                 )}
                                             </td>

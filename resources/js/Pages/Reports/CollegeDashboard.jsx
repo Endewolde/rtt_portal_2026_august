@@ -19,7 +19,7 @@ const STATUS_LABEL = {
     under_blind_review:  'Blind Review',
     blind_review_passed: 'Review Passed',
     under_open_defence:  'Open Defence',
-    accepted:            'Accepted',
+    accepted:            'Central Evaluation',
     funded:              'Funded',
     midterm_evaluation:  'Midterm',
     completed:           'Completed',

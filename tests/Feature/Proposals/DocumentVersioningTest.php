@@ -35,7 +35,7 @@ function dv_proposal(): array
     $proposal = Proposal::create([
         'tracker_number' => 'DV-'.rand(100000, 999999),
         'proposal_call_id' => $call->id, 'category' => 'research',
-        'title' => 'P', 'status' => 'submitted',
+        'title' => 'P', 'status' => 'draft',
         'pi_user_id' => $pi->id, 'college_id' => $college->id,
         'department_id' => $dept->id, 'academic_year' => '2026', 'created_by' => $pi->id,
     ]);
@@ -122,4 +122,23 @@ test('deleting the current version restores the previous version as current', fu
         ->assertOk();
 
     expect($v1->fresh()->is_current)->toBeTrue();
+});
+
+test('a document cannot be deleted once the proposal has been submitted', function () {
+    [$pi, $proposal] = dv_proposal();
+
+    $this->actingAs($pi, 'sanctum')->postJson("/api/v1/proposals/{$proposal->id}/documents", [
+        'file' => UploadedFile::fake()->create('proposal.pdf', 100),
+        'document_type' => 'proposal_document',
+    ])->assertCreated();
+    $doc = ProposalDocument::where('proposal_id', $proposal->id)->first();
+
+    $proposal->update(['status' => 'submitted']);
+
+    $this->actingAs($pi, 'sanctum')
+        ->deleteJson("/api/v1/proposals/{$proposal->id}/documents/{$doc->id}")
+        ->assertForbidden()
+        ->assertJsonPath('message', 'This proposal has already been submitted — its documents can no longer be deleted.');
+
+    expect(ProposalDocument::find($doc->id))->not->toBeNull();
 });

@@ -6,6 +6,7 @@ use App\Exceptions\IncompleteProposalException;
 use App\Exceptions\InvalidWizardStepException;
 use App\Exceptions\ProposalNotEditableException;
 use App\Exceptions\WorkflowGuardException;
+use App\Models\AppSetting;
 use App\Models\College;
 use App\Models\Department;
 use App\Models\Proposal;
@@ -151,10 +152,19 @@ class ProposalService
                         $updates['research_type'] = $data['research_type'] ?? null;
                     }
                     if (array_key_exists('ethical_clearance_required', $data)) {
-                        $updates['ethical_clearance_required'] = (bool) $data['ethical_clearance_required'];
-                        $updates['ethical_clearance_number'] = $data['ethical_clearance_required']
+                        $required = (bool) $data['ethical_clearance_required'];
+                        $updates['ethical_clearance_required'] = $required;
+                        $updates['ethical_clearance_number'] = $required
                             ? ($data['ethical_clearance_number'] ?? null)
                             : null;
+                        // Track this proposal for compliance once flagged as requiring
+                        // clearance — status stays until the PI formally submits a
+                        // certificate for verification (see EthicalClearanceController).
+                        if ($required && ! $proposal->ethical_clearance_status) {
+                            $updates['ethical_clearance_status'] = 'pending';
+                        } elseif (! $required) {
+                            $updates['ethical_clearance_status'] = null;
+                        }
                     }
                     break;
 
@@ -191,7 +201,10 @@ class ProposalService
     public function submit(Proposal $proposal, User $pi): Proposal
     {
         $call = $proposal->proposalCall;
-        if ($call && ($call->status === 'expired' || ($call->end_date && $call->end_date->isPast()))) {
+        $deadlinePassed = $call && ($call->status === 'expired' || ($call->end_date && $call->end_date->isPast()));
+        $hasApprovedExtension = $proposal->extended_deadline && $proposal->extended_deadline->isFuture();
+
+        if ($deadlinePassed && ! $hasApprovedExtension) {
             throw new WorkflowGuardException('The submission deadline for this proposal call has passed. Your draft has been saved but can no longer be submitted.');
         }
 
@@ -328,6 +341,10 @@ class ProposalService
         $totalContrib = 0;
         $workflowOn = $this->featureService->hasFeature('workflow');
 
+        // Global, cross-call cap on how many active proposals a person can be a
+        // co-investigator on at once (Settings → Review Thresholds). 0/unset = unlimited.
+        $globalCoiCap = (int) (AppSetting::where('key', 'max_active_coinvestigator_proposals')->value('value') ?? 0);
+
         foreach ($coInvestigators as $coI) {
             $coUser = User::findOrFail($coI['user_id']);
 
@@ -335,6 +352,25 @@ class ProposalService
                 throw new \InvalidArgumentException(
                     "{$coUser->name}'s account is inactive and cannot be added as a co-investigator."
                 );
+            }
+
+            if ($globalCoiCap > 0) {
+                // Excludes this proposal itself — its co-investigator rows were just
+                // deactivated above and are about to be recreated, so re-adding the
+                // same person to a proposal they're already on must not double-count.
+                $otherActiveCount = ProposalMember::where('user_id', $coUser->id)
+                    ->where('role', 'co_investigator')
+                    ->where('status', 'active')
+                    ->where('proposal_id', '!=', $proposal->id)
+                    ->whereHas('proposal', fn ($q) => $q->whereNull('deleted_at')->whereNotIn('status', ['archived', 'rejected']))
+                    ->count();
+
+                if ($otherActiveCount >= $globalCoiCap) {
+                    $noun = $globalCoiCap === 1 ? 'proposal' : 'proposals';
+                    throw new \InvalidArgumentException(
+                        "{$coUser->name} is already a co-investigator on {$globalCoiCap} active {$noun}, the maximum allowed at once."
+                    );
+                }
             }
 
             $contrib = $coI['contribution_percentage'] ?? ($count > 0 ? round(80 / $count, 2) : 0);

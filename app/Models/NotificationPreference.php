@@ -11,7 +11,9 @@ class NotificationPreference extends Model
     use HasUuids;
 
     protected $primaryKey = 'id';
+
     public $incrementing = false;
+
     protected $keyType = 'string';
 
     protected $fillable = [
@@ -20,13 +22,16 @@ class NotificationPreference extends Model
         'telegram_enabled',
         'inapp_enabled',
         'events_config',
+        'digest_frequency',
+        'last_digest_sent_at',
     ];
 
     protected $casts = [
-        'email_enabled'    => 'boolean',
+        'email_enabled' => 'boolean',
         'telegram_enabled' => 'boolean',
-        'inapp_enabled'    => 'boolean',
-        'events_config'    => 'array',
+        'inapp_enabled' => 'boolean',
+        'events_config' => 'array',
+        'last_digest_sent_at' => 'datetime',
     ];
 
     public function user(): BelongsTo

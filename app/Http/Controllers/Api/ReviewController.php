@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Exceptions\BlindReviewPhaseIncompleteException;
 use App\Exceptions\UnauthorizedTransitionException;
 use App\Http\Controllers\Controller;
+use App\Jobs\SendEmailNotificationJob;
 use App\Jobs\SendRawMailJob;
 use App\Jobs\StoreInAppNotificationJob;
 use App\Models\ConferenceAbstractReview;
@@ -17,6 +19,7 @@ use App\Models\ProposalMember;
 use App\Models\ReviewAssignment;
 use App\Models\ReviewScore;
 use App\Models\User;
+use App\Services\DefenceDeadlineService;
 use App\Services\DefenceSessionService;
 use App\Services\MailConfigService;
 use App\Services\ReviewAssignmentService;
@@ -25,6 +28,7 @@ use App\Services\WorkflowService;
 use App\Support\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class ReviewController extends Controller
@@ -32,6 +36,12 @@ class ReviewController extends Controller
     private const WORKLOAD_ROLES = [
         'super_admin', 'admin', 'central_officer', 'research_officer',
         'community_officer', 'technology_officer', 'college_officer',
+    ];
+
+    /** Roles allowed to run the pass/fail review transitions (see WorkflowStageSeeder's $adminFull). */
+    private const DECISION_CORRECTION_ROLES = [
+        'super_admin', 'admin', 'central_officer', 'research_officer',
+        'community_officer', 'technology_officer',
     ];
 
     public function __construct(
@@ -133,6 +143,93 @@ class ReviewController extends Controller
         }
     }
 
+    private const REOPEN_ROLES = ['super_admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer'];
+
+    /**
+     * Reopen a rejected proposal for reconsideration — e.g. it was auto-rejected
+     * under thresholds/decision-mode settings that have since changed. Sends it back
+     * to whichever stage it was actually rejected from (see
+     * WorkflowService::reopenRejectedProposal), preserving already-submitted scores.
+     */
+    public function reopen(string $id, Request $request): JsonResponse
+    {
+        $request->validate(['reason' => 'required|string|min:10|max:2000']);
+
+        if (! $request->user()?->hasAnyRole(self::REOPEN_ROLES)) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
+        }
+
+        $proposal = Proposal::findOrFail($id);
+
+        try {
+            $reopened = $this->workflowService->reopenRejectedProposal($proposal, $request->user(), $request->reason);
+
+            AuditLogger::log('proposal.reopened', Proposal::class, $proposal->id, $request->user()->id, null, [
+                'reason' => $request->reason,
+                'returned_to' => $reopened->status,
+            ]);
+
+            return response()->json([
+                'data' => $reopened,
+                'message' => "Proposal reopened and returned to '{$reopened->status}' for reconsideration.",
+                'errors' => [],
+                'meta' => [],
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['data' => null, 'message' => $e->getMessage(), 'errors' => [], 'meta' => []], 422);
+        }
+    }
+
+    /**
+     * Read-only pre-check for the Schedule Defence page: tells a college officer up
+     * front whether their college still has proposals in blind review, so the form
+     * can explain why scheduling is on hold instead of failing on submit.
+     */
+    public function defenceReadiness(string $id, Request $request): JsonResponse
+    {
+        $proposal = Proposal::with('college:id,name')->findOrFail($id);
+        $isGated = $this->defenceService->isBoundByCollegeBlindReviewGate($request->user());
+        $pending = $isGated ? $this->defenceService->pendingBlindReviewProposals($proposal) : collect();
+
+        return response()->json([
+            'data' => [
+                'can_schedule' => $pending->isEmpty(),
+                'college_name' => $proposal->college?->name,
+                'pending_blind_review' => $pending,
+            ],
+            'message' => '',
+            'errors' => [],
+            'meta' => [],
+        ]);
+    }
+
+    /**
+     * College-wide pre-check for a college officer opening Open Defence: whether
+     * their college (in the current academic year) still has proposals in blind
+     * review. Never blocks roles that aren't held to the college gate.
+     */
+    public function collegeDefenceReadiness(Request $request): JsonResponse
+    {
+        $user = $request->user()->loadMissing('college:id,name');
+        $pending = collect();
+
+        if ($this->defenceService->isBoundByCollegeBlindReviewGate($user)) {
+            $academicYear = DB::table('app_settings')->where('key', 'current_academic_year')->value('value');
+            $pending = $this->defenceService->pendingBlindReviewForCollege($user->college_id, $academicYear);
+        }
+
+        return response()->json([
+            'data' => [
+                'can_schedule' => $pending->isEmpty(),
+                'college_name' => $user->college?->name,
+                'pending_blind_review' => $pending,
+            ],
+            'message' => '',
+            'errors' => [],
+            'meta' => [],
+        ]);
+    }
+
     public function scheduleDefence(string $id, Request $request): JsonResponse
     {
         $request->validate([
@@ -156,6 +253,17 @@ class ReviewController extends Controller
                 'errors' => [],
                 'meta' => [],
             ], 201);
+        } catch (BlindReviewPhaseIncompleteException $e) {
+            return response()->json([
+                'data' => null,
+                'message' => $e->getMessage(),
+                'errors' => [],
+                'meta' => [
+                    'reason' => 'blind_review_incomplete',
+                    'college_name' => $e->collegeName,
+                    'pending_blind_review' => $e->pendingProposals,
+                ],
+            ], 422);
         } catch (\Exception $e) {
             return response()->json([
                 'data' => null,
@@ -415,7 +523,7 @@ class ReviewController extends Controller
             'data' => [
                 'total_reviews' => $proposal->reviewAssignments->count(),
                 'submitted_reviews' => $submitted->count(),
-                'average_score' => $scored->isNotEmpty() ? round($scored->avg('overall_score'), 2) : null,
+                'average_score' => $scored->isNotEmpty() ? min(round($scored->avg('overall_score'), 2), (float) $scored->first()['overall_max']) : null,
                 'average_max' => $scored->isNotEmpty() ? $scored->first()['overall_max'] : null,
                 'reviews' => $reviews,
             ],
@@ -442,16 +550,60 @@ class ReviewController extends Controller
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
         }
 
+        $request->validate(['phase' => 'nullable|in:blind_review,open_defence']);
         $snapshot = $this->scoreService->recalculateSnapshot($proposal);
 
         return response()->json([
             'data' => array_merge($snapshot, [
+                'phase' => $request->phase,
                 'proposal_status' => $proposal->status,
                 'recalculated_at' => now()->toIso8601String(),
+                'corrections' => $this->scoreService->previewDecisionCorrections($proposal, $request->phase),
+                'can_apply_corrections' => $user->hasAnyRole(self::DECISION_CORRECTION_ROLES),
             ]),
             'message' => '',
             'errors' => [],
         ]);
+    }
+
+    /**
+     * Apply the corrections the recalculation found for this one proposal — the
+     * manual, per-proposal counterpart of the automatic recalculation that runs when
+     * thresholds are saved. Limited to roles allowed to run the pass/fail transitions.
+     */
+    public function applyRecalculatedDecision(string $id, Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if (! $user->hasAnyRole(self::DECISION_CORRECTION_ROLES)) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => [], 'meta' => []], 403);
+        }
+
+        $request->validate(['phase' => 'nullable|in:blind_review,open_defence']);
+        $proposal = Proposal::findOrFail($id);
+        $result = $this->scoreService->applyDecisionCorrections($proposal, $user, $request->phase);
+
+        AuditLogger::log(
+            'proposal.decision_recalculated',
+            Proposal::class,
+            $proposal->id,
+            $user->id,
+            null,
+            ['corrected' => $result['corrected'], 'needs_review' => $result['needs_review']],
+        );
+
+        $message = match (true) {
+            ! empty($result['corrected']) => 'Decision corrected: '.collect($result['corrected'])->pluck('change')->implode(', ').'.',
+            ! empty($result['needs_review']) => 'The decision could not be corrected automatically — '.$result['needs_review'][0]['reason'].'.',
+            default => 'The recorded decision already matches the current thresholds — nothing to correct.',
+        };
+
+        return response()->json([
+            'data' => array_merge($result, ['proposal_status' => $proposal->fresh()->status]),
+            'message' => $message,
+            'errors' => [],
+            'meta' => [],
+        ], empty($result['needs_review']) ? 200 : 422);
     }
 
     public function proposalReviewList(Request $request): JsonResponse
@@ -489,7 +641,26 @@ class ReviewController extends Controller
             $query->where('category', $request->category);
         }
 
-        return response()->json(['data' => $query->get(), 'message' => '', 'errors' => [], 'meta' => []]);
+        $proposals = $query->get();
+
+        // Open defence score deadline (end of the day after the defence, or an
+        // approved extension) + extension state, for the Open Defence page.
+        if (in_array('under_open_defence', $statuses, true)) {
+            $deadlines = app(DefenceDeadlineService::class);
+            $sessions = DefenceSession::whereIn('proposal_id', $proposals->where('status', 'under_open_defence')->pluck('id'))
+                ->where('status', 'scheduled')
+                ->latest()
+                ->get()
+                ->unique('proposal_id')
+                ->keyBy('proposal_id');
+
+            $proposals->each(fn (Proposal $p) => $p->setAttribute(
+                'defence_deadline',
+                $deadlines->present($sessions->get($p->id), $request->user())
+            ));
+        }
+
+        return response()->json(['data' => $proposals, 'message' => '', 'errors' => [], 'meta' => []]);
     }
 
     /** College officers can only ever see their own college — overrides whatever the client sends. */
@@ -536,7 +707,8 @@ class ReviewController extends Controller
         $query = ReviewAssignment::with([
             'reviewer:id,name,email',
             'reviewer.roles:id,name',
-            'scores:id,review_assignment_id,score',
+            'scores:id,review_assignment_id,score,evaluation_question_id',
+            'evaluationType.categories.questions',
         ])
             ->when($collegeId, fn ($q) => $q->whereHas(
                 'proposal',
@@ -544,8 +716,26 @@ class ReviewController extends Controller
             ));
 
         $assignments = $query->get([
-            'id', 'reviewer_id', 'status', 'assigned_at', 'due_date', 'submitted_at',
+            'id', 'reviewer_id', 'status', 'assigned_at', 'due_date', 'submitted_at', 'evaluation_type_id',
         ]);
+
+        // Weighted score % per submitted assignment, grouped by evaluation type — the
+        // baseline for "normal" varies a lot between e.g. blind review and open defence,
+        // so leniency is measured against peers scoring the SAME evaluation type, not a
+        // single global average.
+        $weightedPctByAssignment = [];
+        $peerPctsByEvaluationType = [];
+        foreach ($assignments->where('status', 'submitted') as $a) {
+            $display = $this->scoreService->calculateWeightedDisplay($a);
+            if ($display['max'] <= 0) {
+                continue;
+            }
+            $pct = round(($display['score'] / $display['max']) * 100, 1);
+            $weightedPctByAssignment[$a->id] = $pct;
+            $peerPctsByEvaluationType[$a->evaluation_type_id][] = $pct;
+        }
+        $peerAvgByEvaluationType = collect($peerPctsByEvaluationType)
+            ->map(fn ($pcts) => round(array_sum($pcts) / count($pcts), 1));
 
         $grouped = $assignments->groupBy('reviewer_id');
 
@@ -554,7 +744,7 @@ class ReviewController extends Controller
             ? collect()
             : ConferenceAbstractReview::query()->get(['id', 'reviewer_id', 'score', 'submitted_at', 'created_at'])->groupBy('reviewer_id');
 
-        $stats = $grouped->map(function ($items) use ($abstractGrouped) {
+        $stats = $grouped->map(function ($items) use ($abstractGrouped, $weightedPctByAssignment, $peerAvgByEvaluationType) {
             $reviewer = $items->first()->reviewer;
             $total = $items->count();
             $completed = $items->where('status', 'submitted')->count();
@@ -576,6 +766,36 @@ class ReviewController extends Controller
 
             $allScores = $items->flatMap(fn ($a) => $a->scores)->pluck('score')->filter();
             $avgScore = $allScores->isNotEmpty() ? round($allScores->avg(), 1) : null;
+
+            // Weighted % (normalized against each question's max score) — a fairer
+            // basis for cross-reviewer comparison than the raw avg_score above, which
+            // is skewed by differing question max scores between evaluation types.
+            $pcts = $completedItems
+                ->map(fn ($a) => $weightedPctByAssignment[$a->id] ?? null)
+                ->filter(fn ($p) => $p !== null);
+            $avgScorePct = $pcts->isNotEmpty() ? round($pcts->avg(), 1) : null;
+
+            // Leniency: average of (this reviewer's % − the peer average % for the same
+            // evaluation type) across their scored assignments. Positive = scores higher
+            // than peers on the same rubric; negative = scores lower (stricter).
+            $deltas = $completedItems
+                ->filter(fn ($a) => isset($weightedPctByAssignment[$a->id], $peerAvgByEvaluationType[$a->evaluation_type_id]))
+                ->map(fn ($a) => $weightedPctByAssignment[$a->id] - $peerAvgByEvaluationType[$a->evaluation_type_id]);
+            $leniencyDelta = $deltas->isNotEmpty() ? round($deltas->avg(), 1) : null;
+
+            // A reviewer needs at least a few data points before a rate is meaningful —
+            // one missed deadline out of one assignment shouldn't read the same as a
+            // pattern. "At risk" = missing over 30% of deadlines, or declining over a
+            // fifth of assignments, once there's enough history to judge that from.
+            $riskFlag = ($completed >= 3 && $onTimeRate !== null && $onTimeRate < 70)
+                || ($total >= 3 && ($declined / $total) > 0.2);
+
+            $bucketLabels = ['0-19', '20-39', '40-59', '60-79', '80-100'];
+            $buckets = array_fill_keys($bucketLabels, 0);
+            foreach ($pcts as $pct) {
+                $index = min((int) floor($pct / 20), 4);
+                $buckets[$bucketLabels[$index]]++;
+            }
 
             // Abstract reviews have no due date, so "overdue"/"on-time" don't apply to them —
             // kept as a separate block rather than blended into the proposal-review numbers above.
@@ -602,6 +822,10 @@ class ReviewController extends Controller
                 'avg_days' => $avgDays,
                 'on_time_rate' => $onTimeRate,
                 'avg_score' => $avgScore,
+                'avg_score_pct' => $avgScorePct,
+                'leniency_delta' => $leniencyDelta,
+                'risk_flag' => $riskFlag,
+                'score_distribution' => $buckets,
                 'abstract_reviews' => [
                     'total' => $abstractTotal,
                     'completed' => $abstractCompleted,
@@ -648,6 +872,10 @@ class ReviewController extends Controller
                     'avg_days' => null,
                     'on_time_rate' => null,
                     'avg_score' => null,
+                    'avg_score_pct' => null,
+                    'leniency_delta' => null,
+                    'risk_flag' => false,
+                    'score_distribution' => null,
                     'abstract_reviews' => [
                         'total' => $abstractTotal,
                         'completed' => $abstractCompleted,
@@ -671,6 +899,7 @@ class ReviewController extends Controller
         $avgDaysAll = $stats->filter(fn ($s) => $s['avg_days'] !== null);
         $avgDaysGlobal = $avgDaysAll->isNotEmpty() ? round($avgDaysAll->avg('avg_days')) : null;
         $totalAbstractPending = $stats->sum(fn ($s) => $s['abstract_reviews']['pending']);
+        $totalAtRisk = $stats->where('risk_flag', true)->count();
 
         return response()->json([
             'data' => [
@@ -680,6 +909,7 @@ class ReviewController extends Controller
                     'total_overdue' => $totalOverdue,
                     'avg_days_to_complete' => $avgDaysGlobal,
                     'total_abstract_pending' => $totalAbstractPending,
+                    'total_at_risk' => $totalAtRisk,
                 ],
                 'reviewers' => $stats,
             ],
@@ -724,6 +954,11 @@ class ReviewController extends Controller
             'status' => 'pending',
             'due_date' => $request->due_date,
             'submitted_at' => null,
+            // Reassigning a reviewer who declared a conflict is how officers resolve it —
+            // mark it resolved so it drops off the COI conflicts dashboard.
+            'coi_resolved_at' => $assignment->coi_has_conflict && ! $assignment->coi_resolved_at
+                ? now()
+                : $assignment->coi_resolved_at,
         ]);
 
         ReviewScore::where('review_assignment_id', $assignment->id)->delete();
@@ -1015,6 +1250,10 @@ class ReviewController extends Controller
                 'scheduled_date' => $session->scheduled_date?->toDateString(),
                 'scheduled_time' => $session->scheduled_time,
                 'venue' => $session->venue,
+                'score_deadline' => $session->scoreDeadline()->toIso8601String(),
+                'deadline_extended' => $session->score_deadline_extended_until !== null,
+                'deadline_passed' => now()->gt($session->scoreDeadline()),
+                'deadline_passed_message' => ReviewScoreService::DEFENCE_DEADLINE_PASSED_MESSAGE,
             ] : null;
         }
 
@@ -1056,6 +1295,39 @@ class ReviewController extends Controller
                 ? 'Conflict reported. The assigning officer has been notified to reassign this review.'
                 : 'Conflict of interest declaration recorded.',
         ]);
+    }
+
+    /**
+     * Officer-facing dashboard: review assignments with a reported, unresolved COI —
+     * awaiting a reviewer reassignment. Resolved automatically when the assignment is
+     * reassigned (see reassignReviewer()).
+     */
+    public function coiConflicts(Request $request): JsonResponse
+    {
+        if (! $request->user()->hasAnyRole(['super_admin', 'admin', 'central_officer', 'research_officer',
+            'community_officer', 'technology_officer', 'college_officer'])) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
+        }
+
+        $query = ReviewAssignment::with([
+            'proposal:id,tracker_number,title,category,college_id',
+            'proposal.college:id,name',
+            'reviewer:id,name,email',
+            'assignedBy:id,name',
+        ])
+            ->where('coi_has_conflict', true)
+            ->whereNull('coi_resolved_at')
+            ->whereHas('proposal', function ($q) use ($request) {
+                if ($request->_college_scope) {
+                    $q->where('college_id', $request->_college_scope);
+                }
+                if ($request->_category_scope) {
+                    $q->where('category', $request->_category_scope);
+                }
+            })
+            ->orderBy('coi_declared_at');
+
+        return response()->json(['data' => $query->get(), 'message' => '', 'errors' => [], 'meta' => []]);
     }
 
     private function notifyConflictDeclared(ReviewAssignment $assignment, User $reviewer): void
@@ -1148,5 +1420,54 @@ class ReviewController extends Controller
         }
 
         return response()->json(['data' => $member->fresh(), 'message' => 'Invitation response recorded.']);
+    }
+
+    /** PI resends an invitation to a co-investigator who previously declined. */
+    public function resendInvitation(string $id, Request $request): JsonResponse
+    {
+        $member = ProposalMember::with(['proposal.pi', 'user'])->findOrFail($id);
+        $proposal = $member->proposal;
+
+        if (! $proposal || $proposal->pi_user_id !== $request->user()->id) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.'], 403);
+        }
+
+        if ($member->role !== 'co_investigator' || $member->status !== 'active') {
+            return response()->json(['data' => null, 'message' => 'This person is not an active co-investigator on this proposal.'], 422);
+        }
+
+        if ($member->invitation_status !== 'declined') {
+            return response()->json(['data' => null, 'message' => 'Only a declined invitation can be resent.'], 422);
+        }
+
+        $member->update([
+            'invitation_status' => 'pending',
+            'invitation_responded_at' => null,
+        ]);
+
+        $coI = $member->user;
+        if ($coI) {
+            $data = [
+                'tracker_number' => $proposal->tracker_number,
+                'title' => $proposal->title,
+                'pi_name' => $proposal->pi?->name ?? 'the PI',
+            ];
+
+            if ($coI->email) {
+                try {
+                    SendEmailNotificationJob::dispatchSync($coI, 'co_investigator_notified', $data);
+                } catch (\Exception $e) {
+                    Log::warning("Could not resend co-investigator invitation email to {$coI->email}: {$e->getMessage()}");
+                }
+            }
+
+            try {
+                StoreInAppNotificationJob::dispatchSync($coI->id, 'co_investigator_notified', $data);
+            } catch (\Exception $e) {
+                Log::warning("Could not store resent co-investigator invitation notification for {$coI->id}: {$e->getMessage()}");
+            }
+        }
+
+        return response()->json(['data' => $member->fresh(), 'message' => 'Invitation resent.']);
     }
 }

@@ -10,15 +10,21 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AwardController;
 use App\Http\Controllers\Api\BudgetController;
 use App\Http\Controllers\Api\BudgetMilestoneController;
+use App\Http\Controllers\Api\BudgetRevisionController;
 use App\Http\Controllers\Api\CalendarController;
 use App\Http\Controllers\Api\CentralEvaluationController;
+use App\Http\Controllers\Api\ClosureChecklistController;
 use App\Http\Controllers\Api\CollegeController;
+use App\Http\Controllers\Api\CollegePhaseCompletionController;
 use App\Http\Controllers\Api\ComplaintController;
 use App\Http\Controllers\Api\CompletionWorkshopController;
 use App\Http\Controllers\Api\ConferenceController;
 use App\Http\Controllers\Api\ContractController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\DeadlineExtensionController;
+use App\Http\Controllers\Api\DefenceDeadlineController;
 use App\Http\Controllers\Api\DisbursementController;
+use App\Http\Controllers\Api\EthicalClearanceController;
 use App\Http\Controllers\Api\ExternalFund\AgencyController as EFAgencyController;
 use App\Http\Controllers\Api\ExternalFund\ApplicationController as EFApplicationController;
 use App\Http\Controllers\Api\ExternalFund\AwardController as EFAwardController;
@@ -37,6 +43,7 @@ use App\Http\Controllers\Api\HealthController;
 use App\Http\Controllers\Api\LoginNoticeController;
 use App\Http\Controllers\Api\LookupOptionController;
 use App\Http\Controllers\Api\MidtermEvaluationController;
+use App\Http\Controllers\Api\NoCostExtensionController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OngoingProposalsController;
 use App\Http\Controllers\Api\ProposalAiScoreController;
@@ -46,6 +53,7 @@ use App\Http\Controllers\Api\ProposalArchiveController;
 use App\Http\Controllers\Api\ProposalCallController;
 use App\Http\Controllers\Api\ProposalController;
 use App\Http\Controllers\Api\ProposalPipelineController;
+use App\Http\Controllers\Api\ProposalTemplateController;
 use App\Http\Controllers\Api\ProposalValidationController;
 use App\Http\Controllers\Api\ProposalWizardController;
 use App\Http\Controllers\Api\ReportController;
@@ -303,6 +311,11 @@ Route::prefix('v1')->group(function () {
         Route::post('/proposal-calls/{id}/guidelines', [ProposalCallController::class, 'uploadGuidelines']);
         Route::get('/proposal-calls/{id}/guidelines/download', [ProposalCallController::class, 'downloadGuidelines']);
 
+        // Proposal templates — PI's own reusable, prefillable wizard content
+        Route::post('/proposal-templates', [ProposalTemplateController::class, 'store']);
+        Route::get('/proposal-templates', [ProposalTemplateController::class, 'index']);
+        Route::delete('/proposal-templates/{id}', [ProposalTemplateController::class, 'destroy']);
+
         // Proposal Wizard — static segments before apiResource to avoid {id} collision
         Route::post('/proposals/draft', [ProposalWizardController::class, 'createDraft']);
         Route::get('/proposals/validation-queue', [ProposalValidationController::class, 'index']);
@@ -331,11 +344,19 @@ Route::prefix('v1')->group(function () {
         // Review
         Route::get('/proposals/{id}/available-reviewers', [ReviewController::class, 'availableReviewers']);
         Route::post('/proposals/{id}/review/assign', [ReviewController::class, 'assign']);
-        // /my must be before /{id} so the static segment wins the route match
+        // /my and /coi-conflicts must be before /{id} so the static segment wins the route match
         Route::get('/review-assignments/my', [ReviewController::class, 'myAssignments']);
+        Route::get('/review-assignments/coi-conflicts', [ReviewController::class, 'coiConflicts']);
         Route::get('/review-assignments/{id}', [ReviewController::class, 'showAssignment']);
         Route::post('/review-assignments/{id}/score', [ReviewController::class, 'submitScore']);
         Route::post('/proposals/{id}/blind-review/reject', [ReviewController::class, 'rejectFromBlindReview']);
+        Route::post('/proposals/{id}/reopen', [ReviewController::class, 'reopen']);
+        Route::get('/defence/college-readiness', [ReviewController::class, 'collegeDefenceReadiness']);
+        // Open defence score deadlines — per-proposal extension requests + approvals
+        Route::post('/defence-sessions/{id}/deadline-extensions', [DefenceDeadlineController::class, 'requestExtension']);
+        Route::get('/defence-deadline-extensions', [DefenceDeadlineController::class, 'index']);
+        Route::post('/defence-deadline-extensions/{id}/decide', [DefenceDeadlineController::class, 'decide']);
+        Route::get('/proposals/{id}/defence/readiness', [ReviewController::class, 'defenceReadiness']);
         Route::post('/proposals/{id}/defence/schedule', [ReviewController::class, 'scheduleDefence']);
         Route::post('/proposals/{id}/defence/process-result', [ReviewController::class, 'processDefenceResultByProposal']);
         Route::post('/defence-sessions/{id}/process-result', [ReviewController::class, 'processDefenceResult']);
@@ -367,6 +388,7 @@ Route::prefix('v1')->group(function () {
         Route::put('/review-assignments/{id}/extend', [ReviewController::class, 'extendDueDate']);
         Route::post('/review-assignments/{id}/declare-coi', [ReviewController::class, 'declareCoi']);
         Route::post('/proposal-members/{id}/respond-invitation', [ReviewController::class, 'respondInvitation']);
+        Route::post('/proposal-members/{id}/resend-invitation', [ReviewController::class, 'resendInvitation']);
 
         // Overdue reviews dashboard — reminder history is shared with the daily
         // rtt:review-deadline-reminders scheduled command via ReviewReminderService.
@@ -384,14 +406,39 @@ Route::prefix('v1')->group(function () {
         Route::get('/appeals', [ProposalAppealController::class, 'index']);
         Route::post('/appeals/{id}/resolve', [ProposalAppealController::class, 'resolve']);
 
+        // Deadline extension requests
+        Route::post('/proposals/{id}/deadline-extension', [DeadlineExtensionController::class, 'store']);
+        Route::get('/proposals/{id}/deadline-extension', [DeadlineExtensionController::class, 'show']);
+        Route::get('/deadline-extensions', [DeadlineExtensionController::class, 'index']);
+        Route::post('/deadline-extensions/{id}/resolve', [DeadlineExtensionController::class, 'resolve']);
+
+        // Budget revision requests (post-award)
+        Route::post('/proposals/{id}/budget-revision', [BudgetRevisionController::class, 'store']);
+        Route::get('/proposals/{id}/budget-revision', [BudgetRevisionController::class, 'show']);
+        Route::get('/budget-revisions', [BudgetRevisionController::class, 'index']);
+        Route::post('/budget-revisions/{id}/approve', [BudgetRevisionController::class, 'approve']);
+        Route::post('/budget-revisions/{id}/reject', [BudgetRevisionController::class, 'reject']);
+
+        // No-cost extension requests (post-award project timeline extension)
+        Route::post('/proposals/{id}/no-cost-extension', [NoCostExtensionController::class, 'store']);
+        Route::get('/proposals/{id}/no-cost-extension', [NoCostExtensionController::class, 'show']);
+        Route::get('/no-cost-extensions', [NoCostExtensionController::class, 'index']);
+        Route::post('/no-cost-extensions/{id}/approve', [NoCostExtensionController::class, 'approve']);
+        Route::post('/no-cost-extensions/{id}/reject', [NoCostExtensionController::class, 'reject']);
+
         // Approval reports — college officer flags a possibly mistaken approval sitting in blind review
         Route::post('/proposals/{id}/approval-reports', [ProposalApprovalReportController::class, 'store']);
         Route::get('/proposals/{id}/approval-reports', [ProposalApprovalReportController::class, 'index']);
-        Route::post('/approval-reports/{id}/review', [ProposalApprovalReportController::class, 'markReviewed']);
+        Route::get('/approval-reports', [ProposalApprovalReportController::class, 'indexAll']);
+        Route::post('/approval-reports/{id}/resolve', [ProposalApprovalReportController::class, 'resolve']);
+        Route::post('/approval-reports/{id}/withdraw', [ProposalApprovalReportController::class, 'withdraw']);
 
         // Proposal pipeline — cross-phase status overview
         Route::get('/proposal-pipeline', [ProposalPipelineController::class, 'index']);
         Route::get('/proposal-pipeline/export', [ProposalPipelineController::class, 'export']);
+
+        // College phase completion — per-college blind review / open defence completion %
+        Route::get('/college-phase-completion', [CollegePhaseCompletionController::class, 'index']);
 
         // Ongoing proposals — consolidated post-award monitoring view (funded/midterm_evaluation)
         Route::get('/ongoing-proposals', [OngoingProposalsController::class, 'index']);
@@ -417,6 +464,12 @@ Route::prefix('v1')->group(function () {
         Route::post('/proposals/{id}/contract/approve', [ContractController::class, 'approve']);
         Route::post('/proposals/{id}/contract/reject', [ContractController::class, 'reject']);
         Route::get('/proposals/{id}/contract/download', [ContractController::class, 'download']);
+
+        // Ethical Clearance
+        Route::get('/ethical-clearances', [EthicalClearanceController::class, 'index']);
+        Route::post('/proposals/{id}/ethical-clearance/submit', [EthicalClearanceController::class, 'submit']);
+        Route::post('/proposals/{id}/ethical-clearance/approve', [EthicalClearanceController::class, 'approve']);
+        Route::post('/proposals/{id}/ethical-clearance/reject', [EthicalClearanceController::class, 'reject']);
 
         // Awards
         Route::get('/proposals/awarded/export', [AwardController::class, 'exportAwarded']);
@@ -513,6 +566,10 @@ Route::prefix('v1')->group(function () {
             Route::patch('/completion-workshops/{id}/questions/{questionId}/answer', [CompletionWorkshopController::class, 'answerQuestion']);
             Route::delete('/completion-workshops/{id}/questions/{questionId}', [CompletionWorkshopController::class, 'deleteQuestion']);
 
+            // Project closure checklist — gates completion workshop finalization
+            Route::get('/proposals/{id}/closure-checklist', [ClosureChecklistController::class, 'show']);
+            Route::post('/proposals/{id}/closure-checklist', [ClosureChecklistController::class, 'update']);
+
             // Research Outputs
             Route::get('/research-outputs/stats', [ResearchOutputController::class, 'stats']);
             Route::get('/research-outputs/eligible-proposals', [ResearchOutputController::class, 'eligibleProposals']);
@@ -535,6 +592,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/proposals/{proposal}/ai-score/generate', [ProposalAiScoreController::class, 'generate']);
             Route::get('/proposals/{id}/review-results', [ReviewController::class, 'proposalReviewResults']);
             Route::get('/proposals/{id}/review-results/recalculate', [ReviewController::class, 'recalculateReviewScore']);
+            Route::post('/proposals/{id}/review-results/recalculate/apply', [ReviewController::class, 'applyRecalculatedDecision']);
             Route::get('/proposals/{proposal}/reviewer-suggestions', [ReviewerMatchController::class, 'suggestions']);
             Route::post('/proposals/{proposal}/clone', [ProposalController::class, 'clone']);
 
@@ -635,6 +693,8 @@ Route::prefix('v1')->group(function () {
         Route::post('/notifications/read', [NotificationController::class, 'markAsRead']);
         Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
         Route::delete('/notifications/read', [NotificationController::class, 'destroyRead']);
+        Route::get('/notification-preferences', [NotificationController::class, 'preferences']);
+        Route::put('/notification-preferences', [NotificationController::class, 'updatePreferences']);
         Route::delete('/notifications/{id}', [NotificationController::class, 'destroy']);
 
         // Action counts (nav badges)

@@ -3,7 +3,7 @@ import {
     Users, Download, Filter, Search, X, RefreshCw,
     Building2, ClipboardList, EyeOff, Presentation,
     ChevronDown, ChevronRight, FileDown, BarChart2,
-    Clock, CheckCircle2, AlertCircle, TrendingUp, FileText,
+    Clock, CheckCircle2, AlertCircle, TrendingUp, TrendingDown, Minus, FileText, AlertTriangle,
 } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import api from '../../lib/api';
@@ -539,7 +539,7 @@ export default function ReviewerWorkload() {
                             if (!analytics?.reviewers) { return; }
                             const headers = [
                                 'Reviewer', 'Email', 'Proposal Total', 'Proposal Completed', 'Proposal Pending',
-                                'Overdue', 'Declined', 'Avg Days', 'On-Time %', 'Avg Score',
+                                'Overdue', 'Declined', 'Avg Days', 'On-Time %', 'Avg Score %', 'Leniency vs Peers', 'At Risk',
                                 'Abstract Total', 'Abstract Completed', 'Abstract Pending', 'Abstract Avg Score',
                                 'Combined Pending',
                             ];
@@ -547,7 +547,8 @@ export default function ReviewerWorkload() {
                                 r.reviewer?.name ?? '', r.reviewer?.email ?? '',
                                 r.total, r.completed, r.pending, r.overdue, r.declined,
                                 r.avg_days ?? '', r.on_time_rate != null ? r.on_time_rate + '%' : '',
-                                r.avg_score ?? '',
+                                r.avg_score_pct != null ? r.avg_score_pct + '%' : '',
+                                r.leniency_delta ?? '', r.risk_flag ? 'Yes' : 'No',
                                 r.abstract_reviews?.total ?? 0, r.abstract_reviews?.completed ?? 0,
                                 r.abstract_reviews?.pending ?? 0, r.abstract_reviews?.avg_score ?? '',
                                 r.combined_pending ?? 0,
@@ -788,6 +789,37 @@ function OnTimeBar({ rate }) {
     );
 }
 
+function LeniencyIndicator({ delta }) {
+    if (delta == null) {
+        return <span className="text-xs text-gray-400">—</span>;
+    }
+    if (Math.abs(delta) < 3) {
+        return (
+            <span className="inline-flex items-center gap-1 text-xs text-gray-500">
+                <Minus size={11} /> On par
+            </span>
+        );
+    }
+    const lenient = delta > 0;
+    return (
+        <span className={`inline-flex items-center gap-1 text-xs font-semibold ${lenient ? 'text-amber-600' : 'text-blue-600'}`}>
+            {lenient ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+            {lenient ? '+' : ''}{delta}pt {lenient ? 'vs peers' : 'vs peers'}
+        </span>
+    );
+}
+
+function RiskBadge({ flagged }) {
+    if (!flagged) {
+        return <span className="text-xs text-gray-300">—</span>;
+    }
+    return (
+        <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
+            <AlertTriangle size={11} /> At Risk
+        </span>
+    );
+}
+
 function AnalyticsStatCard({ label, value, icon: Icon, color, sub }) {
     return (
         <div className="bg-white rounded-2xl border border-gray-100 p-5 flex items-center gap-4 shadow-sm">
@@ -897,6 +929,13 @@ function AnalyticsTab({ analytics, loading, onDownload, reviewerTypeFilter = 'al
                     color={(summary.total_abstract_pending ?? 0) > 0 ? 'bg-orange-500' : 'bg-gray-400'}
                     sub="awaiting a reviewer score"
                 />
+                <AnalyticsStatCard
+                    label="Reviewers At Risk"
+                    value={summary.total_at_risk ?? 0}
+                    icon={AlertTriangle}
+                    color={(summary.total_at_risk ?? 0) > 0 ? 'bg-red-500' : 'bg-gray-400'}
+                    sub="late or declining a lot"
+                />
             </div>
 
             {/* Per-reviewer table */}
@@ -930,7 +969,9 @@ function AnalyticsTab({ analytics, loading, onDownload, reviewerTypeFilter = 'al
                                     <SortHeader label="Declined"  col="declined" />
                                     <SortHeader label="Avg Days"  col="avg_days" />
                                     <th className="px-5 py-3.5 text-left text-xs font-semibold text-indigo-100 uppercase tracking-wide whitespace-nowrap">On-Time Rate</th>
-                                    <SortHeader label="Avg Score" col="avg_score" />
+                                    <SortHeader label="Avg Score" col="avg_score_pct" />
+                                    <th className="px-5 py-3.5 text-left text-xs font-semibold text-indigo-100 uppercase tracking-wide whitespace-nowrap">Leniency</th>
+                                    <th className="px-5 py-3.5 text-left text-xs font-semibold text-indigo-100 uppercase tracking-wide whitespace-nowrap">Risk</th>
                                     <th className="px-5 py-3.5 text-left text-xs font-semibold text-indigo-100 uppercase tracking-wide whitespace-nowrap">Abstract Reviews</th>
                                     <SortHeader label="Total Pending" col="combined_pending" />
                                 </tr>
@@ -969,7 +1010,13 @@ function AnalyticsTab({ analytics, loading, onDownload, reviewerTypeFilter = 'al
                                             <OnTimeBar rate={r.on_time_rate} />
                                         </td>
                                         <td className="px-5 py-3.5">
-                                            <span className="text-sm text-gray-600">{r.avg_score ?? '—'}</span>
+                                            <span className="text-sm text-gray-600">{r.avg_score_pct != null ? r.avg_score_pct + '%' : '—'}</span>
+                                        </td>
+                                        <td className="px-5 py-3.5">
+                                            <LeniencyIndicator delta={r.leniency_delta} />
+                                        </td>
+                                        <td className="px-5 py-3.5">
+                                            <RiskBadge flagged={r.risk_flag} />
                                         </td>
                                         <td className="px-5 py-3.5">
                                             {r.abstract_reviews?.total > 0 ? (
@@ -1012,9 +1059,15 @@ function AnalyticsTab({ analytics, loading, onDownload, reviewerTypeFilter = 'al
                                 </div>
                                 <OnTimeBar rate={r.on_time_rate} />
                                 <div className="flex items-center justify-between mt-2 text-xs">
-                                    <span className="text-gray-500">Avg score: <span className="font-medium text-gray-700">{r.avg_score ?? '—'}</span></span>
+                                    <span className="text-gray-500">Avg score: <span className="font-medium text-gray-700">{r.avg_score_pct != null ? r.avg_score_pct + '%' : '—'}</span></span>
                                     <span className={`font-bold ${r.combined_pending > 0 ? 'text-amber-700' : 'text-gray-400'}`}>{r.combined_pending} total pending</span>
                                 </div>
+                                {(r.leniency_delta != null || r.risk_flag) && (
+                                    <div className="flex items-center justify-between mt-1.5">
+                                        <LeniencyIndicator delta={r.leniency_delta} />
+                                        <RiskBadge flagged={r.risk_flag} />
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>

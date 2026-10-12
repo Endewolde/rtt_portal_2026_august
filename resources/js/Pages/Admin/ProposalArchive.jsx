@@ -26,7 +26,7 @@ const ACADEMIC_YEARS = Array.from({ length: 60 }, (_, i) => {
 const STATUS_STYLES = {
     submitted:    { label: 'Submitted',    bg: 'bg-blue-100',    text: 'text-blue-700',    dot: 'bg-blue-500'    },
     validated:    { label: 'Validated',    bg: 'bg-cyan-100',    text: 'text-cyan-700',    dot: 'bg-cyan-500'    },
-    accepted:     { label: 'Accepted',     bg: 'bg-violet-100',  text: 'text-violet-700',  dot: 'bg-violet-500'  },
+    accepted:     { label: 'Central Evaluation', bg: 'bg-violet-100',  text: 'text-violet-700',  dot: 'bg-violet-500'  },
     funded:       { label: 'Funded',       bg: 'bg-emerald-100', text: 'text-emerald-700', dot: 'bg-emerald-500' },
     completed:    { label: 'Completed',    bg: 'bg-green-100',   text: 'text-green-700',   dot: 'bg-green-500'   },
     rejected:     { label: 'Rejected',     bg: 'bg-red-100',     text: 'text-red-700',     dot: 'bg-red-500'     },

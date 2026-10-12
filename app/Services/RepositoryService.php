@@ -103,7 +103,13 @@ class RepositoryService
             $actor = User::find($log->actor_id);
             $actorLabel = 'System';
 
-            if ($actor) {
+            // A system-triggered decision (blind/defence auto pass-fail, threshold
+            // recalculation) still needs a real user in actor_id to satisfy
+            // WorkflowService's authorization check, but that account had no actual
+            // part in the decision — never attribute it to "RTT Office" here.
+            if ($log->metadata['automatic'] ?? false) {
+                $actorLabel = 'System';
+            } elseif ($actor) {
                 if ($reviewerIds->has($actor->id)) {
                     if (! isset($reviewerMap[$actor->id])) {
                         $reviewerMap[$actor->id] = 'Reviewer '.$reviewerCounter++;

@@ -337,7 +337,7 @@ function AppealCard({ appeal, ts, filter, onResolve }) {
 
                         {appeal.resolution_notes && (
                             <div className={`rounded-xl p-4 ${filter === 'approved' ? 'bg-emerald-50 border border-emerald-100' : 'bg-red-50 border border-red-100'}`}>
-                                <p className="text-xs font-semibold uppercase tracking-wide mb-2 ${filter === 'approved' ? 'text-emerald-600' : 'text-red-600'}">
+                                <p className={`text-xs font-semibold uppercase tracking-wide mb-2 ${filter === 'approved' ? 'text-emerald-600' : 'text-red-600'}`}>
                                     Resolution Notes
                                 </p>
                                 <p className="text-sm text-gray-700 leading-relaxed">{appeal.resolution_notes}</p>

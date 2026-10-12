@@ -1,3 +1,5 @@
+import { getStatusLabel } from '../lib/utils';
+
 const CATEGORY_COLORS = {
     research:             'bg-blue-100 text-blue-700',
     community_engagement: 'bg-green-100 text-green-700',
@@ -16,6 +18,39 @@ const STATUS_COLORS = {
     funded:              'bg-emerald-50 text-emerald-700 border-emerald-200',
     rejected:            'bg-red-50 text-red-700 border-red-200',
 };
+
+const CONTRACT_STATUS_LABELS = {
+    null:      'Not Submitted',
+    pending:   'Pending Review',
+    approved:  'Approved',
+    rejected:  'Rejected',
+};
+
+const CONTRACT_STATUS_COLORS = {
+    null:      'bg-gray-100 text-gray-600 border-gray-200',
+    pending:   'bg-blue-50 text-blue-700 border-blue-200',
+    approved:  'bg-emerald-50 text-emerald-700 border-emerald-200',
+    rejected:  'bg-red-50 text-red-700 border-red-200',
+};
+
+function ContractStatusBadge({ status, submittedAt }) {
+    const key = status ?? 'null';
+    const daysPending = status === 'pending' && submittedAt
+        ? Math.floor((Date.now() - new Date(submittedAt).getTime()) / 86400000)
+        : null;
+    return (
+        <div className="inline-flex flex-col items-start gap-0.5">
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium border whitespace-nowrap ${CONTRACT_STATUS_COLORS[key]}`}>
+                {CONTRACT_STATUS_LABELS[key]}
+            </span>
+            {daysPending !== null && (
+                <span className={`text-[10px] font-medium ${daysPending > 7 ? 'text-red-500' : 'text-gray-400'}`}>
+                    {daysPending === 0 ? 'today' : `${daysPending}d pending`}
+                </span>
+            )}
+        </div>
+    );
+}
 
 function SkeletonRow({ hasSelect = false }) {
     return (
@@ -94,6 +129,8 @@ export default function ProposalTable({
         col('awarded_amount') && { label: 'Awarded', value: <span className="font-semibold text-emerald-700">{fmtCurrency(p.award?.awarded_amount ?? p.awarded_amount)}</span> },
         col('reviewers') && { label: 'Reviews', value: p.review_assignments ? `${p.review_assignments.filter(a => a.status === 'submitted').length}/${p.review_assignments.length}` : '—' },
         col('defence_date') && { label: 'Defence Date', value: fmtDate(p.defence_session?.scheduled_date) },
+        col('contract_status') && { label: 'Contract', value: <ContractStatusBadge status={p.contract_status} submittedAt={p.contract_submitted_at} /> },
+        col('contract_submitted') && { label: 'Contract Submitted', value: fmtDate(p.contract_submitted_at) },
     ].filter(Boolean);
 
     return (
@@ -131,6 +168,8 @@ export default function ProposalTable({
                             {col('awarded_amount') && <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Awarded</th>}
                             {col('reviewers') && <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Reviews</th>}
                             {col('defence_date') && <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Defence Date</th>}
+                            {col('contract_status') && <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Contract</th>}
+                            {col('contract_submitted') && <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">Submitted</th>}
                             {actions && <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Actions</th>}
                         </tr>
                     </thead>
@@ -196,7 +235,7 @@ export default function ProposalTable({
                                 {col('status') && (
                                     <td className="px-4 py-3 whitespace-nowrap">
                                         <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${STATUS_COLORS[p.status] ?? 'bg-gray-50 text-gray-600 border-gray-200'}`}>
-                                            {p.status?.replace(/_/g, ' ') ?? '—'}
+                                            {p.status ? getStatusLabel(p.status) : '—'}
                                         </span>
                                     </td>
                                 )}
@@ -242,6 +281,16 @@ export default function ProposalTable({
                                         {fmtDate(p.defence_session?.scheduled_date)}
                                     </td>
                                 )}
+                                {col('contract_status') && (
+                                    <td className="px-4 py-3 whitespace-nowrap">
+                                        <ContractStatusBadge status={p.contract_status} submittedAt={p.contract_submitted_at} />
+                                    </td>
+                                )}
+                                {col('contract_submitted') && (
+                                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">
+                                        {fmtDate(p.contract_submitted_at)}
+                                    </td>
+                                )}
                                 {actions && (
                                     <td className="px-4 py-3 text-right whitespace-nowrap">
                                         {actions(p)}
@@ -284,7 +333,7 @@ export default function ProposalTable({
                             </div>
                             {col('status') && (
                                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium border shrink-0 ${STATUS_COLORS[p.status] ?? 'bg-gray-50 text-gray-600 border-gray-200'}`}>
-                                    {p.status?.replace(/_/g, ' ') ?? '—'}
+                                    {p.status ? getStatusLabel(p.status) : '—'}
                                 </span>
                             )}
                         </div>

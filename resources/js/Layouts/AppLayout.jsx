@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Link, usePage } from '@inertiajs/react'
+import { Link, usePage, router } from '@inertiajs/react'
 import {
     LayoutDashboard, FileText, Megaphone, PlusCircle, Search,
     CheckSquare, ClipboardCheck, AlertCircle, AlertTriangle,
@@ -12,21 +12,24 @@ import {
     BadgeDollarSign, Trophy, Archive, ListChecks, ShieldCheck,
     User, ChevronDown, ChevronUp, Lock, Clock, UserX,
     CalendarDays, Banknote, Landmark, MessageSquareHeart, LogIn, Scale, ScrollText, Milestone, FileBarChart2, FolderSearch,
-    HelpCircle, Sliders,
+    HelpCircle, Sliders, FileSignature, ShieldAlert, CalendarClock, CalendarPlus,
 } from 'lucide-react'
 import NotificationBell from '../Components/NotificationBell'
 import FeedbackPopup from '../Components/FeedbackPopup'
 import ProfileCompleteModal from '../Components/ProfileCompleteModal'
 import SwitchLoginModal from '../Components/SwitchLoginModal'
 import ConfirmDialog from '../Components/ConfirmDialog'
+import OpenDefenceHoldModal from '../Components/OpenDefenceHoldModal'
 import CommandPalette from '../Components/CommandPalette'
 import PendingInvitationsModal from '../Components/PendingInvitationsModal'
+import InvitationResponsePopup from '../Components/InvitationResponsePopup'
 import { useToast } from '../Components/Toast'
 import { useAuth } from '../hooks/useAuth'
 import { useFeature } from '../hooks/useFeature'
 import { useActionCounts } from '../hooks/useActionCounts'
 import { useSessionTimeout } from '../hooks/useSessionTimeout'
 import { cn } from '../lib/utils'
+import api from '../lib/api'
 
 // ─── Route permission map ─────────────────────────────────────────────────────
 
@@ -67,6 +70,9 @@ const ROUTE_PERMISSIONS = [
     ['/admin/review-assignment',   _A],
     // Admin + officers
     ['/admin/appeals',             [..._A, ..._OR]],
+    ['/admin/deadline-extensions', [..._A, ..._OR]],
+    ['/admin/defence-extensions',  [..._A, ..._OR]],
+    ['/admin/ethical-clearance',   [..._A, ..._OR, 'college_officer']],
     ['/admin/grant-letters',       [..._A, ..._OR]],
     ['/admin/validation-queue',    [..._A, ..._OR]],
     ['/admin/central-evaluation',  [..._A, ..._OR]],
@@ -74,6 +80,7 @@ const ROUTE_PERMISSIONS = [
     // college_officer's own scoped view, not just admin-tier + category officers.
     ['/admin/analytics',           [..._A, ..._OR, 'college_officer']],
     ['/admin/proposal-pipeline',   [..._A, ..._OR, 'college_officer']],
+    ['/admin/college-phase-completion', [..._A, ..._OR, 'college_officer']],
     ['/ongoing-proposals',         [..._A, ..._OR, 'college_officer']],
     ['/admin/funding',             [..._A, ..._OR]],
     ['/admin/external-funds',      [..._A, ..._OR]],
@@ -83,8 +90,13 @@ const ROUTE_PERMISSIONS = [
     ['/admin/blind-review',        [..._A, 'college_officer']],
     ['/admin/open-defence',        [..._A, 'college_officer']],
     ['/admin/review-deadlines',    [..._A, 'college_officer']],
+    ['/admin/coi-conflicts',       [..._A, ..._OR, 'college_officer']],
     // Admin + all officers + finance
     ['/admin/awarded',             [..._A, ..._OR, 'college_officer', _FO]],
+    ['/admin/budget-revisions',    [..._A, 'college_officer', _FO, 'support_officer']],
+    ['/admin/no-cost-extensions',  [..._A, ..._OR, 'college_officer']],
+    ['/admin/approval-reports',    [..._A, ..._OR, 'college_officer']],
+    ['/admin/contracts',           [..._A, ..._OR, 'college_officer', _FO]],
     ['/admin/completed-archive',   [..._A, ..._OR, 'college_officer', _FO]],
 ]
 
@@ -99,8 +111,10 @@ const ROUTE_PERM_REQUIRED = {
     '/admin/central-evaluation':  'proposals.validate',
     '/admin/blind-review':        'reviews.view_any',
     '/admin/open-defence':        'defence_sessions.view_any',
+    '/admin/coi-conflicts':       'review_assignments.view_any',
     '/admin/funding':             'proposals.validate',
     '/admin/awarded':             'proposals.view_any',
+    '/admin/contracts':           'proposals.view_any',
     '/admin/assign-reviewers':    'proposals.assign_reviewer',
     '/admin/review-assignment':   'review_assignments.view_any',
     '/admin/audit-logs':          'audit_logs.view_any',
@@ -135,6 +149,56 @@ const ROUTE_PERM_REQUIRED = {
     '/complaints':                'complaints.view_any',
 }
 
+// Sub-feature gate per page — mirrors every hasSubFeature(...) check already used to
+// hide/show the matching sidebar nav item below. Turning a sub-feature off in Feature
+// Management only hid the nav link; a user who already had role/permission access
+// could still reach the page by typing its URL directly, since routeAllowed (below)
+// never consulted this. This map closes that gap by extending the same guard.
+// Matched by prefix except '/proposals' (see SUBFEATURE_EXACT_ONLY below), so
+// longer/more-specific paths must come before shorter ones in this object.
+const ROUTE_SUBFEATURE = {
+    '/proposals/create':          'proposals.new_application',
+    '/proposals':                 'proposals.all',
+    '/proposal-calls':            'proposals.calls',
+    '/tracker':                   'proposals.track',
+    '/my-proposals':              'proposals.my_proposals',
+    '/admin/awarded':             'proposals.awarded',
+    '/admin/contracts':           'proposals.contracts',
+    '/admin/completed-archive':   'proposals.archive',
+    '/admin/validation-queue':    'evaluation.validation',
+    '/admin/blind-review':        'evaluation.blind_review',
+    '/admin/open-defence':        'evaluation.open_defence',
+    '/admin/central-evaluation':  'evaluation.central',
+    '/reviews':                   'evaluation.assigned_reviews',
+    '/admin/evaluation-criteria': 'evaluation.criteria',
+    '/admin/reviewer-workload':   'evaluation.reviewer_workload',
+    '/admin/review-deadlines':    'evaluation.review_deadlines',
+    '/admin/coi-conflicts':       'evaluation.coi_conflicts',
+    '/complaints':                'complaints.manage',
+    '/admin/similarity-flags':    'similarity.flags',
+    '/budget-allocations':        'finance.allocations',
+    '/finance/milestones':        'finance.requests',
+    '/budget-requests':           'finance.requests',
+    '/admin/funding':             'finance.funding',
+    '/disbursements':             'finance.disbursements',
+    '/settlements':               'finance.settlements',
+    '/ongoing-proposals':         'monitoring.ongoing',
+    '/midterm-evaluations':       'monitoring.midterm',
+    '/completion-workshops':      'monitoring.completion',
+    '/research-outputs':          'monitoring.outputs',
+    '/admin/repository':          'repository.manage',
+    '/repository':                'repository.view',
+    '/reports/builder':           'reports.generate',
+    '/reports/annual':            'reports.generate',
+    '/reports':                   'reports.generate',
+    '/admin/analytics':           'reports.analytics',
+    '/admin/proposal-pipeline':   'reports.analytics',
+    '/admin/college-phase-completion': 'reports.analytics',
+    '/admin/conferences':         'events.conferences',
+    '/admin/abstracts':           'events.abstracts',
+    '/admin/external-funds':      'external_funds.manage',
+}
+
 function getAllowedRoles(path) {
     const match = ROUTE_PERMISSIONS.find(([prefix]) =>
         path === prefix || path.startsWith(prefix + '/')
@@ -149,10 +213,27 @@ function getRequiredPermission(path) {
     return entry?.[1] ?? null
 }
 
+// '/proposals' is a bare list page whose URL happens to prefix many unrelated
+// nested routes ('/proposals/{id}', '/proposals/{id}/award', ...) — those must NOT
+// inherit the "All Proposals" list's sub-feature gate (a PI viewing their own
+// proposal has nothing to do with that admin list toggle). Every other entry here
+// is a flat dashboard page, so prefix matching is safe and correctly also covers
+// their action sub-routes (e.g. '/reviews/{id}/score' under '/reviews').
+const SUBFEATURE_EXACT_ONLY = ['/proposals']
+
+function getRequiredSubFeature(path) {
+    const bare = path.split('?')[0]
+    const entry = Object.entries(ROUTE_SUBFEATURE).find(([prefix]) =>
+        bare === prefix || (! SUBFEATURE_EXACT_ONLY.includes(prefix) && bare.startsWith(prefix + '/'))
+    )
+    return entry?.[1] ?? null
+}
+
 // ─── Unauthorized view ────────────────────────────────────────────────────────
 
-function UnauthorizedView({ user }) {
+function UnauthorizedView({ user, reason }) {
     const roles = (user?.roles ?? []).map(r => typeof r === 'string' ? r : r.name)
+    const isDisabledFeature = reason === 'feature_disabled'
     return (
         <div className="flex-1 flex items-center justify-center p-8">
             <div className="max-w-md w-full text-center">
@@ -160,14 +241,21 @@ function UnauthorizedView({ user }) {
                                 bg-red-50 mb-5">
                     <Lock size={28} className="text-red-500" />
                 </div>
-                <h1 className="text-xl font-bold text-gray-900 mb-2">Access Denied</h1>
+                <h1 className="text-xl font-bold text-gray-900 mb-2">
+                    {isDisabledFeature ? 'Feature Unavailable' : 'Access Denied'}
+                </h1>
                 <p className="text-sm text-gray-500 mb-6">
-                    You don't have permission to view this page.
-                    {roles.length > 0 && (
-                        <> Your current role is <strong className="text-gray-700 capitalize">
-                            {roles[0]?.replace(/_/g, ' ')}
-                        </strong>.</>
-                    )}
+                    {isDisabledFeature
+                        ? 'This feature has been turned off by an administrator and is not currently available.'
+                        : (<>
+                            You don't have permission to view this page.
+                            {roles.length > 0 && (
+                                <> Your current role is <strong className="text-gray-700 capitalize">
+                                    {roles[0]?.replace(/_/g, ' ')}
+                                </strong>.</>
+                            )}
+                        </>)
+                    }
                 </p>
                 <Link href="/dashboard"
                     className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600
@@ -295,7 +383,7 @@ const ICONS = {
     BadgeDollarSign, Trophy, Archive, ListChecks, ShieldCheck,
     Globe, CalendarDays, Banknote, Landmark,
     FlaskConical, Brain, MessageSquareHeart, Scale, ScrollText, Milestone, FileBarChart2, FolderSearch,
-    HelpCircle, Sliders, Clock,
+    HelpCircle, Sliders, Clock, FileSignature, ShieldAlert, CalendarClock, CalendarPlus,
     BuildingOffice: Building2,
 }
 
@@ -519,6 +607,31 @@ export default function AppLayout({ children, breadcrumb }) {
     const [switchLoginOpen, setSwitchLoginOpen] = useState(false)
     const [switchTarget, setSwitchTarget] = useState(null)
     const [switching, setSwitching] = useState(false)
+    const [openDefenceHold, setOpenDefenceHold] = useState(null)
+
+    // College officers can only enter the open defence phase once every proposal in
+    // their college has finished blind review — check before navigating, so they see
+    // why instead of landing on a page they can't act on.
+    const isOpenDefenceGated = hasRole('college_officer') && !hasAnyRole([..._A, ..._OR])
+
+    const handleNavClick = async (e, href) => {
+        setMobileOpen(false)
+        if (href !== '/admin/open-defence' || !isOpenDefenceGated) return
+
+        e.preventDefault()
+        try {
+            const res = await api.get('/defence/college-readiness')
+            const readiness = res.data?.data
+            if (readiness && !readiness.can_schedule) {
+                setOpenDefenceHold({
+                    collegeName: readiness.college_name,
+                    pending: readiness.pending_blind_review ?? [],
+                })
+                return
+            }
+        } catch { /* fall through — the page itself re-checks */ }
+        router.visit(href)
+    }
 
     const handleSwitchSelect = (target) => {
         setSwitchLoginOpen(false)
@@ -689,18 +802,26 @@ export default function AppLayout({ children, breadcrumb }) {
     const currentPath      = url || window.location.pathname
     const allowedRoles = getAllowedRoles(currentPath)
     const requiredPerm = getRequiredPermission(currentPath)
+    const requiredSubFeature = getRequiredSubFeature(currentPath)
     // Evaluate in order:
     // 1. No user yet (auth still loading) → pass through, authReady spinner handles it
     // 2. Role restriction exists → must satisfy it (plus optional permission OR)
     // 3. Permission restriction only → must have that permission
     // 4. No restriction at all, but path is under /admin/ → deny (safety net)
     // 5. No restriction, non-admin path → allow all authenticated users
-    const routeAllowed = !user
+    const roleAndPermAllowed = !user
         || (allowedRoles !== null
             ? hasAnyRole(allowedRoles) && (requiredPerm === null || hasPermission(requiredPerm))
             : requiredPerm !== null
                 ? hasPermission(requiredPerm)
                 : !currentPath.startsWith('/admin/'))
+    // A page whose sub-feature has been switched off in Feature Management is
+    // blocked even for a user who otherwise has the role/permission to view it —
+    // matches what the sidebar already does by hiding the link, but now also
+    // enforced against direct URL navigation, not just link visibility.
+    const subFeatureAllowed = !user || requiredSubFeature === null || hasSubFeature(requiredSubFeature)
+    const routeAllowed = roleAndPermAllowed && subFeatureAllowed
+    const unauthorizedReason = !roleAndPermAllowed ? 'permission' : !subFeatureAllowed ? 'feature_disabled' : null
 
     const isDark = isDarkColor(sidebarBg)
     const sc     = isDark ? DARK : LIGHT
@@ -768,6 +889,16 @@ export default function AppLayout({ children, breadcrumb }) {
                     badge: c => c.awarded_without_allocation,
                 },
                 {
+                    label: 'Contracts', href: '/admin/contracts', icon: 'FileSignature',
+                    show: perm('proposals.view_any') && !hasRole('staff') && hasSubFeature('proposals.contracts'),
+                    badge: c => c.contracts_pending_review,
+                },
+                {
+                    label: 'Budget Revisions', href: '/admin/budget-revisions', icon: 'BadgeDollarSign',
+                    show: hasAnyRole([...ALL_ADMIN, 'college_officer', FINANCE_OFF, 'support_officer']),
+                    badge: c => c.budget_revisions_pending,
+                },
+                {
                     label: 'Completed Archive', href: '/admin/completed-archive', icon: 'Archive',
                     show: perm('proposals.view_any') && !hasRole('staff') && hasSubFeature('proposals.archive'),
                 },
@@ -784,6 +915,31 @@ export default function AppLayout({ children, breadcrumb }) {
                 {
                     label: 'Appeals', href: '/admin/appeals', icon: 'Scale',
                     show: hasAnyRole([...ALL_ADMIN, ...OFFICER_ROLES]),
+                },
+                {
+                    label: 'Approval Reports', href: '/admin/approval-reports', icon: 'ShieldAlert',
+                    show: hasAnyRole([...ALL_ADMIN, ...OFFICER_ROLES, 'college_officer']),
+                    badge: c => c.approval_reports_open,
+                },
+                {
+                    label: 'Deadline Extensions', href: '/admin/deadline-extensions', icon: 'CalendarClock',
+                    show: hasAnyRole([...ALL_ADMIN, ...OFFICER_ROLES]),
+                    badge: c => c.deadline_extensions_pending,
+                },
+                {
+                    label: 'Defence Extensions', href: '/admin/defence-extensions', icon: 'CalendarPlus',
+                    show: hasAnyRole([...ALL_ADMIN, ...OFFICER_ROLES]),
+                    badge: c => c.defence_extensions_pending,
+                },
+                {
+                    label: 'No-Cost Extensions', href: '/admin/no-cost-extensions', icon: 'CalendarDays',
+                    show: hasAnyRole([...ALL_ADMIN, ...OFFICER_ROLES, 'college_officer']),
+                    badge: c => c.no_cost_extensions_pending,
+                },
+                {
+                    label: 'Ethical Clearance', href: '/admin/ethical-clearance', icon: 'ShieldCheck',
+                    show: hasAnyRole([...ALL_ADMIN, ...OFFICER_ROLES, 'college_officer']),
+                    badge: c => c.ethical_clearances_pending,
                 },
                 {
                     label: 'Grant Letters', href: '/admin/grant-letters', icon: 'ScrollText',
@@ -821,6 +977,11 @@ export default function AppLayout({ children, breadcrumb }) {
                     label: 'Review Deadlines', href: '/admin/review-deadlines', icon: 'Clock',
                     show: hasAnyRole([...ALL_ADMIN, 'college_officer']) && hasSubFeature('evaluation.review_deadlines'),
                     badge: c => c.overdue_reviews,
+                },
+                {
+                    label: 'COI Conflicts', href: '/admin/coi-conflicts', icon: 'ShieldAlert',
+                    show: hasAnyRole([...ALL_ADMIN, ...OFFICER_ROLES, 'college_officer']) && hasSubFeature('evaluation.coi_conflicts'),
+                    badge: c => c.coi_conflicts_pending,
                 },
                 {
                     label: 'Complaints', href: '/complaints', icon: 'AlertCircle',
@@ -940,6 +1101,10 @@ export default function AppLayout({ children, breadcrumb }) {
                     show: hasAnyRole([...ALL_ADMIN, ...OFFICER_ROLES, 'college_officer']) && hasSubFeature('reports.analytics'),
                 },
                 {
+                    label: 'College Phase Completion', href: '/admin/college-phase-completion', icon: 'ListChecks',
+                    show: hasAnyRole([...ALL_ADMIN, ...OFFICER_ROLES, 'college_officer']) && hasSubFeature('reports.analytics'),
+                },
+                {
                     label: 'Annual RTT Report', href: '/reports/annual', icon: 'FileBarChart2',
                     show: hasAnyRole([...ALL_ADMIN, 'college_officer']) && hasSubFeature('reports.generate'),
                 },
@@ -1019,7 +1184,7 @@ export default function AppLayout({ children, breadcrumb }) {
         {
             group: 'Settings',
             items: [
-                { label: 'Settings',       href: '/admin/settings',      icon: 'Settings',    show: hasRole('super_admin') || hasRole('admin') },
+                { label: 'General',       href: '/admin/settings',      icon: 'Settings',    show: hasRole('super_admin') || hasRole('admin') },
                 { label: 'Public Site',    href: '/admin/public-site',   icon: 'Globe',       show: hasRole('super_admin') || hasRole('admin') },
                 { label: 'Login Notices',  href: '/admin/login-notices', icon: 'Megaphone',   show: hasAnyRole(ALL_ADMIN) },
                 { label: 'FAQs',           href: '/admin/faqs',          icon: 'HelpCircle',  show: hasAnyRole(ALL_ADMIN) },
@@ -1191,7 +1356,7 @@ export default function AppLayout({ children, breadcrumb }) {
                                                 if (collapsed) {
                                                     return (
                                                         <Link key={item.href} href={item.href} title={item.label}
-                                                            onClick={() => setMobileOpen(false)}
+                                                            onClick={(e) => handleNavClick(e, item.href)}
                                                             className="relative flex items-center justify-center my-0.5">
                                                             <span className={cn(
                                                                 'flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-150',
@@ -1209,7 +1374,7 @@ export default function AppLayout({ children, breadcrumb }) {
                                                 /* Expanded: clean full-width row, no icon bg on inactive */
                                                 return (
                                                     <Link key={item.href} href={item.href}
-                                                        onClick={() => setMobileOpen(false)}
+                                                        onClick={(e) => handleNavClick(e, item.href)}
                                                         className={cn(
                                                             'group flex items-center gap-3 rounded-xl px-3 py-2 mb-px',
                                                             'transition-all duration-150',
@@ -1450,7 +1615,7 @@ export default function AppLayout({ children, breadcrumb }) {
                                 </div>
                             </div>
                         )
-                        : routeAllowed ? children : <UnauthorizedView user={user} />
+                        : routeAllowed ? children : <UnauthorizedView user={user} reason={unauthorizedReason} />
                     }
                 </main>
 
@@ -1507,11 +1672,23 @@ export default function AppLayout({ children, breadcrumb }) {
                 />
             )}
 
+            <OpenDefenceHoldModal
+                open={!!openDefenceHold}
+                collegeName={openDefenceHold?.collegeName}
+                pending={openDefenceHold?.pending}
+                onClose={() => setOpenDefenceHold(null)}
+            />
+
             <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
 
             {/* Pending co-PI invitation modal — only for staff when feature is on */}
             {authReady && hasSubFeature('workflow.co_pi_acceptance') && hasRole('staff') && (
                 <PendingInvitationsModal userId={user?.id} />
+            )}
+
+            {/* Co-PI invitation response popup — notifies the inviting PI whether their invite was accepted/declined */}
+            {authReady && hasSubFeature('workflow.co_pi_acceptance') && hasRole('staff') && (
+                <InvitationResponsePopup userId={user?.id} />
             )}
         </div>
     )

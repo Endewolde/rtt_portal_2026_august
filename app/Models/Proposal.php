@@ -39,6 +39,12 @@ class Proposal extends Model
         'research_type',
         'ethical_clearance_required',
         'ethical_clearance_number',
+        'ethical_clearance_status',
+        'ethical_clearance_expiry',
+        'ethical_clearance_submitted_at',
+        'ethical_clearance_verified_by',
+        'ethical_clearance_verified_at',
+        'ethical_clearance_rejection_reason',
         'status_entered_at',
         'contract_signed_at',
         'contract_signed_by',
@@ -56,6 +62,7 @@ class Proposal extends Model
         'validated_at',
         'rejected_at',
         'rejection_reason',
+        'extended_deadline',
         'created_by',
     ];
 
@@ -63,6 +70,9 @@ class Proposal extends Model
         'wizard_completed_steps' => 'array',
         'draft_data' => 'array',
         'ethical_clearance_required' => 'boolean',
+        'ethical_clearance_expiry' => 'date',
+        'ethical_clearance_submitted_at' => 'datetime',
+        'ethical_clearance_verified_at' => 'datetime',
         'status_entered_at' => 'datetime',
         'contract_signed_at' => 'datetime',
         'contract_submitted_at' => 'datetime',
@@ -70,8 +80,23 @@ class Proposal extends Model
         'submitted_at' => 'datetime',
         'validated_at' => 'datetime',
         'rejected_at' => 'datetime',
+        'extended_deadline' => 'datetime',
         'current_wizard_step' => 'integer',
     ];
+
+    /**
+     * Human-readable label for a proposal status. `accepted` is the Central Evaluation
+     * phase (passed open defence, awaiting the funding decision) — never shown as
+     * "Accepted", which would read as a final decision.
+     */
+    public static function statusLabel(?string $status): string
+    {
+        return match ($status) {
+            null, '' => '',
+            'accepted' => 'Central Evaluation',
+            default => ucwords(str_replace('_', ' ', $status)),
+        };
+    }
 
     public function proposalCall(): BelongsTo
     {
@@ -86,6 +111,11 @@ class Proposal extends Model
     public function contractSignedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'contract_signed_by');
+    }
+
+    public function ethicalClearanceVerifiedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'ethical_clearance_verified_by');
     }
 
     public function college(): BelongsTo
@@ -166,5 +196,10 @@ class Proposal extends Model
     public function similarityScores(): HasMany
     {
         return $this->hasMany(SimilarityScore::class);
+    }
+
+    public function deadlineExtensionRequests(): HasMany
+    {
+        return $this->hasMany(DeadlineExtensionRequest::class);
     }
 }

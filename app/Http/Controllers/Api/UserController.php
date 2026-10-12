@@ -182,8 +182,8 @@ class UserController extends Controller
             'auditable_id' => $target->id,
             'event' => 'user.role_changed',
             'actor_id' => $request->user()->id,
-            'old_values' => json_encode(['role' => $oldRole]),
-            'new_values' => json_encode(['role' => $validated['role']]),
+            'old_values' => json_encode(['role' => $oldRole, 'target_name' => $target->name, 'target_email' => $target->email]),
+            'new_values' => json_encode(['role' => $validated['role'], 'target_name' => $target->name, 'target_email' => $target->email]),
             'ip_address' => $request->ip(),
             'user_agent' => $request->userAgent() ?? '',
             'created_at' => now(),
@@ -235,8 +235,8 @@ class UserController extends Controller
             'auditable_id' => $target->id,
             'event' => 'user.status_changed',
             'actor_id' => $request->user()->id,
-            'old_values' => json_encode(['status' => $oldStatus]),
-            'new_values' => json_encode(['status' => $validated['status']]),
+            'old_values' => json_encode(['status' => $oldStatus, 'target_name' => $target->name, 'target_email' => $target->email]),
+            'new_values' => json_encode(['status' => $validated['status'], 'target_name' => $target->name, 'target_email' => $target->email]),
             'ip_address' => $request->ip(),
             'user_agent' => $request->userAgent() ?? '',
             'created_at' => now(),
@@ -306,7 +306,7 @@ class UserController extends Controller
             'event' => 'user.created',
             'actor_id' => $request->user()->id,
             'old_values' => null,
-            'new_values' => json_encode(['email' => $user->email, 'role' => $request->role]),
+            'new_values' => json_encode(['email' => $user->email, 'role' => $request->role, 'target_name' => $user->name, 'target_email' => $user->email]),
             'ip_address' => $request->ip(),
             'user_agent' => $request->userAgent() ?? '',
             'created_at' => now(),
@@ -363,7 +363,7 @@ class UserController extends Controller
             'event' => 'user.super_admin_created',
             'actor_id' => $request->user()->id,
             'old_values' => null,
-            'new_values' => json_encode(['email' => $user->email]),
+            'new_values' => json_encode(['email' => $user->email, 'target_name' => $user->name, 'target_email' => $user->email]),
             'ip_address' => $request->ip(),
             'user_agent' => $request->userAgent() ?? '',
             'created_at' => now(),
@@ -411,10 +411,38 @@ class UserController extends Controller
             return response()->json(['message' => 'The super_admin role cannot be granted or removed here.'], 403);
         }
 
-        $user->update($request->only('name', 'title', 'email', 'college_id', 'department_id', 'employee_id', 'phone', 'gender', 'status', 'expertise'));
+        $fields = ['name', 'title', 'email', 'college_id', 'department_id', 'employee_id', 'phone', 'gender', 'status', 'expertise'];
+        $provided = array_intersect($fields, array_keys($request->only($fields)));
+        $oldValues = $user->only($provided);
+
+        $user->update($request->only($fields));
 
         if ($request->filled('role')) {
             $user->syncRoles([$request->role]);
+        }
+
+        $newValues = $user->fresh()->only($provided);
+        $changed = array_filter($provided, fn ($f) => $oldValues[$f] !== $newValues[$f]);
+
+        if (! empty($changed) || $roleChanging) {
+            DB::table('audit_logs')->insert([
+                'id' => Str::uuid()->toString(),
+                'auditable_type' => User::class,
+                'auditable_id' => $user->id,
+                'event' => 'user.updated',
+                'actor_id' => $request->user()->id,
+                'old_values' => json_encode(array_merge(
+                    array_intersect_key($oldValues, array_flip($changed)),
+                    ['target_name' => $user->name, 'target_email' => $user->email]
+                )),
+                'new_values' => json_encode(array_merge(
+                    array_intersect_key($newValues, array_flip($changed)),
+                    ['target_name' => $user->name, 'target_email' => $user->email]
+                )),
+                'ip_address' => $request->ip(),
+                'user_agent' => $request->userAgent() ?? '',
+                'created_at' => now(),
+            ]);
         }
 
         return response()->json(['data' => $user->fresh()->load('roles'), 'message' => 'User updated.', 'errors' => [], 'meta' => []]);
@@ -731,7 +759,7 @@ class UserController extends Controller
             'event' => 'user.impersonation_started',
             'actor_id' => $actor->id,
             'old_values' => null,
-            'new_values' => json_encode(['impersonated_by' => $actor->id, 'impersonated_by_email' => $actor->email]),
+            'new_values' => json_encode(['target_name' => $target->name, 'target_email' => $target->email, 'target_roles' => $target->getRoleNames()->values()->toArray()]),
             'ip_address' => $request->ip(),
             'user_agent' => $request->userAgent() ?? '',
             'created_at' => now(),
@@ -801,6 +829,10 @@ class UserController extends Controller
                 'errors' => [],
             ], 422);
         }
+
+        $targetName = $user->name;
+        $targetEmail = $user->email;
+        $targetRoles = $user->getRoleNames()->values()->toArray();
 
         DB::transaction(function () use ($user, $uid) {
             // Cascade-delete all proposals owned by this user and everything related to them.
@@ -876,6 +908,19 @@ class UserController extends Controller
             $user->forceDelete();
         });
 
+        DB::table('audit_logs')->insert([
+            'id' => Str::uuid()->toString(),
+            'auditable_type' => User::class,
+            'auditable_id' => $uid,
+            'event' => 'user.deleted',
+            'actor_id' => $actor->id,
+            'old_values' => json_encode(['target_name' => $targetName, 'target_email' => $targetEmail, 'target_roles' => $targetRoles]),
+            'new_values' => null,
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent() ?? '',
+            'created_at' => now(),
+        ]);
+
         return response()->json(['message' => 'User deleted.', 'errors' => [], 'meta' => []]);
     }
 
@@ -924,8 +969,8 @@ class UserController extends Controller
                     'auditable_id' => $u->id,
                     'event' => 'user.role_changed',
                     'actor_id' => $actorId,
-                    'old_values' => json_encode(['role' => $oldRole]),
-                    'new_values' => json_encode(['role' => $role]),
+                    'old_values' => json_encode(['role' => $oldRole, 'target_name' => $u->name, 'target_email' => $u->email]),
+                    'new_values' => json_encode(['role' => $role, 'target_name' => $u->name, 'target_email' => $u->email]),
                     'ip_address' => $request->ip(),
                     'user_agent' => $request->userAgent() ?? '',
                     'created_at' => $now,
@@ -1069,7 +1114,21 @@ class UserController extends Controller
             'roles.*' => 'string|exists:roles,name',
         ]);
         $user = User::findOrFail($id);
+        $oldRoles = $user->getRoleNames()->values()->toArray();
         $user->syncRoles($request->roles);
+
+        DB::table('audit_logs')->insert([
+            'id' => Str::uuid()->toString(),
+            'auditable_type' => User::class,
+            'auditable_id' => $user->id,
+            'event' => 'user.roles_changed',
+            'actor_id' => $request->user()->id,
+            'old_values' => json_encode(['roles' => $oldRoles, 'target_name' => $user->name, 'target_email' => $user->email]),
+            'new_values' => json_encode(['roles' => $request->roles, 'target_name' => $user->name, 'target_email' => $user->email]),
+            'ip_address' => $request->ip(),
+            'user_agent' => $request->userAgent() ?? '',
+            'created_at' => now(),
+        ]);
 
         return response()->json(['data' => $user->fresh()->load('roles'), 'message' => 'Roles updated.', 'errors' => [], 'meta' => []]);
     }

@@ -256,7 +256,7 @@ class AwardController extends Controller
                     $p->college?->name ?? '',
                     $p->department?->name ?? '',
                     $p->academic_year ?? '',
-                    ucfirst(str_replace('_', ' ', $p->status)),
+                    Proposal::statusLabel($p->status),
                     $award ? number_format((float) $award->awarded_amount, 2) : '',
                     $award?->approved_at?->format('Y-m-d') ?? '',
                     $award?->approval_notes ?? '',

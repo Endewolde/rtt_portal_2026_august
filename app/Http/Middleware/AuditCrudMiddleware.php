@@ -20,6 +20,14 @@ class AuditCrudMiddleware
         'settings/upload-editor-image',
         'system-monitor/preferences',
         'feedback',
+        // Every mutating user-management action already writes its own detailed,
+        // target-identified audit_logs entry (see UserController) — old_values,
+        // new_values, and who it was actually done TO. Leaving this path unskipped
+        // means this generic middleware ALSO writes a second, less useful entry
+        // (raw request body, no target name, old_values always null) under the exact
+        // same event name — a same-second duplicate that displaces the real one
+        // whenever the log is queried "latest first".
+        'users',
     ];
 
     private const SENSITIVE_FIELDS = [

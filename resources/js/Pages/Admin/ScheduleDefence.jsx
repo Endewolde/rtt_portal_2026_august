@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { usePage, router } from '@inertiajs/react';
-import { Calendar, Users, Search, Info } from 'lucide-react';
+import { usePage, router, Link } from '@inertiajs/react';
+import { Calendar, Users, Search, Info, Hourglass, ArrowRight } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import StatusBadge from '../../Components/StatusBadge';
 import api from '../../lib/api';
@@ -22,6 +22,54 @@ function WorkloadBadge({ count }) {
     );
 }
 
+function BlindReviewHoldNotice({ collegeName, pending }) {
+    return (
+        <div className="relative overflow-hidden rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 via-white to-orange-50 p-5 shadow-sm">
+            <div className="flex items-start gap-4">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700 ring-4 ring-amber-50">
+                    <Hourglass size={20} />
+                </div>
+                <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Open defence on hold</p>
+                    <h2 className="mt-0.5 text-base font-bold text-gray-900">
+                        Blind review is still in progress{collegeName ? ` for ${collegeName}` : ''}
+                    </h2>
+                    <p className="mt-1.5 text-sm leading-relaxed text-gray-600">
+                        {pending.length} {pending.length === 1 ? 'proposal from your college has' : 'proposals from your college have'} not
+                        yet completed the blind review phase. To keep the review process fair and consistent, open defence
+                        sessions can be scheduled once every blind review in your college has been completed.
+                    </p>
+                </div>
+            </div>
+
+            {pending.length > 0 && (
+                <div className="mt-4 rounded-xl border border-amber-100 bg-white/80">
+                    <p className="border-b border-amber-100 px-4 py-2 text-xs font-semibold text-gray-500">
+                        Remaining in blind review
+                    </p>
+                    <ul className="max-h-56 divide-y divide-gray-100 overflow-y-auto">
+                        {pending.map((p) => (
+                            <li key={p.id}>
+                                <Link
+                                    href={`/proposals/${p.id}`}
+                                    className="group flex items-center gap-3 px-4 py-2.5 hover:bg-amber-50/60"
+                                >
+                                    <div className="min-w-0 flex-1">
+                                        <p className="font-mono text-xs text-gray-400">{p.tracker_number}</p>
+                                        <p className="truncate text-sm font-medium text-gray-800">{p.title}</p>
+                                    </div>
+                                    <StatusBadge status={p.status} />
+                                    <ArrowRight size={14} className="shrink-0 text-gray-300 group-hover:text-amber-600" />
+                                </Link>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
+        </div>
+    );
+}
+
 export default function ScheduleDefence() {
     const { url } = usePage();
     const id = url.split('/')[2];
@@ -35,6 +83,7 @@ export default function ScheduleDefence() {
     const [loading, setLoading]                 = useState(true);
     const [submitting, setSubmitting]           = useState(false);
     const [error, setError]                     = useState(null);
+    const [blindReviewHold, setBlindReviewHold] = useState(null);
 
     const [form, setForm] = useState({
         scheduled_date:     '',
@@ -59,10 +108,19 @@ export default function ScheduleDefence() {
         Promise.all([
             api.get(`/proposals/${id}`),
             api.get('/evaluation-types'),
+            api.get(`/proposals/${id}/defence/readiness`).catch(() => null),
         ])
-            .then(([propRes, typeRes]) => {
+            .then(([propRes, typeRes, readinessRes]) => {
                 const prop = propRes.data?.data ?? propRes.data;
                 setProposal(prop);
+
+                const readiness = readinessRes?.data?.data;
+                if (readiness && !readiness.can_schedule) {
+                    setBlindReviewHold({
+                        collegeName: readiness.college_name,
+                        pending: readiness.pending_blind_review ?? [],
+                    });
+                }
 
                 const allTypes = typeRes.data?.data ?? [];
                 const defenceTypes = allTypes.filter(
@@ -85,6 +143,17 @@ export default function ScheduleDefence() {
     }, [reviewerSearch, loading]);
 
     const set = (field, value) => setForm((f) => ({ ...f, [field]: value }));
+
+    const today = new Date().toISOString().split('T')[0];
+
+    // Reviewers may score on the defence day and until the end of the next day.
+    const scoreDeadlineLabel = form.scheduled_date
+        ? (() => {
+            const d = new Date(`${form.scheduled_date}T23:59`);
+            d.setDate(d.getDate() + 1);
+            return d.toLocaleString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        })()
+        : null;
 
     const toggleReviewer = (reviewerId) => {
         setForm((f) => ({
@@ -123,9 +192,19 @@ export default function ScheduleDefence() {
             toast.success('Open defence scheduled successfully.');
             router.visit('/admin/open-defence');
         } catch (e) {
-            const msg = e.response?.data?.message ?? 'Failed to schedule defence. Please try again.';
-            setError(msg);
-            toast.error(msg, { title: 'Schedule Failed' });
+            const body = e.response?.data;
+            if (body?.meta?.reason === 'blind_review_incomplete') {
+                setBlindReviewHold({
+                    collegeName: body.meta.college_name,
+                    pending: body.meta.pending_blind_review ?? [],
+                });
+                toast.warning(body.message, { title: 'Open Defence On Hold' });
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            } else {
+                const msg = body?.message ?? 'Failed to schedule defence. Please try again.';
+                setError(msg);
+                toast.error(msg, { title: 'Schedule Failed' });
+            }
         }
         setSubmitting(false);
     };
@@ -143,6 +222,13 @@ export default function ScheduleDefence() {
     return (
         <AppLayout breadcrumb={`Proposals / ${proposal?.tracker_number ?? id} / Schedule Defence`}>
             <div className="max-w-xl mx-auto space-y-5">
+
+                {blindReviewHold && (
+                    <BlindReviewHoldNotice
+                        collegeName={blindReviewHold.collegeName}
+                        pending={blindReviewHold.pending}
+                    />
+                )}
 
                 {/* Proposal summary */}
                 {proposal && (
@@ -176,7 +262,7 @@ export default function ScheduleDefence() {
                                 type="date"
                                 value={form.scheduled_date}
                                 onChange={(e) => set('scheduled_date', e.target.value)}
-                                min={new Date().toISOString().split('T')[0]}
+                                min={today}
                                 className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-purple-500"
                             />
                         </div>
@@ -191,6 +277,15 @@ export default function ScheduleDefence() {
                                 className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-purple-500"
                             />
                         </div>
+                    </div>
+
+                    <div className="flex items-start gap-2 rounded-lg border border-purple-100 bg-purple-50/60 px-3 py-2.5 text-xs text-purple-900">
+                        <Info size={13} className="mt-0.5 shrink-0 text-purple-500" />
+                        <span>
+                            Reviewers submit scores during the presentation or by the end of the following day
+                            {scoreDeadlineLabel ? <> — <strong>{scoreDeadlineLabel}</strong></> : ''}. After that, submission is closed unless the
+                            college officer's extension request is approved.
+                        </span>
                     </div>
 
                     <div>
@@ -327,8 +422,9 @@ export default function ScheduleDefence() {
                     </button>
                     <button
                         onClick={submit}
-                        disabled={submitting}
-                        className="flex-1 rounded-lg bg-purple-700 py-2.5 text-sm font-semibold text-white hover:bg-purple-800 disabled:opacity-60"
+                        disabled={submitting || !!blindReviewHold}
+                        title={blindReviewHold ? 'Available once every blind review in your college is complete' : undefined}
+                        className="flex-1 rounded-lg bg-purple-700 py-2.5 text-sm font-semibold text-white hover:bg-purple-800 disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                         {submitting ? 'Scheduling…' : 'Schedule Defence'}
                     </button>

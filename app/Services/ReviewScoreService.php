@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\DefenceScoringClosedException;
 use App\Exceptions\InvalidScoreException;
 use App\Exceptions\InvalidTransitionException;
 use App\Exceptions\ReviewAlreadySubmittedException;
@@ -13,13 +14,16 @@ use App\Models\Proposal;
 use App\Models\ReviewAssignment;
 use App\Models\ReviewScore;
 use App\Models\User;
-use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class ReviewScoreService
 {
+    public const DEFENCE_DEADLINE_PASSED_MESSAGE = 'You cannot submit right now. Result submission must be done in the assigned defence room '
+        .'during the presentation period, or by the due date (one day after the defence). '
+        .'For more information, please contact your college officer.';
+
     public function __construct(private readonly WorkflowService $workflowService) {}
 
     /**
@@ -118,10 +122,11 @@ class ReviewScoreService
     }
 
     /**
-     * Block open-defence score submissions outside the scheduled date.
-     * Reviews can only be submitted on the calendar day of the session.
+     * Open-defence scores are accepted from the start of the defence day until the
+     * session's score deadline — the end of the following day, or a later date from
+     * an approved extension (see DefenceSession::scoreDeadline()).
      *
-     * @throws \RuntimeException
+     * @throws DefenceScoringClosedException
      */
     private function assertDefenceDateWindow(ReviewAssignment $assignment): void
     {
@@ -138,24 +143,18 @@ class ReviewScoreService
             ->first();
 
         if (! $session) {
-            throw new \RuntimeException('No active defence session found for this proposal.');
+            throw new DefenceScoringClosedException('No active defence session found for this proposal.');
         }
 
-        $scheduledDate = Carbon::parse($session->scheduled_date)->startOfDay();
-        $today = Carbon::today();
-
-        if ($today->lt($scheduledDate)) {
-            throw new \RuntimeException(
+        if (now()->lt($session->scoringOpensAt())) {
+            throw new DefenceScoringClosedException(
                 'The open defence session has not started yet. '
-                .'Scores can only be submitted on '.$scheduledDate->format('M d, Y').'.'
+                .'Scores can be submitted from '.$session->scoringOpensAt()->format('M d, Y').'.'
             );
         }
 
-        if ($today->gt($scheduledDate)) {
-            throw new \RuntimeException(
-                'The open defence session date has passed ('.$scheduledDate->format('M d, Y').'). '
-                .'Scores can no longer be submitted for this session.'
-            );
+        if (now()->gt($session->scoreDeadline())) {
+            throw new DefenceScoringClosedException(self::DEFENCE_DEADLINE_PASSED_MESSAGE);
         }
     }
 
@@ -264,7 +263,10 @@ class ReviewScoreService
 
             foreach ($category->questions as $question) {
                 $max += $question->max_score;
-                $earned += (float) ($scoresByQuestion[$question->id] ?? 0);
+                // A stored score can exceed the question's CURRENT max when the max was
+                // lowered in Evaluation Criteria after scoring — never count more than
+                // the question is now worth.
+                $earned += min((float) ($scoresByQuestion[$question->id] ?? 0), (float) $question->max_score);
             }
 
             return ['weight' => (float) $category->weight, 'earned' => $earned, 'max' => $max];
@@ -350,12 +352,8 @@ class ReviewScoreService
         $blindDisplayInfos = $blindAssignments->map(fn ($a) => $this->calculateWeightedDisplay($a));
         $defenceDisplayInfos = $defenceAssignments->map(fn ($a) => $this->calculateWeightedDisplay($a));
 
-        $blind = $blindDisplayInfos->isNotEmpty()
-            ? ['score' => round($blindDisplayInfos->avg('score'), 2), 'max' => $blindDisplayInfos->first()['max']]
-            : null;
-        $defence = $defenceDisplayInfos->isNotEmpty()
-            ? ['score' => round($defenceDisplayInfos->avg('score'), 2), 'max' => $defenceDisplayInfos->first()['max']]
-            : null;
+        $blind = $this->phaseScore($blindDisplayInfos);
+        $defence = $this->phaseScore($defenceDisplayInfos);
 
         $combined = ($blind['score'] ?? 0.0) + ($defence['score'] ?? 0.0);
         $combinedMax = ($blind['max'] ?? 0.0) + ($defence['max'] ?? 0.0);
@@ -388,6 +386,282 @@ class ReviewScoreService
             'defence_below_threshold' => $defenceBelowThreshold,
             'combined_passes' => $combinedPasses,
         ];
+    }
+
+    /**
+     * Average a phase's per-reviewer scores, never exceeding the phase's maximum
+     * possible score (reviewers scored on differently-weighted forms could otherwise
+     * average above the max used for display and threshold comparison).
+     *
+     * @param  Collection<int, array{score: float, max: float}>  $displayInfos
+     * @return array{score: float, max: float}|null
+     */
+    private function phaseScore(Collection $displayInfos): ?array
+    {
+        if ($displayInfos->isEmpty()) {
+            return null;
+        }
+
+        $max = (float) $displayInfos->first()['max'];
+
+        return ['score' => min(round($displayInfos->avg('score'), 2), $max), 'max' => $max];
+    }
+
+    /**
+     * The two score-based decisions a proposal goes through, in workflow order.
+     *
+     * @var list<array{phase: string, pass: string, fail: string, passesKey: string, passedState: string, undecidedState: string}>
+     */
+    private const DECISION_PAIRS = [
+        ['phase' => 'blind_review', 'pass' => 'pass_blind_review', 'fail' => 'fail_blind_review', 'passesKey' => 'blind_passes', 'passedState' => 'blind_review_passed', 'undecidedState' => 'under_blind_review'],
+        ['phase' => 'open_defence', 'pass' => 'pass_defence', 'fail' => 'fail_defence', 'passesKey' => 'combined_passes', 'passedState' => 'accepted', 'undecidedState' => 'under_open_defence'],
+    ];
+
+    /**
+     * Recalculate every proposal's blind-review AND open-defence pass/fail decision
+     * against the CURRENT threshold settings and decision mode, called automatically
+     * whenever an admin saves a threshold change (see SettingsController) so decisions
+     * never go stale against settings that have since moved on. Deliberately
+     * bidirectional at the admin's explicit request: a proposal can flip either way,
+     * including an already-rejected one becoming blind_review_passed/accepted if it
+     * now clears the bar (via WorkflowService::bypassRejectedStageSilently, then the
+     * normal pass_blind_review/pass_defence transition — so the PI gets the same
+     * accurate "you passed" notification as any other pass decision).
+     *
+     * The one line that's still never crossed: proposals that already progressed past
+     * the decision point (funded and beyond) are never touched automatically, since
+     * those may carry real financial/contractual consequences — those are reported in
+     * `needs_review` for a human to act on via the manual "Reopen for Reconsideration"
+     * action if appropriate. The same applies to any correction that fails outright
+     * (e.g. a missing workflow transition).
+     *
+     * @return array{corrected: array<int, array<string, mixed>>, needs_review: array<int, array<string, mixed>>}
+     */
+    public function recalculateAllDecisions(User $systemActor): array
+    {
+        $corrected = [];
+        $needsReview = [];
+
+        foreach (self::DECISION_PAIRS as $pair) {
+            foreach ($this->latestDecisionLogs($pair) as $log) {
+                $proposal = Proposal::find($log->proposal_id);
+                if (! $proposal) {
+                    continue;
+                }
+
+                $this->correctDecision($proposal, $log, $pair, $systemActor, manual: false, corrected: $corrected, needsReview: $needsReview);
+            }
+        }
+
+        return ['corrected' => $corrected, 'needs_review' => $needsReview];
+    }
+
+    /**
+     * Dry run for a single proposal (optionally a single phase): which of its recorded
+     * blind-review / open-defence decisions no longer match what the current thresholds and criteria would decide,
+     * and whether each one can safely be corrected right now.
+     *
+     * @return list<array{phase: string, issue: string, change: string, score: string, applicable: bool, reason: string|null}>
+     */
+    public function previewDecisionCorrections(Proposal $proposal, ?string $phase = null): array
+    {
+        $plans = [];
+
+        foreach ($this->decisionPairs($phase) as $pair) {
+            $log = $this->latestDecisionLogs($pair, $proposal->id)->first();
+            if (! $log) {
+                continue;
+            }
+
+            $plan = $this->planCorrection($proposal, $log, $pair);
+            if ($plan) {
+                $plans[] = [
+                    'phase' => $pair['phase'],
+                    'issue' => $plan['issue'],
+                    'change' => $plan['change'],
+                    'score' => $plan['score'],
+                    'applicable' => $plan['applicable'],
+                    'reason' => $plan['reason'],
+                ];
+            }
+        }
+
+        return $plans;
+    }
+
+    /**
+     * Manual, per-proposal counterpart of recalculateAllDecisions(): applies the
+     * corrections previewDecisionCorrections() reports as applicable, recorded under
+     * the acting officer rather than as an automatic system decision.
+     *
+     * @return array{corrected: array<int, array<string, mixed>>, needs_review: array<int, array<string, mixed>>}
+     */
+    public function applyDecisionCorrections(Proposal $proposal, User $actor, ?string $phase = null): array
+    {
+        $corrected = [];
+        $needsReview = [];
+
+        foreach ($this->decisionPairs($phase) as $pair) {
+            $log = $this->latestDecisionLogs($pair, $proposal->id)->first();
+            if (! $log) {
+                continue;
+            }
+
+            $this->correctDecision($proposal->fresh(), $log, $pair, $actor, manual: true, corrected: $corrected, needsReview: $needsReview);
+        }
+
+        return ['corrected' => $corrected, 'needs_review' => $needsReview];
+    }
+
+    /**
+     * Every decision pair, or just the one for a single phase (blind_review / open_defence).
+     *
+     * @return list<array{phase: string, pass: string, fail: string, passesKey: string, passedState: string, undecidedState: string}>
+     */
+    private function decisionPairs(?string $phase): array
+    {
+        return array_values(array_filter(self::DECISION_PAIRS, fn ($pair) => $phase === null || $pair['phase'] === $phase));
+    }
+
+    /**
+     * The most recent pass/fail decision log per proposal for one decision pair.
+     *
+     * @param  array{pass: string, fail: string}  $pair
+     * @return Collection<string, object>
+     */
+    private function latestDecisionLogs(array $pair, ?string $proposalId = null): Collection
+    {
+        return DB::table('workflow_logs')
+            ->whereIn('action', [$pair['pass'], $pair['fail']])
+            ->when($proposalId, fn ($q) => $q->where('proposal_id', $proposalId))
+            ->orderBy('created_at')
+            ->get()
+            ->groupBy('proposal_id')
+            ->map(fn ($group) => $group->last());
+    }
+
+    /**
+     * Compare a recorded decision with what current settings would decide. Null when
+     * they agree (or there is nothing to recalculate / nothing safe to say).
+     *
+     * @param  array{pass: string, passesKey: string, passedState: string}  $pair
+     * @return array{issue: string, change: string, score: string, applicable: bool, reason: string|null}|null
+     */
+    private function planCorrection(Proposal $proposal, object $log, array $pair): ?array
+    {
+        $snapshot = $this->recalculateSnapshot($proposal);
+        $recalculatedPasses = $snapshot[$pair['passesKey']];
+        if ($recalculatedPasses === null) {
+            return null;
+        }
+
+        $recordedPass = $log->action === $pair['pass'];
+        if ($recordedPass === $recalculatedPasses) {
+            return null;
+        }
+
+        $score = $pair['passedState'] === 'blind_review_passed'
+            ? "{$snapshot['blind']['score']}/{$snapshot['blind']['max']} (min {$snapshot['blind_threshold']})"
+            : "{$snapshot['combined']}/{$snapshot['combined_max']} (min {$snapshot['combined_threshold']})";
+
+        if ($recordedPass) {
+            // Wrongly passed — only safe to correct while still sitting in the exact
+            // state that decision produced (nothing built on it yet).
+            $applicable = $proposal->status === $pair['passedState'];
+
+            return [
+                'issue' => 'wrongly_passed',
+                'change' => "{$pair['passedState']} → rejected",
+                'score' => $score,
+                'applicable' => $applicable,
+                'reason' => $applicable ? null : "already progressed to '{$proposal->status}' — correcting now would affect existing work built on top of it",
+            ];
+        }
+
+        // Wrongly rejected. Only safe to correct while still sitting at rejected — if
+        // someone already reopened/resolved it since, leave it alone rather than fight
+        // whatever they did.
+        if ($proposal->status !== 'rejected') {
+            return null;
+        }
+
+        return [
+            'issue' => 'wrongly_rejected',
+            'change' => "rejected → {$pair['passedState']}",
+            'score' => $score,
+            'applicable' => true,
+            'reason' => null,
+        ];
+    }
+
+    /**
+     * @param  array{pass: string, fail: string, passesKey: string, passedState: string, undecidedState: string}  $pair
+     * @param  array<int, array<string, mixed>>  $corrected
+     * @param  array<int, array<string, mixed>>  $needsReview
+     */
+    private function correctDecision(Proposal $proposal, object $log, array $pair, User $actor, bool $manual, array &$corrected, array &$needsReview): void
+    {
+        $plan = $this->planCorrection($proposal, $log, $pair);
+        if (! $plan) {
+            return;
+        }
+
+        $base = [
+            'tracker_number' => $proposal->tracker_number, 'proposal_id' => $proposal->id,
+            'issue' => $plan['issue'], 'score' => $plan['score'],
+        ];
+
+        if (! $plan['applicable']) {
+            $needsReview[] = $base + ['current_status' => $proposal->status, 'reason' => $plan['reason']];
+
+            return;
+        }
+
+        $scoreLabel = $plan['score'];
+        $prefix = $manual ? "Corrected by {$actor->name} after recalculation" : 'Corrected automatically';
+        $metadata = [
+            'automatic' => ! $manual, 'manual' => $manual, 'corrected' => true,
+            'score_label' => $scoreLabel, 'original_decision_at' => $log->created_at,
+        ];
+
+        try {
+            if ($plan['issue'] === 'wrongly_passed') {
+                $this->workflowService->transition(
+                    $proposal,
+                    $pair['fail'],
+                    $actor,
+                    "{$prefix}: score {$scoreLabel} no longer meets the threshold under current settings "
+                        ."(originally decided on {$log->created_at} under different settings).",
+                    $metadata
+                );
+            } else {
+                DB::transaction(function () use ($proposal, $pair, $actor, $prefix, $scoreLabel, $log, $metadata) {
+                    $this->workflowService->bypassRejectedStageSilently(
+                        $proposal,
+                        $pair['undecidedState'],
+                        $actor,
+                        "Recalculated under current settings: score {$scoreLabel} now clears the threshold "
+                            ."(originally rejected on {$log->created_at} under different settings)."
+                    );
+                    $this->workflowService->transition(
+                        $proposal,
+                        $pair['pass'],
+                        $actor,
+                        "{$prefix}: score {$scoreLabel} now meets the threshold under current settings "
+                            ."(originally rejected on {$log->created_at} under different settings).",
+                        $metadata
+                    );
+                });
+            }
+
+            $corrected[] = $base + ['change' => $plan['change']];
+        } catch (\Throwable $e) {
+            $needsReview[] = $base + [
+                'current_status' => $proposal->fresh()->status,
+                'reason' => "correction failed: {$e->getMessage()}"
+                    .($plan['issue'] === 'wrongly_rejected' ? ' — use "Reopen for Reconsideration" on the proposal to act on it manually' : ''),
+            ];
+        }
     }
 
     /**
@@ -472,6 +746,7 @@ class ReviewScoreService
                 "Defence {$outcome} automatically. Blind: {$blindLabel}, Defence: {$defenceLabel}. "
                     ."Combined: {$combined}/{$combinedMax}. Combined threshold: {$combinedThreshold}.{$defenceNote}",
                 [
+                    'automatic' => true,
                     'blind_score' => $blindRaw, 'defence_score' => $defenceRaw,
                     'combined' => $combined, 'combined_max' => $combinedMax,
                     'defence_threshold' => $defenceThreshold, 'combined_threshold' => $combinedThreshold,
@@ -507,9 +782,9 @@ class ReviewScoreService
             return;
         }
 
-        $displayInfos = $assignments->map(fn ($a) => $this->calculateWeightedDisplay($a));
-        $rawAvg = round($displayInfos->avg('score'), 2);
-        $rawMax = $displayInfos->first()['max'];
+        $phase = $this->phaseScore($assignments->map(fn ($a) => $this->calculateWeightedDisplay($a)));
+        $rawAvg = $phase['score'];
+        $rawMax = $phase['max'];
         $scoreLabel = $rawMax > 0 ? "{$rawAvg}/{$rawMax}" : (string) $rawAvg;
 
         $threshold = $this->thresholdValue('blind_threshold');
@@ -523,7 +798,7 @@ class ReviewScoreService
                 'pass_blind_review',
                 $systemActor,
                 "Blind review passed. Average score: {$scoreLabel}. Threshold: {$threshold}.",
-                ['average_score' => $rawAvg, 'score_label' => $scoreLabel, 'threshold' => $threshold]
+                ['automatic' => true, 'average_score' => $rawAvg, 'score_label' => $scoreLabel, 'threshold' => $threshold]
             );
         } else {
             $this->workflowService->transition(
@@ -531,7 +806,7 @@ class ReviewScoreService
                 'fail_blind_review',
                 $systemActor,
                 "Blind review failed. Average score: {$scoreLabel}. Threshold: {$threshold}.",
-                ['average_score' => $rawAvg, 'score_label' => $scoreLabel, 'threshold' => $threshold]
+                ['automatic' => true, 'average_score' => $rawAvg, 'score_label' => $scoreLabel, 'threshold' => $threshold]
             );
         }
     }

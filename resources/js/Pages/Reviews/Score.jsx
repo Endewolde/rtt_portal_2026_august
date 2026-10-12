@@ -3,7 +3,7 @@ import { usePage, router } from '@inertiajs/react';
 import {
     Download, FileText, ClipboardCheck, BarChart2,
     Info, Paperclip, DollarSign, CheckCircle2,
-    AlertTriangle, ChevronLeft, Calendar, MapPin, Clock,
+    AlertTriangle, ChevronLeft, Calendar, MapPin, Clock, Lock,
 } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import { downloadFile } from '../../lib/download';
@@ -217,6 +217,44 @@ export default function ReviewScore() {
     );
 
     // ── Before-schedule gate ──────────────────────────────────────────────────
+    const isPastDefenceDeadline = isOpenDefence && !submitted && defenceSession?.deadline_passed;
+    const defenceDeadlineLabel = defenceSession?.score_deadline
+        ? new Date(defenceSession.score_deadline).toLocaleString('en-GB', {
+            weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
+        })
+        : null;
+
+    if (isPastDefenceDeadline) {
+        return (
+            <AppLayout breadcrumb="Score Review">
+                <div className="min-h-[70vh] flex items-center justify-center p-6">
+                    <div className="max-w-md w-full">
+                        <div className="bg-white border border-red-200 rounded-3xl p-8 text-center shadow-sm">
+                            <div className="w-16 h-16 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-5">
+                                <Lock size={28} className="text-red-600" />
+                            </div>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-red-600">Submission closed</p>
+                            <h1 className="mt-1 text-lg font-bold text-gray-900">Score submission period has ended</h1>
+                            <p className="mt-3 text-sm leading-relaxed text-gray-600">{defenceSession.deadline_passed_message}</p>
+                            {defenceDeadlineLabel && (
+                                <p className="mt-4 rounded-xl bg-gray-50 px-4 py-2.5 text-xs text-gray-500">
+                                    Due date was <strong className="text-gray-700">{defenceDeadlineLabel}</strong>
+                                    {proposal?.tracker_number && <> · {proposal.tracker_number}</>}
+                                </p>
+                            )}
+                            <button
+                                onClick={() => router.visit('/reviews')}
+                                className="mt-6 inline-flex items-center gap-1.5 rounded-xl border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                            >
+                                <ChevronLeft size={14} /> Back to My Reviews
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </AppLayout>
+        );
+    }
+
     if (isBeforeSchedule) {
         const fmt  = new Date(scheduledDateStr + 'T00:00:00').toLocaleDateString('en-GB', {
             weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
@@ -326,6 +364,13 @@ export default function ReviewScore() {
                             )}
                         </div>
                     </div>
+
+                    {isOpenDefence && !submitted && defenceDeadlineLabel && (
+                        <p className="flex items-center gap-1.5 px-1 pb-2 text-xs text-purple-700">
+                            <Clock size={12} /> Submit your score by <strong>{defenceDeadlineLabel}</strong>
+                            {defenceSession?.deadline_extended && <span className="rounded-full bg-purple-100 px-1.5 py-0.5 text-[10px] font-semibold">Extended</span>}
+                        </p>
+                    )}
 
                     {/* Progress bar */}
                     <div className="h-0.5 bg-gray-100">

@@ -17,6 +17,8 @@ import api from '../../lib/api';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../Components/Toast';
 import { getCategoryLabel } from '../../lib/utils';
+import OpenDefenceHoldModal from '../../Components/OpenDefenceHoldModal';
+import DefenceDeadlineStrip, { RequestDeadlineExtensionModal } from '../../Components/DefenceDeadlineStrip';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -535,64 +537,6 @@ function AddReviewerModal({ proposalId, currentAssignments, onSave, onClose }) {
     );
 }
 
-function ExtendModal({ assignment, onSave, onClose }) {
-    const [dueDate, setDueDate] = useState('');
-    const [saving, setSaving]   = useState(false);
-    const { error } = useToast();
-
-    const currentDue = assignment.due_date
-        ? new Date(assignment.due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-        : null;
-
-    const save = async () => {
-        if (!dueDate) return;
-        setSaving(true);
-        try {
-            await api.put(`/review-assignments/${assignment.id}/extend`, { due_date: dueDate });
-            onSave();
-        } catch (e) { error(e.response?.data?.message || 'Failed to extend due date.'); }
-        setSaving(false);
-    };
-
-    return (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-                <div className="flex items-center justify-between mb-4">
-                    <div>
-                        <h3 className="text-base font-semibold text-gray-900">Extend Due Date</h3>
-                        <p className="text-xs text-gray-500 mt-0.5">{assignment.reviewer?.name}</p>
-                    </div>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
-                </div>
-                {currentDue && (
-                    <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 mb-4 flex items-center justify-between">
-                        <span className="text-xs text-gray-500">Current deadline</span>
-                        <span className="text-xs font-semibold text-gray-700">{currentDue}</span>
-                    </div>
-                )}
-                <div className="mb-4">
-                    <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-                        New Due Date <span className="text-red-400">*</span>
-                    </label>
-                    <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
-                        min={new Date(Date.now() + 86400000).toISOString().slice(0, 10)}
-                        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
-                </div>
-                <div className="flex gap-3">
-                    <button onClick={onClose}
-                        className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-700 hover:bg-gray-50 font-medium transition-colors">
-                        Cancel
-                    </button>
-                    <button onClick={save} disabled={!dueDate || saving}
-                        className="flex-1 px-4 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-700 disabled:opacity-60 transition-colors">
-                        {saving ? 'Saving…' : 'Extend'}
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-}
-
 // ─── Awaiting Schedule Row ────────────────────────────────────────────────────
 
 function AwaitingRow({ proposal }) {
@@ -643,7 +587,7 @@ function AwaitingRow({ proposal }) {
 
 // ─── Defence Card ─────────────────────────────────────────────────────────────
 
-function DefenceCard({ proposal, onReassign, onExtend, onAddReviewer, onRemove }) {
+function DefenceCard({ proposal, onReassign, onExtend, onAddReviewer, onRemove, onRequestDeadlineExtension }) {
     const assignments  = (proposal.review_assignments ?? []).filter(a => (a.evaluation_type?.name ?? '').startsWith('open_defence'));
     const submitted    = assignments.filter(a => a.status === 'submitted').length;
     const overdue      = assignments.filter(a => a.due_date && daysUntil(a.due_date) < 0 && a.status !== 'submitted').length;
@@ -701,6 +645,11 @@ function DefenceCard({ proposal, onReassign, onExtend, onAddReviewer, onRemove }
                     </div>
                 </div>
             </div>
+
+            <DefenceDeadlineStrip
+                deadline={proposal.defence_deadline}
+                onRequestExtension={() => onRequestDeadlineExtension(proposal)}
+            />
 
             {/* ── Footer ── */}
             <div className={`px-5 py-3 border-t flex items-center justify-between ${allSubmitted ? 'border-green-200 bg-green-50/50' : 'border-gray-100 bg-gray-50/50'}`}>
@@ -789,7 +738,20 @@ export default function OpenDefence() {
     const [addReviewerModal, setAddReviewerModal] = useState(null);
     const [removeConfirm, setRemoveConfirm]       = useState(null);
     const [removing, setRemoving]                 = useState(false);
-    const [extendModal, setExtendModal]           = useState(null);
+    const [defenceHold, setDefenceHold]           = useState(null);
+    const [deadlineExtensionFor, setDeadlineExtensionFor] = useState(null);
+
+    // Defence score deadlines move only through an approved college-officer request,
+    // so the per-reviewer "Extend" action routes here too.
+    const openDeadlineExtension = (proposal) => {
+        if (proposal.defence_deadline?.can_request_extension) {
+            setDeadlineExtensionFor(proposal);
+        } else if (proposal.defence_deadline?.pending_extension) {
+            error('An extension request for this defence is already awaiting approval.');
+        } else {
+            error("Open defence score deadlines are extended by the college officer's request, approved by the category director or the central office.");
+        }
+    };
 
     const load = async () => {
         setLoading(true);
@@ -803,6 +765,22 @@ export default function OpenDefence() {
     };
 
     useEffect(() => { load(); }, []);
+
+    // Reached directly (URL, bookmark, command palette) rather than via the sidebar,
+    // which already checks first — the server only gates college officers.
+    useEffect(() => {
+        api.get('/defence/college-readiness')
+            .then((res) => {
+                const readiness = res.data?.data;
+                if (readiness && !readiness.can_schedule) {
+                    setDefenceHold({
+                        collegeName: readiness.college_name,
+                        pending: readiness.pending_blind_review ?? [],
+                    });
+                }
+            })
+            .catch(() => {});
+    }, []);
 
     const openReassign    = (assignment, proposalId, currentAssignments) => setReassignModal({ assignment, proposalId, currentAssignments });
     const openAddReviewer = (proposalId, currentAssignments)             => setAddReviewerModal({ proposalId, currentAssignments });
@@ -824,7 +802,6 @@ export default function OpenDefence() {
         success('Saved successfully.');
         setReassignModal(null);
         setAddReviewerModal(null);
-        setExtendModal(null);
         load();
     };
 
@@ -870,6 +847,11 @@ export default function OpenDefence() {
 
     return (
         <AppLayout breadcrumb="Open Defence">
+            <OpenDefenceHoldModal
+                open={!!defenceHold}
+                collegeName={defenceHold?.collegeName}
+                pending={defenceHold?.pending}
+            />
             <div className="max-w-6xl mx-auto">
                 <WorkflowBreadcrumb current="under_open_defence" />
 
@@ -1047,9 +1029,10 @@ export default function OpenDefence() {
                                                     key={p.id}
                                                     proposal={p}
                                                     onReassign={openReassign}
-                                                    onExtend={setExtendModal}
+                                                    onExtend={() => openDeadlineExtension(p)}
                                                     onAddReviewer={openAddReviewer}
                                                     onRemove={confirmRemove}
+                                                    onRequestDeadlineExtension={openDeadlineExtension}
                                                 />
                                             ))}
                                         </div>
@@ -1079,8 +1062,12 @@ export default function OpenDefence() {
                     onClose={() => setAddReviewerModal(null)}
                 />
             )}
-            {extendModal && (
-                <ExtendModal assignment={extendModal} onSave={afterSave} onClose={() => setExtendModal(null)} />
+            {deadlineExtensionFor && (
+                <RequestDeadlineExtensionModal
+                    proposal={deadlineExtensionFor}
+                    onClose={() => setDeadlineExtensionFor(null)}
+                    onSaved={() => { setDeadlineExtensionFor(null); load(); }}
+                />
             )}
 
             {removeConfirm && (

@@ -72,6 +72,21 @@ test('revoking your current session logs you out', function () {
         ->assertStatus(401);
 });
 
+test('an impersonation token is excluded from the sessions list', function () {
+    $user = User::factory()->create();
+    $user->assignRole('staff');
+    $user->createToken('impersonation_token');
+    $token = $user->createToken('auth_token')->plainTextToken;
+
+    $response = $this->withHeader('Authorization', "Bearer {$token}")
+        ->getJson('/api/v1/auth/sessions')
+        ->assertOk();
+
+    $sessions = collect($response->json('data'));
+    expect($sessions)->toHaveCount(1)
+        ->and($sessions->pluck('name'))->not->toContain('impersonation_token');
+});
+
 test('a user cannot revoke another user\'s session', function () {
     $user = User::factory()->create();
     $user->assignRole('staff');

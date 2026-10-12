@@ -3,7 +3,7 @@ import {
     User, Mail, Phone, CreditCard, Shield, Lock,
     Camera, Save, Eye, EyeOff, CheckCircle2, AlertCircle,
     Building2, Layers, ExternalLink, ShieldCheck,
-    BookOpen, X, GraduationCap, Monitor, Trash2,
+    BookOpen, X, GraduationCap, Monitor, Trash2, Bell,
 } from 'lucide-react'
 import AppLayout from '../../Layouts/AppLayout'
 import { useAuth } from '../../hooks/useAuth'
@@ -408,6 +408,122 @@ function SecuritySection({ user, onUpdated }) {
     )
 }
 
+// ─── Notification preferences ──────────────────────────────────────────────────
+
+function ToggleRow({ label, hint, checked, onChange, disabled }) {
+    return (
+        <div className="flex items-start justify-between gap-4">
+            <div>
+                <p className="text-sm font-semibold text-gray-800">{label}</p>
+                {hint && <p className="text-xs text-gray-500 mt-0.5">{hint}</p>}
+            </div>
+            <button
+                onClick={onChange}
+                disabled={disabled}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent
+                            transition-colors duration-200 focus:outline-none
+                            ${checked ? 'bg-green-500' : 'bg-gray-200'}
+                            ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                role="switch"
+                aria-checked={checked}
+            >
+                <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow
+                                transition duration-200 ${checked ? 'translate-x-5' : 'translate-x-0'}`}
+                />
+            </button>
+        </div>
+    )
+}
+
+const DIGEST_OPTIONS = [
+    { value: 'realtime', label: 'Real-time', hint: 'Email me as soon as something happens' },
+    { value: 'daily', label: 'Daily digest', hint: 'One summary email per day instead' },
+    { value: 'weekly', label: 'Weekly digest', hint: 'One summary email per week instead' },
+]
+
+function NotificationPreferencesSection() {
+    const { success, error } = useToast()
+    const [prefs, setPrefs] = useState(null)
+    const [saving, setSaving] = useState(false)
+
+    useEffect(() => {
+        api.get('/notification-preferences')
+            .then(r => setPrefs(r.data?.data))
+            .catch(() => error('Failed to load notification preferences.'))
+    }, [])
+
+    const save = async (changes) => {
+        setSaving(true)
+        const previous = prefs
+        setPrefs(p => ({ ...p, ...changes }))
+        try {
+            const res = await api.put('/notification-preferences', changes)
+            setPrefs(res.data?.data)
+            success('Notification preferences updated.')
+        } catch (e) {
+            setPrefs(previous)
+            error(e.response?.data?.message ?? 'Update failed.')
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    if (!prefs) {
+        return <div className="h-24 flex items-center justify-center">
+            <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+    }
+
+    return (
+        <div className="space-y-5">
+            <ToggleRow
+                label="Email Notifications"
+                hint="Receive notifications by email, in addition to in-app"
+                checked={!!prefs.email_enabled}
+                disabled={saving}
+                onChange={() => save({ email_enabled: !prefs.email_enabled })}
+            />
+            <ToggleRow
+                label="In-App Notifications"
+                hint="Show notifications in the bell menu"
+                checked={!!prefs.inapp_enabled}
+                disabled={saving}
+                onChange={() => save({ inapp_enabled: !prefs.inapp_enabled })}
+            />
+
+            <div className="pt-4 border-t border-gray-100">
+                <p className="text-sm font-semibold text-gray-800 mb-1">Email Frequency</p>
+                <p className="text-xs text-gray-500 mb-3">
+                    Choose whether routine notification emails (assignments, decisions, budget updates) arrive
+                    individually or bundled into a periodic summary. Time-sensitive emails (password resets,
+                    login codes, invitations) always send immediately regardless of this setting.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    {DIGEST_OPTIONS.map(opt => {
+                        const active = prefs.digest_frequency === opt.value
+                        return (
+                            <button
+                                key={opt.value}
+                                onClick={() => !active && save({ digest_frequency: opt.value })}
+                                disabled={saving}
+                                className={`text-left px-3.5 py-3 rounded-xl border transition-colors disabled:opacity-50 ${
+                                    active
+                                        ? 'border-indigo-400 bg-indigo-50 ring-1 ring-indigo-200'
+                                        : 'border-gray-200 hover:border-gray-300 bg-white'
+                                }`}
+                            >
+                                <p className={`text-xs font-semibold ${active ? 'text-indigo-700' : 'text-gray-700'}`}>{opt.label}</p>
+                                <p className="text-[11px] text-gray-500 mt-0.5">{opt.hint}</p>
+                            </button>
+                        )
+                    })}
+                </div>
+            </div>
+        </div>
+    )
+}
+
 // ─── Active sessions ──────────────────────────────────────────────────────────
 
 function ActiveSessionsSection() {
@@ -704,6 +820,12 @@ export default function ProfileEdit() {
                 <Card title="Security" icon={ShieldCheck}
                       iconColor="bg-green-100 text-green-600">
                     <SecuritySection user={currentUser} onUpdated={handleUpdated} />
+                </Card>
+
+                {/* Notification preferences */}
+                <Card title="Notification Preferences" icon={Bell}
+                      iconColor="bg-indigo-100 text-indigo-600">
+                    <NotificationPreferencesSection />
                 </Card>
 
                 {/* Active sessions */}

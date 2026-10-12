@@ -403,8 +403,18 @@ class ProposalController extends Controller
                 $actor = $log->actor;
                 $actorLabel = $actor?->name ?? 'System';
 
-                if (! $isAdmin && $actor?->hasRole('staff')) {
-                    $actorLabel = 'Reviewer';
+                // System-triggered decisions (blind/defence auto pass-fail, threshold
+                // recalculation) still need a real user in actor_id to satisfy
+                // WorkflowService's authorization check, but that account had no actual
+                // part in the decision — never attribute it to them in the history.
+                if ($log->metadata['automatic'] ?? false) {
+                    $actorLabel = 'System (Automatic)';
+                } elseif (! $isAdmin && $actor?->hasRole('staff')) {
+                    // 'staff' is the role real PIs hold in this app (see
+                    // RolePermissionSeeder) — and per the workflow transitions table, a
+                    // staff-role actor is only ever credited with the 'submit' action,
+                    // never a review action. So this is always the PI, never a reviewer.
+                    $actorLabel = 'PI';
                 }
 
                 return [

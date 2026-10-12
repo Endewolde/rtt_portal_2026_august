@@ -35,6 +35,11 @@ const TYPE_CFG = {
         template: d => `Assigned to review ${d.tracker_number || ''} — ${d.review_type || ''}`,
         actionLabel: 'Review Now', actionUrl: () => '/proposals/reviewee',
     },
+    review_assignment_cancelled: {
+        icon: XCircle, color: 'gray', label: 'Assignment Cancelled', category: 'activity',
+        template: d => `Your review assignment for ${d.tracker_number || ''} was cancelled — the proposal was rejected`,
+        actionLabel: null, actionUrl: () => '/notifications',
+    },
     review_deadline_reminder: {
         icon: AlertTriangle, color: 'amber', label: 'Review Deadline Reminder', category: 'action',
         template: d => (d.days_remaining ?? 0) < 0
@@ -53,8 +58,8 @@ const TYPE_CFG = {
         actionLabel: 'View Details', actionUrl: d => d.proposal_id ? `/proposals/${d.proposal_id}` : '/my-proposals',
     },
     central_eval_approved: {
-        icon: CheckCircle2, color: 'green', label: 'Evaluation Passed', category: 'activity',
-        template: d => `Central evaluation approved for ${d.tracker_number || ''}`,
+        icon: CheckCircle2, color: 'green', label: 'Advanced to Central Evaluation', category: 'activity',
+        template: d => `Your proposal ${d.tracker_number || ''} passed open defence and is now in Central Evaluation`,
         actionLabel: 'View Proposal', actionUrl: d => d.proposal_id ? `/proposals/${d.proposal_id}` : '/proposals',
     },
     blind_review_passed_officer: {
@@ -129,13 +134,38 @@ const TYPE_CFG = {
     },
     co_pi_response: {
         icon: MessageSquare, color: 'blue', label: 'Co-PI Response', category: 'activity',
-        template: d => `Co-PI responded for ${d.tracker_number || ''}`,
+        template: d => `${d.co_pi_name || 'Your co-investigator'} ${d.response === 'accepted' ? 'accepted' : 'declined'} your invitation on ${d.tracker_number || ''}`,
         actionLabel: 'View', actionUrl: d => d.proposal_id ? `/proposals/${d.proposal_id}` : '/proposals',
     },
     'App\\Notifications\\SystemAlertNotification': {
         icon: AlertCircle, color: 'amber', label: 'System Alert', category: 'activity',
         template: d => d.message || d.title || 'System notification',
         actionLabel: null, actionUrl: () => '/notifications',
+    },
+    defence_extension_requested: {
+        icon: Calendar, color: 'amber', label: 'Defence Deadline Extension Request', category: 'action',
+        template: d => d.message || `Score deadline extension requested for ${d.tracker_number || 'a proposal'}`,
+        actionLabel: 'Review Request', actionUrl: () => '/admin/defence-extensions',
+    },
+    defence_extension_resolved: {
+        icon: Calendar, color: 'violet', label: 'Defence Extension Decision', category: 'activity',
+        template: d => d.message || `Your extension request for ${d.tracker_number || 'a proposal'} was ${d.decision || 'decided'}`,
+        actionLabel: 'Open Defence', actionUrl: () => '/admin/open-defence',
+    },
+    defence_deadline_extended: {
+        icon: Calendar, color: 'violet', label: 'Defence Deadline Extended', category: 'action',
+        template: d => d.message || `The defence score deadline for ${d.tracker_number || 'a proposal'} was extended`,
+        actionLabel: 'My Reviews', actionUrl: () => '/reviews',
+    },
+    defence_deadline_reminder: {
+        icon: AlertTriangle, color: 'amber', label: 'Defence Score Due', category: 'action',
+        template: d => d.message || `Your defence score for ${d.tracker_number || 'a proposal'} is due soon`,
+        actionLabel: 'My Reviews', actionUrl: () => '/reviews',
+    },
+    defence_deadline_passed: {
+        icon: AlertCircle, color: 'red', label: 'Defence Deadline Passed', category: 'action',
+        template: d => d.message || `The defence score deadline for ${d.tracker_number || 'a proposal'} has passed`,
+        actionLabel: 'Open Defence', actionUrl: () => '/admin/open-defence',
     },
     default: {
         icon: Bell, color: 'gray', label: 'Notification', category: 'activity',

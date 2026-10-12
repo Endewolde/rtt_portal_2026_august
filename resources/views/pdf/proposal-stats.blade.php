@@ -411,7 +411,7 @@ body {
         'under_blind_review'  => ['label' => 'Under Blind Review',  'dot' => 'dot-purple'],
         'blind_review_passed' => ['label' => 'Blind Review Passed', 'dot' => 'dot-purple'],
         'under_open_defence'  => ['label' => 'Under Open Defence',  'dot' => 'dot-purple'],
-        'accepted'            => ['label' => 'Accepted',            'dot' => 'dot-purple'],
+        'accepted'            => ['label' => 'Central Evaluation',  'dot' => 'dot-purple'],
         'funded'              => ['label' => 'Funded',              'dot' => 'dot-green' ],
         'midterm_evaluation'  => ['label' => 'Midterm Evaluation',  'dot' => 'dot-amber' ],
         'completed'           => ['label' => 'Completed',           'dot' => 'dot-green' ],

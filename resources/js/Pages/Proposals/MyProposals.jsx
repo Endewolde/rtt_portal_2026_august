@@ -317,6 +317,7 @@ export default function MyProposals() {
     const [loading,      setLoading]      = useState(true);
     const [activeTab,    setActiveTab]    = useState('all');
     const [reasonModal,  setReasonModal]  = useState(null);
+    const [respondingId, setRespondingId] = useState(null);
 
     useEffect(() => {
         Promise.all([
@@ -550,8 +551,37 @@ export default function MyProposals() {
                                             {p.rejection_reason ? 'Fix & Resubmit' : 'Continue'}
                                         </Link>
                                     )}
-                                    {coProposalIds.has(p.id) && (
-                                        <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">Co-PI</span>
+                                    {coProposalIds.has(p.id) && showInvitations && p.my_invitation_status === 'pending' ? (
+                                        <>
+                                            <button
+                                                onClick={async () => {
+                                                    setRespondingId(p.id);
+                                                    await handleRespondInvitation(p.my_proposal_member_id, 'accepted', p.id);
+                                                    setRespondingId(null);
+                                                }}
+                                                disabled={respondingId === p.id}
+                                                className="flex items-center gap-1 px-2.5 py-1 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700 disabled:opacity-50"
+                                            >
+                                                {respondingId === p.id ? <Loader2 size={11} className="animate-spin" /> : <CheckCircle2 size={11} />}
+                                                Accept
+                                            </button>
+                                            <button
+                                                onClick={async () => {
+                                                    setRespondingId(p.id);
+                                                    await handleRespondInvitation(p.my_proposal_member_id, 'declined', p.id);
+                                                    setRespondingId(null);
+                                                }}
+                                                disabled={respondingId === p.id}
+                                                className="flex items-center gap-1 px-2.5 py-1 bg-white text-red-600 border border-red-300 rounded-lg text-xs font-medium hover:bg-red-50 disabled:opacity-50"
+                                            >
+                                                {respondingId === p.id ? <Loader2 size={11} className="animate-spin" /> : <XCircle size={11} />}
+                                                Decline
+                                            </button>
+                                        </>
+                                    ) : coProposalIds.has(p.id) && (
+                                        <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
+                                            {p.my_invitation_status === 'declined' ? 'Declined' : 'Co-PI'}
+                                        </span>
                                     )}
                                     {p.status === 'draft' && !coProposalIds.has(p.id) && (
                                         <button onClick={() => handleDeleteProposal(p)}

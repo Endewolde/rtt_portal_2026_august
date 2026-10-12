@@ -146,7 +146,7 @@ function ConferenceModal({ conf, onSave, onClose }) {
                                   placeholder="About this conference…" />
                     </Field>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <Field label="Start Date & Time *" err={errors.start_date}>
                             <input type="datetime-local" value={form.start_date}
                                    onChange={e => set('start_date', e.target.value)}
@@ -159,7 +159,7 @@ function ConferenceModal({ conf, onSave, onClose }) {
                         </Field>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <Field label="Timezone" err={errors.timezone}>
                             <input value={form.timezone} onChange={e => set('timezone', e.target.value)}
                                    className={inputCls('timezone')} placeholder="e.g. Africa/Addis_Ababa" />
@@ -186,7 +186,7 @@ function ConferenceModal({ conf, onSave, onClose }) {
                         </Field>
                     )}
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <Field label="Status" err={errors.status}>
                             <select value={form.status} onChange={e => set('status', e.target.value)}
                                     className={inputCls('status')}>
@@ -271,7 +271,7 @@ function SpeakerForm({ conferenceId, speaker, onSave, onCancel }) {
 
     return (
         <div className="bg-indigo-50/60 border border-indigo-100 rounded-xl p-4 space-y-3">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {[
                     { k: 'name',     label: 'Name *', placeholder: 'Dr. Jane Smith' },
                     { k: 'title',    label: 'Title',  placeholder: 'Prof. of Computer Science' },
@@ -337,8 +337,8 @@ function SessionForm({ conferenceId, session, speakers, onSave, onCancel }) {
 
     return (
         <div className="bg-blue-50/60 border border-blue-100 rounded-xl p-4 space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="sm:col-span-2">
                     <label className="block text-xs font-semibold text-gray-600 mb-1">Title *</label>
                     <input value={form.title} onChange={e => set('title', e.target.value)}
                            className="w-full border border-gray-200 bg-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -367,13 +367,13 @@ function SessionForm({ conferenceId, session, speakers, onSave, onCancel }) {
                     <input type="datetime-local" value={form.ends_at ?? ''} onChange={e => set('ends_at', e.target.value)}
                            className="w-full border border-gray-200 bg-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
                 </div>
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                     <label className="block text-xs font-semibold text-gray-600 mb-1">Room / Location</label>
                     <input value={form.room ?? ''} onChange={e => set('room', e.target.value)}
                            className="w-full border border-gray-200 bg-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                            placeholder="e.g. Room 101, Auditorium" />
                 </div>
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                     <label className="block text-xs font-semibold text-gray-600 mb-1">Description</label>
                     <textarea value={form.description ?? ''} onChange={e => set('description', e.target.value)} rows={2}
                               className="w-full border border-gray-200 bg-white rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
@@ -508,11 +508,11 @@ function ConferenceDrawer({ confId, onClose, onUpdated }) {
                 </div>
 
                 {/* Tabs */}
-                <div className="flex border-b border-gray-100 px-4 shrink-0">
+                <div className="flex border-b border-gray-100 px-4 shrink-0 overflow-x-auto">
                     {TABS.map(t => (
                         <button key={t.id} onClick={() => setTab(t.id)}
                             className={cn(
-                                'flex items-center gap-1.5 px-3 py-3 text-xs font-semibold border-b-2 transition-colors -mb-px',
+                                'flex items-center gap-1.5 px-3 py-3 text-xs font-semibold border-b-2 transition-colors -mb-px shrink-0',
                                 tab === t.id
                                     ? 'border-indigo-600 text-indigo-700'
                                     : 'border-transparent text-gray-400 hover:text-gray-700'
@@ -601,7 +601,7 @@ function ConferenceDrawer({ confId, onClose, onUpdated }) {
                                                     <p className="text-sm font-semibold text-gray-900 truncate">{sp.name}</p>
                                                     {sp.title && <p className="text-xs text-gray-500 truncate">{sp.title}</p>}
                                                 </div>
-                                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <div className="flex items-center gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
                                                     <button onClick={() => setEditSpeaker(sp)}
                                                         className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
                                                         <Pencil size={12} />
@@ -663,7 +663,7 @@ function ConferenceDrawer({ confId, onClose, onUpdated }) {
                                                         </p>
                                                     )}
                                                 </div>
-                                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <div className="flex items-center gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
                                                     <button onClick={() => setEditSession(sess)}
                                                         className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
                                                         <Pencil size={12} />
@@ -702,24 +702,41 @@ function ConferenceDrawer({ confId, onClose, onUpdated }) {
                                 {(conf?.registrations ?? []).length === 0 ? (
                                     <p className="text-sm text-gray-400 text-center py-8">No registrations yet.</p>
                                 ) : (
-                                    <div className="divide-y divide-gray-50 bg-white border border-gray-100 rounded-xl overflow-hidden">
-                                        <div className="grid grid-cols-4 px-4 py-2 bg-gray-50 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-                                            <span>Name</span>
-                                            <span>Email</span>
-                                            <span>Organization</span>
-                                            <span>Date</span>
-                                        </div>
-                                        {(conf.registrations ?? []).map(reg => (
-                                            <div key={reg.id} className="grid grid-cols-4 px-4 py-3 text-xs text-gray-600 hover:bg-gray-50">
-                                                <span className="font-medium text-gray-900 truncate">{reg.name}</span>
-                                                <span className="truncate">{reg.email}</span>
-                                                <span className="truncate text-gray-400">{reg.organization ?? '—'}</span>
-                                                <span className="text-gray-400">
-                                                    {reg.registered_at ? new Date(reg.registered_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—'}
-                                                </span>
+                                    <>
+                                        {/* Desktop table */}
+                                        <div className="hidden sm:block divide-y divide-gray-50 bg-white border border-gray-100 rounded-xl overflow-hidden">
+                                            <div className="grid grid-cols-4 px-4 py-2 bg-gray-50 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                                <span>Name</span>
+                                                <span>Email</span>
+                                                <span>Organization</span>
+                                                <span>Date</span>
                                             </div>
-                                        ))}
-                                    </div>
+                                            {(conf.registrations ?? []).map(reg => (
+                                                <div key={reg.id} className="grid grid-cols-4 px-4 py-3 text-xs text-gray-600 hover:bg-gray-50">
+                                                    <span className="font-medium text-gray-900 truncate">{reg.name}</span>
+                                                    <span className="truncate">{reg.email}</span>
+                                                    <span className="truncate text-gray-400">{reg.organization ?? '—'}</span>
+                                                    <span className="text-gray-400">
+                                                        {reg.registered_at ? new Date(reg.registered_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—'}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+
+                                        {/* Mobile cards */}
+                                        <div className="sm:hidden space-y-2">
+                                            {(conf.registrations ?? []).map(reg => (
+                                                <div key={reg.id} className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 space-y-1">
+                                                    <p className="text-sm font-semibold text-gray-900">{reg.name}</p>
+                                                    <p className="text-xs text-gray-500 break-all">{reg.email}</p>
+                                                    <div className="flex items-center justify-between text-xs text-gray-400 pt-0.5">
+                                                        <span>{reg.organization ?? '—'}</span>
+                                                        <span>{reg.registered_at ? new Date(reg.registered_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—'}</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </>
                                 )}
                             </div>
                         )}
@@ -811,7 +828,7 @@ export default function AdminConferences() {
             <div className="max-w-7xl mx-auto space-y-5">
 
                 {/* Header */}
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
                     <div>
                         <div className="flex items-center gap-3 mb-1">
                             <div className="h-10 w-10 rounded-2xl bg-linear-to-br from-indigo-500 to-violet-600
@@ -820,7 +837,7 @@ export default function AdminConferences() {
                             </div>
                             <h1 className="text-2xl font-black text-gray-900 tracking-tight">Conferences</h1>
                         </div>
-                        <p className="text-sm text-gray-500 ml-13">Manage events, speakers, agendas, registrations &amp; abstract submissions</p>
+                        <p className="text-sm text-gray-500 sm:ml-13">Manage events, speakers, agendas, registrations &amp; abstract submissions</p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                         <button onClick={load}
@@ -846,8 +863,8 @@ export default function AdminConferences() {
                 </div>
 
                 {/* Filters */}
-                <div className="flex gap-3">
-                    <div className="relative flex-1">
+                <div className="flex flex-wrap gap-3">
+                    <div className="relative w-full sm:flex-1 sm:min-w-52">
                         <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
                         <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
                                placeholder="Search conferences…"
@@ -883,73 +900,146 @@ export default function AdminConferences() {
                         </div>
                     ) : (
                         <>
-                            <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto_auto] gap-4 px-6 py-3
-                                            bg-gray-50/80 border-b border-gray-100
-                                            text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-                                <span>Conference</span>
-                                <span>Date</span>
-                                <span>Stats</span>
-                                <span>Status</span>
-                                <span />
+                            {/* Desktop table */}
+                            <div className="hidden sm:block">
+                                <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto_auto] gap-4 px-6 py-3
+                                                bg-gray-50/80 border-b border-gray-100
+                                                text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                                    <span>Conference</span>
+                                    <span>Date</span>
+                                    <span>Stats</span>
+                                    <span>Status</span>
+                                    <span />
+                                </div>
+                                <div className="divide-y divide-gray-50">
+                                    {conferences.map(conf => (
+                                        <div key={conf.id}
+                                             className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto_auto] gap-4 items-center
+                                                        px-6 py-4 hover:bg-gray-50/60 transition-colors group">
+                                            {/* Title */}
+                                            <div className="flex items-center gap-3 min-w-0">
+                                                <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0 overflow-hidden">
+                                                    {conf.banner_image
+                                                        ? <img src={conf.banner_image} alt="" className="w-full h-full object-cover" />
+                                                        : <Calendar size={18} className="text-indigo-400" />
+                                                    }
+                                                </div>
+                                                <div className="min-w-0 overflow-hidden">
+                                                    <button onClick={() => setDrawerConf(conf.id)}
+                                                        className="w-full text-sm font-semibold text-gray-900 hover:text-indigo-700
+                                                                   transition-colors truncate block text-left max-w-full">
+                                                        {conf.title}
+                                                    </button>
+                                                    <p className="text-xs text-gray-400 mt-0.5 truncate flex items-center gap-1">
+                                                        {conf.location_type === 'virtual' ? <Video size={10} /> : conf.location_type === 'hybrid' ? <Globe size={10} /> : <MapPin size={10} />}
+                                                        {conf.location_address ?? (conf.virtual_link ? 'Online' : '—')}
+                                                        {conf.is_featured && <Star size={10} className="text-amber-400 ml-1" />}
+                                                    </p>
+                                                </div>
+                                            </div>
+
+                                            {/* Date */}
+                                            <div className="text-xs text-gray-600">
+                                                <p className="font-medium">{fmtDate(conf.start_date)}</p>
+                                                {conf.end_date && <p className="text-gray-400">to {fmtDate(conf.end_date)}</p>}
+                                            </div>
+
+                                            {/* Stats + capacity */}
+                                            <div className="space-y-1.5">
+                                                <div className="flex items-center gap-3 text-xs text-gray-400">
+                                                    <span className="flex items-center gap-1"><Users size={10} />{conf.speakers_count}</span>
+                                                    <span className="flex items-center gap-1"><Clock size={10} />{conf.sessions_count}</span>
+                                                    <span className="flex items-center gap-1"><UserPlus size={10} />{conf.registrations_count}</span>
+                                                </div>
+                                                {conf.max_capacity > 0 && (
+                                                    <div>
+                                                        <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                                            <div className={`h-full rounded-full transition-all ${
+                                                                conf.registrations_count / conf.max_capacity >= 1 ? 'bg-red-500' :
+                                                                conf.registrations_count / conf.max_capacity >= 0.8 ? 'bg-orange-400' : 'bg-emerald-500'
+                                                            }`}
+                                                                 style={{ width: `${Math.min(100, (conf.registrations_count / conf.max_capacity) * 100)}%` }} />
+                                                        </div>
+                                                        <p className="text-[10px] text-gray-400 mt-0.5">
+                                                            {conf.registrations_count}/{conf.max_capacity} capacity
+                                                        </p>
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Status */}
+                                            <div className="flex flex-col gap-1">
+                                                <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full w-fit ${STATUS_CFG[conf.status]?.cls}`}>
+                                                    <span className={`w-1.5 h-1.5 rounded-full ${STATUS_CFG[conf.status]?.dot}`} />
+                                                    {STATUS_CFG[conf.status]?.label}
+                                                </span>
+                                                {conf.abstract_submission_open && (
+                                                    <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-violet-50 text-violet-600 w-fit">
+                                                        <FileText size={8} /> Abstracts Open
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {/* Actions */}
+                                            <div className="flex items-center gap-1 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+                                                <button onClick={() => setDrawerConf(conf.id)}
+                                                    className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="View">
+                                                    <Eye size={13} />
+                                                </button>
+                                                <button onClick={() => setEditTarget(conf)}
+                                                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Edit">
+                                                    <Pencil size={13} />
+                                                </button>
+                                                <button onClick={() => setDeleteTarget(conf)}
+                                                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
+                                                    <Trash2 size={13} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
-                            <div className="divide-y divide-gray-50">
+
+                            {/* Mobile cards */}
+                            <div className="sm:hidden divide-y divide-gray-50">
                                 {conferences.map(conf => (
-                                    <div key={conf.id}
-                                         className="grid grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto_auto] gap-4 items-center
-                                                    px-6 py-4 hover:bg-gray-50/60 transition-colors group">
-                                        {/* Title */}
-                                        <div className="flex items-center gap-3 min-w-0">
+                                    <div key={conf.id} className="px-4 py-4 space-y-3">
+                                        <div className="flex items-start gap-3">
                                             <div className="w-10 h-10 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0 overflow-hidden">
                                                 {conf.banner_image
                                                     ? <img src={conf.banner_image} alt="" className="w-full h-full object-cover" />
                                                     : <Calendar size={18} className="text-indigo-400" />
                                                 }
                                             </div>
-                                            <div className="min-w-0 overflow-hidden">
+                                            <div className="min-w-0 flex-1">
                                                 <button onClick={() => setDrawerConf(conf.id)}
-                                                    className="w-full text-sm font-semibold text-gray-900 hover:text-indigo-700
-                                                               transition-colors truncate block text-left max-w-full">
+                                                    className="text-sm font-semibold text-gray-900 hover:text-indigo-700
+                                                               transition-colors text-left block">
                                                     {conf.title}
                                                 </button>
-                                                <p className="text-xs text-gray-400 mt-0.5 truncate flex items-center gap-1">
+                                                <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
                                                     {conf.location_type === 'virtual' ? <Video size={10} /> : conf.location_type === 'hybrid' ? <Globe size={10} /> : <MapPin size={10} />}
-                                                    {conf.location_address ?? (conf.virtual_link ? 'Online' : '—')}
-                                                    {conf.is_featured && <Star size={10} className="text-amber-400 ml-1" />}
+                                                    <span className="truncate">{conf.location_address ?? (conf.virtual_link ? 'Online' : '—')}</span>
+                                                    {conf.is_featured && <Star size={10} className="text-amber-400 shrink-0 ml-1" />}
                                                 </p>
                                             </div>
-                                        </div>
-
-                                        {/* Date */}
-                                        <div className="text-xs text-gray-600">
-                                            <p className="font-medium">{fmtDate(conf.start_date)}</p>
-                                            {conf.end_date && <p className="text-gray-400">to {fmtDate(conf.end_date)}</p>}
-                                        </div>
-
-                                        {/* Stats + capacity */}
-                                        <div className="space-y-1.5">
-                                            <div className="flex items-center gap-3 text-xs text-gray-400">
-                                                <span className="flex items-center gap-1"><Users size={10} />{conf.speakers_count}</span>
-                                                <span className="flex items-center gap-1"><Clock size={10} />{conf.sessions_count}</span>
-                                                <span className="flex items-center gap-1"><UserPlus size={10} />{conf.registrations_count}</span>
+                                            <div className="flex items-center gap-1 shrink-0">
+                                                <button onClick={() => setDrawerConf(conf.id)}
+                                                    className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="View">
+                                                    <Eye size={13} />
+                                                </button>
+                                                <button onClick={() => setEditTarget(conf)}
+                                                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Edit">
+                                                    <Pencil size={13} />
+                                                </button>
+                                                <button onClick={() => setDeleteTarget(conf)}
+                                                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
+                                                    <Trash2 size={13} />
+                                                </button>
                                             </div>
-                                            {conf.max_capacity > 0 && (
-                                                <div>
-                                                    <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                                                        <div className={`h-full rounded-full transition-all ${
-                                                            conf.registrations_count / conf.max_capacity >= 1 ? 'bg-red-500' :
-                                                            conf.registrations_count / conf.max_capacity >= 0.8 ? 'bg-orange-400' : 'bg-emerald-500'
-                                                        }`}
-                                                             style={{ width: `${Math.min(100, (conf.registrations_count / conf.max_capacity) * 100)}%` }} />
-                                                    </div>
-                                                    <p className="text-[10px] text-gray-400 mt-0.5">
-                                                        {conf.registrations_count}/{conf.max_capacity} capacity
-                                                    </p>
-                                                </div>
-                                            )}
                                         </div>
 
-                                        {/* Status */}
-                                        <div className="flex flex-col gap-1">
+                                        <div className="flex flex-wrap items-center gap-1.5">
                                             <span className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full w-fit ${STATUS_CFG[conf.status]?.cls}`}>
                                                 <span className={`w-1.5 h-1.5 rounded-full ${STATUS_CFG[conf.status]?.dot}`} />
                                                 {STATUS_CFG[conf.status]?.label}
@@ -961,21 +1051,36 @@ export default function AdminConferences() {
                                             )}
                                         </div>
 
-                                        {/* Actions */}
-                                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button onClick={() => setDrawerConf(conf.id)}
-                                                className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="View">
-                                                <Eye size={13} />
-                                            </button>
-                                            <button onClick={() => setEditTarget(conf)}
-                                                className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors" title="Edit">
-                                                <Pencil size={13} />
-                                            </button>
-                                            <button onClick={() => setDeleteTarget(conf)}
-                                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Delete">
-                                                <Trash2 size={13} />
-                                            </button>
+                                        <div className="grid grid-cols-2 gap-3 text-xs">
+                                            <div>
+                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Date</p>
+                                                <p className="font-medium text-gray-700">{fmtDate(conf.start_date)}</p>
+                                                {conf.end_date && <p className="text-gray-400">to {fmtDate(conf.end_date)}</p>}
+                                            </div>
+                                            <div>
+                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Stats</p>
+                                                <div className="flex items-center gap-3 text-gray-500">
+                                                    <span className="flex items-center gap-1"><Users size={10} />{conf.speakers_count}</span>
+                                                    <span className="flex items-center gap-1"><Clock size={10} />{conf.sessions_count}</span>
+                                                    <span className="flex items-center gap-1"><UserPlus size={10} />{conf.registrations_count}</span>
+                                                </div>
+                                            </div>
                                         </div>
+
+                                        {conf.max_capacity > 0 && (
+                                            <div>
+                                                <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                                    <div className={`h-full rounded-full transition-all ${
+                                                        conf.registrations_count / conf.max_capacity >= 1 ? 'bg-red-500' :
+                                                        conf.registrations_count / conf.max_capacity >= 0.8 ? 'bg-orange-400' : 'bg-emerald-500'
+                                                    }`}
+                                                         style={{ width: `${Math.min(100, (conf.registrations_count / conf.max_capacity) * 100)}%` }} />
+                                                </div>
+                                                <p className="text-[10px] text-gray-400 mt-0.5">
+                                                    {conf.registrations_count}/{conf.max_capacity} capacity
+                                                </p>
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                             </div>

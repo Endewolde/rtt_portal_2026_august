@@ -92,6 +92,11 @@ class AppSettingsSeeder extends Seeder
             ['key' => 'max_reviewer_active_assignments', 'value' => '5', 'type' => 'number', 'group' => 'thresholds'],
             ['key' => 'overdue_reminder_interval_days', 'value' => '3', 'type' => 'number', 'group' => 'thresholds'],
             ['key' => 'ongoing_midterm_overdue_days', 'value' => '90', 'type' => 'number', 'group' => 'thresholds'],
+            // Global, cross-call caps on how many active proposals one person can be
+            // involved in at once. 0 = unlimited (same convention as max_concurrent_sessions).
+            // "Active" = any status except archived/rejected (WorkflowStage.is_terminal).
+            ['key' => 'max_active_pi_proposals', 'value' => '0', 'type' => 'number', 'group' => 'thresholds'],
+            ['key' => 'max_active_coinvestigator_proposals', 'value' => '0', 'type' => 'number', 'group' => 'thresholds'],
 
             // Audit & Logging
             ['key' => 'audit_log_retention_days', 'value' => '365',  'type' => 'number',  'group' => 'audit'],

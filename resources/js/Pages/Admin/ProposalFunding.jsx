@@ -52,7 +52,7 @@ const STATUS_LABELS = {
     under_blind_review: { label: 'Blind Review', cls: 'bg-violet-100 text-violet-700' },
     blind_review_passed: { label: 'BR Passed', cls: 'bg-orange-100 text-orange-700' },
     under_open_defence: { label: 'Open Defence', cls: 'bg-purple-100 text-purple-700' },
-    accepted: { label: 'Accepted', cls: 'bg-teal-100 text-teal-700' },
+    accepted: { label: 'Central Evaluation', cls: 'bg-teal-100 text-teal-700' },
     funded: { label: 'Funded', cls: 'bg-emerald-100 text-emerald-700' },
     midterm_evaluation: { label: 'Midterm', cls: 'bg-cyan-100 text-cyan-700' },
     completed: { label: 'Completed', cls: 'bg-green-100 text-green-700' },
@@ -247,7 +247,7 @@ export default function ProposalFunding() {
                 <WorkflowBreadcrumb current="funded" />
 
                 {/* Page Header */}
-                <div className="flex items-start justify-between mb-6 gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-6 gap-4">
                     <div className="flex items-center gap-3">
                         <div className="h-10 w-10 bg-emerald-100 rounded-xl flex items-center justify-center shrink-0">
                             <BadgeDollarSign size={20} className="text-emerald-600" />
@@ -257,7 +257,7 @@ export default function ProposalFunding() {
                             <p className="text-sm text-gray-500 mt-0.5">All funded proposals with grant details and award information</p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
+                    <div className="flex items-center gap-3 flex-wrap sm:shrink-0">
                         {!loading && proposals.length > 0 && (
                             <span className="flex items-center gap-1.5 text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1.5 rounded-lg">
                                 <BadgeDollarSign size={12} /> {proposals.length} Funded

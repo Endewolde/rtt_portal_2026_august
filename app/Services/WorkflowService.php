@@ -133,6 +133,116 @@ class WorkflowService
     }
 
     /**
+     * Reopen a rejected proposal for reconsideration — sends it back to whichever
+     * stage it was rejected FROM (looked up from workflow_logs), so it can be
+     * re-decided with current settings/data without losing already-submitted review
+     * scores or forcing the PI to restart (unlike an Appeal, which always returns to
+     * draft). Used when a rejection is later found to have been decided under
+     * thresholds/settings that have since changed.
+     *
+     * Bypasses the WorkflowTransition table (its single from-stage -> single to-stage
+     * shape can't express "wherever it came from"), but — per the rule at the top of
+     * this class — this remains the only method allowed to touch proposal.status.
+     *
+     * @throws InvalidTransitionException if the proposal isn't currently rejected, or
+     *                                    its rejection origin can't be determined
+     */
+    public function reopenRejectedProposal(Proposal $proposal, User $actor, string $reason): Proposal
+    {
+        if ($proposal->status !== 'rejected') {
+            throw new InvalidTransitionException(
+                "Proposal is not currently rejected. Current status: '{$proposal->status}'."
+            );
+        }
+
+        $lastRejection = DB::table('workflow_logs')
+            ->where('proposal_id', $proposal->id)
+            ->where('to_stage', 'rejected')
+            ->orderByDesc('created_at')
+            ->first();
+
+        if (! $lastRejection || ! $lastRejection->from_stage) {
+            throw new InvalidTransitionException(
+                'Could not determine which stage this proposal was rejected from — cannot reopen safely.'
+            );
+        }
+
+        return $this->leaveRejectedStage($proposal, $lastRejection->from_stage, $actor, $reason, notify: true);
+    }
+
+    /**
+     * Used only by ReviewScoreService::recalculateAllDecisions for the fully-automatic
+     * correction path: bypasses 'rejected' straight to a KNOWN target stage (the pair's
+     * pre-decision stage — under_blind_review or under_open_defence — not looked up from
+     * history, since the caller already knows exactly which decision is being redone).
+     * Fires no notification: the immediately-following pass_blind_review/pass_defence
+     * transition (a normal transition() call) sends the real, accurate "you passed"
+     * notice — sending one here too would just double the email for no reason.
+     */
+    public function bypassRejectedStageSilently(Proposal $proposal, string $toStage, User $actor, string $reason): Proposal
+    {
+        if ($proposal->status !== 'rejected') {
+            throw new InvalidTransitionException(
+                "Proposal is not currently rejected. Current status: '{$proposal->status}'."
+            );
+        }
+
+        return $this->leaveRejectedStage($proposal, $toStage, $actor, $reason, notify: false);
+    }
+
+    private function leaveRejectedStage(Proposal $proposal, string $toStage, User $actor, string $reason, bool $notify): Proposal
+    {
+        return DB::transaction(function () use ($proposal, $actor, $reason, $toStage, $notify) {
+            DB::table('proposals')
+                ->where('id', $proposal->id)
+                ->update([
+                    'status' => $toStage,
+                    'status_entered_at' => now(),
+                    'updated_at' => now(),
+                ]);
+
+            DB::table('workflow_logs')->insert([
+                'id' => Str::uuid()->toString(),
+                'proposal_id' => $proposal->id,
+                'from_stage' => 'rejected',
+                'action' => 'reopen',
+                'to_stage' => $toStage,
+                'actor_id' => $actor->id,
+                'notes' => $reason,
+                // notify=false only ever comes from the fully-automatic recalculation
+                // path (bypassRejectedStageSilently) — the manual "Reopen for
+                // Reconsideration" button always notifies, so this distinguishes them
+                // for the workflow-history display without a separate parameter.
+                'metadata' => $notify ? null : json_encode(['automatic' => true]),
+                'created_at' => now(),
+            ]);
+
+            DB::table('audit_logs')->insert([
+                'id' => Str::uuid()->toString(),
+                'auditable_type' => Proposal::class,
+                'auditable_id' => $proposal->id,
+                'event' => 'proposal.reopened',
+                'actor_id' => $actor->id,
+                'old_values' => json_encode(['status' => 'rejected']),
+                'new_values' => json_encode(['status' => $toStage, 'action' => 'reopen']),
+                'ip_address' => Request::ip() ?? '127.0.0.1',
+                'user_agent' => Request::userAgent() ?? '',
+                'created_at' => now(),
+            ]);
+
+            $refreshed = $proposal->refresh();
+
+            if ($notify) {
+                event(new ProposalTransitioned($refreshed, 'rejected', $toStage, 'reopen', $actor, now()));
+            }
+
+            app(DashboardService::class)->invalidate($proposal->pi_user_id);
+
+            return $refreshed;
+        });
+    }
+
+    /**
      * Get all valid next actions for this proposal given this actor.
      */
     public function availableActions(Proposal $proposal, User $actor): Collection

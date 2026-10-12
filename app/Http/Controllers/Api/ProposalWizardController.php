@@ -9,6 +9,7 @@ use App\Exceptions\ProposalNotEditableException;
 use App\Exceptions\UnauthorizedTransitionException;
 use App\Exceptions\WorkflowGuardException;
 use App\Http\Controllers\Controller;
+use App\Models\AppSetting;
 use App\Models\Proposal;
 use App\Models\ProposalCall;
 use App\Models\ProposalDocument;
@@ -65,6 +66,27 @@ class ProposalWizardController extends Controller
                 return response()->json([
                     'data' => null,
                     'message' => "This call limits each PI to {$limit} {$noun}. You have already reached this limit.",
+                    'errors' => [],
+                    'meta' => [],
+                ], 422);
+            }
+        }
+
+        // Global, cross-call cap on how many active proposals a person can be PI on
+        // at once (Settings → Review Thresholds). 0/unset = unlimited.
+        $globalPiCap = (int) (AppSetting::where('key', 'max_active_pi_proposals')->value('value') ?? 0);
+        if ($globalPiCap > 0) {
+            $activePiCount = Proposal::where('pi_user_id', $request->user()->id)
+                ->whereNull('deleted_at')
+                ->whereNotIn('status', ['archived', 'rejected'])
+                ->count();
+
+            if ($activePiCount >= $globalPiCap) {
+                $noun = $globalPiCap === 1 ? 'proposal' : 'proposals';
+
+                return response()->json([
+                    'data' => null,
+                    'message' => "You are already the PI on {$globalPiCap} active {$noun}, the maximum allowed at once. Complete or withdraw from an existing proposal before starting a new one.",
                     'errors' => [],
                     'meta' => [],
                 ], 422);
@@ -134,7 +156,7 @@ class ProposalWizardController extends Controller
 
         $request->validate([
             'file' => ['required', 'file', 'max:10240'],
-            'document_type' => ['required', 'string', 'in:proposal_document,budget_spreadsheet,pi_cv,supporting_document,shared_document'],
+            'document_type' => ['required', 'string', 'in:proposal_document,budget_spreadsheet,pi_cv,supporting_document,shared_document,ethical_clearance_certificate'],
         ]);
 
         $proposal = Proposal::findOrFail($id);
@@ -207,6 +229,15 @@ class ProposalWizardController extends Controller
         $doc = ProposalDocument::where('proposal_id', $proposalId)
             ->where('id', $docId)
             ->firstOrFail();
+
+        if ($doc->proposal->status !== 'draft') {
+            return response()->json([
+                'data' => null,
+                'message' => 'This proposal has already been submitted — its documents can no longer be deleted.',
+                'errors' => [],
+                'meta' => [],
+            ], 403);
+        }
 
         if ($doc->uploaded_by !== $request->user()->id) {
             return response()->json([

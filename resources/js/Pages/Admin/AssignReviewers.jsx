@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { usePage, router } from '@inertiajs/react';
 import {
     Search, UserCheck, Info, AlertTriangle, SlidersHorizontal,
-    X, ChevronLeft, BookOpen, Building2, Users, Microscope,
+    X, ChevronLeft, ChevronDown, BookOpen, Building2, Users, Microscope,
     CheckCircle2, RefreshCw, ToggleLeft, ToggleRight, Sparkles,
-    Bell, Calendar,
+    Bell, Calendar, Tags,
 } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import StatusBadge from '../../Components/StatusBadge';
@@ -88,6 +88,7 @@ export default function AssignReviewers() {
     const [suggestions, setSuggestions]     = useState([]);
     const [suggestionsLoading, setSuggestionsLoading] = useState(false);
     const [suggestionsOpen, setSuggestionsOpen] = useState(false);
+    const [suggestionTerms, setSuggestionTerms] = useState([]);
     const [suggestDueDate, setSuggestDueDate]   = useState('');
     const [selected, setSelected]           = useState([]);
     const [evalType, setEvalType]           = useState('');
@@ -98,6 +99,7 @@ export default function AssignReviewers() {
     const [error, setError]                 = useState(null);
     const [showFilters, setShowFilters]     = useState(false);
     const [override, setOverride]           = useState(false);
+    const [showAbstract, setShowAbstract]   = useState(false);
 
     const [filters, setFilters] = useState({
         search: '', expertise: '', department_id: '', college_id: '', reviewer_type: '',
@@ -130,9 +132,11 @@ export default function AssignReviewers() {
         try {
             const r = await get(`/proposals/${id}/reviewer-suggestions`);
             setSuggestions(r.data ?? []);
+            setSuggestionTerms(r.meta?.proposal_terms ?? []);
             setSuggestionsOpen(true);
         } catch {
             setSuggestions([]);
+            setSuggestionTerms([]);
             setSuggestionsOpen(true);
         } finally {
             setSuggestionsLoading(false);
@@ -208,6 +212,10 @@ export default function AssignReviewers() {
     const selectedSuggestionIds = selected.filter(id => suggestions.some(s => s.id === id));
     const hasSuggestionSelected = suggestionsOpen && selectedSuggestionIds.length > 0;
 
+    // Match strength is relative to the best match in this suggestion set —
+    // composite_score has no fixed ceiling, so the top match is always "100%".
+    const maxCompositeScore = Math.max(1, ...suggestions.map(s => s.composite_score ?? 0));
+
     const selectedReviewers = reviewers.filter(r => selected.includes(r.id));
     const evalTypeLabel     = evalTypes.find(t => t.id === evalType)?.label
                            ?? evalTypes.find(t => t.id === evalType)?.name ?? '';
@@ -234,19 +242,23 @@ export default function AssignReviewers() {
 
     return (
         <AppLayout breadcrumb={`Proposals / ${proposal?.tracker_number ?? id} / Assign Reviewers`}>
-            <div className="max-w-6xl mx-auto space-y-5 pb-10">
+            <div className={cn('max-w-6xl mx-auto space-y-5', selected.length > 0 ? 'pb-24 lg:pb-10' : 'pb-10')}>
 
                 {/* ── Page header ─────────────────────────────────────────── */}
-                <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3">
+                <div className="relative flex items-center justify-between gap-4 overflow-hidden">
+                    {/* Ambient decorative wash — purely cosmetic, sits behind the header content */}
+                    <div className="pointer-events-none absolute -top-16 -left-10 h-40 w-40 rounded-full bg-linear-to-br from-indigo-200/40 to-violet-200/30 blur-3xl" aria-hidden="true" />
+                    <div className="pointer-events-none absolute -top-20 left-32 h-32 w-32 rounded-full bg-violet-200/20 blur-3xl" aria-hidden="true" />
+
+                    <div className="relative flex items-center gap-3">
                         <button
                             onClick={() => router.visit('/admin/proposals')}
                             className="h-9 w-9 flex items-center justify-center rounded-xl border border-gray-200 text-gray-400 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50 transition-colors"
                         >
                             <ChevronLeft size={16} />
                         </button>
-                        <div className="h-10 w-10 bg-indigo-50 rounded-xl flex items-center justify-center shrink-0">
-                            <UserCheck size={20} className="text-indigo-600" />
+                        <div className="h-10 w-10 bg-linear-to-br from-indigo-500 to-violet-600 rounded-xl flex items-center justify-center shrink-0 shadow-lg shadow-indigo-200">
+                            <UserCheck size={20} className="text-white" />
                         </div>
                         <div>
                             <h1 className="text-xl font-bold text-gray-900">Assign Reviewers</h1>
@@ -277,6 +289,7 @@ export default function AssignReviewers() {
                         {/* Proposal card */}
                         {proposal && (
                             <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                                <div className="h-1 w-full bg-linear-to-r from-blue-400 via-indigo-400 to-violet-400" />
                                 <div className="px-5 py-4 border-b border-gray-50 flex items-center gap-3">
                                     <div className="h-8 w-8 bg-blue-50 rounded-lg flex items-center justify-center shrink-0">
                                         <BookOpen size={14} className="text-blue-600" />
@@ -306,6 +319,37 @@ export default function AssignReviewers() {
                                             </div>
                                         )}
                                     </div>
+
+                                    {proposal.abstract && (
+                                        <div className="pt-1 border-t border-gray-50">
+                                            <button
+                                                onClick={() => setShowAbstract(v => !v)}
+                                                className="w-full flex items-center justify-between text-left group"
+                                            >
+                                                <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Abstract</span>
+                                                <ChevronDown size={12} className={cn('text-gray-300 group-hover:text-gray-500 transition-transform', showAbstract && 'rotate-180')} />
+                                            </button>
+                                            <p className={cn('text-xs text-gray-500 leading-relaxed mt-1.5', !showAbstract && 'line-clamp-2')}>
+                                                {proposal.abstract}
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    {proposal.keywords && (
+                                        <div className="pt-1 border-t border-gray-50">
+                                            <div className="flex items-center gap-1.5 mb-1.5">
+                                                <Tags size={11} className="text-gray-300" />
+                                                <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">Keywords</span>
+                                            </div>
+                                            <div className="flex flex-wrap gap-1">
+                                                {proposal.keywords.split(',').map(k => k.trim()).filter(Boolean).map((k, i) => (
+                                                    <span key={i} className="text-[11px] bg-gray-50 text-gray-600 border border-gray-200 px-2 py-0.5 rounded-full">
+                                                        {k}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}
@@ -318,8 +362,13 @@ export default function AssignReviewers() {
                                 className="w-full flex items-center justify-between px-5 py-4 hover:bg-gray-50 transition-colors"
                             >
                                 <div className="flex items-center gap-2.5">
-                                    <div className="h-7 w-7 bg-violet-50 rounded-lg flex items-center justify-center">
-                                        <Sparkles size={13} className="text-violet-600" />
+                                    <div className="relative h-7 w-7 flex items-center justify-center shrink-0">
+                                        {!suggestionsOpen && (
+                                            <span className="absolute inset-0 rounded-lg bg-violet-300/50 motion-safe:animate-ping" aria-hidden="true" />
+                                        )}
+                                        <div className="relative h-7 w-7 bg-linear-to-br from-violet-500 to-indigo-600 rounded-lg flex items-center justify-center shadow-sm shadow-violet-200">
+                                            <Sparkles size={13} className="text-white" />
+                                        </div>
                                     </div>
                                     <div className="text-left">
                                         <p className="text-xs font-bold text-gray-700">Smart Reviewer Suggestions</p>
@@ -332,53 +381,76 @@ export default function AssignReviewers() {
                                 }
                             </button>
                             {suggestionsOpen && suggestions.length > 0 && (
-                                <div className="border-t border-gray-100 divide-y divide-gray-50">
-                                    {suggestions.slice(0, 5).map(s => (
-                                        <div key={s.id}
-                                            onClick={() => toggleReviewer(s.id)}
-                                            className={cn(
-                                                'flex items-center gap-3 px-5 py-3 cursor-pointer transition-colors',
-                                                selected.includes(s.id) ? 'bg-indigo-50' : 'hover:bg-gray-50'
-                                            )}>
-                                            <ReviewerAvatar reviewer={s} size="sm" />
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-1.5">
-                                                    <p className="text-xs font-semibold text-gray-800 truncate">{s.name}</p>
-                                                    {isExternalReviewer(s) && (
-                                                        <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-600 border border-orange-200 shrink-0">
-                                                            External
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                {s.matched_terms?.length > 0 && (
-                                                    <p className="text-[10px] text-violet-600 truncate">
-                                                        {s.matched_terms.slice(0, 3).join(', ')}
-                                                    </p>
-                                                )}
-                                                <div className="flex items-center gap-2 mt-0.5">
-                                                    {s.on_time_rate != null && (
-                                                        <span className={cn(
-                                                            'text-[10px] font-medium',
-                                                            s.on_time_rate >= 80 ? 'text-emerald-600' : s.on_time_rate >= 50 ? 'text-amber-600' : 'text-red-500'
-                                                        )}>
-                                                            {s.on_time_rate}% on-time
-                                                        </span>
-                                                    )}
-                                                    {s.active_assignments >= 5 && (
-                                                        <span className="text-[10px] font-medium text-red-500">
-                                                            {s.active_assignments} active reviews
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <div className={cn(
-                                                'h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors',
-                                                selected.includes(s.id) ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300'
-                                            )}>
-                                                {selected.includes(s.id) && <CheckCircle2 size={10} className="text-white" />}
+                                <div className="border-t border-gray-100">
+                                    {suggestionTerms.length > 0 && (
+                                        <div className="px-5 py-3 bg-violet-50/50 border-b border-violet-100">
+                                            <p className="text-[10px] font-semibold text-violet-400 uppercase tracking-wide mb-1.5">Matching against</p>
+                                            <div className="flex flex-wrap gap-1">
+                                                {suggestionTerms.slice(0, 8).map((t, i) => (
+                                                    <span key={i} className="text-[10px] bg-white text-violet-600 border border-violet-200 px-2 py-0.5 rounded-full font-medium">
+                                                        {t}
+                                                    </span>
+                                                ))}
                                             </div>
                                         </div>
-                                    ))}
+                                    )}
+                                    <div className="divide-y divide-gray-50">
+                                        {suggestions.slice(0, 5).map(s => {
+                                            const strength = Math.max(6, Math.round(((s.composite_score ?? 0) / maxCompositeScore) * 100));
+                                            return (
+                                                <div key={s.id}
+                                                    onClick={() => toggleReviewer(s.id)}
+                                                    className={cn(
+                                                        'flex items-center gap-3 px-5 py-3 cursor-pointer transition-all active:scale-[0.99]',
+                                                        selected.includes(s.id) ? 'bg-indigo-50' : 'hover:bg-gray-50'
+                                                    )}>
+                                                    <ReviewerAvatar reviewer={s} size="sm" />
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-1.5">
+                                                            <p className="text-xs font-semibold text-gray-800 truncate">{s.name}</p>
+                                                            {isExternalReviewer(s) && (
+                                                                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-600 border border-orange-200 shrink-0">
+                                                                    External
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        {s.matched_terms?.length > 0 && (
+                                                            <p className="text-[10px] text-violet-600 truncate">
+                                                                {s.matched_terms.slice(0, 3).join(', ')}
+                                                            </p>
+                                                        )}
+                                                        <div className="flex items-center gap-1.5 mt-1">
+                                                            <div className="h-1 flex-1 max-w-16 bg-violet-100 rounded-full overflow-hidden">
+                                                                <div className="h-full bg-linear-to-r from-violet-400 to-violet-600 rounded-full" style={{ width: `${strength}%` }} />
+                                                            </div>
+                                                            <span className="text-[9px] font-bold text-violet-500 shrink-0">{strength}% match</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 mt-0.5">
+                                                            {s.on_time_rate != null && (
+                                                                <span className={cn(
+                                                                    'text-[10px] font-medium',
+                                                                    s.on_time_rate >= 80 ? 'text-emerald-600' : s.on_time_rate >= 50 ? 'text-amber-600' : 'text-red-500'
+                                                                )}>
+                                                                    {s.on_time_rate}% on-time
+                                                                </span>
+                                                            )}
+                                                            {s.active_assignments >= 5 && (
+                                                                <span className="text-[10px] font-medium text-red-500">
+                                                                    {s.active_assignments} active reviews
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    </div>
+                                                    <div className={cn(
+                                                        'h-5 w-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors',
+                                                        selected.includes(s.id) ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300'
+                                                    )}>
+                                                        {selected.includes(s.id) && <CheckCircle2 size={10} className="text-white" />}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
                             )}
                             {suggestionsOpen && suggestions.length === 0 && (
@@ -756,7 +828,7 @@ export default function AssignReviewers() {
                                                 key={r.id}
                                                 onClick={() => toggleReviewer(r.id)}
                                                 className={cn(
-                                                    'w-full flex items-start gap-3.5 px-5 py-4 text-left transition-colors',
+                                                    'w-full flex items-start gap-3.5 px-5 py-4 text-left transition-all active:scale-[0.99]',
                                                     isSelected
                                                         ? 'bg-indigo-50 hover:bg-indigo-50/80'
                                                         : 'hover:bg-gray-50/60'
@@ -827,6 +899,26 @@ export default function AssignReviewers() {
                     </div>
                 </div>
             </div>
+
+            {/* Sticky mobile assign bar */}
+            {selected.length > 0 && (
+                <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur border-t border-gray-200 shadow-xl px-4 py-3">
+                    <button
+                        onClick={() => assign()}
+                        disabled={submitting || !evalType || !dueDate}
+                        className="w-full flex items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-colors"
+                    >
+                        {submitting
+                            ? <><RefreshCw size={14} className="animate-spin" /> Assigning…</>
+                            : !evalType
+                                ? 'Select an Evaluation Type to Continue'
+                                : !dueDate
+                                    ? 'Set a Due Date to Continue'
+                                    : <><UserCheck size={15} /> Assign {selected.length} Reviewer{selected.length !== 1 ? 's' : ''}</>
+                        }
+                    </button>
+                </div>
+            )}
         </AppLayout>
     );
 }

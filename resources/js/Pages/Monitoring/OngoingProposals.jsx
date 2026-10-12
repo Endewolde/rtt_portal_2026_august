@@ -16,7 +16,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useFeature } from '../../hooks/useFeature';
 import { useToast } from '../../Components/Toast';
 import api, { get, post } from '../../lib/api';
-import { formatDate, formatCurrency, getCategoryLabel } from '../../lib/utils';
+import { formatDate, formatCurrency, getCategoryLabel, getStatusLabel } from '../../lib/utils';
 
 // Same category-specific lookup fallbacks the normal proposal wizard uses
 // (resources/js/Pages/Proposals/Create.jsx) — kept in sync so a legacy-created
@@ -221,7 +221,7 @@ function SingleGrantPanel({ onGranted, onClose }) {
                         >
                             <div className="flex items-center gap-2">
                                 <span className="font-mono text-xs font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{p.tracker_number}</span>
-                                <span className="text-[11px] text-gray-400">{p.status}</span>
+                                <span className="text-[11px] text-gray-400">{getStatusLabel(p.status)}</span>
                             </div>
                             <p className="text-sm text-gray-800 mt-1 line-clamp-1">{p.title}</p>
                             <p className="text-xs text-gray-400 mt-0.5">{p.pi?.name ?? '—'} · {p.college?.name ?? '—'}</p>

@@ -1,0 +1,285 @@
+<?php
+
+use App\Models\College;
+use App\Models\Department;
+use App\Models\EvaluationType;
+use App\Models\Proposal;
+use App\Models\ProposalCall;
+use App\Models\ReviewAssignment;
+use App\Models\User;
+use Database\Seeders\RolePermissionSeeder;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+
+uses(RefreshDatabase::class);
+
+beforeEach(function () {
+    (new RolePermissionSeeder)->run();
+});
+
+function cpc_admin(): User
+{
+    $admin = User::factory()->create();
+    $admin->assignRole('super_admin');
+
+    return $admin;
+}
+
+function cpc_college(): College
+{
+    return College::create(['name' => 'C'.rand(), 'code' => 'CPC'.rand(1000, 9999), 'status' => 'active']);
+}
+
+function cpc_makeProposal(College $college, string $status, User $creator): Proposal
+{
+    $pi = User::factory()->create();
+    $pi->assignRole('staff');
+
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'CPCD'.rand(1000, 9999)]);
+    $call = ProposalCall::create([
+        'academic_year' => '2026-2027', 'category' => 'research',
+        'title' => 'Call', 'slug' => 'cpc-'.rand(10000, 99999),
+        'start_date' => now()->toDateString(), 'end_date' => now()->addMonths(3)->toDateString(),
+        'status' => 'active', 'is_open' => true, 'created_by' => $creator->id,
+    ]);
+
+    return Proposal::create([
+        'tracker_number' => 'CPC-'.rand(100000, 999999),
+        'proposal_call_id' => $call->id, 'category' => 'research',
+        'title' => 'P', 'status' => $status,
+        'pi_user_id' => $pi->id, 'college_id' => $college->id,
+        'department_id' => $dept->id, 'academic_year' => '2026-2027', 'created_by' => $pi->id,
+    ]);
+}
+
+function cpc_assign(Proposal $proposal, User $actor, string $evalPrefix): void
+{
+    $reviewer = User::factory()->create();
+    $reviewer->assignRole('reviewer');
+
+    $type = EvaluationType::create(['name' => $evalPrefix.'_'.Str::random(6), 'label' => 'T', 'proposal_category' => 'research', 'is_active' => true]);
+
+    ReviewAssignment::create([
+        'proposal_id' => $proposal->id, 'reviewer_id' => $reviewer->id,
+        'evaluation_type_id' => $type->id, 'assigned_by' => $actor->id,
+        'status' => 'submitted', 'assigned_at' => now(), 'submitted_at' => now(),
+    ]);
+}
+
+function cpc_logRejection(Proposal $proposal, User $actor, string $action, string $from): void
+{
+    DB::table('workflow_logs')->insert([
+        'id' => Str::uuid()->toString(),
+        'proposal_id' => $proposal->id,
+        'from_stage' => $from,
+        'action' => $action,
+        'to_stage' => 'rejected',
+        'actor_id' => $actor->id,
+        'notes' => null,
+        'metadata' => null,
+        'created_at' => now(),
+    ]);
+}
+
+test('a non-admin/officer/college-officer role is forbidden', function () {
+    $staff = User::factory()->create();
+    $staff->assignRole('staff');
+
+    $this->actingAs($staff, 'sanctum')
+        ->getJson('/api/v1/college-phase-completion')
+        ->assertForbidden();
+});
+
+test('a college with a submitted proposal that has no phase assigned yet counts against completion, not excluded from it', function () {
+    $admin = cpc_admin();
+    $college = cpc_college();
+    cpc_makeProposal($college, 'submitted', $admin);
+
+    $res = $this->actingAs($admin, 'sanctum')
+        ->getJson('/api/v1/college-phase-completion')
+        ->assertOk();
+
+    $blind = collect($res->json('data.colleges'))->firstWhere('college_id', $college->id)['phases']['blind_review'];
+
+    expect($blind['total'])->toBe(1)
+        ->and($blind['assigned'])->toBe(0)
+        ->and($blind['unassigned'])->toBe(1)
+        ->and($blind['completion_pct'])->toBe(0);
+});
+
+test('a college with zero submitted proposals reports null completion (nothing to report on)', function () {
+    $admin = cpc_admin();
+    $college = cpc_college();
+
+    $res = $this->actingAs($admin, 'sanctum')
+        ->getJson('/api/v1/college-phase-completion')
+        ->assertOk();
+
+    $row = collect($res->json('data.colleges'))->firstWhere('college_id', $college->id);
+
+    expect($row['phases']['blind_review']['completion_pct'])->toBeNull();
+});
+
+test('a college is not 100% complete while any submitted proposal still lacks a reviewer assignment', function () {
+    $admin = cpc_admin();
+    $college = cpc_college();
+    $reviewed = cpc_makeProposal($college, 'blind_review_passed', $admin);
+    cpc_assign($reviewed, $admin, 'blind_review');
+    cpc_makeProposal($college, 'submitted', $admin); // never assigned to any phase
+
+    $res = $this->actingAs($admin, 'sanctum')
+        ->getJson('/api/v1/college-phase-completion')
+        ->assertOk();
+
+    $blind = collect($res->json('data.colleges'))->firstWhere('college_id', $college->id)['phases']['blind_review'];
+
+    expect($blind['total'])->toBe(2)
+        ->and($blind['assigned'])->toBe(1)
+        ->and($blind['unassigned'])->toBe(1)
+        ->and($blind['reviewed'])->toBe(1)
+        ->and($blind['completion_pct'])->toBe(50);
+});
+
+test('a proposal still under blind review counts as assigned but pending, not reviewed', function () {
+    $admin = cpc_admin();
+    $college = cpc_college();
+    $proposal = cpc_makeProposal($college, 'under_blind_review', $admin);
+    cpc_assign($proposal, $admin, 'blind_review');
+
+    $res = $this->actingAs($admin, 'sanctum')
+        ->getJson('/api/v1/college-phase-completion')
+        ->assertOk();
+
+    $row = collect($res->json('data.colleges'))->firstWhere('college_id', $college->id);
+    $blind = $row['phases']['blind_review'];
+
+    expect($blind['assigned'])->toBe(1)
+        ->and($blind['pending'])->toBe(1)
+        ->and($blind['reviewed'])->toBe(0)
+        ->and($blind['rejected'])->toBe(0)
+        ->and($blind['completion_pct'])->toBe(0);
+});
+
+test('a proposal that passed blind review counts as reviewed, separate from rejected', function () {
+    $admin = cpc_admin();
+    $college = cpc_college();
+    $proposal = cpc_makeProposal($college, 'blind_review_passed', $admin);
+    cpc_assign($proposal, $admin, 'blind_review');
+
+    $res = $this->actingAs($admin, 'sanctum')
+        ->getJson('/api/v1/college-phase-completion')
+        ->assertOk();
+
+    $blind = collect($res->json('data.colleges'))->firstWhere('college_id', $college->id)['phases']['blind_review'];
+
+    expect($blind['assigned'])->toBe(1)
+        ->and($blind['reviewed'])->toBe(1)
+        ->and($blind['rejected'])->toBe(0)
+        ->and($blind['pending'])->toBe(0)
+        ->and($blind['completion_pct'])->toBe(100);
+});
+
+test('a proposal rejected AT blind review counts as rejected for that phase', function () {
+    $admin = cpc_admin();
+    $college = cpc_college();
+    $proposal = cpc_makeProposal($college, 'rejected', $admin);
+    cpc_assign($proposal, $admin, 'blind_review');
+    cpc_logRejection($proposal, $admin, 'fail_blind_review', 'under_blind_review');
+
+    $res = $this->actingAs($admin, 'sanctum')
+        ->getJson('/api/v1/college-phase-completion')
+        ->assertOk();
+
+    $blind = collect($res->json('data.colleges'))->firstWhere('college_id', $college->id)['phases']['blind_review'];
+
+    expect($blind['assigned'])->toBe(1)
+        ->and($blind['reviewed'])->toBe(0)
+        ->and($blind['rejected'])->toBe(1)
+        ->and($blind['completion_pct'])->toBe(100);
+});
+
+test('a proposal rejected at a LATER phase (defence) does not count against blind review\'s rejected bucket', function () {
+    $admin = cpc_admin();
+    $college = cpc_college();
+    $proposal = cpc_makeProposal($college, 'rejected', $admin);
+    cpc_assign($proposal, $admin, 'blind_review');
+    cpc_assign($proposal, $admin, 'open_defence');
+    cpc_logRejection($proposal, $admin, 'fail_defence', 'under_open_defence');
+
+    $res = $this->actingAs($admin, 'sanctum')
+        ->getJson('/api/v1/college-phase-completion')
+        ->assertOk();
+
+    $colleges = collect($res->json('data.colleges'))->firstWhere('college_id', $college->id)['phases'];
+
+    // Blind review was assigned and never had a rejection recorded for IT — the
+    // proposal completed blind review successfully before failing later at defence.
+    expect($colleges['blind_review']['assigned'])->toBe(1)
+        ->and($colleges['blind_review']['rejected'])->toBe(0)
+        ->and($colleges['blind_review']['reviewed'])->toBe(1)
+        ->and($colleges['open_defence']['assigned'])->toBe(1)
+        ->and($colleges['open_defence']['rejected'])->toBe(1);
+});
+
+test('a proposal rejected, reopened, then rejected again at a different phase is judged by the LATEST rejection only', function () {
+    $admin = cpc_admin();
+    $college = cpc_college();
+    $proposal = cpc_makeProposal($college, 'rejected', $admin);
+    cpc_assign($proposal, $admin, 'blind_review');
+    cpc_assign($proposal, $admin, 'open_defence');
+
+    cpc_logRejection($proposal, $admin, 'fail_blind_review', 'under_blind_review');
+    DB::table('workflow_logs')->insert([
+        'id' => Str::uuid()->toString(), 'proposal_id' => $proposal->id,
+        'from_stage' => 'rejected', 'action' => 'reopen', 'to_stage' => 'under_open_defence',
+        'actor_id' => $admin->id, 'notes' => null, 'metadata' => null, 'created_at' => now()->addMinute(),
+    ]);
+    DB::table('workflow_logs')->insert([
+        'id' => Str::uuid()->toString(), 'proposal_id' => $proposal->id,
+        'from_stage' => 'under_open_defence', 'action' => 'fail_defence', 'to_stage' => 'rejected',
+        'actor_id' => $admin->id, 'notes' => null, 'metadata' => null, 'created_at' => now()->addMinutes(2),
+    ]);
+
+    $res = $this->actingAs($admin, 'sanctum')
+        ->getJson('/api/v1/college-phase-completion')
+        ->assertOk();
+
+    $phases = collect($res->json('data.colleges'))->firstWhere('college_id', $college->id)['phases'];
+
+    expect($phases['blind_review']['rejected'])->toBe(0)
+        ->and($phases['open_defence']['rejected'])->toBe(1);
+});
+
+test('college_id filter narrows the result to a single college', function () {
+    $admin = cpc_admin();
+    $collegeA = cpc_college();
+    $collegeB = cpc_college();
+    cpc_makeProposal($collegeA, 'submitted', $admin);
+    cpc_makeProposal($collegeB, 'submitted', $admin);
+
+    $res = $this->actingAs($admin, 'sanctum')
+        ->getJson('/api/v1/college-phase-completion?college_id='.$collegeA->id)
+        ->assertOk();
+
+    $ids = collect($res->json('data.colleges'))->pluck('college_id');
+    expect($ids)->toHaveCount(1)->and($ids->first())->toBe($collegeA->id);
+});
+
+test('a college_officer scoped to one college cannot widen the view via a client-supplied college_id', function () {
+    $officer = User::factory()->create();
+    $officer->assignRole('college_officer');
+    $ownCollege = cpc_college();
+    $otherCollege = cpc_college();
+    $officer->college_id = $ownCollege->id;
+    $officer->save();
+    cpc_makeProposal($ownCollege, 'submitted', $officer);
+    cpc_makeProposal($otherCollege, 'submitted', $officer);
+
+    $res = $this->actingAs($officer, 'sanctum')
+        ->getJson('/api/v1/college-phase-completion?college_id='.$otherCollege->id)
+        ->assertOk();
+
+    $ids = collect($res->json('data.colleges'))->pluck('college_id');
+    expect($ids)->toHaveCount(1)->and($ids->first())->toBe($ownCollege->id);
+});
