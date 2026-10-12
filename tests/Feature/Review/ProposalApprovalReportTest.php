@@ -61,6 +61,7 @@ test('a college_officer can report a proposal sitting in blind review as possibl
 
     $response = $this->actingAs($officer, 'sanctum')
         ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", [
+            'issue_type' => 'other',
             'reason' => 'This looks like a duplicate of an already-funded proposal.',
         ]);
 
@@ -77,6 +78,7 @@ test('a college_officer can report a validated proposal awaiting reviewer assign
 
     $this->actingAs($officer, 'sanctum')
         ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", [
+            'issue_type' => 'other',
             'reason' => 'This should have never passed validation.',
         ])
         ->assertCreated();
@@ -89,6 +91,7 @@ test('a college_officer can report a proposal that already passed blind review',
 
     $this->actingAs($officer, 'sanctum')
         ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", [
+            'issue_type' => 'other',
             'reason' => 'PI eligibility should be rechecked.',
         ])
         ->assertCreated();
@@ -100,7 +103,7 @@ test('a non-college_officer role cannot file an approval report', function () {
     $central->assignRole('central_officer');
 
     $this->actingAs($central, 'sanctum')
-        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['reason' => 'Trying to report as the wrong role.'])
+        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['issue_type' => 'other', 'reason' => 'Trying to report as the wrong role.'])
         ->assertStatus(403);
 });
 
@@ -111,7 +114,7 @@ test('a college_officer cannot report a proposal from a different college', func
     $officer->assignRole('college_officer');
 
     $this->actingAs($officer, 'sanctum')
-        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['reason' => 'Reporting a proposal outside my college.'])
+        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['issue_type' => 'other', 'reason' => 'Reporting a proposal outside my college.'])
         ->assertStatus(403);
 });
 
@@ -121,7 +124,7 @@ test('a proposal not currently in blind review cannot be reported', function () 
     $officer->assignRole('college_officer');
 
     $this->actingAs($officer, 'sanctum')
-        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['reason' => 'Reporting a draft proposal.'])
+        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['issue_type' => 'other', 'reason' => 'Reporting a draft proposal.'])
         ->assertStatus(422);
 });
 
@@ -131,29 +134,63 @@ test('a second open report cannot be filed while one is already open', function 
     $officer->assignRole('college_officer');
 
     $this->actingAs($officer, 'sanctum')
-        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['reason' => 'First report on this proposal.'])
+        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['issue_type' => 'other', 'reason' => 'First report on this proposal.'])
         ->assertCreated();
 
     $this->actingAs($officer, 'sanctum')
-        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['reason' => 'Second report on this proposal.'])
+        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['issue_type' => 'other', 'reason' => 'Second report on this proposal.'])
         ->assertStatus(422);
 });
 
-test('the reason is required and must be at least 10 characters', function () {
+test('an issue must be selected, and "other" needs a description of at least 10 characters', function () {
+    [$proposal, $college] = par_makeProposal('under_blind_review');
+    $officer = User::factory()->create(['college_id' => $college->id]);
+    $officer->assignRole('college_officer');
+    $file = fn (array $payload) => $this->actingAs($officer, 'sanctum')
+        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", $payload);
+
+    $file(['reason' => 'No issue type selected here.'])->assertStatus(422)->assertJsonValidationErrors('issue_type');
+    $file(['issue_type' => 'made_up_issue'])->assertStatus(422)->assertJsonValidationErrors('issue_type');
+    $file(['issue_type' => 'other'])->assertStatus(422)->assertJsonValidationErrors('reason');
+    $file(['issue_type' => 'other', 'reason' => 'short'])->assertStatus(422)->assertJsonValidationErrors('reason');
+});
+
+test('a listed issue can be reported without extra details, and directors see it in the notification', function () {
     [$proposal, $college] = par_makeProposal('under_blind_review');
     $officer = User::factory()->create(['college_id' => $college->id]);
     $officer->assignRole('college_officer');
 
     $this->actingAs($officer, 'sanctum')
-        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['reason' => 'short'])
-        ->assertStatus(422);
+        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['issue_type' => 'not_anonymous'])
+        ->assertCreated()
+        ->assertJsonPath('data.issue_label', 'Not anonymous — author identity revealed');
+
+    $central = User::role('central_officer')->first();
+    $notice = DB::table('notifications')->where('notifiable_id', $central->id)->where('type', 'approval_report_submitted')->first();
+    expect(json_decode($notice->data, true)['message'])->toContain('Issue: Not anonymous — author identity revealed');
+});
+
+test('the rejection reason sent to the team names the reported issue and its details', function () {
+    [$proposal, $college] = par_makeProposal('under_blind_review');
+    $officer = User::factory()->create(['college_id' => $college->id]);
+    $officer->assignRole('college_officer');
+    $this->actingAs($officer, 'sanctum')
+        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['issue_type' => 'not_anonymous', 'reason' => 'PI name on page 1 of the proposal document.'])
+        ->assertCreated();
+    $report = ProposalApprovalReport::where('proposal_id', $proposal->id)->firstOrFail();
+
+    par_resolve($report, 'approval_revoked', 'Confirmed — identity is clearly revealed.')->assertOk();
+
+    expect($proposal->fresh()->rejection_reason)
+        ->toContain('Not anonymous — author identity revealed — PI name on page 1 of the proposal document.')
+        ->toContain('Confirmed — identity is clearly revealed.');
 });
 
 test('central_officer and the matching category officer can resolve a report', function () {
     [$proposal, $college] = par_makeProposal('under_blind_review', 'research');
     $officer = User::factory()->create(['college_id' => $college->id]);
     $officer->assignRole('college_officer');
-    $this->actingAs($officer, 'sanctum')->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['reason' => 'Needs a second look.'])->assertCreated();
+    $this->actingAs($officer, 'sanctum')->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['issue_type' => 'other', 'reason' => 'Needs a second look.'])->assertCreated();
 
     $researchOfficer = User::factory()->create();
     $researchOfficer->assignRole('research_officer');
@@ -170,7 +207,7 @@ test('a college_officer cannot resolve a report', function () {
     [$proposal, $college] = par_makeProposal('under_blind_review');
     $officer = User::factory()->create(['college_id' => $college->id]);
     $officer->assignRole('college_officer');
-    $this->actingAs($officer, 'sanctum')->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['reason' => 'Needs a second look.'])->assertCreated();
+    $this->actingAs($officer, 'sanctum')->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['issue_type' => 'other', 'reason' => 'Needs a second look.'])->assertCreated();
 
     $report = ProposalApprovalReport::where('proposal_id', $proposal->id)->firstOrFail();
 
@@ -187,7 +224,7 @@ test('reporting a proposal under blind review returns it to validated', function
     $officer->assignRole('college_officer');
 
     $response = $this->actingAs($officer, 'sanctum')
-        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['reason' => 'This should not have passed.']);
+        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['issue_type' => 'other', 'reason' => 'This should not have passed.']);
 
     $response->assertCreated()->assertJsonFragment(['message' => 'Reported. The proposal has been returned to validated status for the category officer to review.']);
     expect($proposal->fresh()->status)->toBe('validated');
@@ -199,7 +236,7 @@ test('reporting a proposal that already passed blind review returns it to valida
     $officer->assignRole('college_officer');
 
     $this->actingAs($officer, 'sanctum')
-        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['reason' => 'PI eligibility should be rechecked.'])
+        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['issue_type' => 'other', 'reason' => 'PI eligibility should be rechecked.'])
         ->assertCreated();
 
     expect($proposal->fresh()->status)->toBe('validated');
@@ -211,7 +248,7 @@ test('reporting an already-validated proposal leaves its status unchanged', func
     $officer->assignRole('college_officer');
 
     $response = $this->actingAs($officer, 'sanctum')
-        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['reason' => 'This should have never passed validation.']);
+        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['issue_type' => 'other', 'reason' => 'This should have never passed validation.']);
 
     $response->assertCreated()->assertJsonFragment(['message' => 'Reported. Central office and the category officer have been notified.']);
     expect($proposal->fresh()->status)->toBe('validated');
@@ -222,7 +259,7 @@ test('a category officer can reject a proposal returned to validated by a report
     $officer = User::factory()->create(['college_id' => $college->id]);
     $officer->assignRole('college_officer');
     $this->actingAs($officer, 'sanctum')
-        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['reason' => 'PI eligibility should be rechecked.'])
+        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['issue_type' => 'other', 'reason' => 'PI eligibility should be rechecked.'])
         ->assertCreated();
 
     $researchOfficer = User::factory()->create();
@@ -242,7 +279,7 @@ test('the PI is not sent a "passed validation" notification when a report return
     $officer->assignRole('college_officer');
 
     $this->actingAs($officer, 'sanctum')
-        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['reason' => 'This should not have passed.'])
+        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['issue_type' => 'other', 'reason' => 'This should not have passed.'])
         ->assertCreated();
 
     Queue::assertNotPushed(SendEmailNotificationJob::class, fn ($job) => ($job->data['decision'] ?? null) === 'validated');
@@ -257,8 +294,8 @@ test('a central_officer sees all open approval reports across categories', funct
     $rOfficer->assignRole('college_officer');
     $cOfficer = User::factory()->create(['college_id' => $cCollege->id]);
     $cOfficer->assignRole('college_officer');
-    $this->actingAs($rOfficer, 'sanctum')->postJson("/api/v1/proposals/{$research->id}/approval-reports", ['reason' => 'Reason one, long enough.'])->assertCreated();
-    $this->actingAs($cOfficer, 'sanctum')->postJson("/api/v1/proposals/{$community->id}/approval-reports", ['reason' => 'Reason two, long enough.'])->assertCreated();
+    $this->actingAs($rOfficer, 'sanctum')->postJson("/api/v1/proposals/{$research->id}/approval-reports", ['issue_type' => 'other', 'reason' => 'Reason one, long enough.'])->assertCreated();
+    $this->actingAs($cOfficer, 'sanctum')->postJson("/api/v1/proposals/{$community->id}/approval-reports", ['issue_type' => 'other', 'reason' => 'Reason two, long enough.'])->assertCreated();
 
     $central = User::factory()->create();
     $central->assignRole('central_officer');
@@ -276,8 +313,8 @@ test('a category officer only sees approval reports for their own category', fun
     $rOfficer->assignRole('college_officer');
     $cOfficer = User::factory()->create(['college_id' => $cCollege->id]);
     $cOfficer->assignRole('college_officer');
-    $this->actingAs($rOfficer, 'sanctum')->postJson("/api/v1/proposals/{$research->id}/approval-reports", ['reason' => 'Reason one, long enough.'])->assertCreated();
-    $this->actingAs($cOfficer, 'sanctum')->postJson("/api/v1/proposals/{$community->id}/approval-reports", ['reason' => 'Reason two, long enough.'])->assertCreated();
+    $this->actingAs($rOfficer, 'sanctum')->postJson("/api/v1/proposals/{$research->id}/approval-reports", ['issue_type' => 'other', 'reason' => 'Reason one, long enough.'])->assertCreated();
+    $this->actingAs($cOfficer, 'sanctum')->postJson("/api/v1/proposals/{$community->id}/approval-reports", ['issue_type' => 'other', 'reason' => 'Reason two, long enough.'])->assertCreated();
 
     $researchOfficer = User::factory()->create();
     $researchOfficer->assignRole('research_officer');
@@ -297,8 +334,8 @@ test('a college_officer sees only the reports they personally filed, and cannot 
     $officerB = User::factory()->create(['college_id' => $collegeB->id]);
     $officerB->assignRole('college_officer');
 
-    $this->actingAs($officerA, 'sanctum')->postJson("/api/v1/proposals/{$proposalA->id}/approval-reports", ['reason' => 'Filed by officer A.'])->assertCreated();
-    $this->actingAs($officerB, 'sanctum')->postJson("/api/v1/proposals/{$proposalB->id}/approval-reports", ['reason' => 'Filed by officer B.'])->assertCreated();
+    $this->actingAs($officerA, 'sanctum')->postJson("/api/v1/proposals/{$proposalA->id}/approval-reports", ['issue_type' => 'other', 'reason' => 'Filed by officer A.'])->assertCreated();
+    $this->actingAs($officerB, 'sanctum')->postJson("/api/v1/proposals/{$proposalB->id}/approval-reports", ['issue_type' => 'other', 'reason' => 'Filed by officer B.'])->assertCreated();
 
     $response = $this->actingAs($officerA, 'sanctum')->getJson('/api/v1/approval-reports')->assertOk();
     $trackerNumbers = collect($response->json('data.data'))->pluck('proposal.tracker_number');
@@ -321,7 +358,7 @@ test('the status filter separates open from reviewed reports', function () {
     [$proposal, $college] = par_makeProposal('under_blind_review');
     $officer = User::factory()->create(['college_id' => $college->id]);
     $officer->assignRole('college_officer');
-    $this->actingAs($officer, 'sanctum')->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['reason' => 'Needs a second look.'])->assertCreated();
+    $this->actingAs($officer, 'sanctum')->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['issue_type' => 'other', 'reason' => 'Needs a second look.'])->assertCreated();
 
     $central = User::factory()->create();
     $central->assignRole('central_officer');
@@ -339,7 +376,7 @@ test('reports for a proposal are listed newest first with reporter and reviewer 
     [$proposal, $college] = par_makeProposal('under_blind_review');
     $officer = User::factory()->create(['name' => 'Officer One', 'college_id' => $college->id]);
     $officer->assignRole('college_officer');
-    $this->actingAs($officer, 'sanctum')->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['reason' => 'Needs a second look.'])->assertCreated();
+    $this->actingAs($officer, 'sanctum')->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['issue_type' => 'other', 'reason' => 'Needs a second look.'])->assertCreated();
 
     $response = $this->actingAs($officer, 'sanctum')->getJson("/api/v1/proposals/{$proposal->id}/approval-reports");
 
@@ -356,7 +393,7 @@ function par_report(Proposal $proposal, College $college): array
     $officer->assignRole('college_officer');
 
     test()->actingAs($officer, 'sanctum')
-        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['reason' => 'This looks like a duplicate of a funded proposal.'])
+        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['issue_type' => 'other', 'reason' => 'This looks like a duplicate of a funded proposal.'])
         ->assertCreated();
 
     return [$officer, ProposalApprovalReport::where('proposal_id', $proposal->id)->latest()->first()];
@@ -407,7 +444,7 @@ test('after cancelling, the officer can report the proposal again', function () 
     $this->actingAs($officer, 'sanctum')->postJson("/api/v1/approval-reports/{$report->id}/withdraw")->assertOk();
 
     $this->actingAs($officer, 'sanctum')
-        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['reason' => 'Reporting again after checking the records.'])
+        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['issue_type' => 'other', 'reason' => 'Reporting again after checking the records.'])
         ->assertCreated();
 });
 

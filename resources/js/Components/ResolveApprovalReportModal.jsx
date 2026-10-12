@@ -76,7 +76,12 @@ export default function ResolveApprovalReportModal({ report, proposal, onClose, 
                 <div className="space-y-4 p-6">
                     <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">College officer's report</p>
-                        <p className="text-sm leading-relaxed text-slate-700">{report.reason}</p>
+                        {report.issue_label && (
+                            <p className="mb-1.5 inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
+                                {report.issue_label}
+                            </p>
+                        )}
+                        {report.reason && <p className="text-sm leading-relaxed text-slate-700">{report.reason}</p>}
                         <p className="mt-2 text-xs text-slate-400">{report.reported_by?.name ?? 'College officer'} · {formatDate(report.created_at)}</p>
                     </div>
 

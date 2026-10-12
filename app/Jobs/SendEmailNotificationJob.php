@@ -49,7 +49,11 @@ class SendEmailNotificationJob implements ShouldQueue
         try {
             Mail::send(
                 "emails.notifications.{$template}",
-                array_merge($this->data, ['recipient' => $this->recipient]),
+                // 'message' is reserved by Mail::send() for the Message object.
+                array_merge($this->data, [
+                    'recipient' => $this->recipient,
+                    'notification_message' => $this->data['message'] ?? null,
+                ]),
                 function ($message) use ($subject) {
                     $message->to($this->recipient->email, $this->recipient->name)
                         ->subject($subject);

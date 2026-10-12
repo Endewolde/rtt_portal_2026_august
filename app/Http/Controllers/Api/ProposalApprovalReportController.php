@@ -15,6 +15,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 
 /**
  * College officers can't reject a proposal out of blind review themselves (that's
@@ -57,7 +58,13 @@ class ProposalApprovalReportController extends Controller
             return response()->json(['data' => null, 'message' => 'Only college officers can report a mistaken approval.', 'errors' => []], 403);
         }
 
-        $request->validate(['reason' => 'required|string|min:10|max:2000']);
+        $request->validate([
+            'issue_type' => ['required', Rule::in(array_keys(ProposalApprovalReport::ISSUE_TYPES))],
+            'reason' => 'nullable|required_if:issue_type,other|string|min:10|max:2000',
+        ], [
+            'issue_type.required' => 'Please select what is wrong with this proposal.',
+            'reason.required_if' => 'Please describe the issue.',
+        ]);
 
         $proposal = Proposal::findOrFail($proposalId);
 
@@ -80,6 +87,7 @@ class ProposalApprovalReportController extends Controller
                 $report = ProposalApprovalReport::create([
                     'proposal_id' => $proposalId,
                     'reported_by' => $user->id,
+                    'issue_type' => $request->issue_type,
                     'reason' => $request->reason,
                     'status' => 'open',
                     'returned_from_status' => $returnedForInvestigation ? $proposal->status : null,
@@ -89,7 +97,7 @@ class ProposalApprovalReportController extends Controller
                 // officer gets a real next action, instead of it silently sitting
                 // where it was.
                 if ($returnedForInvestigation) {
-                    $this->workflowService->transition($proposal, 'return_for_investigation', $user, $request->reason);
+                    $this->workflowService->transition($proposal, 'return_for_investigation', $user, $report->summary);
                 }
 
                 return $report;
@@ -109,7 +117,7 @@ class ProposalApprovalReportController extends Controller
             'returned_for_investigation' => $returnedForInvestigation,
         ]);
 
-        $this->notifyReviewers($proposal, $user, $request->reason);
+        $this->notifyReviewers($proposal, $user, $report);
 
         return response()->json([
             'data' => $report,
@@ -377,7 +385,7 @@ class ProposalApprovalReportController extends Controller
         $reporter = $report->reportedBy?->name ?? 'the college officer';
 
         return 'This proposal was rejected after a review found that it had been approved by mistake. '
-            ."Reported by {$reporter} (College Officer): {$report->reason} "
+            ."Reported by {$reporter} (College Officer): {$report->summary} "
             ."Decision by {$decidedBy->name}: {$notes}";
     }
 
@@ -400,9 +408,14 @@ class ProposalApprovalReportController extends Controller
 
         try {
             StoreInAppNotificationJob::dispatchSync($reporter->id, 'approval_report_resolved', $data);
+        } catch (\Exception $e) {
+            Log::error("Approval report outcome in-app notify failed: {$e->getMessage()}");
+        }
+
+        try {
             SendEmailNotificationJob::dispatchSync($reporter, 'approval_report_resolved', $data);
         } catch (\Exception $e) {
-            Log::error("Approval report outcome notify failed: {$e->getMessage()}");
+            Log::error("Approval report outcome email notify failed: {$e->getMessage()}");
         }
     }
 
@@ -427,7 +440,7 @@ class ProposalApprovalReportController extends Controller
         }
     }
 
-    private function notifyReviewers(Proposal $proposal, User $reporter, string $reason): void
+    private function notifyReviewers(Proposal $proposal, User $reporter, ProposalApprovalReport $report): void
     {
         $role = self::CATEGORY_ROLE_MAP[$proposal->category] ?? null;
         $roles = array_values(array_filter(['central_officer', $role]));
@@ -438,16 +451,23 @@ class ProposalApprovalReportController extends Controller
             'tracker_number' => $proposal->tracker_number,
             'title' => $proposal->title,
             'reporter_name' => $reporter->name,
-            'reason' => $reason,
-            'message' => "{$reporter->name} (college officer) flagged {$proposal->tracker_number} — \"{$proposal->title}\" as possibly mistakenly approved, currently at ".str_replace('_', ' ', $proposal->status).". Reason: {$reason}",
+            'issue' => $report->issue_label,
+            'reason' => $report->reason,
+            'message' => "{$reporter->name} (college officer) flagged {$proposal->tracker_number} — \"{$proposal->title}\" as possibly mistakenly approved, currently at ".Proposal::statusLabel($proposal->status).". Issue: {$report->summary}",
         ];
 
+        // In-app first and separately, so a mail failure can't also swallow the bell notification.
         foreach ($officers as $officer) {
             try {
-                SendEmailNotificationJob::dispatchSync($officer, 'approval_report_submitted', $data);
                 StoreInAppNotificationJob::dispatchSync($officer->id, 'approval_report_submitted', $data);
             } catch (\Exception $e) {
-                Log::error("Approval report notify failed: {$e->getMessage()}");
+                Log::error("Approval report in-app notify failed: {$e->getMessage()}");
+            }
+
+            try {
+                SendEmailNotificationJob::dispatchSync($officer, 'approval_report_submitted', $data);
+            } catch (\Exception $e) {
+                Log::error("Approval report email notify failed: {$e->getMessage()}");
             }
         }
     }

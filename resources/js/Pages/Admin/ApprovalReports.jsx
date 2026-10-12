@@ -6,6 +6,7 @@ import { get, post } from '../../lib/api';
 import { formatDate, getCategoryLabel } from '../../lib/utils';
 import { useToast } from '../../Components/Toast';
 import ResolveApprovalReportModal from '../../Components/ResolveApprovalReportModal';
+import { issueByKey } from '../../lib/approvalReportIssues';
 
 const TABS = [
     { key: 'open', label: 'Open', icon: Clock, dot: true },
@@ -161,6 +162,15 @@ function ReportCard({ report, filter, canResolve, onReview }) {
                             {report.proposal?.title}
                         </h3>
 
+                        {report.issue_label && (() => {
+                            const Icon = issueByKey(report.issue_type)?.icon;
+                            return (
+                                <p className="mb-2 inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-xs font-semibold text-amber-800">
+                                    {Icon && <Icon size={12} />} {report.issue_label}
+                                </p>
+                            );
+                        })()}
+
                         <div className="flex items-center gap-4 flex-wrap">
                             <span className="flex items-center gap-1.5 text-xs text-gray-500">
                                 <User size={11} /> {report.reported_by?.name}
@@ -196,8 +206,12 @@ function ReportCard({ report, filter, canResolve, onReview }) {
                 {expanded && (
                     <div className="mt-4 space-y-3 border-t border-gray-100 pt-4">
                         <div className="bg-slate-50 rounded-xl p-4">
-                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Reported Reason</p>
-                            <p className="text-sm text-slate-700 leading-relaxed">{report.reason}</p>
+                            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                                {report.issue_label ? `Reported issue: ${report.issue_label}` : 'Reported Reason'}
+                            </p>
+                            {report.reason
+                                ? <p className="text-sm text-slate-700 leading-relaxed">{report.reason}</p>
+                                : <p className="text-sm italic text-slate-400">No additional details given.</p>}
                         </div>
 
                         {report.resolution_notes && (

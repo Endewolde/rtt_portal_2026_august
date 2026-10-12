@@ -12,6 +12,8 @@ import { formatDate, formatCurrency, getCategoryLabel, getStatusLabel } from '..
 import { useToast } from '../../Components/Toast';
 import ConfirmDialog from '../../Components/ConfirmDialog';
 import ResolveApprovalReportModal from '../../Components/ResolveApprovalReportModal';
+import ReportMistakenApprovalModal from '../../Components/ReportMistakenApprovalModal';
+import { issueByKey } from '../../lib/approvalReportIssues';
 import { downloadFile } from '../../lib/download';
 
 const TABS = ['Overview', 'Team', 'Budget', 'Documents', 'History', 'Reviews', 'Complaints'];
@@ -1894,6 +1896,7 @@ export default function ProposalShow() {
     const [showAppealModal, setShowAppealModal] = useState(false);
     const [approvalReports, setApprovalReports] = useState([]);
     const [resolvingReport, setResolvingReport] = useState(null);
+    const [showReportModal, setShowReportModal] = useState(false);
     const [withdrawingReportId, setWithdrawingReportId] = useState(null);
     const [confirmWithdrawReport, setConfirmWithdrawReport] = useState(null);
     const [extension, setExtension] = useState(null);
@@ -1959,7 +1962,11 @@ export default function ProposalShow() {
         setWithdrawingReportId(null);
     };
 
-    const handleAction = (action) => { setDialog(action); setReason(''); };
+    const handleAction = (action) => {
+        if (action === 'report_mistaken_approval') { setShowReportModal(true); return; }
+        setDialog(action);
+        setReason('');
+    };
 
     const handleProcessDefenceResult = async () => {
         setSubmitting(true);
@@ -1980,10 +1987,6 @@ export default function ProposalShow() {
             if (dialog === 'reject_blind_review') {
                 await post(`/proposals/${id}/blind-review/reject`, { reason });
                 toast.error('Proposal rejected and removed from blind review.');
-            } else if (dialog === 'report_mistaken_approval') {
-                const res = await post(`/proposals/${id}/approval-reports`, { reason });
-                toast.success(res?.message || 'Reported. Central office and the category officer have been notified.');
-                loadApprovalReports();
             } else if (dialog === 'reopen') {
                 const res = await post(`/proposals/${id}/reopen`, { reason });
                 toast.success(res?.message || 'Proposal reopened for reconsideration.');
@@ -2347,7 +2350,16 @@ export default function ProposalShow() {
                                                 <p className="text-xs text-gray-500 mt-0.5">
                                                     By {r.reported_by?.name ?? 'a college officer'} · {formatDate(r.created_at)}
                                                 </p>
-                                                <p className="text-sm text-gray-700 mt-1.5">{r.reason}</p>
+                                                {r.issue_type && (() => {
+                                                    const issue = issueByKey(r.issue_type);
+                                                    const Icon = issue?.icon;
+                                                    return (
+                                                        <span className="mt-1.5 inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-white px-2.5 py-0.5 text-xs font-semibold text-amber-800">
+                                                            {Icon && <Icon size={12} />} {r.issue_label ?? issue?.label}
+                                                        </span>
+                                                    );
+                                                })()}
+                                                {r.reason && <p className="text-sm text-gray-700 mt-1.5">{r.reason}</p>}
                                                 {r.status === 'reviewed' && (
                                                     <p className="text-xs text-gray-500 mt-1.5">
                                                         Reviewed by {r.reviewed_by?.name ?? '—'} · {formatDate(r.reviewed_at)}
@@ -2382,6 +2394,14 @@ export default function ProposalShow() {
                                 </div>
                             ))}
                         </div>
+                    )}
+
+                    {showReportModal && (
+                        <ReportMistakenApprovalModal
+                            proposal={proposal}
+                            onClose={() => setShowReportModal(false)}
+                            onReported={() => { setShowReportModal(false); loadApprovalReports(); load(); }}
+                        />
                     )}
 
                     {resolvingReport && (
@@ -2645,7 +2665,6 @@ export default function ProposalShow() {
                     <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
                         <h2 className="text-base font-semibold mb-3">
                             {dialog === 'reject_blind_review' ? 'Reject From Blind Review'
-                                : dialog === 'report_mistaken_approval' ? 'Report Mistaken Approval'
                                 : dialog === 'reopen' ? 'Reopen for Reconsideration'
                                 : <span className="capitalize">{dialog} Proposal</span>}
                         </h2>
@@ -2663,7 +2682,6 @@ export default function ProposalShow() {
                             <button onClick={confirmAction} disabled={submitting}
                                 className={`px-4 py-2 text-sm font-medium rounded-lg text-white disabled:opacity-60 ${
                                     dialog === 'reject' || dialog === 'reject_blind_review' ? 'bg-red-600 hover:bg-red-700'
-                                        : dialog === 'report_mistaken_approval' ? 'bg-amber-500 hover:bg-amber-600'
                                         : dialog === 'reopen' ? 'bg-indigo-600 hover:bg-indigo-700'
                                         : 'bg-yellow-600 hover:bg-yellow-700'
                                 }`}>

@@ -38,7 +38,10 @@
   <div class="body">
     <p style="font-size:15px;color:#374151;margin:0 0 16px;">Dear <strong>{{ $recipient->name ?? 'User' }}</strong>,</p>
     <p style="font-size:14px;color:#4b5563;line-height:1.75;margin:0 0 20px;">
-      {{ $message ?? 'You have a new notification from the RTT platform.' }}
+      {{-- Mail::send() injects its own $message (the Mail\Message object), so the
+           notification text arrives as $notification_message; $message is only a
+           string when this view is rendered directly. --}}
+      {{ $notification_message ?? (is_string($message ?? null) ? $message : 'You have a new notification from the RTT platform.') }}
     </p>
 
     <hr class="divider">
