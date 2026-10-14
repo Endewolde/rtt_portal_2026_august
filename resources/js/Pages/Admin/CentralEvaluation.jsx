@@ -11,6 +11,7 @@ import api from '../../lib/api';
 import { useToast } from '../../Components/Toast';
 import { formatCurrency, getCategoryLabel } from '../../lib/utils';
 import RejectWithReasonModal from '../../Components/RejectWithReasonModal';
+import ApproveFundingModal from '../../Components/ApproveFundingModal';
 
 function ScoreBar({ score, max, label, color }) {
     const pct = max > 0 ? Math.min(100, (score / max) * 100) : 0;
@@ -120,9 +121,6 @@ export default function CentralEvaluation() {
     const [collegeFilter, setCollegeFilter] = useState('');
     const [loading, setLoading]       = useState(true);
     const [dialog, setDialog]         = useState(null);
-    const [reason, setReason]         = useState('');
-    const [approveForm, setApproveForm] = useState({ remarks: '', awarded_amount: '' });
-    const [submitting, setSubmitting] = useState(false);
     const [budgetMap, setBudgetMap]         = useState({});
     const [expandedBudget, setExpandedBudget] = useState(null);
     const [piHistoryMap, setPiHistoryMap]   = useState({});
@@ -172,42 +170,8 @@ export default function CentralEvaluation() {
         .filter(p => !categoryFilter || p.category === categoryFilter)
         .filter(p => !collegeFilter || p.college_id === collegeFilter);
 
-    const openApprove = (proposal) => {
-        setApproveForm({ remarks: '', awarded_amount: proposal.budget_total ?? '' });
-        setDialog({ type: 'approve', proposal });
-    };
-    const openReject  = (proposal) => { setDialog({ type: 'reject', proposal }); setReason(''); };
-
-    const confirm = async () => {
-        if (!dialog) return;
-        if (dialog.type === 'reject' && !reason.trim()) { error('Reason is required.'); return; }
-        setSubmitting(true);
-        try {
-            if (dialog.type === 'approve') {
-                if (!approveForm.awarded_amount) { error('Awarded amount is required.'); setSubmitting(false); return; }
-                const res = await api.post(`/proposals/${dialog.proposal.id}/central/approve`, {
-                    awarded_amount: parseFloat(approveForm.awarded_amount),
-                    remarks: approveForm.remarks || null,
-                });
-                success(res.data?.message || 'Proposal approved for funding.', {
-                    action: { label: 'Go to Funding', onClick: () => { window.location.href = '/admin/funding'; } },
-                });
-                setDialog(null);
-                setReason('');
-                setTimeout(() => { window.location.href = '/admin/funding'; }, 1500);
-                return;
-            } else {
-                const res = await api.post(`/proposals/${dialog.proposal.id}/central/reject`, { reason });
-                success(res.data?.message || 'Proposal rejected.');
-            }
-            setDialog(null);
-            setReason('');
-            load();
-        } catch (e) {
-            error(e.response?.data?.message || 'Action failed.');
-        }
-        setSubmitting(false);
-    };
+    const openApprove = (proposal) => setDialog({ type: 'approve', proposal });
+    const openReject  = (proposal) => setDialog({ type: 'reject', proposal });
 
     return (
         <AppLayout breadcrumb="Central Evaluation">
@@ -454,48 +418,19 @@ export default function CentralEvaluation() {
                 />
             )}
 
-            {dialog && dialog.type !== 'reject' && (
-                <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
-                        <h2 className="text-base font-semibold mb-2">
-                            {dialog.type === 'approve' ? 'Approve for Funding' : 'Reject Proposal'}
-                        </h2>
-                        <p className="text-sm text-gray-500 mb-4 line-clamp-2">{dialog.proposal.title}</p>
-                        {dialog.type === 'reject' && (
-                            <textarea value={reason} onChange={e => setReason(e.target.value)}
-                                placeholder="Reason for rejection (required, min 10 characters)…" rows={3}
-                                className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 mb-4 focus:outline-none resize-none" />
-                        )}
-                        {dialog.type === 'approve' && (
-                            <div className="space-y-4 mb-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Awarded Amount (ETB) <span className="text-red-500">*</span>
-                                    </label>
-                                    <input type="number" min="0"
-                                        value={approveForm.awarded_amount}
-                                        onChange={e => setApproveForm(p => ({ ...p, awarded_amount: e.target.value }))}
-                                        placeholder="Enter approved budget amount"
-                                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Central Office Remarks</label>
-                                    <textarea rows={4} value={approveForm.remarks}
-                                        onChange={e => setApproveForm(p => ({ ...p, remarks: e.target.value }))}
-                                        placeholder="Add evaluation remarks, conditions, or notes for the PI..."
-                                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none" />
-                                </div>
-                            </div>
-                        )}
-                        <div className="flex justify-end gap-3">
-                            <button onClick={() => setDialog(null)} className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
-                            <button onClick={confirm} disabled={submitting}
-                                className={`px-4 py-2 text-sm font-medium rounded-lg text-white disabled:opacity-60 ${dialog.type === 'reject' ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'}`}>
-                                {submitting ? 'Processing…' : 'Confirm'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
+            {dialog?.type === 'approve' && (
+                <ApproveFundingModal
+                    proposal={dialog.proposal}
+                    onClose={() => setDialog(null)}
+                    onSubmit={async (payload) => {
+                        const res = await api.post(`/proposals/${dialog.proposal.id}/central/approve`, payload);
+                        success(res.data?.message || 'Proposal approved for funding.', {
+                            action: { label: 'Go to Funding', onClick: () => { window.location.href = '/admin/funding'; } },
+                        });
+                        setDialog(null);
+                        setTimeout(() => { window.location.href = '/admin/funding'; }, 1500);
+                    }}
+                />
             )}
         </AppLayout>
     );

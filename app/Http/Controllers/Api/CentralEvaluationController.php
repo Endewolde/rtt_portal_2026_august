@@ -79,7 +79,7 @@ class CentralEvaluationController extends Controller
     {
         $request->validate([
             'awarded_amount' => 'required|numeric|min:1',
-            'remarks' => 'nullable|string',
+            'remarks' => 'nullable|string|max:2000',
         ]);
 
         $proposal = Proposal::findOrFail($id);
@@ -87,31 +87,36 @@ class CentralEvaluationController extends Controller
         try {
             // Create or update the award BEFORE transitioning so that when the
             // ProposalTransitioned event fires and sends the email, the correct
-            // awarded_amount is already persisted on the award record.
-            $existingAward = Award::where('proposal_id', $proposal->id)->first();
-            if ($existingAward) {
-                $existingAward->update([
-                    'awarded_amount' => (float) $request->awarded_amount,
-                    'approval_notes' => $request->remarks ?? $existingAward->approval_notes,
-                    'approved_by' => $request->user()->id,
-                    'approved_at' => now(),
-                ]);
-                $award = $existingAward->fresh();
-            } else {
-                $award = $this->awardService->createForFundedProposal(
-                    $proposal,
-                    $request->user(),
-                    (float) $request->awarded_amount,
-                    $request->remarks
-                );
-            }
+            // awarded_amount is already persisted on the award record. One
+            // transaction: a refused transition must not leave an award behind.
+            [$updated, $award] = DB::transaction(function () use ($request, $proposal) {
+                $existingAward = Award::where('proposal_id', $proposal->id)->first();
+                if ($existingAward) {
+                    $existingAward->update([
+                        'awarded_amount' => (float) $request->awarded_amount,
+                        'approval_notes' => $request->remarks ?? $existingAward->approval_notes,
+                        'approved_by' => $request->user()->id,
+                        'approved_at' => now(),
+                    ]);
+                    $award = $existingAward->fresh();
+                } else {
+                    $award = $this->awardService->createForFundedProposal(
+                        $proposal,
+                        $request->user(),
+                        (float) $request->awarded_amount,
+                        $request->remarks
+                    );
+                }
 
-            $updated = $this->workflowService->transition(
-                $proposal,
-                'central_approve',
-                $request->user(),
-                $request->remarks ?? 'Approved by Central Office for funding'
-            );
+                $updated = $this->workflowService->transition(
+                    $proposal,
+                    'central_approve',
+                    $request->user(),
+                    $request->remarks ?? 'Approved by Central Office for funding'
+                );
+
+                return [$updated, $award];
+            });
 
             return response()->json([
                 'data' => ['status' => $updated->status, 'grant_reference' => $award->grant_reference],
