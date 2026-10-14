@@ -1,17 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
-    Globe, Eye, Layout, Settings, FileText, Star,
+    Globe, Eye, Layout, Settings, FileText, Star, Sparkles,
     Save, RefreshCw, ToggleLeft, ToggleRight, ExternalLink, Layers,
     ImagePlus, X, Upload,
 } from 'lucide-react'
 import AppLayout from '../../Layouts/AppLayout'
 import { useToast } from '../../Components/Toast'
 import api from '../../lib/api'
+import { FEATURE_DEFAULTS, FEATURE_ICONS } from '../../lib/publicFeatures'
 
 const TABS = [
     { key: 'hero',     label: 'Hero Slider',  icon: Layout   },
     { key: 'sections', label: 'Sections',     icon: Settings },
     { key: 'steps',    label: 'How It Works', icon: FileText },
+    { key: 'features', label: 'Capabilities', icon: Sparkles },
     { key: 'cta',      label: 'CTA & More',   icon: Star     },
 ]
 
@@ -99,6 +101,14 @@ const DEFAULTS = {
     public_step_5_desc:        'The central committee weighs the combined scores and makes the funding decision.',
     public_step_6_title:       'Funding & Monitoring',
     public_step_6_desc:        'Funded teams sign a contract, receive their budget, and report progress regularly until completion.',
+    ...Object.fromEntries(
+        FEATURE_DEFAULTS.flatMap((f, i) => [
+            [`public_feature_${i + 1}_title`, f.title],
+            [`public_feature_${i + 1}_desc`,  f.desc],
+            [`public_feature_${i + 1}_icon`,  f.icon],
+            [`public_feature_${i + 1}_show`,  'true'],
+        ])
+    ),
     public_features_title:     'Everything You Need to Manage Research',
     public_features_subtitle:  'A complete platform for the full research lifecycle, built for academic institutions.',
     public_cta_title:          'Ready to Start Your Research Journey?',
@@ -262,6 +272,35 @@ function Toggle({ label, desc, fieldKey, settings, onToggle }) {
                 }`}>
                 {on ? <><ToggleRight size={15} /> Visible</> : <><ToggleLeft size={15} /> Hidden</>}
             </button>
+        </div>
+    )
+}
+
+// ─── Icon picker (saves on click) ─────────────────────────────────────────────
+
+function IconPicker({ fieldKey, settings, onChange, onSave }) {
+    const current = settings[fieldKey]
+    return (
+        <div className="space-y-1.5">
+            <label className="text-sm font-medium text-slate-800">Icon</label>
+            <div className="flex flex-wrap gap-1.5">
+                {Object.entries(FEATURE_ICONS).map(([name, Icon]) => (
+                    <button
+                        key={name}
+                        type="button"
+                        title={name}
+                        aria-label={name}
+                        aria-pressed={current === name}
+                        onClick={() => { onChange(fieldKey, name); onSave(fieldKey, name) }}
+                        className={`w-9 h-9 rounded-lg flex items-center justify-center border transition-all ${
+                            current === name
+                                ? 'border-blue-500 bg-blue-50 text-blue-600 ring-2 ring-blue-100'
+                                : 'border-gray-200 text-slate-500 hover:border-gray-300 hover:bg-gray-50'
+                        }`}>
+                        <Icon size={16} />
+                    </button>
+                ))}
+            </div>
         </div>
     )
 }
@@ -517,6 +556,35 @@ export default function PublicSite() {
                                     {...fieldProps} />
                             </Card>
                         ))}
+                    </div>
+                )}
+
+                {/* ── Capabilities tab ── */}
+                {tab === 'features' && (
+                    <div className="space-y-4">
+                        <p className="text-xs text-slate-500 px-1">
+                            The cards in the dark "Platform Capabilities" section. Hide a card to remove it; leave a field empty to use the default text.
+                            The section heading and subtitle are under CTA &amp; More.
+                        </p>
+                        {FEATURE_DEFAULTS.map((d, idx) => {
+                            const i = idx + 1
+                            return (
+                                <Card key={i} title={`Card ${i}`} subtitle={`Default: ${d.title}`}>
+                                    <Toggle label="Show on homepage" fieldKey={`public_feature_${i}_show`}
+                                        settings={settings} onToggle={handleToggle} />
+                                    <Field label="Title"
+                                        fieldKey={`public_feature_${i}_title`}
+                                        placeholder={d.title}
+                                        {...fieldProps} />
+                                    <Field label="Description"
+                                        fieldKey={`public_feature_${i}_desc`}
+                                        multiline
+                                        placeholder={d.desc}
+                                        {...fieldProps} />
+                                    <IconPicker fieldKey={`public_feature_${i}_icon`} {...fieldProps} />
+                                </Card>
+                            )
+                        })}
                     </div>
                 )}
 

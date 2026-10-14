@@ -5,14 +5,14 @@ import {
     FileText, Award,
     Calendar, Clock, HelpCircle, TrendingUp, Users, Layers,
     Microscope, Zap, Handshake, Rocket, Lightbulb, ClipboardList, Sprout, HeartPulse,
-    Globe2, GraduationCap, Telescope, Laptop, BarChart3, EyeOff, Presentation, Scale,
-    ClipboardCheck, BadgeCheck, ShieldCheck, Wallet, Landmark,
+    Globe2, GraduationCap, Telescope, Laptop, BarChart3, Scale, Wallet, Landmark,
 } from 'lucide-react';
 import {
     PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import PublicLayout from '../../Layouts/PublicLayout';
 import { get } from '../../lib/api';
+import { resolveFeatures } from '../../lib/publicFeatures';
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
@@ -350,16 +350,6 @@ function CallCard({ call }) {
 
 // ─── Platform features ────────────────────────────────────────────────────────
 
-const FEATURES = [
-    { icon: FileText,       title: 'Guided Submission',          desc: 'A step-by-step proposal wizard, team invitations, and a live status guide that tells researchers what happens next.' },
-    { icon: EyeOff,         title: 'Truly Blind Review',         desc: 'Automatic anonymity checks on every submission, and alerts when independent reviewers disagree sharply.' },
-    { icon: Presentation,   title: 'Open Defence Scoring',       desc: 'Scheduled defence panels, on-the-day scoring, and firm score deadlines with a formal extension process.' },
-    { icon: Scale,          title: 'Transparent Decisions',      desc: 'Blind review and defence scores combined against published thresholds before the central funding decision.' },
-    { icon: Award,          title: 'Grants & Contracts',         desc: 'Award letters with grant references, research contracts, budget allocation, and staged disbursement.' },
-    { icon: ClipboardCheck, title: 'Progress Monitoring',        desc: 'Regular progress reports, milestones, mid-term evaluation, and completion workshops for every funded project.' },
-    { icon: BadgeCheck,     title: 'Verifiable Certificates',    desc: 'Reviewers earn QR-coded certificates of service that anyone can verify online.' },
-    { icon: ShieldCheck,    title: 'Accountability & Audit',     desc: 'Full audit trails, similarity detection, and stage turnaround tracking that keeps decisions on time.' },
-];
 
 const DEFAULT_STEPS = [
     { title: 'Submit Proposal',      desc: 'Complete the guided wizard with your research details, team, budget, and documents before the call closes.' },
@@ -942,6 +932,8 @@ export default function Home() {
     const ctaBtn1   = s.public_cta_primary       || 'View Open Calls';
     const ctaBtn2   = s.public_cta_secondary     || 'Track Proposal';
 
+    const features = resolveFeatures(s);
+
     const steps = DEFAULT_STEPS.map((d, i) => ({
         title: s[`public_step_${i + 1}_title`] || d.title,
         desc:  s[`public_step_${i + 1}_desc`]  || d.desc,
@@ -1100,7 +1092,7 @@ export default function Home() {
             )}
 
             {/* ── Platform Features ─────────────────────────────────────────── */}
-            {showFeatures && (
+            {showFeatures && features.length > 0 && (
                 <section className="py-14"
                     style={{ background: `linear-gradient(135deg, ${featuresBg} 0%, ${featuresBg}dd 100%)` }}>
                     <div className="max-w-7xl mx-auto px-6">
@@ -1108,7 +1100,7 @@ export default function Home() {
                         <p className="text-slate-300 text-sm mb-10 max-w-lg -mt-4">{featSub}</p>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                            {FEATURES.map((f) => (
+                            {features.map((f) => (
                                 <div key={f.title}
                                     className="group p-6 rounded-2xl border border-white/10 bg-white/5
                                                hover:bg-white/8 hover:border-white/20 transition-all duration-200">

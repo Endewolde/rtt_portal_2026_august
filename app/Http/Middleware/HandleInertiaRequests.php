@@ -67,6 +67,10 @@ class HandleInertiaRequests extends Middleware
                     'public_step_3_desc',
                     'public_step_4_title',
                     'public_step_4_desc',
+                    'public_step_5_title',
+                    'public_step_5_desc',
+                    'public_step_6_title',
+                    'public_step_6_desc',
                     'public_features_title',
                     'public_features_subtitle',
                     'public_cta_title',
@@ -122,6 +126,9 @@ class HandleInertiaRequests extends Middleware
                     'public_topbar_text',
                     'developer_credits',
                     'feedback_popup_enabled',
+                    ...collect(range(1, 8))->flatMap(fn (int $n) => array_map(
+                        fn (string $field) => "public_feature_{$n}_{$field}", ['title', 'desc', 'icon', 'show']
+                    ))->all(),
                 ])->get()->keyBy('key')->map(fn ($s) => $s->value)->toArray();
             }),
             'enabled_features' => Cache::remember('inertia_enabled_features', 300, function () {
