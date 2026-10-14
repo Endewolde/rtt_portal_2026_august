@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\AnalyticsService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -14,9 +15,16 @@ class AnalyticsController extends Controller
         'community_officer', 'technology_officer', 'college_officer',
     ];
 
+    private const CATEGORIES = ['research', 'community_engagement', 'technology_transfer'];
+
+    /** Sent as academic_year to see every year; leaving it out means the current year. */
+    private const ALL_YEARS = 'all';
+
+    public function __construct(private AnalyticsService $analytics) {}
+
     /**
-     * Full analytics payload in one request. College officers are always forced to
-     * their own college — the client's college_id is only honoured for other roles.
+     * Full analytics payload in one request. College officers are always limited to their
+     * own college and category directors to their own category, whatever the client sends.
      */
     public function index(Request $request): JsonResponse
     {
@@ -26,349 +34,34 @@ class AnalyticsController extends Controller
             return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
         }
 
-        $currentAcademicYear = DB::table('app_settings')
-            ->where('key', 'current_academic_year')
-            ->value('value');
+        $currentYear = DB::table('app_settings')->where('key', 'current_academic_year')->value('value');
+        $requestedYear = $request->input('academic_year');
+        $academicYear = $requestedYear === self::ALL_YEARS ? null : ($requestedYear ?: $currentYear);
 
-        $collegeId = $user->hasRole('college_officer') ? $user->college_id : $request->input('college_id');
+        $category = $request->_category_scope ?: (in_array($request->input('category'), self::CATEGORIES, true) ? $request->input('category') : null);
 
         $filters = [
-            'academic_year' => $request->input('academic_year') ?? $currentAcademicYear,
-            'college_id' => $collegeId,
+            'academic_year' => $academicYear,
+            'college_id' => $user->hasRole('college_officer') ? $user->college_id : ($request->input('college_id') ?: null),
+            'category' => $category,
         ];
 
         return response()->json([
             'data' => [
-                'filters' => $filters,
-                'academicYears' => $this->getAcademicYears(),
-                'colleges' => $this->getColleges(),
-                'summaryStats' => $this->summaryStats($filters),
-                'researchTypes' => $this->researchTypeDistribution($filters),
-                'collegePerf' => $this->collegePerformance($filters),
-                'passRateTrends' => $this->passRateTrends($filters),
-                'appTrends' => $this->applicationTrends($filters),
-                'genderPassRate' => $this->passRateByGender($filters),
-                'yearDistribution' => $this->yearDistribution($filters),
-                'collegeTypeDist' => $this->collegeTypeDistribution($filters),
-                'predictive' => $this->predictiveModel($filters),
+                'filters' => $filters + [
+                    'current_academic_year' => $currentYear,
+                    'college_locked' => $user->hasRole('college_officer'),
+                    'category_locked' => (bool) $request->_category_scope,
+                ],
+                'academicYears' => DB::table('proposals')->whereNull('deleted_at')->whereNotNull('academic_year')
+                    ->distinct()->orderByDesc('academic_year')->pluck('academic_year'),
+                'college_options' => DB::table('colleges')->whereNull('deleted_at')->where('status', 'active')
+                    ->orderBy('name')->get(['id', 'name', 'code']),
+                ...$this->analytics->dashboard($filters),
             ],
             'message' => '',
             'errors' => [],
             'meta' => [],
         ]);
-    }
-
-    private function getAcademicYears(): array
-    {
-        return DB::table('proposals')
-            ->whereNull('deleted_at')
-            ->whereNotNull('academic_year')
-            ->distinct()
-            ->orderByDesc('academic_year')
-            ->pluck('academic_year')
-            ->toArray();
-    }
-
-    private function getColleges(): array
-    {
-        return DB::table('colleges')
-            ->whereNull('deleted_at')
-            ->where('status', 'active')
-            ->orderBy('name')
-            ->select('id', 'name', 'code')
-            ->get()
-            ->map(fn ($c) => (array) $c)
-            ->toArray();
-    }
-
-    private function summaryStats(array $filters): array
-    {
-        $q = DB::table('proposals')->whereNull('deleted_at');
-
-        if (! empty($filters['academic_year'])) {
-            $q->where('academic_year', $filters['academic_year']);
-        }
-        if (! empty($filters['college_id'])) {
-            $q->where('college_id', $filters['college_id']);
-        }
-
-        $total = (clone $q)->where('status', '!=', 'draft')->count();
-        $funded = (clone $q)->whereIn('status', ['funded', 'accepted', 'completed'])->count();
-        $rejected = (clone $q)->where('status', 'rejected')->count();
-        $active = (clone $q)->whereNotIn('status', ['funded', 'rejected', 'archived', 'completed', 'draft'])->count();
-
-        return [
-            'total' => $total,
-            'funded' => $funded,
-            'rejected' => $rejected,
-            'active' => $active,
-            'pass_rate' => $total > 0 ? round($funded / $total * 100, 1) : 0,
-        ];
-    }
-
-    private function researchTypeDistribution(array $filters): array
-    {
-        $q = DB::table('proposals')
-            ->whereNull('deleted_at')
-            ->whereNotNull('research_type')
-            ->where('status', '!=', 'draft');
-
-        if (! empty($filters['academic_year'])) {
-            $q->where('academic_year', $filters['academic_year']);
-        }
-        if (! empty($filters['college_id'])) {
-            $q->where('college_id', $filters['college_id']);
-        }
-
-        return $q->select(
-            'research_type',
-            DB::raw('COUNT(*) as count'),
-            DB::raw("SUM(CASE WHEN status IN ('funded','accepted','completed') THEN 1 ELSE 0 END) as funded"),
-            DB::raw("SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected")
-        )
-            ->groupBy('research_type')
-            ->orderByDesc('count')
-            ->get()
-            ->map(fn ($r) => (array) $r)
-            ->toArray();
-    }
-
-    private function collegePerformance(array $filters): array
-    {
-        $year = $filters['academic_year'] ?? null;
-
-        return DB::table('colleges as c')
-            ->leftJoin('proposals as p', function ($join) use ($year) {
-                $join->on('p.college_id', '=', 'c.id')
-                    ->whereNull('p.deleted_at')
-                    ->where('p.status', '!=', 'draft');
-                if ($year) {
-                    $join->where('p.academic_year', $year);
-                }
-            })
-            ->whereNull('c.deleted_at')
-            ->when(! empty($filters['college_id']), fn ($q) => $q->where('c.id', $filters['college_id']))
-            ->select(
-                'c.name as college',
-                'c.code',
-                DB::raw('COUNT(DISTINCT p.id) as total'),
-                DB::raw("COUNT(DISTINCT CASE WHEN p.status IN ('funded','accepted','completed') THEN p.id END) as funded"),
-                DB::raw("COUNT(DISTINCT CASE WHEN p.status = 'rejected' THEN p.id END) as rejected"),
-                DB::raw("ROUND(COUNT(DISTINCT CASE WHEN p.status IN ('funded','accepted','completed') THEN p.id END) * 100.0 / NULLIF(COUNT(DISTINCT p.id), 0), 1) as pass_rate")
-            )
-            ->groupBy('c.id', 'c.name', 'c.code')
-            ->orderByDesc('total')
-            ->get()
-            ->map(fn ($r) => (array) $r)
-            ->toArray();
-    }
-
-    private function passRateTrends(array $filters): array
-    {
-        $q = DB::table('proposals')
-            ->whereNull('deleted_at')
-            ->whereNotNull('academic_year')
-            ->where('status', '!=', 'draft');
-
-        if (! empty($filters['college_id'])) {
-            $q->where('college_id', $filters['college_id']);
-        }
-
-        return $q->select(
-            'academic_year',
-            DB::raw('COUNT(*) as total'),
-            DB::raw("SUM(CASE WHEN status IN ('funded','accepted','completed') THEN 1 ELSE 0 END) as funded"),
-            DB::raw("SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected"),
-            DB::raw("ROUND(SUM(CASE WHEN status IN ('funded','accepted','completed') THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0), 1) as pass_rate")
-        )
-            ->groupBy('academic_year')
-            ->orderBy('academic_year')
-            ->get()
-            ->map(fn ($r) => (array) $r)
-            ->toArray();
-    }
-
-    private function applicationTrends(array $filters): array
-    {
-        $q = DB::table('proposals')
-            ->whereNull('deleted_at')
-            ->whereNotNull('submitted_at')
-            ->where('submitted_at', '>=', now()->subMonths(24));
-
-        if (! empty($filters['college_id'])) {
-            $q->where('college_id', $filters['college_id']);
-        }
-
-        return $q->select(
-            DB::raw("DATE_FORMAT(submitted_at, '%Y-%m') as month"),
-            DB::raw('COUNT(*) as submitted'),
-            DB::raw("SUM(CASE WHEN status IN ('funded','accepted','completed') THEN 1 ELSE 0 END) as funded")
-        )
-            ->groupBy('month')
-            ->orderBy('month')
-            ->get()
-            ->map(fn ($r) => (array) $r)
-            ->toArray();
-    }
-
-    private function passRateByGender(array $filters): array
-    {
-        $q = DB::table('proposals as p')
-            ->join('users as u', 'u.id', '=', 'p.pi_user_id')
-            ->whereNull('p.deleted_at')
-            ->whereNotNull('u.gender')
-            ->where('p.status', '!=', 'draft');
-
-        if (! empty($filters['academic_year'])) {
-            $q->where('p.academic_year', $filters['academic_year']);
-        }
-        if (! empty($filters['college_id'])) {
-            $q->where('p.college_id', $filters['college_id']);
-        }
-
-        return $q->select(
-            'u.gender',
-            DB::raw('COUNT(*) as total'),
-            DB::raw("SUM(CASE WHEN p.status IN ('funded','accepted','completed') THEN 1 ELSE 0 END) as funded"),
-            DB::raw("SUM(CASE WHEN p.status = 'rejected' THEN 1 ELSE 0 END) as rejected"),
-            DB::raw("ROUND(SUM(CASE WHEN p.status IN ('funded','accepted','completed') THEN 1 ELSE 0 END) * 100.0 / NULLIF(COUNT(*), 0), 1) as pass_rate")
-        )
-            ->groupBy('u.gender')
-            ->get()
-            ->map(fn ($r) => (array) $r)
-            ->toArray();
-    }
-
-    private function yearDistribution(array $filters): array
-    {
-        $q = DB::table('proposals')
-            ->whereNull('deleted_at')
-            ->whereNotNull('academic_year')
-            ->where('status', '!=', 'draft');
-
-        if (! empty($filters['college_id'])) {
-            $q->where('college_id', $filters['college_id']);
-        }
-
-        return $q->select(
-            'academic_year',
-            DB::raw('COUNT(*) as total'),
-            DB::raw("SUM(CASE WHEN status IN ('funded','accepted','completed') THEN 1 ELSE 0 END) as funded"),
-            DB::raw("SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected"),
-            DB::raw("SUM(CASE WHEN status NOT IN ('funded','accepted','completed','rejected','archived','draft') THEN 1 ELSE 0 END) as in_progress")
-        )
-            ->groupBy('academic_year')
-            ->orderBy('academic_year')
-            ->get()
-            ->map(fn ($r) => (array) $r)
-            ->toArray();
-    }
-
-    private function collegeTypeDistribution(array $filters): array
-    {
-        $q = DB::table('proposals as p')
-            ->join('colleges as c', 'c.id', '=', 'p.college_id')
-            ->whereNull('p.deleted_at')
-            ->whereNull('c.deleted_at')
-            ->where('p.status', '!=', 'draft');
-
-        if (! empty($filters['academic_year'])) {
-            $q->where('p.academic_year', $filters['academic_year']);
-        }
-        if (! empty($filters['college_id'])) {
-            $q->where('c.id', $filters['college_id']);
-        }
-
-        return $q->select(
-            'c.name as college',
-            'c.code',
-            DB::raw('COUNT(*) as count'),
-            DB::raw("SUM(CASE WHEN p.status IN ('funded','accepted','completed') THEN 1 ELSE 0 END) as funded")
-        )
-            ->groupBy('c.id', 'c.name', 'c.code')
-            ->orderByDesc('count')
-            ->get()
-            ->map(fn ($r) => (array) $r)
-            ->toArray();
-    }
-
-    private function predictiveModel(array $filters): array
-    {
-        $q = DB::table('proposals')
-            ->whereNull('deleted_at')
-            ->whereNotNull('academic_year')
-            ->where('status', '!=', 'draft');
-
-        if (! empty($filters['college_id'])) {
-            $q->where('college_id', $filters['college_id']);
-        }
-
-        $yearlyData = $q->select('academic_year', DB::raw('COUNT(*) as total'))
-            ->groupBy('academic_year')
-            ->orderBy('academic_year')
-            ->get();
-
-        if ($yearlyData->count() < 2) {
-            return [
-                'historical' => $yearlyData->map(fn ($r) => ['year' => $r->academic_year, 'actual' => (int) $r->total, 'trend' => (int) $r->total])->toArray(),
-                'predictions' => [],
-                'equation' => null,
-                'r_squared' => null,
-            ];
-        }
-
-        $firstYear = (int) substr($yearlyData->first()->academic_year, 0, 4);
-
-        $points = $yearlyData->map(fn ($r) => [
-            'x' => (int) substr($r->academic_year, 0, 4) - $firstYear,
-            'y' => (int) $r->total,
-            'year' => $r->academic_year,
-        ])->values()->toArray();
-
-        $n = count($points);
-        $sumX = array_sum(array_column($points, 'x'));
-        $sumY = array_sum(array_column($points, 'y'));
-        $sumXY = array_sum(array_map(fn ($p) => $p['x'] * $p['y'], $points));
-        $sumX2 = array_sum(array_map(fn ($p) => $p['x'] ** 2, $points));
-
-        $denom = $n * $sumX2 - $sumX ** 2;
-        $slope = $denom != 0 ? ($n * $sumXY - $sumX * $sumY) / $denom : 0;
-        $intercept = ($sumY - $slope * $sumX) / $n;
-
-        $meanY = $sumY / $n;
-        $ssTot = array_sum(array_map(fn ($p) => ($p['y'] - $meanY) ** 2, $points));
-        $ssRes = array_sum(array_map(fn ($p) => ($p['y'] - ($slope * $p['x'] + $intercept)) ** 2, $points));
-        $rSquared = $ssTot > 0 ? round(1 - ($ssRes / $ssTot), 3) : 1;
-
-        $historical = array_map(fn ($p) => [
-            'year' => $p['year'],
-            'actual' => $p['y'],
-            'trend' => (int) round($slope * $p['x'] + $intercept),
-        ], $points);
-
-        $lastYear = (int) substr($yearlyData->last()->academic_year, 0, 4);
-        $predictions = [];
-
-        for ($i = 1; $i <= 3; $i++) {
-            $yr = $lastYear + $i;
-            $x = $yr - $firstYear;
-            $pred = max(0, (int) round($slope * $x + $intercept));
-
-            $predictions[] = [
-                'year' => "{$yr}-".($yr + 1),
-                'predicted' => $pred,
-                'trend' => $pred,
-            ];
-        }
-
-        return [
-            'historical' => $historical,
-            'predictions' => $predictions,
-            'equation' => [
-                'slope' => round($slope, 2),
-                'intercept' => round($intercept, 2),
-            ],
-            'r_squared' => $rSquared,
-        ];
     }
 }

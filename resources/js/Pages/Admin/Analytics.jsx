@@ -1,667 +1,493 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
-    ComposedChart, BarChart, Bar, LineChart, Line, AreaChart, Area,
+    BarChart, Bar, LineChart, Line, AreaChart, Area,
     XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-    Cell, PieChart, Pie, ReferenceLine,
 } from 'recharts'
 import {
-    BarChart2, TrendingUp, Users, Activity, Building2,
-    FlaskConical, Brain, BookOpen, Filter, RefreshCw,
+    BarChart3, RefreshCw, Filter, TrendingUp, Wallet, Timer, Users, Layers,
+    GitBranch, Building2, CalendarRange, FlaskConical, LineChart as LineIcon, Info,
+    CheckCircle2, XCircle, Hourglass, Send, Percent,
 } from 'lucide-react'
 import AppLayout from '../../Layouts/AppLayout'
 import { get } from '../../lib/api'
 import { useToast } from '../../Components/Toast'
+import { getCategoryLabel } from '../../lib/utils'
 
-const PIE_COLORS = [
-    '#6366f1', '#3b82f6', '#10b981', '#f59e0b',
-    '#ec4899', '#a855f7', '#06b6d4', '#f97316', '#84cc16', '#14b8a6',
-]
-
-const CHART_STYLE = {
-    contentStyle: {
-        borderRadius: 10,
-        border: '1px solid #e5e7eb',
-        fontSize: 12,
-        boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.08)',
-    },
-    labelStyle: { fontWeight: 600, color: '#111827', marginBottom: 4 },
+// One meaning per colour across the page: outcomes use status colours, single series use the primary.
+const C = {
+    funded: '#059669',
+    inProgress: '#94a3b8',
+    rejected: '#e11d48',
+    primary: '#4f46e5',
+    target: '#f59e0b',
 }
 
-const Skeleton = ({ height = 280 }) => (
-    <div className="animate-pulse rounded-xl bg-gray-100" style={{ height }} />
-)
+const TOOLTIP = {
+    contentStyle: { borderRadius: 10, border: '1px solid #e5e7eb', fontSize: 12, boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.08)' },
+    labelStyle: { fontWeight: 600, color: '#111827', marginBottom: 4 },
+    cursor: { fill: '#f8fafc' },
+}
 
-const Empty = () => (
-    <div className="flex items-center justify-center text-sm text-gray-300" style={{ height: 200 }}>
-        No data available
-    </div>
-)
+const pct = (v) => (v === null || v === undefined ? '—' : `${v}%`)
+const num = (v) => (v === null || v === undefined ? '—' : Number(v).toLocaleString())
+const money = (v) => {
+    if (v === null || v === undefined) return '—'
+    const n = Number(v)
+    if (n >= 1_000_000) return `ETB ${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`
+    if (n >= 1_000) return `ETB ${(n / 1_000).toFixed(0)}K`
+    return `ETB ${n.toLocaleString()}`
+}
+const titleCase = (s) => (s ? s.replace(/\b\w/g, (c) => c.toUpperCase()) : '—')
 
-function ChartCard({ title, icon: Icon, desc, bg, color, children }) {
+function Skeleton({ height = 240 }) {
+    return <div className="animate-pulse rounded-xl bg-gray-100" style={{ height }} />
+}
+
+function Empty({ text = 'No proposals match these filters yet.' }) {
+    return <div className="flex h-40 items-center justify-center text-sm text-gray-400">{text}</div>
+}
+
+function Card({ title, desc, icon: Icon, children, action, className = '' }) {
     return (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-            <div className="px-6 pt-5 pb-4 border-b border-gray-50 flex items-center gap-3">
-                <span className={`w-8 h-8 rounded-lg ${bg} flex items-center justify-center shrink-0`}>
-                    <Icon size={15} className={color} />
-                </span>
-                <div>
-                    <p className="text-sm font-semibold text-gray-900">{title}</p>
-                    {desc && <p className="text-xs text-gray-400">{desc}</p>}
+        <section className={`overflow-hidden rounded-2xl border border-gray-200 bg-white ${className}`}>
+            <header className="flex items-start justify-between gap-3 border-b border-gray-100 px-5 py-4">
+                <div className="flex items-start gap-3">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600"><Icon size={15} /></span>
+                    <div>
+                        <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
+                        {desc && <p className="text-xs text-gray-500">{desc}</p>}
+                    </div>
                 </div>
-            </div>
+                {action}
+            </header>
             <div className="p-5">{children}</div>
+        </section>
+    )
+}
+
+function Kpi({ icon: Icon, label, value, hint, tone = 'text-gray-900' }) {
+    return (
+        <div className="rounded-2xl border border-gray-200 bg-white p-4">
+            <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500"><Icon size={13} /> {label}</div>
+            <p className={`mt-1.5 text-2xl font-bold tabular-nums ${tone}`}>{value}</p>
+            {hint && <p className="mt-0.5 text-[11px] leading-snug text-gray-400">{hint}</p>}
+        </div>
+    )
+}
+
+/** A single funded / in progress / rejected bar, with the numbers in the tooltip. */
+function OutcomeBar({ row }) {
+    const total = row.submitted || 0
+    if (!total) return <div className="h-2 rounded-full bg-gray-100" />
+    const part = (n) => `${(n / total) * 100}%`
+    return (
+        <div className="flex h-2 overflow-hidden rounded-full bg-gray-100" title={`${row.funded} funded · ${row.in_progress} in progress · ${row.rejected} not selected`}>
+            <div style={{ width: part(row.funded), background: C.funded }} />
+            <div style={{ width: part(row.in_progress), background: C.inProgress }} className="border-l-2 border-white first:border-0" />
+            <div style={{ width: part(row.rejected), background: C.rejected }} className="border-l-2 border-white first:border-0" />
+        </div>
+    )
+}
+
+function OutcomeLegend() {
+    return (
+        <div className="flex flex-wrap items-center gap-4 text-[11px] text-gray-500">
+            {[['Funded', C.funded], ['In progress', C.inProgress], ['Not selected', C.rejected]].map(([l, c]) => (
+                <span key={l} className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: c }} /> {l}</span>
+            ))}
+        </div>
+    )
+}
+
+/** Category / research type / gender / college rows: name, outcome bar, counts, pass rate. */
+function BreakdownTable({ rows, nameKey, format = (v) => v, emptyText }) {
+    if (!rows?.length) return <Empty text={emptyText} />
+    return (
+        <div className="overflow-x-auto">
+            <table className="w-full min-w-130 text-sm">
+                <thead className="text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                    <tr>
+                        <th className="pb-2 pr-3">Name</th>
+                        <th className="w-1/3 pb-2 pr-3">Outcomes</th>
+                        <th className="pb-2 pr-3 text-right">Submitted</th>
+                        <th className="pb-2 pr-3 text-right">Funded</th>
+                        <th className="pb-2 pr-3 text-right">Not selected</th>
+                        <th className="pb-2 text-right">Pass rate</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                    {rows.map((r) => (
+                        <tr key={r[nameKey]}>
+                            <td className="py-2.5 pr-3 font-medium text-gray-800">{format(r[nameKey])}</td>
+                            <td className="py-2.5 pr-3"><OutcomeBar row={r} /></td>
+                            <td className="py-2.5 pr-3 text-right tabular-nums text-gray-700">{r.submitted}</td>
+                            <td className="py-2.5 pr-3 text-right tabular-nums text-gray-700">{r.funded}</td>
+                            <td className="py-2.5 pr-3 text-right tabular-nums text-gray-700">{r.rejected}</td>
+                            <td className="py-2.5 text-right font-semibold tabular-nums text-gray-900" title={`${r.funded} of ${r.decided} decided`}>{pct(r.pass_rate)}</td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+    )
+}
+
+function Funnel({ steps }) {
+    const max = Math.max(1, steps[0]?.count ?? 0)
+    return (
+        <ol className="space-y-3">
+            {steps.map((s, i) => {
+                const prev = steps[i - 1]
+                const conversion = prev && prev.count > 0 ? Math.round((s.count / prev.count) * 100) : null
+                return (
+                    <li key={s.key}>
+                        <div className="mb-1 flex items-baseline justify-between gap-3 text-xs">
+                            <span className="font-medium text-gray-700">{s.label}</span>
+                            <span className="tabular-nums text-gray-500">
+                                <span className="font-semibold text-gray-900">{num(s.count)}</span>
+                                {conversion !== null && <span className="ml-2 text-gray-400">{conversion}% of previous</span>}
+                            </span>
+                        </div>
+                        <div className="h-3 overflow-hidden rounded-r-md bg-gray-100">
+                            <div className="h-full rounded-r-md" style={{ width: `${(s.count / max) * 100}%`, background: i === steps.length - 1 ? C.funded : C.primary }} />
+                        </div>
+                    </li>
+                )
+            })}
+        </ol>
+    )
+}
+
+function StageTimes({ stages }) {
+    const rows = stages.filter((s) => s.count > 0)
+    if (!rows.length) return <Empty text="No completed stages yet." />
+    const scale = Math.max(...rows.map((s) => Math.max(s.median ?? 0, s.target))) * 1.15
+    return (
+        <div className="space-y-3">
+            {rows.map((s) => {
+                const over = s.median !== null && s.median > s.target
+                return (
+                    <div key={s.label}>
+                        <div className="mb-1 flex justify-between text-xs">
+                            <span className="font-medium text-gray-700">{s.label}</span>
+                            <span className={`tabular-nums ${over ? 'font-semibold text-rose-600' : 'text-gray-500'}`}>
+                                {s.median ?? '—'}d median · target {s.target}d{over ? ' · over target' : ''}
+                            </span>
+                        </div>
+                        <div className="relative h-2.5 rounded-full bg-gray-100">
+                            <div className="h-full rounded-full" style={{ width: `${((s.median ?? 0) / scale) * 100}%`, background: over ? C.rejected : C.primary }} />
+                            <div className="absolute -top-1 h-4.5 w-0.5 rounded bg-amber-500" style={{ left: `${(s.target / scale) * 100}%` }} title={`Target ${s.target} days`} />
+                        </div>
+                    </div>
+                )
+            })}
+            <p className="flex items-center gap-1.5 pt-1 text-[11px] text-gray-400"><span className="inline-block h-3 w-0.5 bg-amber-500" /> Target time for the stage</p>
         </div>
     )
 }
 
 export default function Analytics() {
     const { error } = useToast()
-
+    const [data, setData] = useState(null)
     const [loading, setLoading] = useState(true)
+    const [filters, setFilters] = useState({ academic_year: '', category: '', college_id: '' })
+    const [showAllColleges, setShowAllColleges] = useState(false)
 
-    const [academicYears, setAcademicYears] = useState([])
-    const [colleges, setColleges] = useState([])
-    const [summaryStats, setSummaryStats] = useState(null)
-    const [researchTypes, setResearchTypes] = useState(null)
-    const [collegePerf, setCollegePerf] = useState(null)
-    const [passRateTrends, setPassRateTrends] = useState(null)
-    const [appTrends, setAppTrends] = useState(null)
-    const [genderPassRate, setGenderPassRate] = useState(null)
-    const [yearDistribution, setYearDistribution] = useState(null)
-    const [collegeTypeDist, setCollegeTypeDist] = useState(null)
-    const [predictive, setPredictive] = useState(null)
-
-    const [yr, setYr] = useState('')
-    const [col, setCol] = useState('')
-
-    const load = useCallback((academicYear, collegeId) => {
+    const load = useCallback((next) => {
         setLoading(true)
-        // Reset section state so stale data from a previous filter doesn't briefly show.
-        setResearchTypes(null); setCollegePerf(null); setPassRateTrends(null)
-        setAppTrends(null); setGenderPassRate(null); setYearDistribution(null)
-        setCollegeTypeDist(null); setPredictive(null)
+        const params = {}
+        if (next?.academic_year) params.academic_year = next.academic_year
+        if (next?.category) params.category = next.category
+        if (next?.college_id) params.college_id = next.college_id
 
-        get('/admin/analytics', {
-            ...(academicYear ? { academic_year: academicYear } : {}),
-            ...(collegeId ? { college_id: collegeId } : {}),
-        })
-            .then(r => {
+        get('/admin/analytics', params)
+            .then((r) => {
                 const d = r.data ?? {}
-                setAcademicYears(d.academicYears ?? [])
-                setColleges(d.colleges ?? [])
-                setSummaryStats(d.summaryStats ?? {})
-                setResearchTypes(d.researchTypes ?? [])
-                setCollegePerf(d.collegePerf ?? [])
-                setPassRateTrends(d.passRateTrends ?? [])
-                setAppTrends(d.appTrends ?? [])
-                setGenderPassRate(d.genderPassRate ?? [])
-                setYearDistribution(d.yearDistribution ?? [])
-                setCollegeTypeDist(d.collegeTypeDist ?? [])
-                setPredictive(d.predictive ?? null)
-                setYr(d.filters?.academic_year ?? '')
-                setCol(d.filters?.college_id ?? '')
+                setData(d)
+                setFilters({
+                    academic_year: d.filters?.academic_year ?? 'all',
+                    category: d.filters?.category ?? '',
+                    college_id: d.filters?.college_id ?? '',
+                })
             })
             .catch(() => error('Failed to load analytics.'))
             .finally(() => setLoading(false))
     }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-    useEffect(() => { load(); }, [load])
+    useEffect(() => { load() }, [load])
 
-    function applyFilters() {
-        load(yr, col)
+    const change = (key, value) => {
+        const next = { ...filters, [key]: value }
+        setFilters(next)
+        load(next)
     }
 
-    function resetFilters() {
-        setYr('')
-        setCol('')
-        load()
-    }
+    const f = data?.filters ?? {}
+    const s = data?.summary
+    const collegeRows = (data?.colleges ?? []).filter((c) => showAllColleges || c.submitted > 0)
+    const collegeChart = (data?.colleges ?? []).filter((c) => c.submitted > 0).slice(0, 12)
+    const scopeText = [
+        f.academic_year ? `${f.academic_year} academic year` : 'All academic years',
+        f.category ? getCategoryLabel(f.category) : 'All categories',
+        f.college_id ? (data?.college_options?.find((c) => c.id === f.college_id)?.name ?? 'One college') : 'All colleges',
+    ].join(' · ')
 
-    const stats = summaryStats ?? {}
+    const select = 'h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:border-indigo-400 focus:outline-none disabled:bg-gray-50 disabled:text-gray-400'
 
     return (
-        <AppLayout title="Analytics Dashboard">
-
-            {/* Header */}
-            <div className="mb-6">
-                <h1 className="text-2xl font-bold text-gray-900">Analytics Dashboard</h1>
-                <p className="text-sm text-gray-400 mt-0.5">
-                    Research proposal analytics and predictive insights
-                </p>
-            </div>
-
-            {/* Filter bar */}
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 mb-6 flex flex-wrap items-end gap-3">
-                <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">Academic Year</label>
-                    <select
-                        value={yr}
-                        onChange={e => setYr(e.target.value)}
-                        className="h-9 text-sm border border-gray-200 rounded-lg px-3 bg-white text-gray-700 focus:outline-none focus:border-indigo-400 min-w-36"
-                    >
-                        <option value="">All Years</option>
-                        {(academicYears ?? []).map(y => (
-                            <option key={y} value={y}>{y}</option>
-                        ))}
-                    </select>
+        <AppLayout breadcrumb="Analytics Dashboard">
+            <div className="mx-auto max-w-7xl">
+                {/* Header + filters */}
+                <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-100"><BarChart3 size={20} className="text-indigo-600" /></div>
+                        <div>
+                            <h1 className="text-xl font-bold text-gray-900">Analytics Dashboard</h1>
+                            <p className="mt-0.5 text-sm text-gray-500">{scopeText}</p>
+                        </div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Filter size={14} className="hidden text-gray-400 sm:block" />
+                        <select aria-label="Academic year" value={filters.academic_year || 'all'} onChange={(e) => change('academic_year', e.target.value)} className={select}>
+                            <option value="all">All years</option>
+                            {(data?.academicYears ?? []).map((y) => (
+                                <option key={y} value={y}>{y}{y === f.current_academic_year ? ' (current)' : ''}</option>
+                            ))}
+                        </select>
+                        <select aria-label="Category" value={filters.category} onChange={(e) => change('category', e.target.value)} disabled={f.category_locked} className={select}>
+                            <option value="">All categories</option>
+                            {['research', 'community_engagement', 'technology_transfer'].map((c) => <option key={c} value={c}>{getCategoryLabel(c)}</option>)}
+                        </select>
+                        <select aria-label="College" value={filters.college_id} onChange={(e) => change('college_id', e.target.value)} disabled={f.college_locked} className={`${select} max-w-56`}>
+                            <option value="">All colleges</option>
+                            {(data?.college_options ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                        <button onClick={() => load(filters)} disabled={loading} aria-label="Refresh"
+                            className="flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-60">
+                            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
+                        </button>
+                    </div>
                 </div>
-                <div>
-                    <label className="block text-xs font-medium text-gray-500 mb-1">College</label>
-                    <select
-                        value={col}
-                        onChange={e => setCol(e.target.value)}
-                        className="h-9 text-sm border border-gray-200 rounded-lg px-3 bg-white text-gray-700 focus:outline-none focus:border-indigo-400 min-w-52"
-                    >
-                        <option value="">All Colleges</option>
-                        {(colleges ?? []).map(c => (
-                            <option key={c.id} value={c.id}>{c.code} — {c.name}</option>
-                        ))}
-                    </select>
-                </div>
-                <button
-                    onClick={applyFilters}
-                    disabled={loading}
-                    className="h-9 px-4 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-60 transition-colors flex items-center gap-1.5"
-                >
-                    <Filter size={13} /> Apply
-                </button>
-                <button
-                    onClick={resetFilters}
-                    disabled={loading}
-                    className="h-9 px-4 border border-gray-200 text-gray-600 text-sm font-medium rounded-lg hover:bg-gray-50 disabled:opacity-60 transition-colors flex items-center gap-1.5"
-                >
-                    <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Reset
-                </button>
-            </div>
 
-            {/* KPI cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-                <div className="bg-gradient-to-br from-indigo-50 to-white rounded-2xl border border-indigo-100 p-5">
-                    <p className="text-xs font-semibold text-indigo-400 uppercase tracking-wider">Total Proposals</p>
-                    <p className="text-3xl font-bold text-indigo-700 mt-1">{stats.total ?? '–'}</p>
-                    <p className="text-xs text-gray-400 mt-1">Across all years</p>
-                </div>
-                <div className="bg-gradient-to-br from-emerald-50 to-white rounded-2xl border border-emerald-100 p-5">
-                    <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">Funded</p>
-                    <p className="text-3xl font-bold text-emerald-700 mt-1">{stats.funded ?? '–'}</p>
-                    <p className="text-xs text-gray-400 mt-1">Accepted or completed</p>
-                </div>
-                <div className="bg-gradient-to-br from-rose-50 to-white rounded-2xl border border-rose-100 p-5">
-                    <p className="text-xs font-semibold text-rose-400 uppercase tracking-wider">Rejected</p>
-                    <p className="text-3xl font-bold text-rose-700 mt-1">{stats.rejected ?? '–'}</p>
-                    <p className="text-xs text-gray-400 mt-1">Did not proceed</p>
-                </div>
-                <div className="bg-gradient-to-br from-amber-50 to-white rounded-2xl border border-amber-100 p-5">
-                    <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">Pass Rate</p>
-                    <p className="text-3xl font-bold text-amber-700 mt-1">
-                        {stats.pass_rate != null ? `${stats.pass_rate}%` : '–'}
-                    </p>
-                    <p className="text-xs text-gray-400 mt-1">Funded / submitted</p>
-                </div>
-            </div>
+                {!data ? (
+                    <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">{[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} height={96} />)}</div>
+                        <Skeleton height={280} />
+                    </div>
+                ) : (
+                    <div className={`space-y-5 transition-opacity ${loading ? 'opacity-60' : ''}`}>
+                        {/* KPIs */}
+                        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+                            <Kpi icon={Send} label="Submitted" value={num(s.submitted)} hint="All proposals except drafts" />
+                            <Kpi icon={CheckCircle2} label="Funded" value={num(s.funded)} hint="Funded, at mid-term or completed" tone="text-emerald-700" />
+                            <Kpi icon={XCircle} label="Not selected" value={num(s.rejected)} hint="Rejected at any stage" tone="text-rose-700" />
+                            <Kpi icon={Hourglass} label="In progress" value={num(s.in_progress)} hint="Still in review or awaiting a decision" />
+                            <Kpi icon={Percent} label="Pass rate" value={pct(s.pass_rate)} hint={s.decided ? `Funded ÷ decided (${s.funded} of ${s.decided})` : 'No decisions yet'} tone="text-indigo-700" />
+                        </div>
 
-            <div className="space-y-6">
-
-                {/* Row 1: Research Type + College Type Distribution */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-                    {/* 1. Research Type Distribution */}
-                    <ChartCard
-                        title="Research Type Distribution"
-                        icon={FlaskConical}
-                        desc="Proposal volume by research type"
-                        bg="bg-indigo-50"
-                        color="text-indigo-600"
-                    >
-                        {!researchTypes
-                            ? <Skeleton />
-                            : researchTypes.length === 0
-                                ? <Empty />
-                                : (
-                                    <div className="flex items-center gap-4">
-                                        <div className="shrink-0" style={{ width: 200, height: 200 }}>
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <PieChart>
-                                                    <Pie
-                                                        data={researchTypes}
-                                                        dataKey="count"
-                                                        nameKey="research_type"
-                                                        cx="50%"
-                                                        cy="50%"
-                                                        innerRadius={52}
-                                                        outerRadius={80}
-                                                        paddingAngle={2}
-                                                    >
-                                                        {researchTypes.map((_, i) => (
-                                                            <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                                                        ))}
-                                                    </Pie>
-                                                    <Tooltip {...CHART_STYLE} />
-                                                </PieChart>
-                                            </ResponsiveContainer>
-                                        </div>
-                                        <div className="flex-1 space-y-2 min-w-0">
-                                            {researchTypes.map((r, i) => (
-                                                <div key={i} className="flex items-center gap-2">
-                                                    <span
-                                                        className="w-2.5 h-2.5 rounded-full shrink-0"
-                                                        style={{ background: PIE_COLORS[i % PIE_COLORS.length] }}
-                                                    />
-                                                    <span className="text-xs text-gray-600 flex-1 truncate">{r.research_type}</span>
-                                                    <span className="text-xs font-semibold text-gray-900 shrink-0">{r.count}</span>
+                        {/* Funnel + current pipeline */}
+                        <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
+                            <Card className="lg:col-span-3" icon={GitBranch} title="Proposal Funnel" desc="How far proposals got. Rejected proposals count up to the stage they stopped at.">
+                                {s.submitted ? <Funnel steps={data.funnel} /> : <Empty />}
+                            </Card>
+                            <Card className="lg:col-span-2" icon={Layers} title="Where Proposals Are Now" desc="Current stage of every submitted proposal">
+                                {s.submitted ? (
+                                    <ul className="space-y-2.5">
+                                        {data.pipeline.map((p) => (
+                                            <li key={p.key} className="flex items-center gap-3 text-sm">
+                                                <span className="w-36 shrink-0 text-gray-700">{p.label}</span>
+                                                <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-100">
+                                                    <div className="h-full rounded-full" style={{
+                                                        width: `${(p.count / Math.max(1, s.submitted)) * 100}%`,
+                                                        background: p.key === 'funded' ? C.funded : p.key === 'rejected' ? C.rejected : C.primary,
+                                                    }} />
                                                 </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )
-                        }
-                    </ChartCard>
+                                                <span className="w-8 text-right font-semibold tabular-nums text-gray-900">{p.count}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                ) : <Empty />}
+                            </Card>
+                        </div>
 
-                    {/* 8. College Type Distribution */}
-                    <ChartCard
-                        title="College Type Distribution"
-                        icon={Building2}
-                        desc="Proposal volume and funding per college"
-                        bg="bg-blue-50"
-                        color="text-blue-600"
-                    >
-                        {!collegeTypeDist
-                            ? <Skeleton />
-                            : collegeTypeDist.length === 0
-                                ? <Empty />
-                                : (
-                                    <ResponsiveContainer width="100%" height={240}>
-                                        <BarChart
-                                            data={collegeTypeDist.slice(0, 8)}
-                                            layout="vertical"
-                                            margin={{ top: 0, right: 16, left: 0, bottom: 0 }}
-                                        >
-                                            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
-                                            <XAxis type="number" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                                            <YAxis
-                                                type="category"
-                                                dataKey="code"
-                                                tick={{ fontSize: 11 }}
-                                                width={56}
-                                                tickLine={false}
-                                                axisLine={false}
-                                            />
-                                            <Tooltip {...CHART_STYLE} />
+                        {/* Money */}
+                        <Card icon={Wallet} title="Funding" desc="Funded proposals in the current filters">
+                            <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+                                {[
+                                    ['Requested', money(data.money.requested), 'Itemised budgets of funded proposals'],
+                                    ['Awarded', money(data.money.awarded), `${data.money.awards} award${data.money.awards === 1 ? '' : 's'}`],
+                                    ['Disbursed', money(data.money.disbursed), data.money.disbursed_ratio !== null ? `${data.money.disbursed_ratio}% of awarded` : 'Nothing awarded yet'],
+                                    ['Awarded vs requested', pct(data.money.award_ratio), 'Where both a budget and an award exist'],
+                                    ['Average award', money(data.money.average_award), 'Per funded proposal'],
+                                ].map(([label, value, hint]) => (
+                                    <div key={label} className="rounded-xl bg-gray-50 px-4 py-3">
+                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{label}</p>
+                                        <p className="mt-1 text-lg font-bold tabular-nums text-gray-900">{value}</p>
+                                        <p className="text-[11px] text-gray-400">{hint}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </Card>
+
+                        {/* Categories */}
+                        {!f.category && (
+                            <Card icon={Layers} title="By Category" desc="Outcomes for each proposal category" action={<OutcomeLegend />}>
+                                <BreakdownTable rows={data.categories} nameKey="category" format={getCategoryLabel} />
+                            </Card>
+                        )}
+
+                        {/* Colleges */}
+                        {!f.college_id && (
+                            <Card icon={Building2} title="By College" desc="Outcomes per college, busiest first"
+                                action={
+                                    <label className="flex cursor-pointer items-center gap-2 text-xs text-gray-500">
+                                        <input type="checkbox" checked={showAllColleges} onChange={(e) => setShowAllColleges(e.target.checked)} className="rounded border-gray-300" />
+                                        Show colleges with no proposals
+                                    </label>
+                                }>
+                                {collegeChart.length > 0 && (
+                                    <ResponsiveContainer width="100%" height={Math.max(160, collegeChart.length * 34)}>
+                                        <BarChart data={collegeChart} layout="vertical" margin={{ top: 0, right: 16, left: 0, bottom: 0 }} barCategoryGap={8}>
+                                            <CartesianGrid horizontal={false} stroke="#f1f5f9" />
+                                            <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} axisLine={false} />
+                                            <YAxis type="category" dataKey="code" width={64} tick={{ fontSize: 11, fill: '#334155' }} tickLine={false} axisLine={false} />
+                                            <Tooltip {...TOOLTIP} labelFormatter={(code) => collegeChart.find((c) => c.code === code)?.college ?? code} />
                                             <Legend wrapperStyle={{ fontSize: 12 }} />
-                                            <Bar dataKey="count" name="Total" radius={[0, 4, 4, 0]} fill="#3b82f6">
-                                                {collegeTypeDist.slice(0, 8).map((_, i) => (
-                                                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                                                ))}
-                                            </Bar>
-                                            <Bar dataKey="funded" name="Funded" radius={[0, 4, 4, 0]} fill="#10b981" />
+                                            <Bar dataKey="funded" name="Funded" stackId="o" fill={C.funded} stroke="#fff" strokeWidth={2} />
+                                            <Bar dataKey="in_progress" name="In progress" stackId="o" fill={C.inProgress} stroke="#fff" strokeWidth={2} />
+                                            <Bar dataKey="rejected" name="Not selected" stackId="o" fill={C.rejected} stroke="#fff" strokeWidth={2} radius={[0, 4, 4, 0]} />
                                         </BarChart>
                                     </ResponsiveContainer>
-                                )
-                        }
-                    </ChartCard>
-                </div>
-
-                {/* 2. College Performance Details */}
-                <ChartCard
-                    title="College Performance Details"
-                    icon={BarChart2}
-                    desc="Submission volume and pass rate per college"
-                    bg="bg-purple-50"
-                    color="text-purple-600"
-                >
-                    {!collegePerf
-                        ? <Skeleton height={360} />
-                        : (
-                            <>
-                                <ResponsiveContainer width="100%" height={260}>
-                                    <BarChart
-                                        data={collegePerf.filter(c => c.total > 0)}
-                                        margin={{ top: 4, right: 16, left: 0, bottom: 48 }}
-                                    >
-                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                        <XAxis
-                                            dataKey="code"
-                                            tick={{ fontSize: 11 }}
-                                            angle={-30}
-                                            textAnchor="end"
-                                            tickLine={false}
-                                            axisLine={false}
-                                        />
-                                        <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                                        <Tooltip {...CHART_STYLE} />
-                                        <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-                                        <Bar dataKey="total" name="Total" fill="#a855f7" radius={[4, 4, 0, 0]} />
-                                        <Bar dataKey="funded" name="Funded" fill="#10b981" radius={[4, 4, 0, 0]} />
-                                        <Bar dataKey="rejected" name="Rejected" fill="#f43f5e" radius={[4, 4, 0, 0]} />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                                <div className="hidden sm:block mt-4 overflow-x-auto rounded-xl border border-gray-100">
-                                    <table className="w-full text-xs">
-                                        <thead>
-                                            <tr className="bg-gray-50 border-b border-gray-100">
-                                                <th className="py-2.5 px-4 text-gray-400 font-semibold w-10">#</th>
-                                                <th className="text-left py-2.5 px-4 text-gray-500 font-semibold">College</th>
-                                                <th className="text-right py-2.5 px-4 text-gray-500 font-semibold">Total</th>
-                                                <th className="text-right py-2.5 px-4 text-emerald-600 font-semibold">Funded</th>
-                                                <th className="text-right py-2.5 px-4 text-rose-500 font-semibold">Rejected</th>
-                                                <th className="text-right py-2.5 px-4 text-gray-500 font-semibold">Pass Rate</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {collegePerf.map((c, i) => (
-                                                <tr key={i} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                                                    <td className="py-2.5 px-4 text-xs font-medium text-gray-400 tabular-nums">{i + 1}</td>
-                                                    <td className="py-2.5 px-4 text-gray-700 font-medium">{c.college}</td>
-                                                    <td className="py-2.5 px-4 text-right text-gray-600">{c.total}</td>
-                                                    <td className="py-2.5 px-4 text-right text-emerald-600 font-semibold">{c.funded}</td>
-                                                    <td className="py-2.5 px-4 text-right text-rose-500">{c.rejected}</td>
-                                                    <td className="py-2.5 px-4 text-right">
-                                                        <span className={`font-semibold ${c.pass_rate >= 50 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                                                            {c.pass_rate != null ? `${c.pass_rate}%` : '–'}
-                                                        </span>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
+                                )}
+                                <div className={collegeChart.length ? 'mt-5' : ''}>
+                                    <BreakdownTable rows={collegeRows} nameKey="college" emptyText="No college has submitted proposals in these filters." />
                                 </div>
+                            </Card>
+                        )}
 
-                                {/* Mobile: stacked cards */}
-                                <div className="sm:hidden mt-4 divide-y divide-gray-50 rounded-xl border border-gray-100">
-                                    {collegePerf.map((c, i) => (
-                                        <div key={i} className="px-4 py-2.5 flex items-center justify-between gap-3">
-                                            <span className="text-gray-700 font-medium text-sm truncate">{c.college}</span>
-                                            <div className="flex items-center gap-2.5 text-xs shrink-0">
-                                                <span className="text-gray-600">{c.total}</span>
-                                                <span className="text-emerald-600 font-semibold">{c.funded}F</span>
-                                                <span className="text-rose-500">{c.rejected}R</span>
-                                                <span className={`font-semibold ${c.pass_rate >= 50 ? 'text-emerald-600' : 'text-amber-600'}`}>
-                                                    {c.pass_rate != null ? `${c.pass_rate}%` : '–'}
-                                                </span>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </>
-                        )
-                    }
-                </ChartCard>
-
-                {/* Row 3: Pass Rate Trends + Application Trends */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-                    {/* 3. Pass Rate Trends Over Academic Year */}
-                    <ChartCard
-                        title="Pass Rate Trends Over Academic Year"
-                        icon={TrendingUp}
-                        desc="Funding success rate trend per academic year"
-                        bg="bg-emerald-50"
-                        color="text-emerald-600"
-                    >
-                        {!passRateTrends
-                            ? <Skeleton />
-                            : passRateTrends.length === 0
-                                ? <Empty />
-                                : (
+                        {/* Years */}
+                        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                            <Card icon={CalendarRange} title="Outcomes by Academic Year" desc="Every year, regardless of the year filter">
+                                {data.years.length ? (
                                     <ResponsiveContainer width="100%" height={240}>
-                                        <LineChart data={passRateTrends} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                                            <XAxis dataKey="academic_year" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                                            <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} unit="%" domain={[0, 100]} />
-                                            <Tooltip {...CHART_STYLE} formatter={v => [`${v}%`, 'Pass Rate']} />
+                                        <BarChart data={data.years} margin={{ top: 4, right: 8, left: -12, bottom: 0 }}>
+                                            <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                                            <XAxis dataKey="academic_year" tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} axisLine={false} />
+                                            <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} axisLine={false} />
+                                            <Tooltip {...TOOLTIP} />
                                             <Legend wrapperStyle={{ fontSize: 12 }} />
-                                            <Line
-                                                type="monotone"
-                                                dataKey="pass_rate"
-                                                name="Pass Rate %"
-                                                stroke="#10b981"
-                                                strokeWidth={2.5}
-                                                dot={{ r: 4, fill: '#10b981' }}
-                                                activeDot={{ r: 6 }}
-                                            />
-                                            <Line
-                                                type="monotone"
-                                                dataKey="total"
-                                                name="Total Proposals"
-                                                stroke="#6366f1"
-                                                strokeWidth={1.5}
-                                                strokeDasharray="4 2"
-                                                dot={{ r: 3, fill: '#6366f1' }}
-                                                yAxisId={0}
-                                            />
+                                            <Bar dataKey="funded" name="Funded" stackId="y" fill={C.funded} stroke="#fff" strokeWidth={2} />
+                                            <Bar dataKey="in_progress" name="In progress" stackId="y" fill={C.inProgress} stroke="#fff" strokeWidth={2} />
+                                            <Bar dataKey="rejected" name="Not selected" stackId="y" fill={C.rejected} stroke="#fff" strokeWidth={2} radius={[4, 4, 0, 0]} />
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                ) : <Empty />}
+                            </Card>
+                            <Card icon={TrendingUp} title="Pass Rate by Academic Year" desc="Funded ÷ decided — years still in review can change">
+                                {data.years.some((y) => y.pass_rate !== null) ? (
+                                    <ResponsiveContainer width="100%" height={240}>
+                                        <LineChart data={data.years} margin={{ top: 8, right: 16, left: -12, bottom: 0 }}>
+                                            <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                                            <XAxis dataKey="academic_year" tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} axisLine={false} />
+                                            <YAxis domain={[0, 100]} unit="%" tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} axisLine={false} />
+                                            <Tooltip {...TOOLTIP} cursor={{ stroke: '#cbd5e1' }} formatter={(v, _n, p) => [`${v}% (${p.payload.funded} of ${p.payload.decided} decided)`, 'Pass rate']} />
+                                            <Line type="monotone" dataKey="pass_rate" name="Pass rate" stroke={C.primary} strokeWidth={2} dot={{ r: 4, fill: C.primary, stroke: '#fff', strokeWidth: 2 }} connectNulls />
                                         </LineChart>
                                     </ResponsiveContainer>
-                                )
-                        }
-                    </ChartCard>
+                                ) : <Empty text="No decisions yet." />}
+                            </Card>
+                        </div>
 
-                    {/* 5. Proposal Application Trends */}
-                    <ChartCard
-                        title="Proposal Application Trends"
-                        icon={Activity}
-                        desc="Monthly submission volume over the last 24 months"
-                        bg="bg-cyan-50"
-                        color="text-cyan-600"
-                    >
-                        {!appTrends
-                            ? <Skeleton />
-                            : appTrends.length === 0
-                                ? <Empty />
-                                : (
-                                    <ResponsiveContainer width="100%" height={240}>
-                                        <AreaChart data={appTrends} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
-                                            <defs>
-                                                <linearGradient id="gSubmitted" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.25} />
-                                                    <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
-                                                </linearGradient>
-                                                <linearGradient id="gFunded" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.25} />
-                                                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                                                </linearGradient>
-                                            </defs>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                                            <XAxis dataKey="month" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-                                            <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                                            <Tooltip {...CHART_STYLE} />
-                                            <Legend wrapperStyle={{ fontSize: 12 }} />
-                                            <Area
-                                                type="monotone"
-                                                dataKey="submitted"
-                                                name="Submitted"
-                                                stroke="#06b6d4"
-                                                fill="url(#gSubmitted)"
-                                                strokeWidth={2}
-                                            />
-                                            <Area
-                                                type="monotone"
-                                                dataKey="funded"
-                                                name="Funded"
-                                                stroke="#10b981"
-                                                fill="url(#gFunded)"
-                                                strokeWidth={2}
-                                            />
-                                        </AreaChart>
-                                    </ResponsiveContainer>
-                                )
-                        }
-                    </ChartCard>
-                </div>
+                        {/* Monthly submissions */}
+                        <Card icon={LineIcon} title="Monthly Submissions" desc="Proposals submitted each month over the last two years">
+                            {data.monthly.some((m) => m.submitted > 0) ? (
+                                <ResponsiveContainer width="100%" height={200}>
+                                    <AreaChart data={data.monthly} margin={{ top: 4, right: 8, left: -12, bottom: 0 }}>
+                                        <defs>
+                                            <linearGradient id="gMonthly" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="5%" stopColor={C.primary} stopOpacity={0.2} />
+                                                <stop offset="95%" stopColor={C.primary} stopOpacity={0} />
+                                            </linearGradient>
+                                        </defs>
+                                        <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                                        <XAxis dataKey="month" tick={{ fontSize: 10, fill: '#64748b' }} tickLine={false} axisLine={false} interval="preserveStartEnd" minTickGap={24} />
+                                        <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} axisLine={false} />
+                                        <Tooltip {...TOOLTIP} cursor={{ stroke: '#cbd5e1' }} />
+                                        <Area type="monotone" dataKey="submitted" name="Submitted" stroke={C.primary} strokeWidth={2} fill="url(#gMonthly)" />
+                                    </AreaChart>
+                                </ResponsiveContainer>
+                            ) : <Empty text="No submissions in the last two years." />}
+                        </Card>
 
-                {/* Row 4: Gender + Year Distribution */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-                    {/* 6. Pass Rate by Gender */}
-                    <ChartCard
-                        title="Pass Rate by Gender"
-                        icon={Users}
-                        desc="Funding success rate by principal investigator gender"
-                        bg="bg-pink-50"
-                        color="text-pink-600"
-                    >
-                        {!genderPassRate
-                            ? <Skeleton />
-                            : genderPassRate.length === 0
-                                ? <Empty />
-                                : (
-                                    <div className="space-y-5">
-                                        <ResponsiveContainer width="100%" height={180}>
-                                            <BarChart data={genderPassRate} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
-                                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                                <XAxis
-                                                    dataKey="gender"
-                                                    tick={{ fontSize: 12 }}
-                                                    tickLine={false}
-                                                    axisLine={false}
-                                                    tickFormatter={g => g ? g.charAt(0).toUpperCase() + g.slice(1) : '–'}
-                                                />
-                                                <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                                                <Tooltip {...CHART_STYLE} />
-                                                <Legend wrapperStyle={{ fontSize: 12 }} />
-                                                <Bar dataKey="total" name="Total" fill="#e879f9" radius={[4, 4, 0, 0]} />
-                                                <Bar dataKey="funded" name="Funded" fill="#10b981" radius={[4, 4, 0, 0]} />
-                                                <Bar dataKey="rejected" name="Rejected" fill="#f43f5e" radius={[4, 4, 0, 0]} />
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            {genderPassRate.map((g, i) => (
-                                                <div key={i} className="bg-gray-50 rounded-xl p-3">
-                                                    <p className="text-xs text-gray-500 capitalize font-medium">{g.gender}</p>
-                                                    <p className="text-2xl font-bold text-gray-900 mt-0.5">
-                                                        {g.pass_rate != null ? `${g.pass_rate}%` : '–'}
-                                                    </p>
-                                                    <p className="text-xs text-gray-400">{g.funded} of {g.total} funded</p>
-                                                </div>
-                                            ))}
+                        {/* Review process */}
+                        <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
+                            <Card className="lg:col-span-3" icon={Timer} title="Time per Stage" desc="Median days a proposal spends in each stage, against its target">
+                                <StageTimes stages={data.review.stages} />
+                            </Card>
+                            <Card className="lg:col-span-2" icon={Users} title="Review Quality" desc="Reviewer workload, speed and agreement">
+                                <dl className="grid grid-cols-2 gap-3">
+                                    {[
+                                        ['Reviewers', num(data.review.reviewers)],
+                                        ['Reviews per reviewer', data.review.reviews_per_reviewer ?? '—'],
+                                        ['Average days per review', data.review.average_review_days ?? '—'],
+                                        ['Submitted on time', pct(data.review.on_time_rate)],
+                                        ['Reviews overdue now', num(data.review.overdue_reviews)],
+                                        ['Blind reviewer disagreement', pct(data.review.disagreement_rate)],
+                                    ].map(([label, value]) => (
+                                        <div key={label} className="rounded-xl bg-gray-50 px-3 py-2.5">
+                                            <dt className="text-[11px] text-gray-500">{label}</dt>
+                                            <dd className="text-base font-bold tabular-nums text-gray-900">{value}</dd>
                                         </div>
-                                    </div>
-                                )
-                        }
-                    </ChartCard>
+                                    ))}
+                                </dl>
+                            </Card>
+                        </div>
 
-                    {/* 7. Pass Rate Distribution by Academic Year */}
-                    <ChartCard
-                        title="Pass Rate Distribution by Academic Year"
-                        icon={BookOpen}
-                        desc="Funded, in-progress and rejected proposals per year"
-                        bg="bg-amber-50"
-                        color="text-amber-600"
-                    >
-                        {!yearDistribution
-                            ? <Skeleton />
-                            : yearDistribution.length === 0
-                                ? <Empty />
-                                : (
-                                    <ResponsiveContainer width="100%" height={280}>
-                                        <BarChart data={yearDistribution} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
-                                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                                            <XAxis dataKey="academic_year" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                                            <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                                            <Tooltip {...CHART_STYLE} />
+                        {/* Research type + gender */}
+                        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+                            <Card icon={FlaskConical} title="By Research Type" action={<OutcomeLegend />}>
+                                <BreakdownTable rows={data.researchTypes} nameKey="research_type" />
+                            </Card>
+                            <Card icon={Users} title="By PI Gender" desc="Principal investigator of each proposal">
+                                <BreakdownTable rows={data.gender} nameKey="gender" format={titleCase} />
+                            </Card>
+                        </div>
+
+                        {/* Forecast */}
+                        <Card icon={TrendingUp} title="Submissions Forecast" desc="Trend from completed academic years only">
+                            {data.forecast.available ? (
+                                <>
+                                    <ResponsiveContainer width="100%" height={240}>
+                                        <BarChart
+                                            data={[
+                                                ...data.forecast.history.map((h) => ({ year: h.year, actual: h.actual })),
+                                                ...data.forecast.predictions.map((p) => ({ year: p.year, predicted: p.predicted })),
+                                            ]}
+                                            margin={{ top: 4, right: 8, left: -12, bottom: 0 }}
+                                        >
+                                            <CartesianGrid vertical={false} stroke="#f1f5f9" />
+                                            <XAxis dataKey="year" tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} axisLine={false} />
+                                            <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} axisLine={false} />
+                                            <Tooltip {...TOOLTIP} />
                                             <Legend wrapperStyle={{ fontSize: 12 }} />
-                                            <Bar dataKey="funded" name="Funded" stackId="a" fill="#10b981" />
-                                            <Bar dataKey="in_progress" name="In Progress" stackId="a" fill="#3b82f6" />
-                                            <Bar dataKey="rejected" name="Rejected" stackId="a" fill="#f43f5e" radius={[4, 4, 0, 0]} />
+                                            <Bar dataKey="actual" name="Submitted" fill={C.primary} radius={[4, 4, 0, 0]} />
+                                            <Bar dataKey="predicted" name="Forecast" fill="#c7d2fe" stroke={C.primary} strokeDasharray="4 3" radius={[4, 4, 0, 0]} />
                                         </BarChart>
                                     </ResponsiveContainer>
-                                )
-                        }
-                    </ChartCard>
-                </div>
-
-                {/* 9. Predictive Analysis Model */}
-                <ChartCard
-                    title="Predictive Analysis Model"
-                    icon={Brain}
-                    desc="Linear regression trend forecast for proposal applications"
-                    bg="bg-violet-50"
-                    color="text-violet-600"
-                >
-                    {!predictive
-                        ? <Skeleton height={380} />
-                        : (() => {
-                            const allData = [
-                                ...predictive.historical.map(h => ({
-                                    year: h.year,
-                                    actual: h.actual,
-                                    trend: h.trend,
-                                })),
-                                ...predictive.predictions.map(p => ({
-                                    year: p.year,
-                                    predicted: p.predicted,
-                                    trend: p.trend,
-                                })),
-                            ]
-                            const splitYear = predictive.historical[predictive.historical.length - 1]?.year
-
-                            return (
-                                <div className="space-y-4">
-                                    {allData.length === 0
-                                        ? <Empty />
-                                        : (
-                                            <ResponsiveContainer width="100%" height={300}>
-                                                <ComposedChart data={allData} margin={{ top: 4, right: 16, left: 0, bottom: 0 }}>
-                                                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                                                    <XAxis dataKey="year" tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                                                    <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
-                                                    <Tooltip {...CHART_STYLE} />
-                                                    <Legend wrapperStyle={{ fontSize: 12 }} />
-                                                    {splitYear && (
-                                                        <ReferenceLine
-                                                            x={splitYear}
-                                                            stroke="#d1d5db"
-                                                            strokeDasharray="4 2"
-                                                            label={{ value: 'Now', position: 'insideTopRight', fontSize: 11, fill: '#9ca3af' }}
-                                                        />
-                                                    )}
-                                                    <Bar dataKey="actual" name="Historical" fill="#6366f1" radius={[4, 4, 0, 0]} />
-                                                    <Bar dataKey="predicted" name="Predicted" fill="#a855f7" radius={[4, 4, 0, 0]} opacity={0.65} />
-                                                    <Line
-                                                        type="monotone"
-                                                        dataKey="trend"
-                                                        name="Trend Line"
-                                                        stroke="#f59e0b"
-                                                        strokeWidth={2.5}
-                                                        strokeDasharray="5 3"
-                                                        dot={false}
-                                                    />
-                                                </ComposedChart>
-                                            </ResponsiveContainer>
-                                        )
-                                    }
-
-                                    {predictive.equation && (
-                                        <div className="flex flex-wrap gap-3 pt-3 border-t border-gray-50">
-                                            <div className="bg-violet-50 rounded-xl px-3 py-2.5 text-xs">
-                                                <span className="text-violet-500 font-medium">Slope: </span>
-                                                <span className="text-violet-900 font-bold">
-                                                    {predictive.equation.slope > 0 ? '+' : ''}
-                                                    {predictive.equation.slope} proposals/yr
-                                                </span>
-                                            </div>
-                                            {predictive.r_squared != null && (
-                                                <div className="bg-amber-50 rounded-xl px-3 py-2.5 text-xs">
-                                                    <span className="text-amber-500 font-medium">R² fit quality: </span>
-                                                    <span className="text-amber-900 font-bold">{predictive.r_squared}</span>
-                                                </div>
-                                            )}
-                                            {predictive.predictions.map((p, i) => (
-                                                <div key={i} className="bg-purple-50 rounded-xl px-3 py-2.5 text-xs">
-                                                    <span className="text-purple-500 font-medium">{p.year}: </span>
-                                                    <span className="text-purple-900 font-bold">~{p.predicted} proposals</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                    <p className="text-xs text-gray-400">
-                                        * Predictions are based on a simple linear regression model and should be used as estimates only.
+                                    <p className="mt-3 text-xs text-gray-500">
+                                        Trend: {data.forecast.slope > 0 ? '+' : ''}{data.forecast.slope} proposals per year · fit {data.forecast.r_squared} (1 = perfect).
+                                        A simple straight-line estimate — use it as a guide for planning, not a commitment.
                                     </p>
+                                </>
+                            ) : (
+                                <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                                    <Info size={16} className="mt-0.5 shrink-0 text-slate-400" />
+                                    <span>No forecast yet. {data.forecast.reason}</span>
                                 </div>
-                            )
-                        })()
-                    }
-                </ChartCard>
-
+                            )}
+                        </Card>
+                    </div>
+                )}
             </div>
         </AppLayout>
     )
