@@ -27,10 +27,13 @@
     .counts .lbl { font-size: 9.5px; color: #6b7280; text-transform: uppercase; letter-spacing: 1px; }
     .footer { position: absolute; left: 46pt; right: 46pt; bottom: 18pt; }
     .footer table { width: 100%; }
-    .sig { text-align: center; width: 40%; }
+    .sig { text-align: center; width: 40%; vertical-align: bottom; }
     .sig-line { border-top: 1px solid #374151; margin: 0 auto 4px; width: 80%; padding-top: 4px; font-size: 12px; font-weight: bold; }
     .sig-title { font-size: 10.5px; color: #6b7280; }
-    .verify { text-align: right; font-size: 9px; color: #6b7280; vertical-align: bottom; }
+    .verify { text-align: right; font-size: 9px; line-height: 1.5; color: #6b7280; vertical-align: bottom; padding-right: 8pt; }
+    .verify strong { color: #1e3a8a; font-size: 9.5px; letter-spacing: 0.5px; }
+    .qr { width: 64pt; vertical-align: bottom; text-align: right; }
+    .qr img { width: 64pt; height: 64pt; border: 1pt solid #e5e7eb; padding: 2pt; background: #fff; }
     .code { font-family: 'DejaVu Sans Mono', monospace; font-size: 11px; color: #111827; letter-spacing: 1px; }
 </style>
 </head>
@@ -72,9 +75,11 @@
             <div class="sig-title">{{ $signatoryTitle }}</div>
         </td>
         <td class="verify">
+            <strong>SCAN TO VERIFY</strong><br>
             Issued {{ $certificate->issued_at->format('F j, Y') }} · Certificate no. <span class="code">{{ $certificate->code }}</span><br>
-            Verify at {{ $verifyUrl }}
+            {{ $verifyUrl }}
         </td>
+        <td class="qr"><img src="{{ $qrCode }}" alt="Verification QR code"></td>
     </tr></table></div>
 </div></div></div>
 </body>

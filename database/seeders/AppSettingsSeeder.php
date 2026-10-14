@@ -104,7 +104,7 @@ class AppSettingsSeeder extends Seeder
             ['key' => 'progress_report_interval_months', 'value' => '3', 'type' => 'number', 'group' => 'thresholds'],
             // Who signs reviewer certificates of service.
             ['key' => 'certificate_signatory_name', 'value' => '', 'type' => 'string', 'group' => 'general'],
-            ['key' => 'certificate_signatory_title', 'value' => 'Director, Research & Technology Transfer', 'type' => 'string', 'group' => 'general'],
+            ['key' => 'certificate_signatory_title', 'value' => 'Vice President, Research & Technology Transfer', 'type' => 'string', 'group' => 'general'],
 
             // Audit & Logging
             ['key' => 'audit_log_retention_days', 'value' => '365',  'type' => 'number',  'group' => 'audit'],

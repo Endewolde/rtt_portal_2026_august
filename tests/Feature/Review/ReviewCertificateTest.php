@@ -8,6 +8,8 @@ use App\Models\ProposalCall;
 use App\Models\ReviewAssignment;
 use App\Models\ReviewCertificate;
 use App\Models\User;
+use App\Services\ReviewCertificateService;
+use chillerlan\QRCode\QRCode;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -99,4 +101,19 @@ test('anyone can verify a certificate, which never names the proposals', functio
     expect($response->getContent())->not->toContain('Secret Proposal');
 
     $this->getJson('/api/v1/certificates/verify/NOPE-NOPE-NOPE')->assertNotFound();
+});
+
+test('the QR code on the certificate opens its public verification page', function () {
+    $certificate = new ReviewCertificate(['code' => 'RC26-ABCD-EFGH']);
+    $service = app(ReviewCertificateService::class);
+    $url = $service->verifyUrl($certificate);
+
+    $png = base64_decode(explode(',', $service->qrCode($url), 2)[1]);
+
+    expect($url)->toEndWith('/certificates/verify/RC26-ABCD-EFGH')
+        ->and((string) (new QRCode)->readFromBlob($png))->toBe($url);
+});
+
+test('certificates are signed by the Vice President by default', function () {
+    expect(ReviewCertificateService::DEFAULT_SIGNATORY_TITLE)->toBe('Vice President, Research & Technology Transfer');
 });

@@ -5,6 +5,10 @@ namespace App\Services;
 use App\Models\ReviewCertificate;
 use App\Models\User;
 use Barryvdh\DomPDF\Facade\Pdf;
+use chillerlan\QRCode\Common\EccLevel;
+use chillerlan\QRCode\Output\QRGdImagePNG;
+use chillerlan\QRCode\QRCode;
+use chillerlan\QRCode\QROptions;
 use Illuminate\Http\Response;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -17,6 +21,8 @@ use Illuminate\Support\Str;
  */
 class ReviewCertificateService
 {
+    public const DEFAULT_SIGNATORY_TITLE = 'Vice President, Research & Technology Transfer';
+
     /**
      * Completed reviews per academic year for this reviewer.
      *
@@ -75,6 +81,7 @@ class ReviewCertificateService
         $settings = DB::table('app_settings')
             ->whereIn('key', ['organization_name', 'system_name', 'system_logo', 'certificate_signatory_name', 'certificate_signatory_title'])
             ->pluck('value', 'key');
+        $verifyUrl = $this->verifyUrl($certificate);
 
         $pdf = Pdf::loadView('pdf.review_certificate', [
             'certificate' => $certificate,
@@ -84,13 +91,31 @@ class ReviewCertificateService
             'systemName' => $settings['system_name'] ?? 'RTT Platform',
             'logo' => $this->embeddedLogo($settings['system_logo'] ?? null),
             'signatoryName' => $settings['certificate_signatory_name'] ?? '',
-            'signatoryTitle' => $settings['certificate_signatory_title'] ?? 'Director, Research & Technology Transfer',
-            'verifyUrl' => rtrim(config('app.url'), '/')."/certificates/verify/{$certificate->code}",
+            'signatoryTitle' => $settings['certificate_signatory_title'] ?? self::DEFAULT_SIGNATORY_TITLE,
+            'verifyUrl' => $verifyUrl,
+            'qrCode' => $this->qrCode($verifyUrl),
         ])->setPaper('a4', 'landscape');
 
         $file = 'review-certificate-'.Str::slug($certificate->academic_year).'.pdf';
 
         return $pdf->download($file);
+    }
+
+    public function verifyUrl(ReviewCertificate $certificate): string
+    {
+        return rtrim(config('app.url'), '/')."/certificates/verify/{$certificate->code}";
+    }
+
+    /** A scannable link to the public verification page, as a PNG data URI for dompdf. */
+    public function qrCode(string $url): string
+    {
+        return (new QRCode(new QROptions([
+            'outputInterface' => QRGdImagePNG::class,
+            'eccLevel' => EccLevel::M,
+            'scale' => 6,
+            'quietzoneSize' => 1,
+            'outputBase64' => true,
+        ])))->render($url);
     }
 
     /** dompdf can't fetch remote images — embed the uploaded logo as a data URI. */
