@@ -22,8 +22,8 @@ function aiscore_makeProposal(): Proposal
     $admin = User::factory()->create();
     $admin->assignRole('central_officer');
 
-    $college = College::create(['name' => 'AI College '.rand(), 'code' => 'AI'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'AID'.rand(10, 99)]);
+    $college = College::create(['name' => 'AI College '.rand(), 'code' => 'AI'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'AID'.rand(10000, 99999)]);
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research',
         'title' => 'AI Call', 'slug' => 'ai-'.rand(10000, 99999),

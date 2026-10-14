@@ -19,8 +19,8 @@ function mets_makeProposal(string $category = 'research'): Proposal
 {
     $central = User::factory()->create();
     $central->assignRole('central_officer');
-    $college = College::create(['name' => 'METS College '.rand(), 'code' => 'MS'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'MSD'.rand(10, 99)]);
+    $college = College::create(['name' => 'METS College '.rand(), 'code' => 'MS'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'MSD'.rand(10000, 99999)]);
     $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
     $pi->assignRole('pi');
     $call = ProposalCall::create([

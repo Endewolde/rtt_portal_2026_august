@@ -34,8 +34,8 @@ function dash_makeUser(string $role, array $attrs = []): User
 
 function dash_makeCollegeUser(string $role): User
 {
-    $college = College::create(['name' => 'Dash C '.rand(), 'code' => 'DC'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'DD'.rand(10, 99)]);
+    $college = College::create(['name' => 'Dash C '.rand(), 'code' => 'DC'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'DD'.rand(10000, 99999)]);
 
     return dash_makeUser($role, ['college_id' => $college->id, 'department_id' => $dept->id]);
 }

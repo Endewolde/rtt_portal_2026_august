@@ -24,8 +24,8 @@ beforeEach(function () {
 
 function coi_assignment(): array
 {
-    $college = College::create(['name' => 'COI College '.rand(), 'code' => 'COI'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'COID'.rand(10, 99)]);
+    $college = College::create(['name' => 'COI College '.rand(), 'code' => 'COI'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'COID'.rand(10000, 99999)]);
     $officer = User::factory()->create();
     $officer->assignRole('central_officer');
     $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);

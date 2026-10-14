@@ -25,8 +25,8 @@ function adal_makeProposal(string $status): array
     $pi = User::factory()->create();
     $pi->assignRole('staff');
 
-    $college = College::create(['name' => 'C'.rand(), 'code' => 'AD'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'ADD'.rand(10, 99)]);
+    $college = College::create(['name' => 'C'.rand(), 'code' => 'AD'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'ADD'.rand(10000, 99999)]);
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research',
         'title' => 'Call', 'slug' => 'ad-'.rand(10000, 99999),

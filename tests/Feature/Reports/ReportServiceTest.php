@@ -27,8 +27,8 @@ beforeEach(function () {
 
 function rpt_makeBase(): array
 {
-    $college = College::create(['name' => 'Rpt College '.rand(), 'code' => 'RP'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'RD'.rand(10, 99)]);
+    $college = College::create(['name' => 'Rpt College '.rand(), 'code' => 'RP'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'RD'.rand(10000, 99999)]);
     $central = User::factory()->create();
     $central->assignRole('central_officer');
 
@@ -281,8 +281,8 @@ test('report with date range under 3 months runs synchronously', function () {
 
 test('proposal_count_by_college filters down to a single college when college_id is passed', function () {
     [$collegeA, $deptA, $central, $callA] = rpt_makeBase();
-    $collegeB = College::create(['name' => 'Rpt College B '.rand(), 'code' => 'RB'.rand(10, 99)]);
-    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'RD'.rand(10, 99)]);
+    $collegeB = College::create(['name' => 'Rpt College B '.rand(), 'code' => 'RB'.rand(10000, 99999)]);
+    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'RD'.rand(10000, 99999)]);
 
     rpt_proposal($collegeA, $deptA, $callA);
     rpt_proposal($collegeB, $deptB, $callA);
@@ -296,7 +296,7 @@ test('proposal_count_by_college filters down to a single college when college_id
 
 test('college_performance filters down to a single college when college_id is passed', function () {
     [$collegeA] = rpt_makeBase();
-    $collegeB = College::create(['name' => 'Rpt College B '.rand(), 'code' => 'RB2'.rand(10, 99)]);
+    $collegeB = College::create(['name' => 'Rpt College B '.rand(), 'code' => 'RB2'.rand(10000, 99999)]);
 
     $result = app(ReportService::class)->runReport('college_performance', ['college_id' => $collegeA->id]);
 
@@ -307,8 +307,8 @@ test('college_performance filters down to a single college when college_id is pa
 
 test('reviewer_workload only counts assignments for proposals in the given college', function () {
     [$collegeA, $deptA, $central, $callA] = rpt_makeBase();
-    $collegeB = College::create(['name' => 'Rpt College B '.rand(), 'code' => 'RB3'.rand(10, 99)]);
-    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'RD3'.rand(10, 99)]);
+    $collegeB = College::create(['name' => 'Rpt College B '.rand(), 'code' => 'RB3'.rand(10000, 99999)]);
+    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'RD3'.rand(10000, 99999)]);
 
     $proposalA = rpt_proposal($collegeA, $deptA, $callA, 'research', 'under_blind_review');
     $proposalB = rpt_proposal($collegeB, $deptB, $callA, 'research', 'under_blind_review');
@@ -338,8 +338,8 @@ test('reviewer_workload only counts assignments for proposals in the given colle
 
 test('college officer cannot generate a report for another college via the API', function () {
     [$collegeA, $deptA, $central, $callA] = rpt_makeBase();
-    $collegeB = College::create(['name' => 'Rpt College B '.rand(), 'code' => 'RB4'.rand(10, 99)]);
-    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'RD4'.rand(10, 99)]);
+    $collegeB = College::create(['name' => 'Rpt College B '.rand(), 'code' => 'RB4'.rand(10000, 99999)]);
+    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'RD4'.rand(10000, 99999)]);
 
     rpt_proposal($collegeA, $deptA, $callA);
     rpt_proposal($collegeB, $deptB, $callA);
@@ -369,7 +369,7 @@ test('a user without a reporting role cannot generate reports', function () {
 
 test('a user cannot view another user\'s report snapshot unless admin-tier', function () {
     [$collegeA] = rpt_makeBase();
-    $collegeB = College::create(['name' => 'Rpt College B '.rand(), 'code' => 'RB5'.rand(10, 99)]);
+    $collegeB = College::create(['name' => 'Rpt College B '.rand(), 'code' => 'RB5'.rand(10000, 99999)]);
 
     $officerA = User::factory()->create(['college_id' => $collegeA->id]);
     $officerA->assignRole('college_officer');
@@ -419,8 +419,8 @@ test('complaint_summary counts totals, resolution outcomes, and levels correctly
 
 test('complaint_summary filters down to a single college when college_id is passed', function () {
     [$collegeA, $deptA, $central, $callA] = rpt_makeBase();
-    $collegeB = College::create(['name' => 'Rpt College B '.rand(), 'code' => 'RC'.rand(10, 99)]);
-    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'RDC'.rand(10, 99)]);
+    $collegeB = College::create(['name' => 'Rpt College B '.rand(), 'code' => 'RC'.rand(10000, 99999)]);
+    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'RDC'.rand(10000, 99999)]);
 
     $proposalA = rpt_proposal($collegeA, $deptA, $callA);
     $proposalB = rpt_proposal($collegeB, $deptB, $callA);
@@ -436,8 +436,8 @@ test('complaint_summary filters down to a single college when college_id is pass
 
 test('college officer generating a complaint report via the API only sees their own college', function () {
     [$collegeA, $deptA, $central, $callA] = rpt_makeBase();
-    $collegeB = College::create(['name' => 'Rpt College B '.rand(), 'code' => 'RD'.rand(10, 99)]);
-    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'RDD'.rand(10, 99)]);
+    $collegeB = College::create(['name' => 'Rpt College B '.rand(), 'code' => 'RD'.rand(10000, 99999)]);
+    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'RDD'.rand(10000, 99999)]);
 
     $proposalA = rpt_proposal($collegeA, $deptA, $callA);
     $proposalB = rpt_proposal($collegeB, $deptB, $callA);
@@ -597,8 +597,8 @@ test('custom_builder defaults to a plain count when no metrics are chosen', func
 
 test('college officer using the custom builder via the API only sees their own college', function () {
     [$collegeA, $deptA, $central, $callA] = rpt_makeBase();
-    $collegeB = College::create(['name' => 'Rpt College B '.rand(), 'code' => 'RE'.rand(10, 99)]);
-    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'RDE'.rand(10, 99)]);
+    $collegeB = College::create(['name' => 'Rpt College B '.rand(), 'code' => 'RE'.rand(10000, 99999)]);
+    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'RDE'.rand(10000, 99999)]);
 
     rpt_proposal($collegeA, $deptA, $callA);
     rpt_proposal($collegeB, $deptB, $callA);
@@ -656,7 +656,7 @@ test('a custom_builder snapshot can be exported to excel', function () {
 
 test('a user cannot export another user\'s report snapshot unless admin-tier', function () {
     [$collegeA, $deptA, $central, $callA] = rpt_makeBase();
-    $collegeB = College::create(['name' => 'Rpt College B '.rand(), 'code' => 'RF'.rand(10, 99)]);
+    $collegeB = College::create(['name' => 'Rpt College B '.rand(), 'code' => 'RF'.rand(10000, 99999)]);
 
     rpt_proposal($collegeA, $deptA, $callA);
 

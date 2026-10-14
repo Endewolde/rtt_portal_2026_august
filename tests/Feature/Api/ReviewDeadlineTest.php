@@ -21,8 +21,8 @@ beforeEach(function () {
 
 function rd_makeBase(): array
 {
-    $college = College::create(['name' => 'RD College '.rand(), 'code' => 'RD'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'RDD'.rand(10, 99)]);
+    $college = College::create(['name' => 'RD College '.rand(), 'code' => 'RD'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'RDD'.rand(10000, 99999)]);
     $central = User::factory()->create();
     $central->assignRole('central_officer');
 
@@ -191,8 +191,8 @@ test('a non-admin cannot send a manual reminder', function () {
 
 test('a college officer only sees assignments from their own college', function () {
     [$collegeA, $deptA, $central, $callA] = rd_makeBase();
-    $collegeB = College::create(['name' => 'RD College B '.rand(), 'code' => 'RB'.rand(10, 99)]);
-    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'RBD'.rand(10, 99)]);
+    $collegeB = College::create(['name' => 'RD College B '.rand(), 'code' => 'RB'.rand(10000, 99999)]);
+    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'RBD'.rand(10000, 99999)]);
 
     rd_assignment($collegeA, $deptA, $callA, now()->addDays(1)->toDateString());
     rd_assignment($collegeB, $deptB, $callA, now()->addDays(1)->toDateString());
@@ -210,8 +210,8 @@ test('a college officer only sees assignments from their own college', function 
 
 test('a college officer cannot remind a reviewer outside their college', function () {
     [$collegeA, $deptA, $central, $callA] = rd_makeBase();
-    $collegeB = College::create(['name' => 'RD College C '.rand(), 'code' => 'RC'.rand(10, 99)]);
-    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'RCD'.rand(10, 99)]);
+    $collegeB = College::create(['name' => 'RD College C '.rand(), 'code' => 'RC'.rand(10000, 99999)]);
+    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'RCD'.rand(10000, 99999)]);
     $assignment = rd_assignment($collegeB, $deptB, $callA, now()->addDays(1)->toDateString());
 
     $officerA = User::factory()->create(['college_id' => $collegeA->id]);
@@ -240,8 +240,8 @@ test('bulk remind sends a reminder for every valid id and reports the summary', 
 
 test('bulk remind reports out-of-scope items separately for a college officer without aborting the batch', function () {
     [$collegeA, $deptA, $central, $callA] = rd_makeBase();
-    $collegeB = College::create(['name' => 'RD College D '.rand(), 'code' => 'RE'.rand(10, 99)]);
-    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'RED'.rand(10, 99)]);
+    $collegeB = College::create(['name' => 'RD College D '.rand(), 'code' => 'RE'.rand(10000, 99999)]);
+    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'RED'.rand(10000, 99999)]);
 
     $inScope = rd_assignment($collegeA, $deptA, $callA, now()->addDays(1)->toDateString());
     $outOfScope = rd_assignment($collegeB, $deptB, $callA, now()->addDays(1)->toDateString());

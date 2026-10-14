@@ -31,8 +31,8 @@ beforeEach(function () {
 
 function conflict_makeProposalWithMembers(): array
 {
-    $college = College::create(['name' => 'Conflict College '.rand(), 'code' => 'CC'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'CF'.rand(10, 99)]);
+    $college = College::create(['name' => 'Conflict College '.rand(), 'code' => 'CC'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'CF'.rand(10000, 99999)]);
 
     $central = User::factory()->create();
     $central->assignRole('central_officer');

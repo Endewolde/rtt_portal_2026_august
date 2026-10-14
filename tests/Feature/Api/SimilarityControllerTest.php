@@ -18,8 +18,8 @@ beforeEach(function () {
 
 function sc_proposal(User $creator, string $category = 'research'): Proposal
 {
-    $college = College::create(['name' => 'SC College '.rand(), 'code' => 'SC'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'SCD'.rand(10, 99)]);
+    $college = College::create(['name' => 'SC College '.rand(), 'code' => 'SC'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'SCD'.rand(10000, 99999)]);
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => $category,
         'title' => 'Call', 'slug' => 'sc-'.rand(10000, 99999),

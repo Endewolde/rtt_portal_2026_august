@@ -29,8 +29,8 @@ function rr_makeAssignment(string $dueDate, string $status = 'pending'): ReviewA
     $reviewer = User::factory()->create();
     $reviewer->assignRole('reviewer');
 
-    $college = College::create(['name' => 'RR College '.rand(), 'code' => 'RR'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'RRD'.rand(10, 99)]);
+    $college = College::create(['name' => 'RR College '.rand(), 'code' => 'RR'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'RRD'.rand(10000, 99999)]);
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research',
         'title' => 'RR Call', 'slug' => 'rr-'.rand(10000, 99999),

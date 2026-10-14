@@ -23,8 +23,8 @@ beforeEach(function () {
 
 function alloc_makeBase(): array
 {
-    $college = College::create(['name' => 'Alloc College '.rand(), 'code' => 'AC'.rand(10, 99)]);
-    $dept    = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'AD'.rand(10, 99)]);
+    $college = College::create(['name' => 'Alloc College '.rand(), 'code' => 'AC'.rand(10000, 99999)]);
+    $dept    = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'AD'.rand(10000, 99999)]);
 
     $central = User::factory()->create();
     $central->assignRole('central_officer');

@@ -109,7 +109,7 @@ test('a non-college_officer role cannot file an approval report', function () {
 
 test('a college_officer cannot report a proposal from a different college', function () {
     [$proposal, $college] = par_makeProposal('under_blind_review');
-    $otherCollege = College::create(['name' => 'Other '.rand(), 'code' => 'OC'.rand(10, 99)]);
+    $otherCollege = College::create(['name' => 'Other '.rand(), 'code' => 'OC'.rand(10000, 99999)]);
     $officer = User::factory()->create(['college_id' => $otherCollege->id]);
     $officer->assignRole('college_officer');
 

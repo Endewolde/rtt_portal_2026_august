@@ -26,8 +26,8 @@ beforeEach(function () {
 
 function op_makeBase(): array
 {
-    $college = College::create(['name' => 'OP College '.rand(), 'code' => 'OP'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'OPD'.rand(10, 99)]);
+    $college = College::create(['name' => 'OP College '.rand(), 'code' => 'OP'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'OPD'.rand(10000, 99999)]);
     $central = User::factory()->create();
     $central->assignRole('central_officer');
 
@@ -147,8 +147,8 @@ test('archiving a proposal that is not yet completed is rejected', function () {
 
 test('a college officer only sees ongoing proposals from their own college, even with a different college_id requested', function () {
     [$collegeA, $deptA, $central, $callA] = op_makeBase();
-    $collegeB = College::create(['name' => 'OP College B '.rand(), 'code' => 'OB'.rand(10, 99)]);
-    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'OBD'.rand(10, 99)]);
+    $collegeB = College::create(['name' => 'OP College B '.rand(), 'code' => 'OB'.rand(10000, 99999)]);
+    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'OBD'.rand(10000, 99999)]);
 
     op_proposal($collegeA, $deptA, $callA, 'funded');
     op_proposal($collegeB, $deptB, $callA, 'funded');
@@ -823,7 +823,7 @@ test('a second legacy creation for the same category and academic year reuses th
 
 test('creating a legacy proposal rejects a department that does not belong to the selected college', function () {
     [$college, $dept, $central, $call] = op_makeBase();
-    $otherCollege = College::create(['name' => 'OP College Other '.rand(), 'code' => 'OO'.rand(10, 99)]);
+    $otherCollege = College::create(['name' => 'OP College Other '.rand(), 'code' => 'OO'.rand(10000, 99999)]);
     $superAdmin = User::factory()->create();
     $superAdmin->assignRole('super_admin');
     $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);

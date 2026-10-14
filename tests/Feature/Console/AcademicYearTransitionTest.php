@@ -24,8 +24,8 @@ function ayt_base(): array
     $superAdmin = User::factory()->create();
     $superAdmin->assignRole('super_admin');
 
-    $college = College::create(['name' => 'AYT College '.rand(), 'code' => 'AYT'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'AYTD'.rand(10, 99)]);
+    $college = College::create(['name' => 'AYT College '.rand(), 'code' => 'AYT'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'AYTD'.rand(10000, 99999)]);
 
     return [$superAdmin, $college, $dept];
 }

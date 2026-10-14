@@ -28,8 +28,8 @@ beforeEach(function () {
 
 function disb_makeApprovedRequest(float $total = 50000.00): array
 {
-    $college = College::create(['name' => 'Disb College '.rand(), 'code' => 'DC'.rand(10, 99)]);
-    $dept    = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'DD'.rand(10, 99)]);
+    $college = College::create(['name' => 'Disb College '.rand(), 'code' => 'DC'.rand(10000, 99999)]);
+    $dept    = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'DD'.rand(10000, 99999)]);
 
     $central = User::factory()->create();
     $central->assignRole('central_officer');

@@ -27,8 +27,8 @@ beforeEach(function () {
 
 function comp_makeBase(): array
 {
-    $college = College::create(['name' => 'Comp College '.rand(), 'code' => 'CP'.rand(10, 99)]);
-    $dept    = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'CD'.rand(10, 99)]);
+    $college = College::create(['name' => 'Comp College '.rand(), 'code' => 'CP'.rand(10000, 99999)]);
+    $dept    = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'CD'.rand(10000, 99999)]);
 
     $central       = User::factory()->create(); $central->assignRole('central_officer');
     $collegeAdmin  = User::factory()->create(['college_id' => $college->id]); $collegeAdmin->assignRole('college_officer');

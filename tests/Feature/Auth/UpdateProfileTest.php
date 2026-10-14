@@ -14,8 +14,8 @@ beforeEach(function () {
 
 function upt_makeCollegeAndDept(): array
 {
-    $college = College::create(['name' => 'C'.rand(), 'code' => 'UP'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'UPD'.rand(10, 99)]);
+    $college = College::create(['name' => 'C'.rand(), 'code' => 'UP'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'UPD'.rand(10000, 99999)]);
 
     return [$college, $dept];
 }

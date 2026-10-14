@@ -20,8 +20,8 @@ beforeEach(function () {
 
 function ac_makeBase(): array
 {
-    $college = College::create(['name' => 'AC College '.rand(), 'code' => 'AC'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'AD'.rand(10, 99)]);
+    $college = College::create(['name' => 'AC College '.rand(), 'code' => 'AC'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'AD'.rand(10000, 99999)]);
     $central = User::factory()->create();
     $central->assignRole('central_officer');
 
@@ -100,8 +100,8 @@ test('proposal_funding_queue matches exactly what /admin/funding displays (statu
 
 test('overdue_reviews only counts a college officer\'s own college', function () {
     [$collegeA, $deptA, $central, $callA] = ac_makeBase();
-    $collegeB = College::create(['name' => 'AC College B '.rand(), 'code' => 'AB'.rand(10, 99)]);
-    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'ABD'.rand(10, 99)]);
+    $collegeB = College::create(['name' => 'AC College B '.rand(), 'code' => 'AB'.rand(10000, 99999)]);
+    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'ABD'.rand(10000, 99999)]);
     $type = EvaluationType::create(['name' => 'blind_review_ac_'.rand(1000, 9999), 'label' => 'Blind Review', 'proposal_category' => 'research', 'is_active' => true]);
 
     $reviewerA = User::factory()->create();
@@ -131,8 +131,8 @@ test('overdue_reviews only counts a college officer\'s own college', function ()
 
 test('ongoing_awaiting_midterm counts funded proposals with no midterm evaluation yet, scoped by college', function () {
     [$collegeA, $deptA, $central, $callA] = ac_makeBase();
-    $collegeB = College::create(['name' => 'AC College E '.rand(), 'code' => 'AE'.rand(10, 99)]);
-    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'AED'.rand(10, 99)]);
+    $collegeB = College::create(['name' => 'AC College E '.rand(), 'code' => 'AE'.rand(10000, 99999)]);
+    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'AED'.rand(10000, 99999)]);
 
     ac_proposal($collegeA, $deptA, $callA, 'funded');
     // Not counted: already has a midterm evaluation scheduled.
@@ -155,8 +155,8 @@ test('ongoing_awaiting_midterm counts funded proposals with no midterm evaluatio
 
 test('contracts_pending_review counts only contract_status=pending, scoped by college', function () {
     [$collegeA, $deptA, $central, $callA] = ac_makeBase();
-    $collegeB = College::create(['name' => 'AC College F '.rand(), 'code' => 'AF'.rand(10, 99)]);
-    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'AFD'.rand(10, 99)]);
+    $collegeB = College::create(['name' => 'AC College F '.rand(), 'code' => 'AF'.rand(10000, 99999)]);
+    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'AFD'.rand(10000, 99999)]);
 
     ac_proposal($collegeA, $deptA, $callA, 'funded')->update(['contract_status' => 'pending']);
     ac_proposal($collegeA, $deptA, $callA, 'funded')->update(['contract_status' => 'approved']);
@@ -174,8 +174,8 @@ test('contracts_pending_review counts only contract_status=pending, scoped by co
 
 test('coi_conflicts_pending counts only unresolved reported conflicts, scoped by college', function () {
     [$collegeA, $deptA, $central, $callA] = ac_makeBase();
-    $collegeB = College::create(['name' => 'AC College G '.rand(), 'code' => 'AG'.rand(10, 99)]);
-    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'AGD'.rand(10, 99)]);
+    $collegeB = College::create(['name' => 'AC College G '.rand(), 'code' => 'AG'.rand(10000, 99999)]);
+    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'AGD'.rand(10000, 99999)]);
     $type = EvaluationType::create(['name' => 'blind_review_coi_ac_'.rand(1000, 9999), 'label' => 'Blind Review', 'proposal_category' => 'research', 'is_active' => true]);
     $reviewer = User::factory()->create();
     $reviewer->assignRole('reviewer');
@@ -251,8 +251,8 @@ test('deadline_extensions_pending counts only pending requests, scoped by catego
 
 test('ethical_clearances_pending counts only submitted (awaiting review) proposals, scoped by college', function () {
     [$collegeA, $deptA, $central, $callA] = ac_makeBase();
-    $collegeB = College::create(['name' => 'AC College H '.rand(), 'code' => 'AH'.rand(10, 99)]);
-    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'AHD'.rand(10, 99)]);
+    $collegeB = College::create(['name' => 'AC College H '.rand(), 'code' => 'AH'.rand(10000, 99999)]);
+    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'AHD'.rand(10000, 99999)]);
 
     $submittedProposal = ac_proposal($collegeA, $deptA, $callA, 'draft');
     $submittedProposal->update(['ethical_clearance_required' => true, 'ethical_clearance_status' => 'submitted']);

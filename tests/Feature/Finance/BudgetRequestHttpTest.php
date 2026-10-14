@@ -23,12 +23,12 @@ beforeEach(function () {
 
 function brh_college(string $label = 'A'): College
 {
-    return College::create(['name' => "BRH College {$label} ".rand(), 'code' => 'BRH'.$label.rand(10, 99)]);
+    return College::create(['name' => "BRH College {$label} ".rand(), 'code' => 'BRH'.$label.rand(10000, 99999)]);
 }
 
 function brh_proposal(College $college, User $pi, string $category = 'research'): Proposal
 {
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'BRHD'.rand(10, 99)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'BRHD'.rand(10000, 99999)]);
     $central = User::factory()->create();
     $central->assignRole('central_officer');
 

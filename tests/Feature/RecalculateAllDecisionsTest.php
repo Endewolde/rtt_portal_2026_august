@@ -37,8 +37,8 @@ function rad_makeProposal(string $status): array
     $pi = User::factory()->create();
     $pi->assignRole('staff');
 
-    $college = College::create(['name' => 'C'.rand(), 'code' => 'RD'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'RDD'.rand(10, 99)]);
+    $college = College::create(['name' => 'C'.rand(), 'code' => 'RD'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'RDD'.rand(10000, 99999)]);
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research',
         'title' => 'Call', 'slug' => 'rd-'.rand(10000, 99999),

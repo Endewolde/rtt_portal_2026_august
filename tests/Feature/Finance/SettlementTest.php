@@ -32,8 +32,8 @@ beforeEach(function () {
 
 function sett_makeBase(): array
 {
-    $college = College::create(['name' => 'Sett College '.rand(), 'code' => 'ST'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'SD2'.rand(10, 99)]);
+    $college = College::create(['name' => 'Sett College '.rand(), 'code' => 'ST'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'SD2'.rand(10000, 99999)]);
 
     $central = User::factory()->create();
     $central->assignRole('central_officer');

@@ -32,8 +32,8 @@ function cbr_makeProposal(string $status): array
     $pi = User::factory()->create();
     $pi->assignRole('pi');
 
-    $college = College::create(['name' => 'C'.rand(), 'code' => 'CB'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'CBD'.rand(10, 99)]);
+    $college = College::create(['name' => 'C'.rand(), 'code' => 'CB'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'CBD'.rand(10000, 99999)]);
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research',
         'title' => 'Call', 'slug' => 'cb-'.rand(10000, 99999),

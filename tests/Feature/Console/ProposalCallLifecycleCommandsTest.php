@@ -19,8 +19,8 @@ function plc_base(): array
 {
     $superAdmin = User::factory()->create();
     $superAdmin->assignRole('super_admin');
-    $college = College::create(['name' => 'PLC College '.rand(), 'code' => 'PLC'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'PLCD'.rand(10, 99)]);
+    $college = College::create(['name' => 'PLC College '.rand(), 'code' => 'PLC'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'PLCD'.rand(10000, 99999)]);
 
     return [$superAdmin, $college, $dept];
 }

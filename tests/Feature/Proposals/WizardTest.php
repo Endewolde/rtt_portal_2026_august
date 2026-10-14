@@ -60,8 +60,8 @@ function seedRequiredData(Proposal $proposal, User $pi): void
 
 function makePI(): User
 {
-    $college = College::create(['name' => 'Test College', 'code' => 'TC-'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'Test Dept', 'code' => 'TD-'.rand(10, 99)]);
+    $college = College::create(['name' => 'Test College', 'code' => 'TC-'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'Test Dept', 'code' => 'TD-'.rand(10000, 99999)]);
     $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
     $pi->assignRole('pi');
 
@@ -86,8 +86,8 @@ function makeActiveCall(User $createdBy): ProposalCall
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 test('draft created when user has college but no department auto-assigns first department', function () {
-    $college = College::create(['name' => 'No-Dept College', 'code' => 'NDC-'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'Auto Dept', 'code' => 'AD-'.rand(10, 99)]);
+    $college = College::create(['name' => 'No-Dept College', 'code' => 'NDC-'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'Auto Dept', 'code' => 'AD-'.rand(10000, 99999)]);
     $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => null]);
     $pi->assignRole('pi');
     $service = app(ProposalService::class);

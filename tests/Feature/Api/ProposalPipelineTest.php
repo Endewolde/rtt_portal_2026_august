@@ -16,8 +16,8 @@ beforeEach(function () {
 
 function pp_makeBase(): array
 {
-    $college = College::create(['name' => 'PP College '.rand(), 'code' => 'PP'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'PPD'.rand(10, 99)]);
+    $college = College::create(['name' => 'PP College '.rand(), 'code' => 'PP'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'PPD'.rand(10000, 99999)]);
     $central = User::factory()->create();
     $central->assignRole('central_officer');
 
@@ -98,8 +98,8 @@ test('the status filter narrows the proposal list but stage_counts keeps the ful
 
 test('college officer is scoped to their own college even if a different college_id is requested', function () {
     [$collegeA, $deptA, $central, $callA] = pp_makeBase();
-    $collegeB = College::create(['name' => 'PP College B '.rand(), 'code' => 'PB'.rand(10, 99)]);
-    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'PBD'.rand(10, 99)]);
+    $collegeB = College::create(['name' => 'PP College B '.rand(), 'code' => 'PB'.rand(10000, 99999)]);
+    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'PBD'.rand(10000, 99999)]);
 
     pp_proposal($collegeA, $deptA, $callA, 'research', 'submitted');
     pp_proposal($collegeB, $deptB, $callA, 'research', 'submitted');

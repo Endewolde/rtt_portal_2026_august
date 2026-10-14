@@ -24,8 +24,8 @@ beforeEach(function () {
 
 function http_makeBase(): array
 {
-    $college = College::create(['name' => 'HTTP College '.rand(), 'code' => 'HT'.rand(10, 99)]);
-    $dept    = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'HD'.rand(10, 99)]);
+    $college = College::create(['name' => 'HTTP College '.rand(), 'code' => 'HT'.rand(10000, 99999)]);
+    $dept    = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'HD'.rand(10000, 99999)]);
 
     $central        = User::factory()->create(); $central->assignRole('central_officer');
     $collegeOfficer = User::factory()->create(['college_id' => $college->id]); $collegeOfficer->assignRole('college_officer');
@@ -311,8 +311,8 @@ test('college officer index returns only their college complaints', function () 
     [$proposal, $pi, $central, $collegeOfficer, $college] = http_makeBase();
 
     // Another college with its own proposal and complaint
-    $otherCollege  = College::create(['name' => 'Other '.rand(), 'code' => 'OT'.rand(10, 99)]);
-    $otherDept     = Department::create(['college_id' => $otherCollege->id, 'name' => 'OD', 'code' => 'OD'.rand(10, 99)]);
+    $otherCollege  = College::create(['name' => 'Other '.rand(), 'code' => 'OT'.rand(10000, 99999)]);
+    $otherDept     = Department::create(['college_id' => $otherCollege->id, 'name' => 'OD', 'code' => 'OD'.rand(10000, 99999)]);
     $otherPi       = User::factory()->create(['college_id' => $otherCollege->id, 'department_id' => $otherDept->id]); $otherPi->assignRole('pi');
     $call          = ProposalCall::first();
     $otherProposal = Proposal::create([

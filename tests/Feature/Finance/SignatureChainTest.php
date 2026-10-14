@@ -31,8 +31,8 @@ beforeEach(function () {
 
 function sig_makeRequestWithTwoMembers(): array
 {
-    $college = College::create(['name' => 'Sig College '.rand(), 'code' => 'SG'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'SD'.rand(10, 99)]);
+    $college = College::create(['name' => 'Sig College '.rand(), 'code' => 'SG'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'SD'.rand(10000, 99999)]);
 
     $central = User::factory()->create();
     $central->assignRole('central_officer');

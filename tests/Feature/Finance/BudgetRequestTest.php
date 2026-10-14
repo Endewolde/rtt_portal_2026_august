@@ -32,8 +32,8 @@ beforeEach(function () {
 
 function brq_makeFundedProposal(): array
 {
-    $college = College::create(['name' => 'BRQ College '.rand(), 'code' => 'BR'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'BD'.rand(10, 99)]);
+    $college = College::create(['name' => 'BRQ College '.rand(), 'code' => 'BR'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'BD'.rand(10000, 99999)]);
 
     $central = User::factory()->create();
     $central->assignRole('central_officer');

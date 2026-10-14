@@ -19,8 +19,8 @@ beforeEach(function () {
 });
 
 test('passing blind review notifies the officers who can schedule an open defence session', function () {
-    $college = College::create(['name' => 'BRP College '.rand(), 'code' => 'BR'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'BRD'.rand(10, 99)]);
+    $college = College::create(['name' => 'BRP College '.rand(), 'code' => 'BR'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'BRD'.rand(10000, 99999)]);
 
     $central = User::factory()->create();
     $central->assignRole('central_officer');
@@ -32,7 +32,7 @@ test('passing blind review notifies the officers who can schedule an open defenc
     $collegeOfficer->assignRole('college_officer');
 
     // A college officer at a different college must NOT be notified.
-    $otherCollege = College::create(['name' => 'BRP College B '.rand(), 'code' => 'BRB'.rand(10, 99)]);
+    $otherCollege = College::create(['name' => 'BRP College B '.rand(), 'code' => 'BRB'.rand(10000, 99999)]);
     $otherCollegeOfficer = User::factory()->create(['college_id' => $otherCollege->id]);
     $otherCollegeOfficer->assignRole('college_officer');
 

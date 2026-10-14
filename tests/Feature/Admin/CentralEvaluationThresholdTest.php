@@ -28,8 +28,8 @@ test('central evaluation queue reports the raw point threshold, not a percentage
     $reviewer = User::factory()->create();
     $reviewer->assignRole('reviewer');
 
-    $college = College::create(['name' => 'C'.rand(), 'code' => 'CE'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'CED'.rand(10, 99)]);
+    $college = College::create(['name' => 'C'.rand(), 'code' => 'CE'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'CED'.rand(10000, 99999)]);
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research',
         'title' => 'Call', 'slug' => 'ce-'.rand(10000, 99999),

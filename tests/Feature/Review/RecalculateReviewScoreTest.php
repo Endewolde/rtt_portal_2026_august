@@ -22,8 +22,8 @@ beforeEach(function () {
 
 function rc_makeBase(): array
 {
-    $college = College::create(['name' => 'RC College '.rand(), 'code' => 'RC'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'RCD'.rand(10, 99)]);
+    $college = College::create(['name' => 'RC College '.rand(), 'code' => 'RC'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'RCD'.rand(10000, 99999)]);
     $central = User::factory()->create();
     $central->assignRole('central_officer');
 

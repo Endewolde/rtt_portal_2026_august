@@ -26,8 +26,8 @@ function rebr_makeProposal(string $status): Proposal
     $pi = User::factory()->create();
     $pi->assignRole('pi');
 
-    $college = College::create(['name' => 'C'.rand(), 'code' => 'RE'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'RED'.rand(10, 99)]);
+    $college = College::create(['name' => 'C'.rand(), 'code' => 'RE'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'RED'.rand(10000, 99999)]);
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research',
         'title' => 'Call', 'slug' => 're-'.rand(10000, 99999),

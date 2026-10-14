@@ -89,8 +89,8 @@ test('warms the dashboard cache for every active, verified user without error', 
 test('backfill scores every non-draft proposal without a similarity score yet', function () {
     $superAdmin = User::factory()->create();
     $superAdmin->assignRole('super_admin');
-    $college = College::create(['name' => 'Sim College '.rand(), 'code' => 'SIM'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'SIMD'.rand(10, 99)]);
+    $college = College::create(['name' => 'Sim College '.rand(), 'code' => 'SIM'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'SIMD'.rand(10000, 99999)]);
     $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
     $pi->assignRole('pi');
     $call = ProposalCall::create([

@@ -23,8 +23,8 @@ function rfbr_makeProposal(string $status): Proposal
     $pi = User::factory()->create();
     $pi->assignRole('pi');
 
-    $college = College::create(['name' => 'C'.rand(), 'code' => 'RB'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'RBD'.rand(10, 99)]);
+    $college = College::create(['name' => 'C'.rand(), 'code' => 'RB'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'RBD'.rand(10000, 99999)]);
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research',
         'title' => 'Call', 'slug' => 'rb-'.rand(10000, 99999),

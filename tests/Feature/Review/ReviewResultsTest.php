@@ -27,8 +27,8 @@ test('review results endpoint returns the weighted score and max, not a naive ra
     $reviewer = User::factory()->create();
     $reviewer->assignRole('reviewer');
 
-    $college = College::create(['name' => 'C'.rand(), 'code' => 'RR'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'RRD'.rand(10, 99)]);
+    $college = College::create(['name' => 'C'.rand(), 'code' => 'RR'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'RRD'.rand(10000, 99999)]);
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research',
         'title' => 'Call', 'slug' => 'rr-'.rand(10000, 99999),
@@ -99,8 +99,8 @@ test('review results endpoint falls back to raw points out of raw max when categ
     $reviewer = User::factory()->create();
     $reviewer->assignRole('reviewer');
 
-    $college = College::create(['name' => 'C'.rand(), 'code' => 'RU'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'RUD'.rand(10, 99)]);
+    $college = College::create(['name' => 'C'.rand(), 'code' => 'RU'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'RUD'.rand(10000, 99999)]);
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research',
         'title' => 'Call', 'slug' => 'ru-'.rand(10000, 99999),

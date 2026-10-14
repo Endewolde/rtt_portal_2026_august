@@ -161,8 +161,8 @@ test('reviewer role has review_assignments.view_any so the Assigned Reviews menu
 // ─── College officer scoping: Users / Departments / Report Builder ───────────
 
 test('a college officer only sees users from their own college, even under Administration > Users', function () {
-    $collegeA = College::create(['name' => 'CO College A '.rand(), 'code' => 'CA'.rand(10, 99)]);
-    $collegeB = College::create(['name' => 'CO College B '.rand(), 'code' => 'CB'.rand(10, 99)]);
+    $collegeA = College::create(['name' => 'CO College A '.rand(), 'code' => 'CA'.rand(10000, 99999)]);
+    $collegeB = College::create(['name' => 'CO College B '.rand(), 'code' => 'CB'.rand(10000, 99999)]);
     $officerA = makeUserWithRole('college_officer', $collegeA->id);
     makeUserWithRole('staff', $collegeA->id);
     makeUserWithRole('staff', $collegeB->id);
@@ -175,8 +175,8 @@ test('a college officer only sees users from their own college, even under Admin
 });
 
 test('a college officer\'s user stats count only their own college, not the platform-wide totals', function () {
-    $collegeA = College::create(['name' => 'CO College K '.rand(), 'code' => 'CK'.rand(10, 99)]);
-    $collegeB = College::create(['name' => 'CO College L '.rand(), 'code' => 'CL'.rand(10, 99)]);
+    $collegeA = College::create(['name' => 'CO College K '.rand(), 'code' => 'CK'.rand(10000, 99999)]);
+    $collegeB = College::create(['name' => 'CO College L '.rand(), 'code' => 'CL'.rand(10000, 99999)]);
     $officerA = makeUserWithRole('college_officer', $collegeA->id);
     makeUserWithRole('staff', $collegeA->id);
     makeUserWithRole('staff', $collegeA->id);
@@ -190,10 +190,10 @@ test('a college officer\'s user stats count only their own college, not the plat
 });
 
 test('a college officer only sees departments from their own college, even with a different college_id requested', function () {
-    $collegeA = College::create(['name' => 'CO College C '.rand(), 'code' => 'CC'.rand(10, 99)]);
-    $collegeB = College::create(['name' => 'CO College D '.rand(), 'code' => 'CD'.rand(10, 99)]);
-    Department::create(['college_id' => $collegeA->id, 'name' => 'Dept A', 'code' => 'DA'.rand(10, 99)]);
-    Department::create(['college_id' => $collegeB->id, 'name' => 'Dept B', 'code' => 'DB'.rand(10, 99)]);
+    $collegeA = College::create(['name' => 'CO College C '.rand(), 'code' => 'CC'.rand(10000, 99999)]);
+    $collegeB = College::create(['name' => 'CO College D '.rand(), 'code' => 'CD'.rand(10000, 99999)]);
+    Department::create(['college_id' => $collegeA->id, 'name' => 'Dept A', 'code' => 'DA'.rand(10000, 99999)]);
+    Department::create(['college_id' => $collegeB->id, 'name' => 'Dept B', 'code' => 'DB'.rand(10000, 99999)]);
     $officerA = makeUserWithRole('college_officer', $collegeA->id);
 
     $response = $this->actingAs($officerA, 'sanctum')
@@ -205,7 +205,7 @@ test('a college officer only sees departments from their own college, even with 
 });
 
 test('a college officer cannot create a new department at all', function () {
-    $collegeA = College::create(['name' => 'CO College E '.rand(), 'code' => 'CE'.rand(10, 99)]);
+    $collegeA = College::create(['name' => 'CO College E '.rand(), 'code' => 'CE'.rand(10000, 99999)]);
     $officerA = makeUserWithRole('college_officer', $collegeA->id);
 
     $response = $this->actingAs($officerA, 'sanctum')->postJson('/api/v1/departments', [
@@ -219,8 +219,8 @@ test('a college officer cannot create a new department at all', function () {
 });
 
 test('a college officer cannot update a department belonging to another college', function () {
-    $collegeA = College::create(['name' => 'CO College G '.rand(), 'code' => 'CG'.rand(10, 99)]);
-    $collegeB = College::create(['name' => 'CO College H '.rand(), 'code' => 'CH'.rand(10, 99)]);
+    $collegeA = College::create(['name' => 'CO College G '.rand(), 'code' => 'CG'.rand(10000, 99999)]);
+    $collegeB = College::create(['name' => 'CO College H '.rand(), 'code' => 'CH'.rand(10000, 99999)]);
     $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'Dept B', 'code' => 'DB'.rand(1000, 9999)]);
     $officerA = makeUserWithRole('college_officer', $collegeA->id);
 
@@ -232,8 +232,8 @@ test('a college officer cannot update a department belonging to another college'
 });
 
 test('a college officer cannot generate a report builder result for another college', function () {
-    $collegeA = College::create(['name' => 'CO College I '.rand(), 'code' => 'CI'.rand(10, 99)]);
-    $collegeB = College::create(['name' => 'CO College J '.rand(), 'code' => 'CJ'.rand(10, 99)]);
+    $collegeA = College::create(['name' => 'CO College I '.rand(), 'code' => 'CI'.rand(10000, 99999)]);
+    $collegeB = College::create(['name' => 'CO College J '.rand(), 'code' => 'CJ'.rand(10000, 99999)]);
     $officerA = makeUserWithRole('college_officer', $collegeA->id);
 
     $response = $this->actingAs($officerA, 'sanctum')->postJson('/api/v1/reports/generate', [

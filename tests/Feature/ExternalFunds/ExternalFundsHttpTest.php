@@ -263,7 +263,7 @@ test('finance_officer can record an expenditure and remaining budget is tallied 
     $agency = ef_agency($manager);
     $award = ef_award($manager, ef_application(ef_staff(), $agency));
 
-    $finance = User::factory()->create(['college_id' => College::create(['name' => 'EF Finance College '.rand(), 'code' => 'EFC'.rand(10, 99)])->id]);
+    $finance = User::factory()->create(['college_id' => College::create(['name' => 'EF Finance College '.rand(), 'code' => 'EFC'.rand(10000, 99999)])->id]);
     $finance->assignRole('finance_officer');
 
     $this->actingAs($finance, 'sanctum')

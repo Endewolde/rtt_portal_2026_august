@@ -36,8 +36,8 @@ function buildAssignmentWithScores(int $score, int $maxScore = 5, int $qCount = 
     $admin = User::factory()->create();
     $admin->assignRole('central_officer');
 
-    $college = College::create(['name' => 'C'.rand(), 'code' => 'C'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'D'.rand(10, 99)]);
+    $college = College::create(['name' => 'C'.rand(), 'code' => 'C'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'D'.rand(10000, 99999)]);
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research',
         'title' => 'C', 'slug' => 's-'.rand(10000, 99999),
@@ -123,8 +123,8 @@ test('calculateScore returns 0.0 for assignment with no scores', function () {
     $reviewer = User::factory()->create();
     $reviewer->assignRole('reviewer');
 
-    $college = College::create(['name' => 'C'.rand(), 'code' => 'C'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'D'.rand(10, 99)]);
+    $college = College::create(['name' => 'C'.rand(), 'code' => 'C'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'D'.rand(10000, 99999)]);
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research',
         'title' => 'C', 'slug' => 's-'.rand(10000, 99999),
@@ -166,8 +166,8 @@ test('processBlindReviewResult does nothing if not all reviewers submitted', fun
     $r2 = User::factory()->create();
     $r2->assignRole('reviewer');
 
-    $college = College::create(['name' => 'C'.rand(), 'code' => 'C'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'D'.rand(10, 99)]);
+    $college = College::create(['name' => 'C'.rand(), 'code' => 'C'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'D'.rand(10000, 99999)]);
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research',
         'title' => 'C', 'slug' => 's-'.rand(10000, 99999),
@@ -232,8 +232,8 @@ test('calculateScore counts an entirely unscored category as zero rather than ex
     $reviewer = User::factory()->create();
     $reviewer->assignRole('reviewer');
 
-    $college = College::create(['name' => 'C'.rand(), 'code' => 'C'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'D'.rand(10, 99)]);
+    $college = College::create(['name' => 'C'.rand(), 'code' => 'C'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'D'.rand(10000, 99999)]);
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research',
         'title' => 'C', 'slug' => 's-'.rand(10000, 99999),
@@ -297,8 +297,8 @@ test('processBlindReviewResult compares the RAW weighted score to blind_threshol
     $reviewer = User::factory()->create();
     $reviewer->assignRole('reviewer');
 
-    $college = College::create(['name' => 'C'.rand(), 'code' => 'C'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'D'.rand(10, 99)]);
+    $college = College::create(['name' => 'C'.rand(), 'code' => 'C'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'D'.rand(10000, 99999)]);
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research',
         'title' => 'C', 'slug' => 's-'.rand(10000, 99999),
@@ -351,8 +351,8 @@ test('processOpenDefenceResultIfComplete gates only on combined_threshold; defen
     $reviewer = User::factory()->create();
     $reviewer->assignRole('reviewer');
 
-    $college = College::create(['name' => 'C'.rand(), 'code' => 'C'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'D'.rand(10, 99)]);
+    $college = College::create(['name' => 'C'.rand(), 'code' => 'C'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'D'.rand(10000, 99999)]);
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research',
         'title' => 'C', 'slug' => 's-'.rand(10000, 99999),
@@ -443,8 +443,8 @@ test('combined_decision_mode=strict_all requires blind, defence, AND combined to
     $reviewer = User::factory()->create();
     $reviewer->assignRole('reviewer');
 
-    $college = College::create(['name' => 'C'.rand(), 'code' => 'C'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'D'.rand(10, 99)]);
+    $college = College::create(['name' => 'C'.rand(), 'code' => 'C'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'D'.rand(10000, 99999)]);
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research',
         'title' => 'C', 'slug' => 's-'.rand(10000, 99999),
@@ -527,8 +527,8 @@ test('submitScore rejects a submission that leaves a required question unanswere
     $reviewer = User::factory()->create();
     $reviewer->assignRole('reviewer');
 
-    $college = College::create(['name' => 'C'.rand(), 'code' => 'C'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'D'.rand(10, 99)]);
+    $college = College::create(['name' => 'C'.rand(), 'code' => 'C'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'D'.rand(10000, 99999)]);
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research',
         'title' => 'C', 'slug' => 's-'.rand(10000, 99999),

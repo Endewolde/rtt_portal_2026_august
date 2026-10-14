@@ -23,8 +23,8 @@ beforeEach(function () {
 
 function csa_makeFundedProposal(): array
 {
-    $college = College::create(['name' => 'CSA College '.rand(), 'code' => 'CSA'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'CSAD'.rand(10, 99)]);
+    $college = College::create(['name' => 'CSA College '.rand(), 'code' => 'CSA'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'CSAD'.rand(10000, 99999)]);
 
     $officer = User::factory()->create();
     $officer->assignRole('research_officer');

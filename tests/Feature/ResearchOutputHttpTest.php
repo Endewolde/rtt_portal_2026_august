@@ -27,8 +27,8 @@ beforeEach(function () {
 
 function rh_makeBase(): array
 {
-    $college = College::create(['name' => 'RO College '.rand(), 'code' => 'RO'.rand(10, 99)]);
-    $dept    = Department::create(['college_id' => $college->id, 'name' => 'Dept', 'code' => 'RD'.rand(10, 99)]);
+    $college = College::create(['name' => 'RO College '.rand(), 'code' => 'RO'.rand(10000, 99999)]);
+    $dept    = Department::create(['college_id' => $college->id, 'name' => 'Dept', 'code' => 'RD'.rand(10000, 99999)]);
 
     // Give the college a professional subscription so non-admin users pass feature:monitoring
     $plan = SubscriptionPlan::firstOrCreate(

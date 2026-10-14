@@ -20,10 +20,10 @@ beforeEach(function () {
 
 function api_makeBase(): array
 {
-    $college1 = College::create(['name' => 'API C1 '.rand(), 'code' => 'A1'.rand(10, 99)]);
-    $college2 = College::create(['name' => 'API C2 '.rand(), 'code' => 'A2'.rand(10, 99)]);
-    $dept1 = Department::create(['college_id' => $college1->id, 'name' => 'D1', 'code' => 'D1'.rand(10, 99)]);
-    $dept2 = Department::create(['college_id' => $college2->id, 'name' => 'D2', 'code' => 'D2'.rand(10, 99)]);
+    $college1 = College::create(['name' => 'API C1 '.rand(), 'code' => 'A1'.rand(10000, 99999)]);
+    $college2 = College::create(['name' => 'API C2 '.rand(), 'code' => 'A2'.rand(10000, 99999)]);
+    $dept1 = Department::create(['college_id' => $college1->id, 'name' => 'D1', 'code' => 'D1'.rand(10000, 99999)]);
+    $dept2 = Department::create(['college_id' => $college2->id, 'name' => 'D2', 'code' => 'D2'.rand(10000, 99999)]);
 
     $central = User::factory()->create();
     $central->assignRole('central_officer');

@@ -17,8 +17,8 @@ beforeEach(function () {
     (new RolePermissionSeeder)->run();
     (new WorkflowStageSeeder)->run();
 
-    $this->college = College::create(['name' => 'College of Engineering', 'code' => 'CE'.rand(10, 99)]);
-    $this->department = Department::create(['college_id' => $this->college->id, 'name' => 'D', 'code' => 'GD'.rand(10, 99)]);
+    $this->college = College::create(['name' => 'College of Engineering', 'code' => 'CE'.rand(10000, 99999)]);
+    $this->department = Department::create(['college_id' => $this->college->id, 'name' => 'D', 'code' => 'GD'.rand(10000, 99999)]);
 
     $this->collegeOfficer = User::factory()->create(['college_id' => $this->college->id]);
     $this->collegeOfficer->assignRole('college_officer');
@@ -95,7 +95,7 @@ test('a college officer can schedule open defence once every college proposal ha
 
 test('proposals in blind review at another college or academic year do not hold this college back', function () {
     $ready = gate_makeProposal($this, 'blind_review_passed');
-    $otherCollege = College::create(['name' => 'Other College', 'code' => 'OC'.rand(10, 99)]);
+    $otherCollege = College::create(['name' => 'Other College', 'code' => 'OC'.rand(10000, 99999)]);
     gate_makeProposal($this, 'under_blind_review', $otherCollege);
     gate_makeProposal($this, 'under_blind_review', null, '2025');
 

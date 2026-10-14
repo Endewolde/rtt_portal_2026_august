@@ -26,8 +26,8 @@ beforeEach(function () {
 
 function ra_base(): array
 {
-    $college = College::create(['name' => 'RA C '.rand(), 'code' => 'RA'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'RD'.rand(10, 99)]);
+    $college = College::create(['name' => 'RA C '.rand(), 'code' => 'RA'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'RD'.rand(10000, 99999)]);
     $admin = User::factory()->create();
     $admin->assignRole('super_admin');
     $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
@@ -383,8 +383,8 @@ test('a user without a workload role cannot access reviewer analytics or workloa
 test('college officer cannot see another college\'s reviewer analytics by spoofing college_id', function () {
     ['admin' => $admin, 'reviewer' => $reviewer, 'proposal' => $proposalA, 'evalType' => $evalType, 'college' => $collegeA] = ra_base();
 
-    $collegeB = College::create(['name' => 'RA C B '.rand(), 'code' => 'RB'.rand(10, 99)]);
-    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'RDB'.rand(10, 99)]);
+    $collegeB = College::create(['name' => 'RA C B '.rand(), 'code' => 'RB'.rand(10000, 99999)]);
+    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'RDB'.rand(10000, 99999)]);
     $piB = User::factory()->create(['college_id' => $collegeB->id, 'department_id' => $deptB->id]);
     $piB->assignRole('pi');
     $callB = ProposalCall::create([

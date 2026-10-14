@@ -25,8 +25,8 @@ beforeEach(function () {
     (new ThresholdSettingSeeder)->run();
     Queue::fake();
 
-    $this->college = College::create(['name' => 'Sim College', 'code' => 'SM'.rand(10, 99)]);
-    $this->dept = Department::create(['college_id' => $this->college->id, 'name' => 'D', 'code' => 'SD'.rand(10, 99)]);
+    $this->college = College::create(['name' => 'Sim College', 'code' => 'SM'.rand(10000, 99999)]);
+    $this->dept = Department::create(['college_id' => $this->college->id, 'name' => 'D', 'code' => 'SD'.rand(10000, 99999)]);
 
     $this->central = User::factory()->create();
     $this->central->assignRole('central_officer');

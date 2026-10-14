@@ -20,8 +20,8 @@ beforeEach(function () {
 
 function dv_proposal(): array
 {
-    $college = College::create(['name' => 'DV College '.rand(), 'code' => 'DV'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'DVD'.rand(10, 99)]);
+    $college = College::create(['name' => 'DV College '.rand(), 'code' => 'DV'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'DVD'.rand(10000, 99999)]);
     $central = User::factory()->create();
     $central->assignRole('central_officer');
     $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);

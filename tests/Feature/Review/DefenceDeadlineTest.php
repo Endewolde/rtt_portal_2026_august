@@ -24,8 +24,8 @@ beforeEach(function () {
     (new RolePermissionSeeder)->run();
     (new WorkflowStageSeeder)->run();
 
-    $this->college = College::create(['name' => 'College of Science', 'code' => 'CS'.rand(10, 99)]);
-    $this->department = Department::create(['college_id' => $this->college->id, 'name' => 'D', 'code' => 'DD'.rand(10, 99)]);
+    $this->college = College::create(['name' => 'College of Science', 'code' => 'CS'.rand(10000, 99999)]);
+    $this->department = Department::create(['college_id' => $this->college->id, 'name' => 'D', 'code' => 'DD'.rand(10000, 99999)]);
 
     $this->collegeOfficer = User::factory()->create(['college_id' => $this->college->id]);
     $this->collegeOfficer->assignRole('college_officer');
@@ -208,7 +208,7 @@ test('only one pending request per defence, and the new date must be later and i
 
 test('only the proposal\'s own college officer can request an extension', function () {
     $session = dd_session($this, dd_proposal($this), now()->subDays(3)->toDateString());
-    $otherCollege = College::create(['name' => 'Other', 'code' => 'OT'.rand(10, 99)]);
+    $otherCollege = College::create(['name' => 'Other', 'code' => 'OT'.rand(10000, 99999)]);
     $otherOfficer = User::factory()->create(['college_id' => $otherCollege->id]);
     $otherOfficer->assignRole('college_officer');
 

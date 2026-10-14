@@ -26,8 +26,8 @@ beforeEach(function () {
 
 function ro_makeBase(string $status = 'funded'): array
 {
-    $college = College::create(['name' => 'RO College '.rand(), 'code' => 'RO'.rand(10, 99)]);
-    $dept    = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'RD'.rand(10, 99)]);
+    $college = College::create(['name' => 'RO College '.rand(), 'code' => 'RO'.rand(10000, 99999)]);
+    $dept    = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'RD'.rand(10000, 99999)]);
 
     $central = User::factory()->create(); $central->assignRole('central_officer');
     $pi      = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]); $pi->assignRole('staff');

@@ -22,8 +22,8 @@ beforeEach(function () {
 
 function hub_base(): array
 {
-    $college = College::create(['name' => 'Hub C '.rand(), 'code' => 'HC'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'HD', 'code' => 'HD'.rand(10, 99)]);
+    $college = College::create(['name' => 'Hub C '.rand(), 'code' => 'HC'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'HD', 'code' => 'HD'.rand(10000, 99999)]);
     $admin = User::factory()->create();
     $admin->assignRole('super_admin');
     $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);

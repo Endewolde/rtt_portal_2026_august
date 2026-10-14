@@ -19,8 +19,8 @@ function cwts_makeProposal(string $category = 'research'): Proposal
 {
     $central = User::factory()->create();
     $central->assignRole('central_officer');
-    $college = College::create(['name' => 'CWTS College '.rand(), 'code' => 'CW'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'CWD'.rand(10, 99)]);
+    $college = College::create(['name' => 'CWTS College '.rand(), 'code' => 'CW'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'CWD'.rand(10000, 99999)]);
     $pi = User::factory()->create(['college_id' => $college->id, 'department_id' => $dept->id]);
     $pi->assignRole('pi');
     $call = ProposalCall::create([
