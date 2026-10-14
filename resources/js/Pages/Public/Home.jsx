@@ -2,9 +2,11 @@ import { useEffect, useState, useRef } from 'react';
 import { Link, usePage } from '@inertiajs/react';
 import {
     ArrowRight, Search, ChevronRight, ChevronLeft, ChevronDown, Globe,
-    FileText, CheckSquare, Award, BookOpen, BarChart2, Shield,
+    FileText, Award,
     Calendar, Clock, HelpCircle, TrendingUp, Users, Layers,
-    Microscope, Zap,
+    Microscope, Zap, Handshake, Rocket, Lightbulb, ClipboardList, Sprout, HeartPulse,
+    Globe2, GraduationCap, Telescope, Laptop, BarChart3, EyeOff, Presentation, Scale,
+    ClipboardCheck, BadgeCheck, ShieldCheck, Wallet, Landmark,
 } from 'lucide-react';
 import {
     PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
@@ -179,12 +181,58 @@ function StatsDonut({ stats, primaryColor, academicYear }) {
 // ─── Category config ──────────────────────────────────────────────────────────
 
 const CAT = {
-    research:             { label: 'Research',      gradient: 'from-blue-500 to-indigo-600',   icon: '🔬', color: '#3b82f6' },
-    community_engagement: { label: 'Community',     gradient: 'from-emerald-500 to-green-700', icon: '🤝', color: '#10b981' },
-    technology_transfer:  { label: 'Tech Transfer', gradient: 'from-purple-500 to-violet-700', icon: '🚀', color: '#8b5cf6' },
-    innovation:           { label: 'Innovation',    gradient: 'from-orange-500 to-amber-600',  icon: '💡', color: '#f59e0b' },
-    other:                { label: 'Other',         gradient: 'from-slate-500 to-slate-700',   icon: '📋', color: '#64748b' },
+    research:             { label: 'Research',      gradient: 'from-blue-500 to-indigo-600',   icon: Microscope,    color: '#3b82f6' },
+    community_engagement: { label: 'Community',     gradient: 'from-emerald-500 to-green-700', icon: Handshake,     color: '#10b981' },
+    technology_transfer:  { label: 'Tech Transfer', gradient: 'from-purple-500 to-violet-700', icon: Rocket,        color: '#8b5cf6' },
+    innovation:           { label: 'Innovation',    gradient: 'from-orange-500 to-amber-600',  icon: Lightbulb,     color: '#f59e0b' },
+    other:                { label: 'Other',         gradient: 'from-slate-500 to-slate-700',   icon: ClipboardList, color: '#64748b' },
 };
+
+// ─── Thematic areas ───────────────────────────────────────────────────────────
+
+// Admins pick emoji for thematic areas and hero slides; show the matching line icon so the page stays consistent.
+const AREA_ICONS = {
+    '🔬': Microscope, '🌱': Sprout, '💡': Lightbulb, '🚀': Rocket, '🤝': Handshake, '📊': BarChart3,
+    '🏥': HeartPulse, '⚡': Zap, '🌍': Globe2, '🎓': GraduationCap, '🔭': Telescope, '💻': Laptop,
+    '💰': Wallet, '⚖️': Scale, '🏛️': Landmark, '🌐': Globe,
+};
+
+function AreaIcon({ emoji, size = 20 }) {
+    const Icon = AREA_ICONS[emoji?.trim()];
+    if (Icon) return <Icon size={size} strokeWidth={1.75} />;
+    // An emoji outside the preset list: keep the admin's choice rather than guess.
+    return emoji?.trim() ? <span>{emoji}</span> : <Layers size={size} strokeWidth={1.75} />;
+}
+
+/** Sub-topics as tags: from `sub_topics`, or the numbered lines of the description. */
+function areaTopics(area) {
+    if (Array.isArray(area.sub_topics) && area.sub_topics.length) return area.sub_topics;
+    return (area.description ?? '')
+        .split(/\n|(?=\b\d{1,2}\.\s)/)
+        .map((line) => line.replace(/^\s*\d{1,2}\.\s*/, '').trim())
+        .filter(Boolean);
+}
+
+function SubTopics({ area }) {
+    const topics = areaTopics(area);
+    const shown = topics.slice(0, 3);
+    if (!topics.length) return null;
+
+    return (
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+            {shown.map((t) => (
+                <span key={t} className="max-w-full truncate rounded-md border border-gray-200 bg-white px-2 py-0.5 text-[11px] text-slate-600" title={t}>
+                    {t.length > 42 ? `${t.slice(0, 40)}…` : t}
+                </span>
+            ))}
+            {topics.length > shown.length && (
+                <span className="rounded-md px-1.5 py-0.5 text-[11px] font-medium text-slate-400" title={topics.slice(3).join(' · ')}>
+                    +{topics.length - shown.length} more
+                </span>
+            )}
+        </div>
+    );
+}
 
 // ─── Proposal call card ───────────────────────────────────────────────────────
 
@@ -226,8 +274,8 @@ function CallCard({ call }) {
                 <div className="flex items-start justify-between gap-3">
                     {/* Icon circle */}
                     <div className={`w-11 h-11 rounded-2xl flex items-center justify-center
-                                     text-2xl bg-linear-to-br ${cfg.gradient} shrink-0 shadow-sm`}>
-                        <span className="drop-shadow-sm">{cfg.icon}</span>
+                                     bg-linear-to-br ${cfg.gradient} shrink-0 shadow-sm`}>
+                        <cfg.icon size={20} className="text-white" strokeWidth={2} />
                     </div>
                     <div className="flex flex-col items-end gap-1 shrink-0">
                         <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5
@@ -303,19 +351,23 @@ function CallCard({ call }) {
 // ─── Platform features ────────────────────────────────────────────────────────
 
 const FEATURES = [
-    { icon: FileText,    title: 'Proposal Management',  desc: 'Guided 7-step wizard from draft to submission.' },
-    { icon: CheckSquare, title: 'Blind Peer Review',    desc: 'Anonymous multi-stage scoring pipeline.'        },
-    { icon: Award,       title: 'Grant Funding',        desc: 'Award letters, budgets, and disbursements.'     },
-    { icon: BarChart2,   title: 'Analytics & Reports',  desc: 'Performance and budget utilization dashboards.' },
-    { icon: BookOpen,    title: 'Research Repository',  desc: 'Discover published outputs and publications.'   },
-    { icon: Shield,      title: 'Compliance & Audit',   desc: 'Full audit trails and similarity detection.'    },
+    { icon: FileText,       title: 'Guided Submission',          desc: 'A step-by-step proposal wizard, team invitations, and a live status guide that tells researchers what happens next.' },
+    { icon: EyeOff,         title: 'Truly Blind Review',         desc: 'Automatic anonymity checks on every submission, and alerts when independent reviewers disagree sharply.' },
+    { icon: Presentation,   title: 'Open Defence Scoring',       desc: 'Scheduled defence panels, on-the-day scoring, and firm score deadlines with a formal extension process.' },
+    { icon: Scale,          title: 'Transparent Decisions',      desc: 'Blind review and defence scores combined against published thresholds before the central funding decision.' },
+    { icon: Award,          title: 'Grants & Contracts',         desc: 'Award letters with grant references, research contracts, budget allocation, and staged disbursement.' },
+    { icon: ClipboardCheck, title: 'Progress Monitoring',        desc: 'Regular progress reports, milestones, mid-term evaluation, and completion workshops for every funded project.' },
+    { icon: BadgeCheck,     title: 'Verifiable Certificates',    desc: 'Reviewers earn QR-coded certificates of service that anyone can verify online.' },
+    { icon: ShieldCheck,    title: 'Accountability & Audit',     desc: 'Full audit trails, similarity detection, and stage turnaround tracking that keeps decisions on time.' },
 ];
 
 const DEFAULT_STEPS = [
-    { title: 'Submit Proposal',       desc: 'Complete the 7-step wizard with research details, team, and budget.' },
-    { title: 'Validation',            desc: 'Central Office reviews and routes to the review pipeline.'           },
-    { title: 'Peer Review & Defence', desc: 'Expert reviewers score proposals. Top ones advance to defence.'      },
-    { title: 'Funding & Support',     desc: 'Accepted proposals receive funding and M&E support.'                },
+    { title: 'Submit Proposal',      desc: 'Complete the guided wizard with your research details, team, budget, and documents before the call closes.' },
+    { title: 'Validation',           desc: 'The research office checks completeness and eligibility, and an anonymity check protects blind review.' },
+    { title: 'Blind Review',         desc: 'Independent experts score your proposal without knowing who wrote it.' },
+    { title: 'Open Defence',         desc: 'Shortlisted teams present to a panel that scores the presentation on the day.' },
+    { title: 'Central Evaluation',   desc: 'The central committee weighs the combined scores and makes the funding decision.' },
+    { title: 'Funding & Monitoring', desc: 'Funded teams sign a contract, receive their budget, and report progress regularly until completion.' },
 ];
 
 // ─── Section heading ──────────────────────────────────────────────────────────
@@ -360,15 +412,15 @@ const DEFAULT_FAQS = [
     },
     {
         q: 'What is a Tracker Number and how do I use it?',
-        a: 'A Tracker Number (e.g., RTT-2026-00123) is automatically assigned to your proposal upon submission. You can use it on the Track Proposal page to check your proposal\'s current status at any time — no login required.',
+        a: 'A Tracker Number (for example RES-2026-2027-000123) is assigned to your proposal when you submit it. Enter it on the Track Proposal page to see the current stage at any time — no login required. When you are signed in, the proposal page also shows a step-by-step status guide and anything you need to do next.',
     },
     {
         q: 'How long does the review process take?',
-        a: 'Timelines vary by call. Typically: validation takes 1–2 weeks, blind peer review takes 3–6 weeks, open defence is scheduled after reviews complete, and central evaluation takes 1–2 weeks. Check the specific call\'s guidelines for expected timelines.',
+        a: 'Each stage has a target time: validation about 1 week, assigning reviewers about 1 week, blind review about 3 weeks, scheduling the open defence about 2 weeks, scoring the defence about 1 week, and central evaluation about 2 weeks — roughly ten weeks from submission to a funding decision. The office tracks every stage against these targets, and you can follow your proposal with its Tracker Number.',
     },
     {
         q: 'What happens after my proposal is accepted?',
-        a: 'Accepted proposals enter the funding stage. Once funded, your PI receives an award letter and can submit a budget request. After disbursement, periodic monitoring (midterm evaluation, completion workshop) tracks your project\'s progress.',
+        a: 'After the open defence, the central evaluation committee makes the final funding decision. If your proposal is funded, you receive an award with a grant reference, sign a research contract, and request your budget in stages. You then submit a progress report every few months, take part in a mid-term evaluation, and present your results at a completion workshop.',
     },
     {
         q: 'Can I add co-investigators to my proposal?',
@@ -377,6 +429,18 @@ const DEFAULT_FAQS = [
     {
         q: 'What file formats are accepted for document uploads?',
         a: 'The system accepts PDF, DOC, DOCX, XLS, XLSX, JPG, and PNG files. PDFs are recommended for proposal documents. Each file must be within the size limit set by your administrator (typically 10 MB).',
+    },
+    {
+        q: 'How is my identity kept from the blind reviewers?',
+        a: 'Blind reviewers never see who wrote a proposal. When you submit, the system also scans the documents sent to reviewers for the names, emails and phone numbers of your team, so anything that could identify you is caught and removed before review.',
+    },
+    {
+        q: 'What is the open defence?',
+        a: 'Proposals that pass blind review are presented by the research team to a panel at a scheduled open defence. Panel members score the presentation during the session or by the end of the following day. The blind review and defence scores are then combined for central evaluation.',
+    },
+    {
+        q: 'Do reviewers receive a certificate, and how can it be verified?',
+        a: 'Yes. Reviewers who complete the minimum number of reviews in an academic year receive a certificate of review service once the central office releases that year\'s certificates. Each certificate has a unique number and QR code — anyone can confirm it is genuine on the Verify Certificate page.',
     },
 ];
 
@@ -479,8 +543,8 @@ function HeroStatCard({ stat, label, color, icon, inView, secondaryStats, ringPc
 
             {/* Icon badge */}
             <div className={`${showRing ? 'inline-flex' : 'flex mx-auto'} items-center justify-center w-12 h-12 rounded-2xl mb-5 text-xl`}
-                style={{ background: `${color}22`, border: `1.5px solid ${color}35` }}>
-                {icon}
+                style={{ background: `${color}22`, border: `1.5px solid ${color}35`, color }}>
+                <AreaIcon emoji={icon} size={22} />
             </div>
 
             {/* Stat + ring row */}
@@ -973,11 +1037,11 @@ export default function Home() {
                     <div className="max-w-7xl mx-auto px-6">
                         <SectionHead eyebrow="The Process" title="How It Works" />
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                             {steps.map((step, i) => (
                                 <div key={i} className="relative group">
-                                    {/* Connector line (desktop) */}
-                                    {i < steps.length - 1 && (
+                                    {/* Connector line (desktop, within a row of three) */}
+                                    {i < steps.length - 1 && i % 3 !== 2 && (
                                         <div className="hidden lg:block absolute top-5 left-full w-6 h-px z-10"
                                             style={{ background: `linear-gradient(90deg, ${primaryColor}40, transparent)` }} />
                                     )}
@@ -1005,7 +1069,7 @@ export default function Home() {
                     <div className="max-w-7xl mx-auto px-6">
                         <SectionHead eyebrow="Research Focus" title="Thematic Areas" />
 
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                             {thematicAreas.map((area) => (
                                 <div
                                     key={area.id}
@@ -1013,13 +1077,10 @@ export default function Home() {
                                                hover:shadow-md transition-all duration-200 bg-gray-50/50 flex flex-col gap-3"
                                 >
                                     <div
-                                        className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shrink-0"
-                                        style={{
-                                            backgroundColor: `${area.color}18`,
-                                            border: `1.5px solid ${area.color}30`,
-                                        }}
+                                        className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
+                                        style={{ backgroundColor: `${area.color}18`, color: area.color }}
                                     >
-                                        {area.icon}
+                                        <AreaIcon emoji={area.icon} />
                                     </div>
                                     <div>
                                         <div
@@ -1029,11 +1090,7 @@ export default function Home() {
                                         <h3 className="font-bold text-slate-900 text-sm leading-snug">
                                             {area.name}
                                         </h3>
-                                        {area.description && (
-                                            <p className="text-xs text-slate-500 mt-1.5 leading-relaxed line-clamp-2">
-                                                {area.description}
-                                            </p>
-                                        )}
+                                        <SubTopics area={area} />
                                     </div>
                                 </div>
                             ))}
@@ -1048,19 +1105,19 @@ export default function Home() {
                     style={{ background: `linear-gradient(135deg, ${featuresBg} 0%, ${featuresBg}dd 100%)` }}>
                     <div className="max-w-7xl mx-auto px-6">
                         <SectionHead eyebrow="Platform Capabilities" title={featTitle} light />
-                        <p className="text-slate-400 text-sm mb-10 max-w-lg -mt-4">{featSub}</p>
+                        <p className="text-slate-300 text-sm mb-10 max-w-lg -mt-4">{featSub}</p>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                             {FEATURES.map((f) => (
                                 <div key={f.title}
-                                    className="group p-6 rounded-2xl border border-white/5 bg-white/3
-                                               hover:bg-white/6 hover:border-white/10 transition-all duration-200">
+                                    className="group p-6 rounded-2xl border border-white/10 bg-white/5
+                                               hover:bg-white/8 hover:border-white/20 transition-all duration-200">
                                     <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-4"
-                                        style={{ backgroundColor: `${primaryColor}22` }}>
-                                        <f.icon size={18} style={{ color: primaryColor }} />
+                                        style={{ backgroundColor: `${primaryColor}33` }}>
+                                        <f.icon size={18} className="text-blue-300" />
                                     </div>
                                     <h3 className="font-semibold text-white text-sm mb-1.5">{f.title}</h3>
-                                    <p className="text-xs text-slate-500 leading-relaxed">{f.desc}</p>
+                                    <p className="text-xs text-slate-300 leading-relaxed">{f.desc}</p>
                                 </div>
                             ))}
                         </div>

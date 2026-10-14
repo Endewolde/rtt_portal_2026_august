@@ -88,13 +88,17 @@ const DEFAULTS = {
     public_show_features:      'true',
     public_show_cta:           'true',
     public_step_1_title:       'Submit Proposal',
-    public_step_1_desc:        'Complete the 7-step wizard with your research details, team, and budget.',
+    public_step_1_desc:        'Complete the guided wizard with your research details, team, budget, and documents before the call closes.',
     public_step_2_title:       'Validation',
-    public_step_2_desc:        'Central Office reviews completeness and assigns it to the review pipeline.',
-    public_step_3_title:       'Peer Review & Defence',
-    public_step_3_desc:        'Expert reviewers score your proposal. Top proposals advance to open defence.',
-    public_step_4_title:       'Funding & Support',
-    public_step_4_desc:        'Accepted proposals receive funding and ongoing M&E support.',
+    public_step_2_desc:        'The research office checks completeness and eligibility, and an anonymity check protects blind review.',
+    public_step_3_title:       'Blind Review',
+    public_step_3_desc:        'Independent experts score your proposal without knowing who wrote it.',
+    public_step_4_title:       'Open Defence',
+    public_step_4_desc:        'Shortlisted teams present to a panel that scores the presentation on the day.',
+    public_step_5_title:       'Central Evaluation',
+    public_step_5_desc:        'The central committee weighs the combined scores and makes the funding decision.',
+    public_step_6_title:       'Funding & Monitoring',
+    public_step_6_desc:        'Funded teams sign a contract, receive their budget, and report progress regularly until completion.',
     public_features_title:     'Everything You Need to Manage Research',
     public_features_subtitle:  'A complete platform for the full research lifecycle, built for academic institutions.',
     public_cta_title:          'Ready to Start Your Research Journey?',
@@ -500,7 +504,7 @@ export default function PublicSite() {
                 {/* ── How It Works tab ── */}
                 {tab === 'steps' && (
                     <div className="space-y-4">
-                        {[1, 2, 3, 4].map(i => (
+                        {[1, 2, 3, 4, 5, 6].map(i => (
                             <Card key={i} title={`Step ${i}`}>
                                 <Field label="Title"
                                     fieldKey={`public_step_${i}_title`}

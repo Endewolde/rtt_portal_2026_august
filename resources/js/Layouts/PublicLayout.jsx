@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, usePage } from '@inertiajs/react';
-import { FlaskConical, Menu, X, Search, Download, ChevronDown, Clock, Calendar, ArrowRight, Flame, CalendarDays, MapPin, Video, Building2, Globe, Star, FileText } from 'lucide-react';
+import { FlaskConical, Menu, X, Search, Download, ChevronDown, Clock, Calendar, ArrowRight, Flame, CalendarDays, MapPin, Video, Building2, Globe, Star, FileText, ShieldCheck } from 'lucide-react';
 import { get } from '../lib/api';
 
 // ─── Inline social SVG icons ──────────────────────────────────────────────────
@@ -616,33 +616,14 @@ export default function PublicLayout({ children }) {
                                 Downloads
                             </Link>
                             <span className="w-px h-3 mx-1 opacity-20" style={{ backgroundColor: topbarText }} />
-                            {token ? (
-                                <Link href="/dashboard"
-                                    className="flex items-center gap-1 px-2.5 py-1 rounded-md font-medium transition-all hover:bg-white/10"
-                                    style={{ color: topbarText }}>
-                                    Dashboard <ArrowRight size={10} />
-                                </Link>
-                            ) : (
-                                <>
-                                    <Link href="/login"
-                                        className="px-2.5 py-1 rounded-md font-medium transition-all hover:bg-white/10"
-                                        style={{ color: topbarText }}>
-                                        Sign In
-                                    </Link>
-                                    <Link href="/register"
-                                        className="px-2.5 py-1 rounded-md font-semibold transition-all"
-                                        style={{
-                                            color: topbarBg,
-                                            backgroundColor: topbarText,
-                                            opacity: 0.9,
-                                        }}
-                                        onMouseEnter={e => e.currentTarget.style.opacity = '1'}
-                                        onMouseLeave={e => e.currentTarget.style.opacity = '0.9'}
-                                    >
-                                        Register
-                                    </Link>
-                                </>
-                            )}
+                            <Link
+                                href="/certificates/verify"
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-md transition-all hover:bg-white/10 font-medium"
+                                style={{ color: topbarText }}
+                            >
+                                <ShieldCheck size={11} />
+                                Verify Certificate
+                            </Link>
                         </div>
                     </div>
                 </div>
@@ -667,6 +648,18 @@ export default function PublicLayout({ children }) {
                                         width:  'auto',
                                     }}
                                 />
+                            ) : null}
+                            {systemLogo ? (
+                                <div className="hidden sm:block border-l border-gray-200 pl-3">
+                                    <div className={`font-bold leading-tight text-slate-900 transition-all duration-300 ${scrolled ? 'text-sm' : 'text-base'}`}>
+                                        {orgName}
+                                    </div>
+                                    {!scrolled && (
+                                        <div className="text-xs font-medium tracking-wide text-slate-500 mt-0.5">
+                                            Research &amp; Technology Transfer
+                                        </div>
+                                    )}
+                                </div>
                             ) : (
                                 <div className="flex items-center gap-2">
                                     <div className={`rounded-xl flex items-center justify-center shadow-sm
@@ -706,7 +699,7 @@ export default function PublicLayout({ children }) {
                                     <Link href="/register"
                                         className="px-5 py-2 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90"
                                         style={{ backgroundColor: primaryColor }}>
-                                        Register Free
+                                        Create Account
                                     </Link>
                                 </>
                             )}
@@ -762,11 +755,13 @@ export default function PublicLayout({ children }) {
                                 );
                             })}
                             <div className="ml-auto flex items-center">
-                                <Link href="/tracker"
-                                    className="flex items-center gap-1.5 h-10 px-4 text-white/80
-                                               hover:text-white hover:bg-black/10 transition-colors text-sm">
-                                    <Search size={15} /> Track
-                                </Link>
+                                {!navItems.some(l => l.href === '/tracker') && (
+                                    <Link href="/tracker"
+                                        className="flex items-center gap-1.5 h-10 px-4 text-white/80
+                                                   hover:text-white hover:bg-black/10 transition-colors text-sm">
+                                        <Search size={15} /> Track
+                                    </Link>
+                                )}
                                 <Link href="/my-abstracts"
                                     className="flex items-center gap-1.5 h-10 px-4 text-white/80
                                                hover:text-white hover:bg-black/10 transition-colors text-sm">
@@ -795,10 +790,17 @@ export default function PublicLayout({ children }) {
                                     )}
                                 </Link>
                             ))}
-                            <Link href="/tracker"
+                            {!navItems.some(l => l.href === '/tracker') && (
+                                <Link href="/tracker"
+                                    onClick={() => setMobileOpen(false)}
+                                    className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+                                    <Search size={15} className="text-gray-400" /> Track Proposal
+                                </Link>
+                            )}
+                            <Link href="/certificates/verify"
                                 onClick={() => setMobileOpen(false)}
                                 className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-                                <Search size={15} className="text-gray-400" /> Track Proposal
+                                <ShieldCheck size={15} className="text-gray-400" /> Verify Certificate
                             </Link>
                             <Link href="/my-abstracts"
                                 onClick={() => setMobileOpen(false)}
@@ -827,7 +829,7 @@ export default function PublicLayout({ children }) {
                                     <Link href="/register"
                                         className="py-2.5 px-3 rounded-lg text-sm font-semibold text-white text-center"
                                         style={{ backgroundColor: primaryColor }}>
-                                        Register Free
+                                        Create Account
                                     </Link>
                                 </>
                             )}
@@ -889,9 +891,6 @@ export default function PublicLayout({ children }) {
                                         <Link href={l.href} className="hover:text-white transition-colors">{l.label}</Link>
                                     </li>
                                 ))}
-                                <li>
-                                    <Link href="/download" className="hover:text-white transition-colors">Downloads</Link>
-                                </li>
                             </ul>
                         </div>
 
@@ -905,13 +904,26 @@ export default function PublicLayout({ children }) {
                             </ul>
                         </div>
 
-                        {/* Status */}
+                        {/* Verify & resources */}
                         <div>
-                            <h4 className="text-xs font-semibold text-white uppercase tracking-widest mb-4">Status</h4>
-                            <div className="flex items-center gap-2 text-sm text-emerald-400">
-                                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                                All systems operational
-                            </div>
+                            <h4 className="text-xs font-semibold text-white uppercase tracking-widest mb-4">Verify &amp; Resources</h4>
+                            <ul className="space-y-2.5 text-sm">
+                                <li>
+                                    <Link href="/certificates/verify" className="inline-flex items-center gap-1.5 hover:text-white transition-colors">
+                                        <ShieldCheck size={14} /> Verify a Certificate
+                                    </Link>
+                                </li>
+                                <li>
+                                    <Link href="/tracker" className="inline-flex items-center gap-1.5 hover:text-white transition-colors">
+                                        <Search size={14} /> Track a Proposal
+                                    </Link>
+                                </li>
+                                <li>
+                                    <Link href="/download" className="inline-flex items-center gap-1.5 hover:text-white transition-colors">
+                                        <Download size={14} /> Downloads
+                                    </Link>
+                                </li>
+                            </ul>
                         </div>
                     </div>
 

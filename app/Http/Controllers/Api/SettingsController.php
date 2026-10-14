@@ -189,6 +189,8 @@ class SettingsController extends Controller
             'public_step_2_desc' => 'textarea',
             'public_step_3_desc' => 'textarea',
             'public_step_4_desc' => 'textarea',
+            'public_step_5_desc' => 'textarea',
+            'public_step_6_desc' => 'textarea',
             'public_features_subtitle' => 'textarea',
             'public_cta_subtitle' => 'textarea',
             'public_show_stats' => 'boolean',
