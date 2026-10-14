@@ -208,6 +208,15 @@ class ProposalService
             throw new WorkflowGuardException('The submission deadline for this proposal call has passed. Your draft has been saved but can no longer be submitted.');
         }
 
+        // A PI behind on existing funded work can draft but not submit something new.
+        // Resubmitting a proposal returned for corrections is never held back.
+        if (str_starts_with((string) $proposal->tracker_number, 'DRAFT-')) {
+            $eligibility = app(SubmissionEligibilityService::class)->check($pi, $proposal);
+            if (! $eligibility['eligible']) {
+                throw new WorkflowGuardException(collect($eligibility['reasons'])->pluck('message')->implode(' '));
+            }
+        }
+
         // Enforce max proposals per PI at submit time too
         if ($call && $call->max_proposals_per_pi) {
             $alreadySubmitted = Proposal::where('proposal_call_id', $call->id)
@@ -289,22 +298,26 @@ class ProposalService
         }
 
         $submitted = DB::transaction(function () use ($proposal, $pi) {
-            $trackerNumber = $this->trackerNumberService->generate(
-                $proposal->category,
-                $proposal->academic_year
-            );
+            // A proposal returned for corrections keeps the tracker number it was first given.
+            $trackerNumber = str_starts_with((string) $proposal->tracker_number, 'DRAFT-')
+                ? $this->trackerNumberService->generate($proposal->category, $proposal->academic_year)
+                : $proposal->tracker_number;
 
             $proposal->update([
                 'tracker_number' => $trackerNumber,
                 'submitted_at' => now(),
             ]);
 
-            return $this->workflowService->transition(
+            $submitted = $this->workflowService->transition(
                 $proposal->fresh(),
                 'submit',
                 $pi,
                 'Proposal submitted by PI'
             );
+
+            app(ProposalVersionService::class)->capture($submitted, $pi);
+
+            return $submitted;
         });
 
         try {

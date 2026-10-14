@@ -10,6 +10,8 @@ use App\Models\User;
 use App\Models\WorkflowLog;
 use App\Services\ProgressReportService;
 use App\Services\ProposalStatusGuideService;
+use App\Services\ProposalVersionService;
+use App\Services\SubmissionEligibilityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -262,6 +264,25 @@ class ProposalController extends Controller
         }
 
         return response()->json(['data' => $guide->guide($proposal), 'message' => '', 'errors' => [], 'meta' => []]);
+    }
+
+    /** Whether the signed-in user may submit a new proposal right now, and if not, why. */
+    public function submissionEligibility(Request $request, SubmissionEligibilityService $eligibility): JsonResponse
+    {
+        return response()->json(['data' => $eligibility->check($request->user()), 'message' => '', 'errors' => [], 'meta' => []]);
+    }
+
+    /** Every submitted version, with what changed at each resubmission. */
+    public function versions(string $id, Request $request, ProposalVersionService $versions, ProgressReportService $access): JsonResponse
+    {
+        $proposal = Proposal::findOrFail($id);
+        $user = $request->user();
+
+        if (! $access->isTeamMember($proposal, $user) && ! $access->canReview($proposal, $user)) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => [], 'meta' => []], 403);
+        }
+
+        return response()->json(['data' => $versions->history($proposal), 'message' => '', 'errors' => [], 'meta' => []]);
     }
 
     public function destroy(string $id): JsonResponse

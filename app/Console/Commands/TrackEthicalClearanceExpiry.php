@@ -38,7 +38,7 @@ class TrackEthicalClearanceExpiry extends Command
                 ];
 
                 try {
-                    SendEmailNotificationJob::dispatchSync($proposal->pi, 'ethical_clearance_expiring', $data);
+                    SendEmailNotificationJob::deliver($proposal->pi, 'ethical_clearance_expiring', $data);
                     StoreInAppNotificationJob::dispatchSync($proposal->pi->id, 'ethical_clearance_expiring', $data);
                     $reminded++;
                 } catch (\Throwable $e) {
@@ -57,7 +57,7 @@ class TrackEthicalClearanceExpiry extends Command
 
             if ($proposal->pi) {
                 try {
-                    SendEmailNotificationJob::dispatchSync($proposal->pi, 'ethical_clearance_expired', [
+                    SendEmailNotificationJob::deliver($proposal->pi, 'ethical_clearance_expired', [
                         'tracker_number' => $proposal->tracker_number,
                         'title' => $proposal->title,
                     ]);

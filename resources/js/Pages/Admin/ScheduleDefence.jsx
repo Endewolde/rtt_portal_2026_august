@@ -3,6 +3,7 @@ import { usePage, router, Link } from '@inertiajs/react';
 import { Calendar, Users, Search, Info, Hourglass, ArrowRight, X } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import StatusBadge from '../../Components/StatusBadge';
+import ReviewerConflictBadge from '../../Components/ReviewerConflictBadge';
 import api from '../../lib/api';
 import { get } from '../../lib/api';
 import { getCategoryLabel } from '../../lib/utils';
@@ -451,6 +452,7 @@ export default function ScheduleDefence() {
                                                     {reviewer.title ? `${reviewer.title} ` : ''}{reviewer.name}
                                                 </p>
                                                 <WorkloadBadge count={reviewer.active_assignments} />
+                                                <ReviewerConflictBadge conflicts={reviewer.conflicts} />
                                             </div>
                                             <p className="text-xs text-gray-400 truncate">
                                                 {reviewer.email}

@@ -18,7 +18,8 @@ class ReviewAssignmentService
 {
     public function __construct(
         private readonly WorkflowService $workflowService,
-        private readonly MailConfigService $mailConfig
+        private readonly MailConfigService $mailConfig,
+        private readonly ReviewerConflictService $conflicts
     ) {}
 
     /**
@@ -45,7 +46,8 @@ class ReviewAssignmentService
         User $assignedBy,
         array $sessionData = [],
         ?string $dueDate = null,
-        bool $overrideWorkloadCap = false
+        bool $overrideWorkloadCap = false,
+        bool $acknowledgeConflicts = false
     ): array {
         // under_open_defence: adding reviewers to a defence that is already scheduled.
         $validStates = ['validated', 'blind_review_passed', 'under_open_defence'];
@@ -89,6 +91,11 @@ class ReviewAssignmentService
 
         $this->ensureWithinWorkloadCap($reviewerIds, $overrideWorkloadCap);
 
+        // Blind review must be independent; open defence panels are public, so only warn there.
+        $acknowledged = $proposal->status === 'validated'
+            ? $this->conflicts->ensureAcknowledged($proposal, $reviewerIds, $acknowledgeConflicts)
+            : [];
+
         $assignments = [];
 
         $dueDate = $dueDate ?? now()->addDays(14)->toDateString();
@@ -99,7 +106,7 @@ class ReviewAssignmentService
         // review assignment email/notification as "Open Defence".
         $reviewType = $proposal->status === 'validated' ? 'Blind Review' : 'Open Defence';
 
-        DB::transaction(function () use ($proposal, $reviewerIds, $evaluationTypeId, $assignedBy, $dueDate, &$assignments) {
+        DB::transaction(function () use ($proposal, $reviewerIds, $evaluationTypeId, $assignedBy, $dueDate, $acknowledged, &$assignments) {
             foreach ($reviewerIds as $reviewerId) {
                 $assignments[] = ReviewAssignment::create([
                     'proposal_id' => $proposal->id,
@@ -109,6 +116,7 @@ class ReviewAssignmentService
                     'status' => 'pending',
                     'assigned_at' => now(),
                     'due_date' => $dueDate,
+                    'acknowledged_conflicts' => $acknowledged[$reviewerId] ?? null,
                 ]);
             }
 
@@ -174,13 +182,7 @@ class ReviewAssignmentService
         $proposal = Proposal::findOrFail($proposalId);
 
         // Exclude PI and all active proposal members (co-investigators included)
-        $excludedIds = DB::table('proposal_members')
-            ->where('proposal_id', $proposalId)
-            ->where('status', 'active')
-            ->pluck('user_id')
-            ->push($proposal->pi_user_id)
-            ->unique()
-            ->values();
+        $excludedIds = $this->conflicts->teamIds($proposal);
 
         // Eligible reviewers: active staff or external reviewers, excluding the proposal's own PI/team.
         $query = User::whereHas('roles', fn ($q) => $q->whereIn('name', ['staff', 'external_reviewer']))
@@ -219,10 +221,14 @@ class ReviewAssignmentService
             $query->whereHas('roles', fn ($q) => $q->where('name', 'staff'));
         }
 
-        return $query
+        $reviewers = $query
             ->orderBy('active_assignments')
             ->orderBy('name')
             ->get(['id', 'name', 'title', 'email', 'college_id', 'department_id', 'expertise']);
+
+        $conflicts = $this->conflicts->forProposal($proposal, $reviewers->pluck('id'));
+
+        return $reviewers->each(fn (User $u) => $u->setAttribute('conflicts', $conflicts[$u->id] ?? []));
     }
 
     private function notifyReviewer(

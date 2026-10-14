@@ -298,7 +298,7 @@ class SendProposalWorkflowNotifications
         }
 
         try {
-            SendEmailNotificationJob::dispatchSync($user, $template, $data);
+            SendEmailNotificationJob::deliver($user, $template, $data);
         } catch (\Exception $e) {
             Log::error("Failed to send email notification [{$template}] to {$user->email}: ".$e->getMessage());
         }

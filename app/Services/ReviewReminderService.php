@@ -77,7 +77,7 @@ class ReviewReminderService
             'review_url' => config('app.url').'/reviews/'.$assignment->id.'/score',
         ];
 
-        SendEmailNotificationJob::dispatchSync($reviewer, 'review_deadline_reminder', $data);
+        SendEmailNotificationJob::deliver($reviewer, 'review_deadline_reminder', $data);
         StoreInAppNotificationJob::dispatchSync($reviewer->id, 'review_deadline_reminder', $data);
 
         ReviewReminder::create([

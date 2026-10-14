@@ -105,7 +105,7 @@ class TurnaroundService
             }
 
             try {
-                SendEmailNotificationJob::dispatchSync($user, 'stage_reminder', $data);
+                SendEmailNotificationJob::deliver($user, 'stage_reminder', $data);
             } catch (\Throwable $e) {
                 Log::error("Stage reminder (email) failed: {$e->getMessage()}");
             }

@@ -153,7 +153,7 @@ class DeadlineExtensionController extends Controller
         $officers = User::role($role)->where('status', 'active')->get();
         foreach ($officers as $officer) {
             try {
-                SendEmailNotificationJob::dispatchSync($officer, 'deadline_extension_requested', [
+                SendEmailNotificationJob::deliver($officer, 'deadline_extension_requested', [
                     'tracker_number' => $proposal->tracker_number,
                     'title' => $proposal->title,
                     'submitter_name' => $submitter->name,
@@ -167,7 +167,7 @@ class DeadlineExtensionController extends Controller
     private function notifyPi(User $pi, Proposal $proposal, DeadlineExtensionRequest $extension): void
     {
         try {
-            SendEmailNotificationJob::dispatchSync($pi, 'deadline_extension_resolved', [
+            SendEmailNotificationJob::deliver($pi, 'deadline_extension_resolved', [
                 'tracker_number' => $proposal->tracker_number,
                 'title' => $proposal->title,
                 'decision' => $extension->status,

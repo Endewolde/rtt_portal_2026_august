@@ -46,6 +46,7 @@ use App\Http\Controllers\Api\MidtermEvaluationController;
 use App\Http\Controllers\Api\NoCostExtensionController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OngoingProposalsController;
+use App\Http\Controllers\Api\PersonalDataController;
 use App\Http\Controllers\Api\ProgressReportController;
 use App\Http\Controllers\Api\ProposalAiScoreController;
 use App\Http\Controllers\Api\ProposalAppealController;
@@ -341,6 +342,17 @@ Route::prefix('v1')->group(function () {
         Route::post('/proposals/{id}/submit', [ProposalWizardController::class, 'submit']);
         Route::get('/proposals/{id}/workflow-history', [ProposalController::class, 'workflowHistory']);
         Route::get('/proposals/{id}/status-guide', [ProposalController::class, 'statusGuide']);
+        Route::get('/proposals/{id}/versions', [ProposalController::class, 'versions']);
+        Route::get('/submission-eligibility', [ProposalController::class, 'submissionEligibility']);
+
+        // Personal data: download your own data, ask for it to be deleted; admins handle requests
+        Route::get('/me/data-export', [PersonalDataController::class, 'export']);
+        Route::get('/me/deletion-request', [PersonalDataController::class, 'myRequest']);
+        Route::post('/me/deletion-request', [PersonalDataController::class, 'requestDeletion']);
+        Route::delete('/me/deletion-request', [PersonalDataController::class, 'cancelRequest']);
+        Route::get('/admin/data-deletion-requests', [PersonalDataController::class, 'index']);
+        Route::post('/admin/data-deletion-requests/{id}/approve', [PersonalDataController::class, 'approve']);
+        Route::post('/admin/data-deletion-requests/{id}/reject', [PersonalDataController::class, 'reject']);
         Route::get('/proposals/{id}/budget', [ProposalController::class, 'budget']);
 
         // Validation

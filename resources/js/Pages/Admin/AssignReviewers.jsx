@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import StatusBadge from '../../Components/StatusBadge';
+import ReviewerConflictBadge, { isConflictWarning } from '../../Components/ReviewerConflictBadge';
 import { get, post } from '../../lib/api';
 import { getCategoryLabel, cn } from '../../lib/utils';
 import { useToast } from '../../Components/Toast';
@@ -179,7 +180,7 @@ export default function AssignReviewers() {
         setOverride(o => { if (!o) clearFilters(); return !o; });
     };
 
-    const assign = async (overrideWorkloadCap = false) => {
+    const assign = async (overrideWorkloadCap = false, acknowledgeConflicts = false) => {
         if (!selected.length || !evalType || !dueDate) {
             toast.warning('Select at least one reviewer, an evaluation type, and a due date.');
             return;
@@ -192,13 +193,19 @@ export default function AssignReviewers() {
                 evaluation_type_id: evalType,
                 due_date:           dueDate,
                 override_workload_cap: overrideWorkloadCap,
+                acknowledge_conflicts: acknowledgeConflicts,
             });
             toast.success('Reviewers assigned. Proposal moved to Blind Review.');
             router.visit('/admin/blind-review');
         } catch (e) {
             const msg = e.response?.data?.message ?? 'Assignment failed. Please try again.';
             if (msg.includes('max workload')) {
-                toast.error(msg, { action: { label: 'Assign Anyway', onClick: () => assign(true) } });
+                toast.error(msg, { action: { label: 'Assign Anyway', onClick: () => assign(true, acknowledgeConflicts) } });
+                setSubmitting(false);
+                return;
+            }
+            if (isConflictWarning(msg)) {
+                toast.warning(msg, { duration: 12000, action: { label: 'Assign Anyway', onClick: () => assign(overrideWorkloadCap, true) } });
                 setSubmitting(false);
                 return;
             }
@@ -439,6 +446,7 @@ export default function AssignReviewers() {
                                                                     {s.active_assignments} active reviews
                                                                 </span>
                                                             )}
+                                                            <ReviewerConflictBadge conflicts={s.conflicts} />
                                                         </div>
                                                     </div>
                                                     <div className={cn(
@@ -855,6 +863,7 @@ export default function AssignReviewers() {
                                                             {r.title ? `${r.title} ` : ''}{r.name}
                                                         </p>
                                                         <WorkloadBadge count={r.active_assignments} />
+                                                        <ReviewerConflictBadge conflicts={r.conflicts} showReasons />
                                                         {isExternalReviewer(r) && (
                                                             <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-orange-50 text-orange-600 border border-orange-200">
                                                                 External

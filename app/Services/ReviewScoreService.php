@@ -950,7 +950,7 @@ class ReviewScoreService
             }
 
             try {
-                SendEmailNotificationJob::dispatchSync($recipient, 'review_disagreement', $data);
+                SendEmailNotificationJob::deliver($recipient, 'review_disagreement', $data);
             } catch (\Throwable $e) {
                 Log::error("Review disagreement email failed: {$e->getMessage()}");
             }

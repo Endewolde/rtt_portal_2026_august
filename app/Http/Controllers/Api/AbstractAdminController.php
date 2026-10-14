@@ -202,7 +202,7 @@ class AbstractAdminController extends Controller
             'body' => 'required|string|max:5000',
         ]);
 
-        SendRawMailJob::dispatchSync(
+        SendRawMailJob::deliver(
             view('emails.abstract_what_next', [
                 'abstract' => $abstract,
                 'conference' => $abstract->conference,
@@ -308,7 +308,7 @@ class AbstractAdminController extends Controller
             ? config('app.url').'/conferences/'.$abstract->conference?->slug.'/submit-abstract?token='.$abstract->submission_token
             : null;
 
-        SendRawMailJob::dispatchSync(
+        SendRawMailJob::deliver(
             view($template, [
                 'abstract' => $abstract,
                 'conference' => $abstract->conference,
@@ -335,7 +335,7 @@ class AbstractAdminController extends Controller
                 continue;
             }
 
-            SendRawMailJob::dispatchSync(
+            SendRawMailJob::deliver(
                 view('emails.abstract_review_submitted', [
                     'abstract' => $abstract,
                     'conference' => $abstract->conference,
@@ -356,7 +356,7 @@ class AbstractAdminController extends Controller
         if (! $reviewer->email) {
             return;
         }
-        SendRawMailJob::dispatchSync(
+        SendRawMailJob::deliver(
             view('emails.abstract_reviewer_assigned', [
                 'abstract' => $abstract,
                 'conference' => $abstract->conference,

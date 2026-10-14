@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Jobs\Concerns\DispatchesToWorkerWhenAlive;
 use App\Models\EmailLog;
 use App\Services\MailConfigService;
 use Illuminate\Bus\Queueable;
@@ -14,7 +15,7 @@ use Illuminate\Support\Facades\Mail;
 
 class SendRawMailJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable, DispatchesToWorkerWhenAlive, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 3;
 

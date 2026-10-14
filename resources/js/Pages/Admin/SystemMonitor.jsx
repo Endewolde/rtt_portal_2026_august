@@ -612,6 +612,10 @@ export default function SystemMonitor() {
                         <StatCard icon={Zap}      label="Requests / min"        value={fmt(a.rpm)}              color="cyan" />
                         <StatCard icon={Clock}    label="Avg Response (5 min)"  value={fmtMs(a.avg_response_ms)} color="violet" />
                         <StatCard icon={Database} label="DB Connections"         value={fmt(a.db_connections)}   color="blue" />
+                        <StatCard icon={Activity} label="Queue Worker"
+                            value={a.queue_worker_alive ? 'Running' : 'Not running'}
+                            sub={a.queue_worker_alive ? 'Emails send in the background' : 'Emails send immediately (no worker)'}
+                            color={a.queue_worker_alive ? 'emerald' : 'amber'} />
                         <StatCard icon={Layers}   label="Queue Pending"          value={fmt(a.queue_pending)}    color="amber" />
                         <StatCard icon={XCircle}  label="Failed Jobs"            value={fmt(a.queue_failed)}
                             color={a.queue_failed > 0 ? 'red' : 'emerald'} />

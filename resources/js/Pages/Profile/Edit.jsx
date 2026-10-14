@@ -3,13 +3,14 @@ import {
     User, Mail, Phone, CreditCard, Shield, Lock,
     Camera, Save, Eye, EyeOff, CheckCircle2, AlertCircle,
     Building2, Layers, ExternalLink, ShieldCheck,
-    BookOpen, X, GraduationCap, Monitor, Trash2, Bell,
+    BookOpen, X, GraduationCap, Monitor, Trash2, Bell, Download, FileLock2,
 } from 'lucide-react'
 import AppLayout from '../../Layouts/AppLayout'
 import { useAuth } from '../../hooks/useAuth'
 import { useToast } from '../../Components/Toast'
 import api from '../../lib/api'
 import { timeAgo } from '../../lib/utils'
+import { downloadFile } from '../../lib/download'
 
 // ─── Avatar uploader ──────────────────────────────────────────────────────────
 
@@ -526,6 +527,103 @@ function NotificationPreferencesSection() {
 
 // ─── Active sessions ──────────────────────────────────────────────────────────
 
+function PrivacySection() {
+    const { success, error } = useToast()
+    const [request, setRequest] = useState(undefined)
+    const [asking, setAsking] = useState(false)
+    const [reason, setReason] = useState('')
+    const [busy, setBusy] = useState(false)
+
+    useEffect(() => {
+        api.get('/me/deletion-request').then(r => setRequest(r.data?.data ?? null)).catch(() => setRequest(null))
+    }, [])
+
+    const download = async () => {
+        setBusy(true)
+        try {
+            await downloadFile('/me/data-export', 'my-data.json')
+        } catch {
+            error('Could not prepare your data. Please try again.')
+        }
+        setBusy(false)
+    }
+
+    const send = async () => {
+        setBusy(true)
+        try {
+            const r = await api.post('/me/deletion-request', { reason: reason.trim() || null })
+            setRequest(r.data?.data)
+            setAsking(false)
+            success(r.data?.message || 'Request sent.')
+        } catch (e) {
+            error(e.response?.data?.message || 'Could not send the request.')
+        }
+        setBusy(false)
+    }
+
+    const cancel = async () => {
+        setBusy(true)
+        try {
+            await api.delete('/me/deletion-request')
+            setRequest(r => ({ ...r, status: 'cancelled' }))
+            success('Deletion request cancelled.')
+        } catch (e) {
+            error(e.response?.data?.message || 'Could not cancel the request.')
+        }
+        setBusy(false)
+    }
+
+    const pending = request?.status === 'pending'
+
+    return (
+        <div className="space-y-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <p className="text-sm font-medium text-gray-900">Download your data</p>
+                    <p className="text-xs text-gray-500">Your profile, proposals, team memberships, reviews and notifications, as a file.</p>
+                </div>
+                <button onClick={download} disabled={busy}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                    <Download size={14} /> Download
+                </button>
+            </div>
+
+            <div className="border-t border-gray-100 pt-5">
+                <p className="text-sm font-medium text-gray-900">Delete your personal data</p>
+                <p className="mt-0.5 text-xs text-gray-500">
+                    An administrator reviews the request. Your name, contact details and sign-in are removed; proposals and reviews you took part in
+                    stay as university records without identifying you. It can't be done while you still have active proposals, reviews or unsettled funds.
+                </p>
+
+                {pending ? (
+                    <div className="mt-3 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-sm text-amber-800">Request sent {timeAgo(request.created_at)} — waiting for an administrator.</p>
+                        <button onClick={cancel} disabled={busy} className="text-sm font-semibold text-amber-900 underline underline-offset-2 disabled:opacity-50">Cancel request</button>
+                    </div>
+                ) : request?.status === 'rejected' && !asking ? (
+                    <p className="mt-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">Your last request was declined: {request.admin_note}</p>
+                ) : null}
+
+                {!pending && (asking ? (
+                    <div className="mt-3 space-y-3">
+                        <textarea rows={3} value={reason} maxLength={1000} onChange={e => setReason(e.target.value)}
+                            placeholder="Optional: tell us why"
+                            className="w-full resize-none rounded-xl border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
+                        <div className="flex gap-2">
+                            <button onClick={() => setAsking(false)} className="rounded-xl border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">Cancel</button>
+                            <button onClick={send} disabled={busy} className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50">Send deletion request</button>
+                        </div>
+                    </div>
+                ) : (
+                    <button onClick={() => setAsking(true)} className="mt-3 inline-flex items-center gap-2 rounded-xl border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50">
+                        <Trash2 size={14} /> Request deletion
+                    </button>
+                ))}
+            </div>
+        </div>
+    )
+}
+
 function ActiveSessionsSection() {
     const { success, error } = useToast()
     const { logout } = useAuth()
@@ -832,6 +930,11 @@ export default function ProfileEdit() {
                 <Card title="Active Sessions" icon={Monitor}
                       iconColor="bg-slate-100 text-slate-600">
                     <ActiveSessionsSection />
+                </Card>
+
+                <Card title="Your Data & Privacy" icon={FileLock2}
+                      iconColor="bg-rose-100 text-rose-600">
+                    <PrivacySection />
                 </Card>
 
             </div>

@@ -203,7 +203,7 @@ class BudgetRevisionController extends Controller
 
         foreach (User::role($roles)->where('status', 'active')->get() as $officer) {
             try {
-                SendEmailNotificationJob::dispatchSync($officer, 'budget_revision_requested', [
+                SendEmailNotificationJob::deliver($officer, 'budget_revision_requested', [
                     'tracker_number' => $proposal->tracker_number,
                     'title' => $proposal->title,
                     'submitter_name' => $submitter->name,
@@ -218,7 +218,7 @@ class BudgetRevisionController extends Controller
     private function notifyPi(User $pi, BudgetRevisionRequest $revision, string $decision): void
     {
         try {
-            SendEmailNotificationJob::dispatchSync($pi, 'budget_revision_resolved', [
+            SendEmailNotificationJob::deliver($pi, 'budget_revision_resolved', [
                 'tracker_number' => $revision->proposal->tracker_number,
                 'title' => $revision->proposal->title,
                 'decision' => $decision,

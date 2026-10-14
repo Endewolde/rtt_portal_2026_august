@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\SendRawMailJob;
 use App\Models\AppSetting;
 use App\Models\ThresholdSetting;
 use App\Models\User;
 use App\Services\MailConfigService;
 use App\Services\ReviewScoreService;
+use App\Support\QueueWorker;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -563,6 +565,30 @@ class SettingsController extends Controller
                 'message' => 'No active recipients found for the selected target.',
                 'errors' => [],
             ], 422);
+        }
+
+        // With a queue worker running, hand each email to the queue and return straight away.
+        if (QueueWorker::isAlive()) {
+            foreach ($recipients as $user) {
+                SendRawMailJob::dispatch(
+                    view('emails.broadcast', [
+                        'recipientName' => $user->name,
+                        'subject' => $request->subject,
+                        'body' => $request->message,
+                        'senderName' => config('mail.from.name'),
+                    ])->render(),
+                    $user->email,
+                    $user->name,
+                    $request->subject,
+                );
+            }
+
+            return response()->json([
+                'data' => ['sent' => 0, 'queued' => $recipients->count(), 'failed' => 0, 'total' => $recipients->count()],
+                'message' => "Sending to {$recipients->count()} recipient".($recipients->count() !== 1 ? 's' : '').' in the background. Check System Monitor → Email for delivery.',
+                'errors' => [],
+                'meta' => [],
+            ]);
         }
 
         $sent = 0;

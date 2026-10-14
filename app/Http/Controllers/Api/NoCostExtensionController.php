@@ -185,7 +185,7 @@ class NoCostExtensionController extends Controller
 
         foreach (User::role($roles)->where('status', 'active')->get() as $officer) {
             try {
-                SendEmailNotificationJob::dispatchSync($officer, 'no_cost_extension_requested', [
+                SendEmailNotificationJob::deliver($officer, 'no_cost_extension_requested', [
                     'tracker_number' => $proposal->tracker_number,
                     'title' => $proposal->title,
                     'submitter_name' => $submitter->name,
@@ -200,7 +200,7 @@ class NoCostExtensionController extends Controller
     private function notifyPi(User $pi, NoCostExtensionRequest $extension, string $decision): void
     {
         try {
-            SendEmailNotificationJob::dispatchSync($pi, 'no_cost_extension_resolved', [
+            SendEmailNotificationJob::deliver($pi, 'no_cost_extension_resolved', [
                 'tracker_number' => $extension->proposal->tracker_number,
                 'title' => $extension->proposal->title,
                 'decision' => $decision,

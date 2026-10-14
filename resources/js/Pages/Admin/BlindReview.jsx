@@ -6,6 +6,7 @@ import {
     Search, X, Building2, Users, CheckCircle2, UserPlus, Trash2,
     ChevronRight, Activity, AlertTriangle, Shield, Scale,
 } from 'lucide-react';
+import ReviewerConflictBadge, { isConflictWarning } from '../../Components/ReviewerConflictBadge';
 import AppLayout from '../../Layouts/AppLayout';
 import StatusBadge from '../../Components/StatusBadge';
 import WorkflowBreadcrumb from '../../Components/WorkflowBreadcrumb';
@@ -313,6 +314,7 @@ function ReviewerSearchList({ proposalId, selectedId, onSelect, alreadyAssignedI
                                                     External
                                                 </span>
                                             )}
+                                            <ReviewerConflictBadge conflicts={r.conflicts} />
                                             {isAssigned && (
                                                 <span className="text-[10px] bg-amber-50 text-amber-600 border border-amber-200 px-1.5 py-0.5 rounded-full font-medium">
                                                     Already assigned
@@ -389,18 +391,21 @@ function ReassignModal({ assignment, proposalId, currentAssignments, onSave, onC
         ? new Date(assignment.due_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
         : null;
 
-    const save = async (overrideWorkloadCap = false) => {
+    const save = async (overrideWorkloadCap = false, acknowledgeConflicts = false) => {
         if (!selectedId || !dueDate) return;
         setSaving(true);
         try {
             await api.put(`/review-assignments/${assignment.id}/reassign`, {
                 new_reviewer_id: selectedId, due_date: dueDate, override_workload_cap: overrideWorkloadCap,
+                acknowledge_conflicts: acknowledgeConflicts,
             });
             onSave();
         } catch (e) {
             const msg = e.response?.data?.message || 'Failed to reassign.';
             if (msg.includes('max workload')) {
-                error(msg, { action: { label: 'Assign Anyway', onClick: () => save(true) } });
+                error(msg, { action: { label: 'Assign Anyway', onClick: () => save(true, acknowledgeConflicts) } });
+            } else if (isConflictWarning(msg)) {
+                error(msg, { duration: 12000, action: { label: 'Assign Anyway', onClick: () => save(overrideWorkloadCap, true) } });
             } else {
                 error(msg);
             }
@@ -472,18 +477,21 @@ function AddReviewerModal({ proposalId, currentAssignments, onSave, onClose }) {
             .filter(Boolean)
     );
 
-    const save = async (overrideWorkloadCap = false) => {
+    const save = async (overrideWorkloadCap = false, acknowledgeConflicts = false) => {
         if (!selectedId || !dueDate) return;
         setSaving(true);
         try {
             await api.post(`/proposals/${proposalId}/review/add-reviewer`, {
                 reviewer_id: selectedId, due_date: dueDate, override_workload_cap: overrideWorkloadCap,
+                acknowledge_conflicts: acknowledgeConflicts,
             });
             onSave();
         } catch (e) {
             const msg = e.response?.data?.message || 'Failed to add reviewer.';
             if (msg.includes('max workload')) {
-                error(msg, { action: { label: 'Assign Anyway', onClick: () => save(true) } });
+                error(msg, { action: { label: 'Assign Anyway', onClick: () => save(true, acknowledgeConflicts) } });
+            } else if (isConflictWarning(msg)) {
+                error(msg, { duration: 12000, action: { label: 'Assign Anyway', onClick: () => save(overrideWorkloadCap, true) } });
             } else {
                 error(msg);
             }

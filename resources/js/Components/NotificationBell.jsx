@@ -162,6 +162,16 @@ const TYPE_CFG = {
         template: d => d.message || 'Progress Report Reviewed',
         actionLabel: 'Open Reports', actionUrl: d => d.proposal_id ? `/proposals/${d.proposal_id}?tab=Progress` : '/progress-reports',
     },
+    data_deletion_requested: {
+        icon: AlertTriangle, color: 'amber', label: 'Data Deletion Request', category: 'action',
+        template: d => d.message || 'Someone asked for their personal data to be deleted',
+        actionLabel: 'Review Request', actionUrl: () => '/admin/data-requests',
+    },
+    data_deletion_reviewed: {
+        icon: AlertTriangle, color: 'blue', label: 'Data Deletion Request', category: 'activity',
+        template: d => d.message || 'Your data deletion request was reviewed',
+        actionLabel: 'Open Profile', actionUrl: () => '/profile',
+    },
     review_certificate_released: {
         icon: Trophy, color: 'yellow', label: 'Certificate Ready', category: 'activity',
         template: d => d.message || 'Your certificate of review service is ready',

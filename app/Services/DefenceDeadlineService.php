@@ -364,7 +364,7 @@ class DefenceDeadlineService
         }
 
         try {
-            SendEmailNotificationJob::dispatchSync($user, $event, $data);
+            SendEmailNotificationJob::deliver($user, $event, $data);
         } catch (\Throwable $e) {
             Log::error("Failed to send email notification [{$event}] to {$user->email}: ".$e->getMessage());
         }

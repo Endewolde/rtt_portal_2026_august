@@ -322,7 +322,7 @@ class ReviewCertificateService
         }
 
         try {
-            SendEmailNotificationJob::dispatchSync($user, $event, $data);
+            SendEmailNotificationJob::deliver($user, $event, $data);
         } catch (\Throwable $e) {
             Log::error("Certificate email ({$event}) failed: {$e->getMessage()}");
         }

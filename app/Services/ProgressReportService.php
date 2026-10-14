@@ -300,7 +300,7 @@ class ProgressReportService
             }
 
             try {
-                SendEmailNotificationJob::dispatchSync($user, $event, $data);
+                SendEmailNotificationJob::deliver($user, $event, $data);
             } catch (\Throwable $e) {
                 Log::error("Progress report email ({$event}) failed: {$e->getMessage()}");
             }

@@ -155,7 +155,7 @@ class ProposalAppealController extends Controller
         $officers = User::role($role)->where('status', 'active')->get();
         foreach ($officers as $officer) {
             try {
-                SendEmailNotificationJob::dispatchSync($officer, 'appeal_submitted', [
+                SendEmailNotificationJob::deliver($officer, 'appeal_submitted', [
                     'tracker_number' => $proposal->tracker_number,
                     'title' => $proposal->title,
                     'submitter_name' => $submitter->name,
@@ -169,7 +169,7 @@ class ProposalAppealController extends Controller
     private function notifyPi(User $pi, Proposal $proposal, ProposalAppeal $appeal): void
     {
         try {
-            SendEmailNotificationJob::dispatchSync($pi, 'appeal_resolved', [
+            SendEmailNotificationJob::deliver($pi, 'appeal_resolved', [
                 'tracker_number' => $proposal->tracker_number,
                 'title' => $proposal->title,
                 'decision' => $appeal->status,

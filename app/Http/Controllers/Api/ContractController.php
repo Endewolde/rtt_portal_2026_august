@@ -257,7 +257,7 @@ class ContractController extends Controller
 
         foreach ($officers as $officer) {
             try {
-                SendEmailNotificationJob::dispatchSync($officer, 'contract_submitted', $data);
+                SendEmailNotificationJob::deliver($officer, 'contract_submitted', $data);
                 StoreInAppNotificationJob::dispatchSync($officer->id, 'contract_submitted', $data);
             } catch (\Exception $e) {
                 Log::error("Contract submission notify failed: {$e->getMessage()}");
@@ -278,7 +278,7 @@ class ContractController extends Controller
         ];
 
         try {
-            SendEmailNotificationJob::dispatchSync($pi, 'contract_approved', $data);
+            SendEmailNotificationJob::deliver($pi, 'contract_approved', $data);
             StoreInAppNotificationJob::dispatchSync($pi->id, 'contract_approved', $data);
         } catch (\Exception $e) {
             Log::error("Contract approval notify failed: {$e->getMessage()}");
@@ -299,7 +299,7 @@ class ContractController extends Controller
         ];
 
         try {
-            SendEmailNotificationJob::dispatchSync($pi, 'contract_rejected', $data);
+            SendEmailNotificationJob::deliver($pi, 'contract_rejected', $data);
             StoreInAppNotificationJob::dispatchSync($pi->id, 'contract_rejected', $data);
         } catch (\Exception $e) {
             Log::error("Contract rejection notify failed: {$e->getMessage()}");

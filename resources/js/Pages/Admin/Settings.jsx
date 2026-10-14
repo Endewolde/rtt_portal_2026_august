@@ -115,6 +115,12 @@ const KEY_LABELS = {
     max_active_coinvestigator_proposals: 'Max Active Proposals as Co-Investigator (0 = unlimited)',
     review_disagreement_threshold_pct: 'Hold Blind Review When Reviewers Differ By More Than (% of max, 0 = off)',
     progress_report_interval_months: 'Progress Report Every (months)',
+    retention_draft_days: 'Delete Drafts This Many Days After Their Call Closed (0 = keep)',
+    retention_read_notification_days: 'Delete Read Notifications Older Than (days, 0 = keep)',
+    retention_inactive_account_days: 'Deactivate Accounts Unused For (days, 0 = never)',
+    eligibility_block_overdue_reports: 'Block New Submissions While a Progress Report Is Overdue',
+    eligibility_max_active_grants: 'Maximum Active Grants per PI (0 = no limit)',
+    eligibility_unsettled_days: 'Block New Submissions if Funds Are Unsettled After (days, 0 = off)',
     certificate_min_reviews: 'Reviewer Certificate — Minimum Completed Reviews per Year',
     certificate_on_time_only: 'Reviewer Certificate — Count Only Reviews Submitted On Time',
     certificate_signatory_name: 'Reviewer Certificate — Signatory Name',
@@ -231,6 +237,11 @@ const NUMBER_RANGES = {
     max_active_coinvestigator_proposals: { min: 0, max: 50, step: 1 },
     review_disagreement_threshold_pct: { min: 0, max: 100, step: 1 },
     progress_report_interval_months: { min: 1, max: 12, step: 1 },
+    eligibility_max_active_grants: { min: 0, max: 20, step: 1 },
+    retention_draft_days: { min: 0, max: 3650, step: 1 },
+    retention_read_notification_days: { min: 0, max: 3650, step: 1 },
+    retention_inactive_account_days: { min: 0, max: 3650, step: 1 },
+    eligibility_unsettled_days: { min: 0, max: 730, step: 1 },
 }
 
 // Keys that are internal / legacy and should not appear in the UI

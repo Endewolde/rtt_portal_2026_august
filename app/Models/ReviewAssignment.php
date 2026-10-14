@@ -31,6 +31,7 @@ class ReviewAssignment extends Model
         'coi_has_conflict',
         'coi_reason',
         'coi_resolved_at',
+        'acknowledged_conflicts',
     ];
 
     protected $casts = [
@@ -41,6 +42,7 @@ class ReviewAssignment extends Model
         'coi_has_conflict' => 'boolean',
         'coi_resolved_at' => 'datetime',
         'is_external' => 'boolean',
+        'acknowledged_conflicts' => 'array',
     ];
 
     public function proposal(): BelongsTo

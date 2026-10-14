@@ -23,6 +23,7 @@ use App\Services\DefenceDeadlineService;
 use App\Services\DefenceSessionService;
 use App\Services\MailConfigService;
 use App\Services\ReviewAssignmentService;
+use App\Services\ReviewerConflictService;
 use App\Services\ReviewScoreService;
 use App\Services\WorkflowService;
 use App\Support\AuditLogger;
@@ -68,6 +69,7 @@ class ReviewController extends Controller
             'evaluation_type_id' => 'required|string',
             'due_date' => 'required|date|after:today',
             'override_workload_cap' => 'sometimes|boolean',
+            'acknowledge_conflicts' => 'sometimes|boolean',
         ]);
 
         $proposal = Proposal::findOrFail($id);
@@ -78,7 +80,8 @@ class ReviewController extends Controller
             $request->user(),
             [],
             $request->due_date,
-            $request->boolean('override_workload_cap')
+            $request->boolean('override_workload_cap'),
+            $request->boolean('acknowledge_conflicts')
         );
 
         AuditLogger::log(
@@ -1023,6 +1026,7 @@ class ReviewController extends Controller
             'new_reviewer_id' => 'required|uuid|exists:users,id',
             'due_date' => 'required|date|after:today',
             'override_workload_cap' => 'sometimes|boolean',
+            'acknowledge_conflicts' => 'sometimes|boolean',
         ]);
 
         $assignment = ReviewAssignment::with('evaluationType')->findOrFail($id);
@@ -1046,8 +1050,13 @@ class ReviewController extends Controller
 
         $this->assignmentService->ensureWithinWorkloadCap([$request->new_reviewer_id], $request->boolean('override_workload_cap'));
 
+        $acknowledged = str_starts_with((string) $assignment->evaluationType?->name, 'blind_review')
+            ? app(ReviewerConflictService::class)->ensureAcknowledged($proposal, [$request->new_reviewer_id], $request->boolean('acknowledge_conflicts'))
+            : [];
+
         $oldReviewerId = $assignment->reviewer_id;
         $assignment->update([
+            'acknowledged_conflicts' => $acknowledged[$request->new_reviewer_id] ?? null,
             'reviewer_id' => $request->new_reviewer_id,
             'status' => 'pending',
             'due_date' => $request->due_date,
@@ -1086,7 +1095,7 @@ class ReviewController extends Controller
             ];
 
             if ($newReviewer->email) {
-                SendRawMailJob::dispatchSync(
+                SendRawMailJob::deliver(
                     view('emails.notifications.review_assignment', array_merge($data, ['recipient' => $newReviewer]))->render(),
                     $newReviewer->email,
                     $newReviewer->name,
@@ -1115,6 +1124,7 @@ class ReviewController extends Controller
             'reviewer_id' => 'required|uuid|exists:users,id',
             'due_date' => 'required|date|after:today',
             'override_workload_cap' => 'sometimes|boolean',
+            'acknowledge_conflicts' => 'sometimes|boolean',
         ]);
 
         $proposal = Proposal::findOrFail($id);
@@ -1153,6 +1163,10 @@ class ReviewController extends Controller
         }
 
         $this->assignmentService->ensureWithinWorkloadCap([$request->reviewer_id], $request->boolean('override_workload_cap'));
+
+        $acknowledgedConflicts = $proposal->status === 'under_blind_review'
+            ? app(ReviewerConflictService::class)->ensureAcknowledged($proposal, [$request->reviewer_id], $request->boolean('acknowledge_conflicts'))
+            : [];
 
         $alreadyAssigned = ReviewAssignment::where('proposal_id', $id)
             ->where('reviewer_id', $request->reviewer_id)
@@ -1193,6 +1207,7 @@ class ReviewController extends Controller
             'status' => 'pending',
             'assigned_at' => now(),
             'due_date' => $request->due_date ?? now()->addDays(14)->toDateString(),
+            'acknowledged_conflicts' => $acknowledgedConflicts[$request->reviewer_id] ?? null,
         ]);
 
         $reviewType = $proposal->status === 'under_open_defence' ? 'Open Defence' : 'Blind Review';
@@ -1205,7 +1220,7 @@ class ReviewController extends Controller
             ];
 
             if ($reviewer->email) {
-                SendRawMailJob::dispatchSync(
+                SendRawMailJob::deliver(
                     view('emails.notifications.review_assignment', array_merge($data, ['recipient' => $reviewer]))->render(),
                     $reviewer->email,
                     $reviewer->name,
@@ -1459,7 +1474,7 @@ class ReviewController extends Controller
 
         try {
             StoreInAppNotificationJob::dispatchSync($officer->id, 'review_coi_conflict', $data);
-            SendRawMailJob::dispatchSync(
+            SendRawMailJob::deliver(
                 "<p>Dear {$officer->name},</p><p><strong>{$reviewer->name}</strong> has declared a conflict of interest reviewing <strong>{$assignment->proposal?->title}</strong> ({$assignment->proposal?->tracker_number}) and will not be scoring it.</p><p><strong>Reason given:</strong> ".e($assignment->coi_reason).'</p><p>Please reassign this review to another reviewer.</p>',
                 $officer->email,
                 $officer->name,
@@ -1506,7 +1521,7 @@ class ReviewController extends Controller
             ];
 
             try {
-                SendRawMailJob::dispatchSync(
+                SendRawMailJob::deliver(
                     view('emails.notifications.generic', $emailData)->render(),
                     $pi->email,
                     $pi->name,
@@ -1568,7 +1583,7 @@ class ReviewController extends Controller
 
             if ($coI->email) {
                 try {
-                    SendEmailNotificationJob::dispatchSync($coI, 'co_investigator_notified', $data);
+                    SendEmailNotificationJob::deliver($coI, 'co_investigator_notified', $data);
                 } catch (\Exception $e) {
                     Log::warning("Could not resend co-investigator invitation email to {$coI->email}: {$e->getMessage()}");
                 }

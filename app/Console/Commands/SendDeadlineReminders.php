@@ -72,7 +72,7 @@ class SendDeadlineReminders extends Command
 
         if ($user->email) {
             try {
-                SendEmailNotificationJob::dispatchSync($user, 'deadline_reminder', $data);
+                SendEmailNotificationJob::deliver($user, 'deadline_reminder', $data);
             } catch (\Exception $e) {
                 Log::error("Deadline reminder email failed for {$user->email}: ".$e->getMessage());
             }

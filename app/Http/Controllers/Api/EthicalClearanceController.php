@@ -178,7 +178,7 @@ class EthicalClearanceController extends Controller
         $officers = User::role($role)->where('status', 'active')->get();
         foreach ($officers as $officer) {
             try {
-                SendEmailNotificationJob::dispatchSync($officer, 'ethical_clearance_submitted', [
+                SendEmailNotificationJob::deliver($officer, 'ethical_clearance_submitted', [
                     'tracker_number' => $proposal->tracker_number,
                     'title' => $proposal->title,
                     'submitter_name' => $submitter->name,
@@ -197,7 +197,7 @@ class EthicalClearanceController extends Controller
         }
 
         try {
-            SendEmailNotificationJob::dispatchSync($pi, 'ethical_clearance_resolved', [
+            SendEmailNotificationJob::deliver($pi, 'ethical_clearance_resolved', [
                 'tracker_number' => $proposal->tracker_number,
                 'title' => $proposal->title,
                 'decision' => $decision,

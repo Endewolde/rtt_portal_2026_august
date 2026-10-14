@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Jobs\Concerns\DispatchesToWorkerWhenAlive;
 use App\Models\EmailLog;
 use App\Models\NotificationPreference;
 use App\Models\User;
@@ -16,7 +17,7 @@ use Illuminate\Support\Facades\Mail;
 
 class SendEmailNotificationJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable, DispatchesToWorkerWhenAlive, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 3;
 

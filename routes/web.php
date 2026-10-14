@@ -65,6 +65,7 @@ Route::get('/admin/deadline-extensions', fn () => Inertia::render('Admin/Deadlin
 Route::get('/admin/defence-extensions', fn () => Inertia::render('Admin/DefenceExtensions'));
 Route::get('/admin/turnaround', fn () => Inertia::render('Admin/Turnaround'));
 Route::get('/admin/review-certificates', fn () => Inertia::render('Admin/ReviewCertificates'));
+Route::get('/admin/data-requests', fn () => Inertia::render('Admin/DataRequests'));
 Route::get('/progress-reports', fn () => Inertia::render('Monitoring/ProgressReports'));
 Route::get('/admin/ethical-clearance', fn () => Inertia::render('Admin/EthicalClearance'));
 Route::get('/admin/budget-revisions', fn () => Inertia::render('Admin/BudgetRevisions'));

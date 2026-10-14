@@ -102,6 +102,11 @@ class AppSettingsSeeder extends Seeder
             ['key' => 'review_disagreement_threshold_pct', 'value' => '25', 'type' => 'number', 'group' => 'thresholds'],
             // Funded projects report progress every N months; the last period is the final report.
             ['key' => 'progress_report_interval_months', 'value' => '3', 'type' => 'number', 'group' => 'thresholds'],
+            // Who may submit a new proposal: no overdue progress report, at most N active grants
+            // (0 = no limit), funds settled within N days of release (0 = not checked).
+            ['key' => 'eligibility_block_overdue_reports', 'value' => 'true', 'type' => 'boolean', 'group' => 'thresholds'],
+            ['key' => 'eligibility_max_active_grants', 'value' => '0', 'type' => 'number', 'group' => 'thresholds'],
+            ['key' => 'eligibility_unsettled_days', 'value' => '0', 'type' => 'number', 'group' => 'thresholds'],
             // Who signs reviewer certificates of service.
             ['key' => 'certificate_signatory_name', 'value' => '', 'type' => 'string', 'group' => 'general'],
             // Reviewer certificates: completed reviews needed in a year, and whether late ones count.
@@ -111,6 +116,10 @@ class AppSettingsSeeder extends Seeder
 
             // Audit & Logging
             ['key' => 'audit_log_retention_days', 'value' => '365',  'type' => 'number',  'group' => 'audit'],
+            // Data retention (0 = off): drafts after their call closed, read notifications, unused accounts (deactivated, not deleted).
+            ['key' => 'retention_draft_days', 'value' => '0', 'type' => 'number', 'group' => 'audit'],
+            ['key' => 'retention_read_notification_days', 'value' => '0', 'type' => 'number', 'group' => 'audit'],
+            ['key' => 'retention_inactive_account_days', 'value' => '0', 'type' => 'number', 'group' => 'audit'],
             ['key' => 'activity_logging',         'value' => 'true', 'type' => 'boolean', 'group' => 'audit'],
             ['key' => 'error_logging',            'value' => 'true', 'type' => 'boolean', 'group' => 'audit'],
             ['key' => 'login_history_enabled',    'value' => 'true', 'type' => 'boolean', 'group' => 'audit'],

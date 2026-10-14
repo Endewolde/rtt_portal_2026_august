@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\EmailLog;
 use App\Models\User;
 use App\Notifications\SystemAlertNotification;
+use App\Support\QueueWorker;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
@@ -405,6 +406,8 @@ class SystemMonitorController extends Controller
                 'rpm' => $rpm,
                 'queue_pending' => $queuePending,
                 'queue_failed' => $queueFailed,
+                'queue_worker_alive' => QueueWorker::isAlive(),
+                'queue_worker_last_seen' => QueueWorker::lastSeen()?->toIso8601String(),
                 'db_connections' => $dbConnections,
                 'requests_5m' => (int) ($last5MinReqs?->total ?? 0),
                 'failed_5m' => (int) ($last5MinReqs?->failed ?? 0),

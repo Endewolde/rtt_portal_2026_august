@@ -18,6 +18,7 @@ import AnonymityCheckPanel from '../../Components/AnonymityCheckPanel';
 import ReviewDisagreementPanel from '../../Components/ReviewDisagreementPanel';
 import ProgressReportsTab from '../../Components/ProgressReportsTab';
 import ProposalStatusGuide from '../../Components/ProposalStatusGuide';
+import ProposalVersions from '../../Components/ProposalVersions';
 import { issueByKey } from '../../lib/approvalReportIssues';
 import { downloadFile } from '../../lib/download';
 
@@ -2514,6 +2515,9 @@ export default function ProposalShow() {
                     </div>
 
                     <div className="p-6">
+                        {activeTab === 'Overview' && proposal.status === 'submitted' && !proposal.history_hidden && (
+                            <ProposalVersions proposalId={id} />
+                        )}
                         {activeTab === 'Overview' && (
                             <div className="space-y-4 text-sm text-gray-700">
                                 {proposal.abstract && (
@@ -2684,7 +2688,10 @@ export default function ProposalShow() {
                                     </div>
                                 </div>
                             ) : (
-                                <ProposalTimeline history={history} currentStatus={proposal.status} />
+                                <>
+                                    <ProposalVersions proposalId={id} />
+                                    <ProposalTimeline history={history} currentStatus={proposal.status} />
+                                </>
                             )
                         )}
 

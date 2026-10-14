@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Proposal;
 use App\Models\User;
+use App\Services\ReviewerConflictService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -22,12 +23,14 @@ class ReviewerMatchController extends Controller
         $proposal = Proposal::findOrFail($proposalId);
 
         $proposalTerms = $this->extractTerms($proposal);
+        $conflictService = app(ReviewerConflictService::class);
 
         $reviewers = User::with('roles:id,name')
             ->whereNotNull('expertise')
             ->whereHas('roles', fn ($q) => $q->whereIn('name', ['staff', 'external_reviewer']))
             ->where('status', 'active')
-            ->where('id', '!=', $proposal->pi_user_id)
+            // The whole team, not just the PI — a co-investigator must never review their own proposal.
+            ->whereNotIn('id', $conflictService->teamIds($proposal))
             ->withCount([
                 'reviewAssignments as active_assignments' => fn ($q) => $q->whereIn('status', ['pending', 'accepted', 'in_progress']),
                 'reviewAssignments as completed_assignments' => fn ($q) => $q->where('status', 'submitted'),
@@ -94,8 +97,14 @@ class ReviewerMatchController extends Controller
                 'composite_score' => $compositeScore,
             ];
         })
-            ->filter(fn ($r) => $r['match_score'] > 0)
-            ->sortByDesc('composite_score')
+            ->filter(fn ($r) => $r['match_score'] > 0);
+
+        $conflicts = $conflictService->forProposal($proposal, $scored->pluck('id'));
+
+        // Reviewers with a possible conflict stay visible but rank below clean matches.
+        $scored = $scored
+            ->map(fn ($r) => $r + ['conflicts' => $conflicts[$r['id']] ?? []])
+            ->sortBy([fn ($a, $b) => count($a['conflicts']) > 0 <=> count($b['conflicts']) > 0, fn ($a, $b) => $b['composite_score'] <=> $a['composite_score']])
             ->take(10)
             ->values();
 

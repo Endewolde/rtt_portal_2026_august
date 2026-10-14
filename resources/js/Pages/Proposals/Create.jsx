@@ -15,6 +15,7 @@ import { useFeature } from '../../hooks/useFeature';
 import { useToast } from '../../Components/Toast';
 import RoleRestrictedModal from '../../Components/RoleRestrictedModal';
 import ProposalLimitModal from '../../Components/ProposalLimitModal';
+import SubmissionEligibilityNotice from '../../Components/SubmissionEligibilityNotice';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -1333,6 +1334,7 @@ export default function ProposalCreate() {
         return (
             <AppLayout breadcrumb="Proposals / Active Calls">
                 <div className="max-w-4xl mx-auto pb-28">
+                    <SubmissionEligibilityNotice />
 
                     {/* Page header */}
                     <div className="mb-8">
@@ -1517,6 +1519,9 @@ export default function ProposalCreate() {
     return (
         <AppLayout breadcrumb="Proposals / New Application">
             <div className="max-w-5xl mx-auto">
+
+                {/* Resubmissions after a return are never held back, so only new proposals see this. */}
+                {!returnReason && <SubmissionEligibilityNotice />}
 
                 {/* Return reason banner */}
                 {returnReason && (

@@ -1,5 +1,6 @@
 <?php
 
+use App\Jobs\QueueHeartbeatJob;
 use App\Models\AppSetting;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -33,3 +34,9 @@ foreach ($backupTimeDefaults as $settingKey => $default) {
         ->when($autoBackupEnabled)
         ->onFailure(fn () => Log::error("[Scheduler] Backup failed (scheduled {$backupRunTime})."));
 }
+
+// Lets the app see whether a queue worker is running (mail is queued only while one is).
+Schedule::call(fn () => QueueHeartbeatJob::queueIfIdle())->name('queue-worker-heartbeat')->everyMinute()->withoutOverlapping();
+
+// Retention settings (drafts, read notifications, unused accounts) — each off until configured.
+Schedule::command('rtt:data-retention')->dailyAt('02:30');

@@ -51,7 +51,7 @@ class CancelReviewAssignmentsOnRejection
             }
 
             try {
-                SendEmailNotificationJob::dispatchSync($reviewer, 'review_assignment_cancelled', $data);
+                SendEmailNotificationJob::deliver($reviewer, 'review_assignment_cancelled', $data);
                 StoreInAppNotificationJob::dispatchSync($reviewer->id, 'review_assignment_cancelled', $data);
             } catch (\Exception $e) {
                 Log::error("Review assignment cancellation notify failed for reviewer {$reviewer->id}: {$e->getMessage()}");

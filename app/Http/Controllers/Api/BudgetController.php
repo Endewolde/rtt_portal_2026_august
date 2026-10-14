@@ -1000,7 +1000,7 @@ class BudgetController extends Controller
             if (! $officer->email) {
                 continue;
             }
-            SendRawMailJob::dispatchSync(
+            SendRawMailJob::deliver(
                 "<p>Dear {$officer->name},</p><p>Budget request for <strong>{$proposal->title}</strong> ({$proposal->tracker_number}) — Round {$budgetRequest->funding_round} — has been approved by the college officer and is now awaiting your review.</p><p>Amount requested: ETB ".number_format((float) $budgetRequest->total_amount, 2).'</p>',
                 $officer->email,
                 $officer->name,
@@ -1041,7 +1041,7 @@ class BudgetController extends Controller
             if (! $user->email) {
                 continue;
             }
-            SendRawMailJob::dispatchSync(
+            SendRawMailJob::deliver(
                 "<p>Dear {$user->name},</p><p>Your budget request for <strong>{$proposal->title}</strong> ({$proposal->tracker_number}) — Round {$budgetRequest->funding_round} — has been <strong>rejected</strong> by the college officer.</p><p><strong>Reason:</strong> {$budgetRequest->rejection_reason}</p><p>Please review the feedback, make the necessary corrections, and resubmit when ready.</p>",
                 $user->email,
                 $user->name,
@@ -1077,7 +1077,7 @@ class BudgetController extends Controller
             if (! $officer->email) {
                 continue;
             }
-            SendRawMailJob::dispatchSync(
+            SendRawMailJob::deliver(
                 "<p>Dear {$officer->name},</p><p>The budget request for <strong>{$proposal->title}</strong> ({$proposal->tracker_number}) — Round {$budgetRequest->funding_round} — has been <strong>returned</strong> by the Finance Officer with the following notes:</p><p><strong>Finance Notes:</strong> {$budgetRequest->finance_notes}</p><p>Please review and take appropriate action (approve again or reject to PI).</p>",
                 $officer->email,
                 $officer->name,
@@ -1121,7 +1121,7 @@ class BudgetController extends Controller
             if (! $user->email) {
                 continue;
             }
-            SendRawMailJob::dispatchSync(
+            SendRawMailJob::deliver(
                 view('emails.notifications.budget_request_approved', array_merge($data, ['recipient' => $user]))->render(),
                 $user->email,
                 $user->name,
@@ -1236,7 +1236,7 @@ class BudgetController extends Controller
 
         foreach ($officers as $officer) {
             try {
-                SendEmailNotificationJob::dispatchSync($officer, 'budget_request_submitted', $data);
+                SendEmailNotificationJob::deliver($officer, 'budget_request_submitted', $data);
                 StoreInAppNotificationJob::dispatchSync($officer->id, 'budget_request_submitted', $data);
             } catch (\Exception $e) {
                 Log::error("Finance officer notify failed: {$e->getMessage()}");

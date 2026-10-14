@@ -413,7 +413,7 @@ class ProposalApprovalReportController extends Controller
         }
 
         try {
-            SendEmailNotificationJob::dispatchSync($reporter, 'approval_report_resolved', $data);
+            SendEmailNotificationJob::deliver($reporter, 'approval_report_resolved', $data);
         } catch (\Exception $e) {
             Log::error("Approval report outcome email notify failed: {$e->getMessage()}");
         }
@@ -465,7 +465,7 @@ class ProposalApprovalReportController extends Controller
             }
 
             try {
-                SendEmailNotificationJob::dispatchSync($officer, 'approval_report_submitted', $data);
+                SendEmailNotificationJob::deliver($officer, 'approval_report_submitted', $data);
             } catch (\Exception $e) {
                 Log::error("Approval report email notify failed: {$e->getMessage()}");
             }

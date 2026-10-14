@@ -62,7 +62,7 @@ class SendNotificationDigests extends Command
                     'frequency' => $frequency,
                 ])->render();
 
-                SendRawMailJob::dispatchSync(
+                SendRawMailJob::deliver(
                     $html,
                     $user->email,
                     $user->name,

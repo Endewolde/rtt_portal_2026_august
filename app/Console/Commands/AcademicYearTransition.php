@@ -58,7 +58,7 @@ class AcademicYearTransition extends Command
 
             if (! $dryRun) {
                 try {
-                    SendEmailNotificationJob::dispatchSync($proposal->pi, 'academic_year_transition', [
+                    SendEmailNotificationJob::deliver($proposal->pi, 'academic_year_transition', [
                         'tracker_number' => $proposal->tracker_number,
                         'title' => $proposal->title,
                         'status' => $proposal->status,
