@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\EmailLog;
 use App\Models\User;
 use App\Notifications\SystemAlertNotification;
 use Illuminate\Http\JsonResponse;
@@ -116,6 +117,42 @@ class SystemMonitorController extends Controller
             'message' => '',
             'errors' => [],
             'meta' => ['minutes' => $minutes],
+        ]);
+    }
+
+    /** Outgoing email delivery log with 24h / 7d delivery figures. */
+    public function emailLog(Request $request): JsonResponse
+    {
+        if (! $request->user()?->can('system_monitor.view_any')) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.'], 403);
+        }
+
+        $logs = EmailLog::query()
+            ->when($request->status, fn ($q, $status) => $q->where('status', $status))
+            ->when($request->search, fn ($q, $term) => $q->where(fn ($q) => $q
+                ->where('to_email', 'like', "%{$term}%")
+                ->orWhere('subject', 'like', "%{$term}%")
+                ->orWhere('source', 'like', "%{$term}%")))
+            ->orderByDesc('created_at')
+            ->paginate(50);
+
+        $countSince = fn (string $status, $since) => EmailLog::where('status', $status)->where('created_at', '>=', $since)->count();
+        $day = now()->subDay();
+        $week = now()->subWeek();
+
+        return response()->json([
+            'data' => $logs,
+            'message' => '',
+            'errors' => [],
+            'meta' => [
+                'stats' => [
+                    'sent_24h' => $countSince('sent', $day),
+                    'failed_24h' => $countSince('failed', $day),
+                    'sent_7d' => $countSince('sent', $week),
+                    'failed_7d' => $countSince('failed', $week),
+                    'last_failure' => EmailLog::where('status', 'failed')->latest('created_at')->first(['created_at', 'error', 'source']),
+                ],
+            ],
         ]);
     }
 

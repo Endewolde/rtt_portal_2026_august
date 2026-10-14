@@ -140,6 +140,7 @@ return Application::configure(basePath: dirname(__DIR__))
             DB::table('system_metrics')->where('recorded_at', '<', now()->subDays(7))->delete();
             DB::table('request_logs')->where('requested_at', '<', now()->subDays(3))->delete();
             DB::table('system_alerts')->where('resolved', true)->where('resolved_at', '<', now()->subDays(7))->delete();
+            DB::table('email_logs')->where('created_at', '<', now()->subDays(90))->delete();
         })->dailyAt('02:00')->name('metrics:housekeeping');
     })
     ->create();

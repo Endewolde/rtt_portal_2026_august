@@ -3,14 +3,11 @@
 namespace App\Services;
 
 use App\Models\Proposal;
-use App\Models\ProposalDocument;
 use App\Models\User;
+use App\Support\DocumentText;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Smalot\PdfParser\Parser as PdfParser;
 
 class SimilarityService
 {
@@ -124,37 +121,7 @@ class SimilarityService
             return '';
         }
 
-        if ($document->extracted_text !== null) {
-            return $document->extracted_text;
-        }
-
-        $text = $this->extractPdfText($document);
-
-        $document->forceFill(['extracted_text' => $text])->save();
-
-        return $text;
-    }
-
-    private function extractPdfText(ProposalDocument $document): string
-    {
-        if ($document->mime_type !== 'application/pdf') {
-            return '';
-        }
-
-        if (! Storage::disk('private')->exists($document->stored_path)) {
-            return '';
-        }
-
-        try {
-            $pdf = (new PdfParser)->parseFile(Storage::disk('private')->path($document->stored_path));
-            $text = strtolower(preg_replace('/\s+/', ' ', $pdf->getText()) ?? '');
-        } catch (\Throwable $e) {
-            Log::warning("SimilarityService: could not extract PDF text for document {$document->id}: {$e->getMessage()}");
-
-            return '';
-        }
-
-        return Str::limit(trim($text), 20000, '');
+        return DocumentText::for($document);
     }
 
     /** @param Collection<int, Proposal> $comparisons */

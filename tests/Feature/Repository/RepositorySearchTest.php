@@ -2,9 +2,11 @@
 
 use App\Models\College;
 use App\Models\Department;
+use App\Models\EvaluationType;
 use App\Models\Proposal;
 use App\Models\ProposalCall;
 use App\Models\RepositoryRecord;
+use App\Models\ReviewAssignment;
 use App\Models\User;
 use App\Models\WorkflowLog;
 use App\Services\RepositoryService;
@@ -25,8 +27,8 @@ beforeEach(function () {
 
 function repo_makeCollege(string $suffix = ''): array
 {
-    $college = College::create(['name' => 'Repo College '.$suffix.rand(), 'code' => 'RC'.rand(10, 99)]);
-    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'RD'.rand(10, 99)]);
+    $college = College::create(['name' => 'Repo College '.$suffix.rand(), 'code' => 'RC'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'RD'.rand(10000, 99999)]);
 
     return [$college, $dept];
 }
@@ -161,6 +163,13 @@ test('tracker lookup history is anonymized — no reviewer real names', function
 
     $reviewer = User::factory()->create(['name' => 'Dr. John Doe Secret Reviewer']);
     $reviewer->assignRole('reviewer');
+
+    // Only people actually assigned to review this proposal are shown as "Reviewer A/B…".
+    $type = EvaluationType::create(['name' => 'blind_review_anon', 'label' => 'Blind', 'proposal_category' => 'research', 'is_active' => true]);
+    ReviewAssignment::create([
+        'proposal_id' => $proposal->id, 'reviewer_id' => $reviewer->id, 'evaluation_type_id' => $type->id,
+        'assigned_by' => $reviewer->id, 'status' => 'submitted', 'assigned_at' => now(),
+    ]);
 
     WorkflowLog::create([
         'proposal_id' => $proposal->id,

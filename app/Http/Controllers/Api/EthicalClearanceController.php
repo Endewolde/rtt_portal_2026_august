@@ -8,6 +8,7 @@ use App\Models\Proposal;
 use App\Models\ProposalDocument;
 use App\Models\User;
 use App\Support\AuditLogger;
+use App\Support\RejectionReasons;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -140,6 +141,7 @@ class EthicalClearanceController extends Controller
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
+        RejectionReasons::apply($request, 'ethical_clearance');
         $validated = $request->validate(['reason' => 'required|string|min:10']);
 
         $proposal = Proposal::findOrFail($id);

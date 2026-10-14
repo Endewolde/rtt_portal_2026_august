@@ -71,7 +71,9 @@ jobs:
           DB_PASSWORD: rtt_test_password
 
       - name: Run PHP tests
-        run: php artisan test --compact
+        # Run Pest directly so the memory limit applies (artisan test re-spawns PHP with
+        # the 128M default, which the Excel export tests exceed).
+        run: php -d memory_limit=2G vendor/bin/pest --compact
         env:
           DB_DATABASE: real_rtt1_test
           DB_USERNAME: rtt_user

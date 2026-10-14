@@ -10,10 +10,15 @@ use App\Models\Department;
 use App\Models\Proposal;
 use App\Models\ProposalCall;
 use App\Models\User;
+use App\Models\WorkflowAction;
 use App\Models\WorkflowLog;
+use App\Models\WorkflowStage;
+use App\Models\WorkflowTransition;
 use App\Services\WorkflowService;
+use Database\Seeders\RolePermissionSeeder;
 use Database\Seeders\WorkflowStageSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Spatie\Permission\Models\Role;
 use Tests\TestCase;
@@ -34,34 +39,36 @@ function makeUser(string $roleName): User
 function makeProposal(User $pi, string $status = 'draft'): Proposal
 {
     $college = College::create(['name' => 'Engineering', 'code' => 'ENG-'.rand(100, 999)]);
-    $dept    = Department::create(['college_id' => $college->id, 'name' => 'CS', 'code' => 'CS-'.rand(100, 999)]);
-    $call    = ProposalCall::create([
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'CS', 'code' => 'CS-'.rand(100, 999)]);
+    $call = ProposalCall::create([
         'academic_year' => '2025/2026',
-        'category'      => 'research',
-        'title'         => 'Test Call',
-        'slug'          => 'test-call-'.rand(1000, 9999),
-        'start_date'    => now()->toDateString(),
-        'end_date'      => now()->addMonths(3)->toDateString(),
-        'created_by'    => $pi->id,
+        'category' => 'research',
+        'title' => 'Test Call',
+        'slug' => 'test-call-'.rand(1000, 9999),
+        'start_date' => now()->toDateString(),
+        'end_date' => now()->addMonths(3)->toDateString(),
+        'created_by' => $pi->id,
     ]);
 
     return Proposal::create([
-        'tracker_number'  => 'TRK-'.rand(10000, 99999),
-        'proposal_call_id'=> $call->id,
-        'category'        => 'research',
-        'title'           => 'Test Proposal',
-        'status'          => $status,
-        'pi_user_id'      => $pi->id,
-        'college_id'      => $college->id,
-        'department_id'   => $dept->id,
-        'academic_year'   => '2025/2026',
-        'created_by'      => $pi->id,
+        'tracker_number' => 'TRK-'.rand(10000, 99999),
+        'proposal_call_id' => $call->id,
+        'category' => 'research',
+        'title' => 'Test Proposal',
+        'status' => $status,
+        'pi_user_id' => $pi->id,
+        'college_id' => $college->id,
+        'department_id' => $dept->id,
+        'academic_year' => '2025/2026',
+        'created_by' => $pi->id,
     ]);
 }
 
 // ─── Setup ───────────────────────────────────────────────────────────────────
 
 beforeEach(function () {
+    // Transitions notify category officers, so the real roles must exist.
+    (new RolePermissionSeeder)->run();
     (new WorkflowStageSeeder)->run();
     $this->service = new WorkflowService;
 });
@@ -69,21 +76,21 @@ beforeEach(function () {
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 test('can_transition_returns_true_for_valid_action_and_correct_role', function () {
-    $pi       = makeUser('pi');
+    $pi = makeUser('pi');
     $proposal = makeProposal($pi, 'draft');
 
     expect($this->service->canTransition($proposal, 'submit', $pi))->toBeTrue();
 });
 
 test('can_transition_returns_false_for_invalid_action', function () {
-    $pi       = makeUser('pi');
+    $pi = makeUser('pi');
     $proposal = makeProposal($pi, 'draft');
 
     expect($this->service->canTransition($proposal, 'nonexistent_action', $pi))->toBeFalse();
 });
 
 test('can_transition_returns_false_for_wrong_role', function () {
-    $pi       = makeUser('pi');
+    $pi = makeUser('pi');
     $reviewer = makeUser('reviewer');
     $proposal = makeProposal($pi, 'draft');
 
@@ -92,7 +99,7 @@ test('can_transition_returns_false_for_wrong_role', function () {
 });
 
 test('transition_moves_proposal_to_correct_stage', function () {
-    $pi       = makeUser('pi');
+    $pi = makeUser('pi');
     $proposal = makeProposal($pi, 'draft');
 
     $updated = $this->service->transition($proposal, 'submit', $pi);
@@ -102,7 +109,7 @@ test('transition_moves_proposal_to_correct_stage', function () {
 });
 
 test('transition_writes_one_workflow_log_row', function () {
-    $pi       = makeUser('pi');
+    $pi = makeUser('pi');
     $proposal = makeProposal($pi, 'draft');
 
     $this->service->transition($proposal, 'submit', $pi);
@@ -111,7 +118,7 @@ test('transition_writes_one_workflow_log_row', function () {
 });
 
 test('workflow_log_has_correct_from_stage_to_stage_and_actor', function () {
-    $pi       = makeUser('pi');
+    $pi = makeUser('pi');
     $proposal = makeProposal($pi, 'draft');
 
     $this->service->transition($proposal, 'submit', $pi, 'Submitting now', ['key' => 'val']);
@@ -127,7 +134,7 @@ test('workflow_log_has_correct_from_stage_to_stage_and_actor', function () {
 });
 
 test('transition_writes_one_audit_log_row', function () {
-    $pi       = makeUser('pi');
+    $pi = makeUser('pi');
     $proposal = makeProposal($pi, 'draft');
 
     $this->service->transition($proposal, 'submit', $pi);
@@ -144,7 +151,7 @@ test('transition_writes_one_audit_log_row', function () {
 test('transition_fires_ProposalTransitioned_event', function () {
     Event::fake([ProposalTransitioned::class]);
 
-    $pi       = makeUser('pi');
+    $pi = makeUser('pi');
     $proposal = makeProposal($pi, 'draft');
 
     $this->service->transition($proposal, 'submit', $pi);
@@ -159,14 +166,14 @@ test('transition_fires_ProposalTransitioned_event', function () {
 });
 
 test('transition_is_atomic_rolls_back_on_failure', function () {
-    $pi       = makeUser('pi');
+    $pi = makeUser('pi');
     $proposal = makeProposal($pi, 'draft');
 
     // Force a failure mid-transaction by making audit_logs insert fail
     // We do this by temporarily renaming audit_logs via a DB statement hook
     // Instead, simulate by throwing inside a listener
     Event::listen(ProposalTransitioned::class, function () {
-        throw new \RuntimeException('Simulated listener failure after commit');
+        throw new RuntimeException('Simulated listener failure after commit');
     });
 
     // The event fires AFTER the transaction commits, so this doesn't roll it back.
@@ -178,7 +185,8 @@ test('transition_is_atomic_rolls_back_on_failure', function () {
     // Simplest safe test: verify that both status + log are written or neither is.
     // We test by injecting a failing closure via a subclass of WorkflowService.
 
-    $service = new class extends WorkflowService {
+    $service = new class extends WorkflowService
+    {
         public function transition(
             Proposal $proposal,
             string $action,
@@ -186,18 +194,18 @@ test('transition_is_atomic_rolls_back_on_failure', function () {
             ?string $notes = null,
             array $metadata = []
         ): Proposal {
-            return \Illuminate\Support\Facades\DB::transaction(function () use ($proposal) {
-                \Illuminate\Support\Facades\DB::table('proposals')
+            return DB::transaction(function () use ($proposal) {
+                DB::table('proposals')
                     ->where('id', $proposal->id)
                     ->update(['status' => 'submitted', 'updated_at' => now()]);
 
-                throw new \RuntimeException('Forced failure inside transaction');
+                throw new RuntimeException('Forced failure inside transaction');
             });
         }
     };
 
     expect(fn () => $service->transition($proposal, 'submit', $pi))
-        ->toThrow(\RuntimeException::class, 'Forced failure inside transaction');
+        ->toThrow(RuntimeException::class, 'Forced failure inside transaction');
 
     // Status must still be 'draft' because transaction was rolled back
     expect(Proposal::find($proposal->id)->status)->toBe('draft');
@@ -205,7 +213,7 @@ test('transition_is_atomic_rolls_back_on_failure', function () {
 });
 
 test('transition_throws_InvalidTransitionException_for_unknown_action', function () {
-    $pi       = makeUser('pi');
+    $pi = makeUser('pi');
     $proposal = makeProposal($pi, 'draft');
 
     expect(fn () => $this->service->transition($proposal, 'bogus_action', $pi))
@@ -213,7 +221,7 @@ test('transition_throws_InvalidTransitionException_for_unknown_action', function
 });
 
 test('transition_throws_InvalidTransitionException_for_terminal_stage', function () {
-    $pi       = makeUser('pi');
+    $pi = makeUser('pi');
     $proposal = makeProposal($pi, 'rejected'); // terminal stage
 
     // 'rejected' is terminal — any action from it should fail with InvalidTransitionException
@@ -221,35 +229,35 @@ test('transition_throws_InvalidTransitionException_for_terminal_stage', function
     // the service checks is_terminal before executing. We test with 'archive' action (which
     // has no valid transition from 'rejected') — this will first fail "No valid transition".
     // To test the terminal check specifically, temporarily add a fake transition:
-    $rejectedStage = App\Models\WorkflowStage::where('name', 'rejected')->first();
-    $archiveAction = App\Models\WorkflowAction::where('name', 'archive')->first();
-    $archivedStage = App\Models\WorkflowStage::where('name', 'archived')->first();
+    $rejectedStage = WorkflowStage::where('name', 'rejected')->first();
+    $archiveAction = WorkflowAction::where('name', 'archive')->first();
+    $archivedStage = WorkflowStage::where('name', 'archived')->first();
 
     // Insert fake transition from rejected → archived via 'archive' action
-    App\Models\WorkflowTransition::create([
+    WorkflowTransition::create([
         'from_stage_id' => $rejectedStage->id,
-        'action_id'     => $archiveAction->id,
-        'to_stage_id'   => $archivedStage->id,
+        'action_id' => $archiveAction->id,
+        'to_stage_id' => $archivedStage->id,
         'allowed_roles' => ['super_admin'],
     ]);
 
     $admin = makeUser('super_admin');
 
     expect(fn () => $this->service->transition($proposal, 'archive', $admin))
-        ->toThrow(InvalidTransitionException::class, "terminal stage");
+        ->toThrow(InvalidTransitionException::class, 'terminal stage');
 });
 
 test('transition_throws_UnauthorizedTransitionException_for_wrong_role', function () {
-    $pi           = makeUser('pi');
+    $pi = makeUser('pi');
     $wrongRoleUser = makeUser('college_officer'); // college_admin cannot 'submit'
-    $proposal     = makeProposal($pi, 'draft');
+    $proposal = makeProposal($pi, 'draft');
 
     expect(fn () => $this->service->transition($proposal, 'submit', $wrongRoleUser))
         ->toThrow(UnauthorizedTransitionException::class);
 });
 
 test('workflow_log_throws_LogImmutableException_on_update', function () {
-    $pi       = makeUser('pi');
+    $pi = makeUser('pi');
     $proposal = makeProposal($pi, 'draft');
 
     $this->service->transition($proposal, 'submit', $pi);
@@ -261,7 +269,7 @@ test('workflow_log_throws_LogImmutableException_on_update', function () {
 });
 
 test('workflow_log_throws_LogImmutableException_on_delete', function () {
-    $pi       = makeUser('pi');
+    $pi = makeUser('pi');
     $proposal = makeProposal($pi, 'draft');
 
     $this->service->transition($proposal, 'submit', $pi);
@@ -273,7 +281,7 @@ test('workflow_log_throws_LogImmutableException_on_delete', function () {
 });
 
 test('audit_log_throws_LogImmutableException_on_update', function () {
-    $pi       = makeUser('pi');
+    $pi = makeUser('pi');
     $proposal = makeProposal($pi, 'draft');
 
     $this->service->transition($proposal, 'submit', $pi);
@@ -285,9 +293,9 @@ test('audit_log_throws_LogImmutableException_on_update', function () {
 });
 
 test('full_lifecycle_draft_to_archived', function () {
-    $pi      = makeUser('pi');
+    $pi = makeUser('pi');
     $central = makeUser('central_officer');
-    $admin   = makeUser('super_admin');
+    $admin = makeUser('super_admin');
 
     $proposal = makeProposal($pi, 'draft');
 

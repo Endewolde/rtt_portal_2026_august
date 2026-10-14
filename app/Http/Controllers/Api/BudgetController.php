@@ -20,6 +20,7 @@ use App\Services\BudgetSettlementService;
 use App\Services\DisbursementService;
 use App\Services\SignatureService;
 use App\Support\AuditLogger;
+use App\Support\RejectionReasons;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -901,6 +902,7 @@ class BudgetController extends Controller
      */
     public function rejectByCollege(string $id, Request $request): JsonResponse
     {
+        RejectionReasons::apply($request, 'budget_request', 'notes');
         $request->validate(['notes' => 'required|string|min:10']);
 
         $user = $request->user();

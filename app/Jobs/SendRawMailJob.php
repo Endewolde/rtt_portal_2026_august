@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\EmailLog;
 use App\Services\MailConfigService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -35,9 +36,13 @@ class SendRawMailJob implements ShouldQueue
         try {
             Mail::html(
                 $this->html,
-                fn ($msg) => $msg->to($this->to, $this->toName)->subject($this->subject)
+                function ($msg) {
+                    $msg->to($this->to, $this->toName)->subject($this->subject);
+                    $msg->getSymfonyMessage()->getHeaders()->addTextHeader(EmailLog::SOURCE_HEADER, 'raw_mail');
+                }
             );
         } catch (\Exception $e) {
+            EmailLog::failed($this->to, $this->subject, 'raw_mail', $e);
             Log::error("SendRawMailJob failed to {$this->to}: ".$e->getMessage());
             throw $e;
         }

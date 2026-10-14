@@ -156,7 +156,8 @@ class RolePermissionSeeder extends Seeder
             'reports.view_any', 'reports.view', 'reports.create', 'reports.export',
             'awards.view_any', 'awards.view', 'awards.create', 'awards.update',
             'users.view_any', 'users.view', 'users.create', 'users.update',
-            'users.import', 'users.delete', 'users.impersonate',
+            // users.impersonate is deliberately super_admin-only — not granted to admin.
+            'users.import', 'users.delete',
             // roles.view_any/view/create/update/delete are deliberately NOT granted here —
             // RoleController hard-gates every role-management endpoint to hasRole('super_admin')
             // literally (managing roles/permissions is the one place a permission-based check

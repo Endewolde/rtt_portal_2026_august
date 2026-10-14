@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\AwardService;
 use App\Services\ReviewScoreService;
 use App\Services\WorkflowService;
+use App\Support\RejectionReasons;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -130,6 +131,7 @@ class CentralEvaluationController extends Controller
 
     public function centralReject(Request $request, string $id): JsonResponse
     {
+        RejectionReasons::apply($request, 'central_evaluation');
         $request->validate(['reason' => 'required|string|min:10']);
 
         $proposal = Proposal::findOrFail($id);
@@ -222,6 +224,7 @@ class CentralEvaluationController extends Controller
     /** Revoke funding for a funded proposal and move it back to rejected. */
     public function revokeFunding(Request $request, string $id): JsonResponse
     {
+        RejectionReasons::apply($request, 'funding_revocation');
         $request->validate(['reason' => 'required|string|min:10']);
 
         if (! $request->user()?->hasAnyRole(['super_admin', 'central_officer'])) {

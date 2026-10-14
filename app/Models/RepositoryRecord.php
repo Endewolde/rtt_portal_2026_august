@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Support\TitleCase;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -34,11 +36,23 @@ class RepositoryRecord extends Model
     ];
 
     protected $casts = [
-        'is_featured'        => 'boolean',
-        'total_outputs'      => 'integer',
+        'is_featured' => 'boolean',
+        'total_outputs' => 'integer',
         'publications_count' => 'integer',
-        'patents_count'      => 'integer',
+        'patents_count' => 'integer',
     ];
+
+    /**
+     * Repository titles (copied from the proposal) are stored and shown in one standard form — Title Case
+     * (see App\Support\TitleCase) — however the researcher typed them.
+     */
+    protected function title(): Attribute
+    {
+        return Attribute::make(
+            get: fn (?string $value) => TitleCase::format($value),
+            set: fn (?string $value) => TitleCase::format($value),
+        );
+    }
 
     public function proposal(): BelongsTo
     {

@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\EmailLog;
 use App\Models\NotificationPreference;
 use App\Models\User;
 use App\Services\MailConfigService;
@@ -57,9 +58,11 @@ class SendEmailNotificationJob implements ShouldQueue
                 function ($message) use ($subject) {
                     $message->to($this->recipient->email, $this->recipient->name)
                         ->subject($subject);
+                    $message->getSymfonyMessage()->getHeaders()->addTextHeader(EmailLog::SOURCE_HEADER, $this->event);
                 }
             );
         } catch (\Exception $e) {
+            EmailLog::failed($this->recipient->email, $subject, $this->event, $e);
             Log::error("Email notification failed for event {$this->event}", [
                 'recipient' => $this->recipient->email,
                 'error' => $e->getMessage(),
@@ -103,6 +106,12 @@ class SendEmailNotificationJob implements ShouldQueue
             'no_cost_extension_resolved' => 'No-Cost Extension '.ucfirst($this->data['decision'] ?? '').' — '.($this->data['tracker_number'] ?? ''),
             'review_assignment_cancelled' => 'Review Assignment Cancelled — '.($this->data['tracker_number'] ?? ''),
             'approval_report_submitted' => 'Possible Mistaken Approval Reported — '.($this->data['tracker_number'] ?? ''),
+            'progress_report_due' => 'Progress Report Due Soon — '.($this->data['tracker_number'] ?? ''),
+            'progress_report_overdue' => 'Progress Report Overdue — '.($this->data['tracker_number'] ?? ''),
+            'progress_report_submitted' => 'Progress Report Submitted for Review — '.($this->data['tracker_number'] ?? ''),
+            'progress_report_reviewed' => 'Your Progress Report Was Reviewed — '.($this->data['tracker_number'] ?? ''),
+            'stage_reminder' => 'Action Needed — '.($this->data['tracker_number'] ?? '').' Is Waiting On You',
+            'review_disagreement' => 'Blind Reviewers Disagree — Decision On Hold — '.($this->data['tracker_number'] ?? ''),
             'approval_report_resolved' => 'Your Mistaken-Approval Report Was Reviewed — '.($this->data['tracker_number'] ?? ''),
             'budget_request_submitted' => 'New Budget Request Submitted — '.($this->data['tracker_number'] ?? ''),
             'funding_revoked' => 'Funding Revoked — '.($this->data['tracker_number'] ?? ''),

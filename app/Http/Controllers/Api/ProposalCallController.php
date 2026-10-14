@@ -6,7 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\ProposalCallResource;
 use App\Models\Proposal;
 use App\Models\ProposalCall;
+use App\Models\User;
 use App\Services\ProposalCallService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -20,13 +22,102 @@ class ProposalCallController extends Controller
      * All calls for admin dashboard — includes drafts and expired, with submission counts.
      * Requires proposal_calls.view_any permission.
      */
+    /** Category directors and the proposal category each one oversees. */
+    private const DIRECTOR_CATEGORIES = [
+        'research_officer' => 'research',
+        'community_officer' => 'community_engagement',
+        'technology_officer' => 'technology_transfer',
+    ];
+
+    /**
+     * proposals_count = proposals actually submitted to the call (drafts excluded),
+     * limited to what the viewer can see — the same set the call's Submissions page
+     * lists, so the two numbers always agree.
+     */
+    private function withSubmittedCount(Builder $query, ?User $user): Builder
+    {
+        $isCentral = $user?->hasAnyRole(['super_admin', 'admin', 'central_officer']);
+        $directorCategories = $isCentral || ! $user
+            ? []
+            : collect(self::DIRECTOR_CATEGORIES)->filter(fn ($category, $role) => $user->hasRole($role))->values()->all();
+        $collegeId = ! $isCentral && $user?->hasRole('college_officer') ? $user->college_id : null;
+
+        return $query->withCount(['proposals as proposals_count' => fn ($q) => $q
+            ->where('status', '!=', 'draft')
+            ->when($directorCategories !== [], fn ($q) => $q->whereIn('category', $directorCategories))
+            ->when($collegeId, fn ($q) => $q->where('college_id', $collegeId)),
+        ]);
+    }
+
+    /** Roles that can open a call's submissions page. */
+    private const SUBMISSION_VIEWER_ROLES = [
+        'super_admin', 'admin', 'central_officer',
+        'research_officer', 'community_officer', 'technology_officer', 'college_officer',
+    ];
+
+    /**
+     * Every proposal submitted to one call (drafts are only counted), with the
+     * figures for the call's submissions page. Visibility follows the main proposal
+     * list: college officers see their college, category officers their category.
+     */
+    public function submissions(string $id, Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if (! $user?->hasAnyRole(self::SUBMISSION_VIEWER_ROLES)) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => [], 'meta' => []], 403);
+        }
+
+        $call = ProposalCall::findOrFail($id);
+
+        $scoped = Proposal::query()
+            ->where('proposal_call_id', $call->id)
+            ->when($request->_college_scope, fn ($q, $collegeId) => $q->where('college_id', $collegeId))
+            ->when($request->_category_scope, fn ($q, $category) => $q->where('category', $category));
+
+        $draftCount = (clone $scoped)->where('status', 'draft')->count();
+
+        $proposals = (clone $scoped)
+            ->where('status', '!=', 'draft')
+            ->with(['pi:id,name,email', 'college:id,name', 'department:id,name'])
+            ->withCount([
+                'reviewAssignments as reviews_total' => fn ($q) => $q->whereNotIn('status', ['declined', 'cancelled']),
+                'reviewAssignments as reviews_submitted' => fn ($q) => $q->where('status', 'submitted'),
+            ])
+            ->orderByDesc('submitted_at')
+            ->orderByDesc('created_at')
+            ->get([
+                'id', 'tracker_number', 'title', 'category', 'status', 'pi_user_id', 'college_id',
+                'department_id', 'academic_year', 'submitted_at', 'status_entered_at', 'created_at', 'updated_at',
+                'anonymity_status',
+            ]);
+
+        return response()->json([
+            'data' => [
+                'call' => (new ProposalCallResource($call))->resolve(),
+                'proposals' => $proposals,
+                'stats' => [
+                    'submitted' => $proposals->count(),
+                    'drafts' => $draftCount,
+                    'by_status' => $proposals->countBy('status'),
+                    'by_college' => $proposals->groupBy(fn ($p) => $p->college?->name ?? 'Unassigned')
+                        ->map->count()
+                        ->sortDesc(),
+                ],
+            ],
+            'message' => '',
+            'errors' => [],
+            'meta' => [],
+        ]);
+    }
+
     public function allForAdmin(Request $request): AnonymousResourceCollection|JsonResponse
     {
         if (! $request->user()?->can('proposal_calls.view_any')) {
             return response()->json(['data' => [], 'message' => 'Forbidden.', 'errors' => [], 'meta' => []], 403);
         }
 
-        $calls = ProposalCall::withCount('proposals')
+        $calls = $this->withSubmittedCount(ProposalCall::query(), $request->user())
             ->when($request->search, fn ($q) => $q->where('title', 'like', '%'.$request->search.'%'))
             ->when($request->status, fn ($q) => $q->where('status', $request->status))
             ->when($request->category, fn ($q) => $q->where('category', $request->category))
@@ -42,7 +133,7 @@ class ProposalCallController extends Controller
 
         if ($user && ($user->hasRole(['super_admin', 'central_officer', 'college_officer']))) {
             // Admins see all calls including drafts/expired, with submission counts
-            $calls = ProposalCall::withCount('proposals')
+            $calls = $this->withSubmittedCount(ProposalCall::query(), $user)
                 ->orderByDesc('created_at')
                 ->paginate(20);
         } else {

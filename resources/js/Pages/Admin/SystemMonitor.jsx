@@ -12,6 +12,7 @@ import {
     Radio, UserCheck, UserPlus, LogIn,
 } from 'lucide-react'
 import AppLayout from '../../Layouts/AppLayout'
+import EmailLogPanel from '../../Components/EmailLogPanel'
 import { get, post, put, del } from '../../lib/api'
 
 // ─── helpers ────────────────────────────────────────────────────────────────
@@ -258,6 +259,7 @@ const TABS = [
     { id: 'requests',  label: 'Requests',  icon: Zap },
     { id: 'database',  label: 'Database',  icon: Database },
     { id: 'alerts',    label: 'Alerts',    icon: ShieldAlert },
+    { id: 'email',     label: 'Email',     icon: Mail },
     { id: 'alerting',  label: 'Alerting',  icon: Settings },
 ]
 
@@ -1085,6 +1087,8 @@ export default function SystemMonitor() {
             {/* ══════════════════════════════════════════════════════════════ */}
             {/* ALERTS                                                         */}
             {/* ══════════════════════════════════════════════════════════════ */}
+            {!loading && tab === 'email' && <EmailLogPanel />}
+
             {!loading && tab === 'alerts' && (
                 <div className="space-y-5">
                     {/* Active */}

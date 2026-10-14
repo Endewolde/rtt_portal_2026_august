@@ -12,7 +12,7 @@ import {
     BadgeDollarSign, Trophy, Archive, ListChecks, ShieldCheck,
     User, ChevronDown, ChevronUp, Lock, Clock, UserX,
     CalendarDays, Banknote, Landmark, MessageSquareHeart, LogIn, Scale, ScrollText, Milestone, FileBarChart2, FolderSearch,
-    HelpCircle, Sliders, FileSignature, ShieldAlert, CalendarClock, CalendarPlus,
+    HelpCircle, Sliders, FileSignature, ShieldAlert, CalendarClock, CalendarPlus, Timer,
 } from 'lucide-react'
 import NotificationBell from '../Components/NotificationBell'
 import FeedbackPopup from '../Components/FeedbackPopup'
@@ -79,9 +79,11 @@ const ROUTE_PERMISSIONS = [
     // Analytics/pipeline are read-only cross-cutting dashboards — same audience as
     // college_officer's own scoped view, not just admin-tier + category officers.
     ['/admin/analytics',           [..._A, ..._OR, 'college_officer']],
+    ['/admin/turnaround',          [..._A, ..._OR, 'college_officer']],
     ['/admin/proposal-pipeline',   [..._A, ..._OR, 'college_officer']],
     ['/admin/college-phase-completion', [..._A, ..._OR, 'college_officer']],
     ['/ongoing-proposals',         [..._A, ..._OR, 'college_officer']],
+    ['/progress-reports',          [..._A, ..._OR, 'college_officer']],
     ['/admin/funding',             [..._A, ..._OR]],
     ['/admin/external-funds',      [..._A, ..._OR]],
     ['/admin/conferences',         [..._A, ..._OR]],
@@ -383,7 +385,7 @@ const ICONS = {
     BadgeDollarSign, Trophy, Archive, ListChecks, ShieldCheck,
     Globe, CalendarDays, Banknote, Landmark,
     FlaskConical, Brain, MessageSquareHeart, Scale, ScrollText, Milestone, FileBarChart2, FolderSearch,
-    HelpCircle, Sliders, Clock, FileSignature, ShieldAlert, CalendarClock, CalendarPlus,
+    HelpCircle, Sliders, Clock, FileSignature, ShieldAlert, CalendarClock, CalendarPlus, Timer,
     BuildingOffice: Building2,
 }
 
@@ -1038,6 +1040,10 @@ export default function AppLayout({ children, breadcrumb }) {
                     badge: c => c.ongoing_awaiting_midterm,
                 },
                 {
+                    label: 'Progress Reports', href: '/progress-reports', icon: 'ClipboardList',
+                    show: hasAnyRole([...ALL_ADMIN, ...OFFICER_ROLES, 'college_officer']),
+                },
+                {
                     label: 'Midterm Evaluations', href: '/midterm-evaluations', icon: 'Activity',
                     show: perm('midterm_evaluations.view_any') && hasSubFeature('monitoring.midterm'),
                     badge: c => c.midterm_pending,
@@ -1095,6 +1101,10 @@ export default function AppLayout({ children, breadcrumb }) {
                 {
                     label: 'Analytics Dashboard', href: '/admin/analytics', icon: 'Brain',
                     show: hasAnyRole([...ALL_ADMIN, ...OFFICER_ROLES, 'college_officer']) && hasSubFeature('reports.analytics'),
+                },
+                {
+                    label: 'Turnaround', href: '/admin/turnaround', icon: 'Timer',
+                    show: hasAnyRole([...ALL_ADMIN, ...OFFICER_ROLES, 'college_officer']),
                 },
                 {
                     label: 'Proposal Pipeline', href: '/admin/proposal-pipeline', icon: 'Activity',

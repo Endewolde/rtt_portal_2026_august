@@ -5,6 +5,7 @@ import AppLayout from '../../Layouts/AppLayout';
 import { get, post } from '../../lib/api';
 import { formatDate, getCategoryLabel } from '../../lib/utils';
 import { useToast } from '../../Components/Toast';
+import RejectWithReasonModal from '../../Components/RejectWithReasonModal';
 
 const TABS = [
     { key: 'pending', label: 'Pending', icon: Clock, dot: true },
@@ -20,7 +21,6 @@ const TAB_STYLES = {
 
 function ReviewModal({ extension, onSave, onClose }) {
     const [rejecting, setRejecting] = useState(false);
-    const [reason, setReason] = useState('');
     const [saving, setSaving] = useState(false);
     const { error, success } = useToast();
 
@@ -32,19 +32,6 @@ function ReviewModal({ extension, onSave, onClose }) {
             onSave();
         } catch (e) {
             error(e.response?.data?.message || 'Failed to approve no-cost extension.');
-        }
-        setSaving(false);
-    };
-
-    const reject = async () => {
-        if (reason.trim().length < 10) { error('Please provide at least 10 characters explaining the denial.'); return; }
-        setSaving(true);
-        try {
-            const res = await post(`/no-cost-extensions/${extension.id}/reject`, { reason });
-            success(res?.message || 'No-cost extension denied.');
-            onSave();
-        } catch (e) {
-            error(e.response?.data?.message || 'Failed to deny no-cost extension.');
         }
         setSaving(false);
     };
@@ -89,31 +76,6 @@ function ReviewModal({ extension, onSave, onClose }) {
                         </div>
                     </div>
 
-                    {rejecting && (
-                        <div>
-                            <label className="block text-xs font-semibold text-gray-700 mb-1.5">
-                                Reason for Denial <span className="text-red-500">*</span>
-                            </label>
-                            <textarea
-                                value={reason}
-                                onChange={e => setReason(e.target.value)}
-                                rows={3}
-                                placeholder="Explain why this extension is being denied…"
-                                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-300 resize-none"
-                            />
-                        </div>
-                    )}
-
-                    {rejecting ? (
-                        <div className="flex gap-3 pt-1">
-                            <button onClick={() => setRejecting(false)} disabled={saving} className="flex-1 px-4 py-2.5 text-sm text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 font-medium">
-                                Back
-                            </button>
-                            <button onClick={reject} disabled={saving || reason.trim().length < 10} className="flex-1 px-4 py-2.5 text-sm text-white bg-red-600 rounded-xl hover:bg-red-700 font-semibold disabled:opacity-50">
-                                {saving ? 'Saving…' : 'Confirm Denial'}
-                            </button>
-                        </div>
-                    ) : (
                         <div className="flex gap-3 pt-1">
                             <button onClick={onClose} disabled={saving} className="px-4 py-2.5 text-sm text-gray-600 border border-gray-200 rounded-xl hover:bg-gray-50 font-medium">
                                 Cancel
@@ -125,9 +87,24 @@ function ReviewModal({ extension, onSave, onClose }) {
                                 {saving ? 'Saving…' : 'Approve'}
                             </button>
                         </div>
-                    )}
                 </div>
             </div>
+
+            {rejecting && (
+                <RejectWithReasonModal
+                    context="no_cost_extension"
+                    title="Deny No-Cost Extension"
+                    subtitle={extension.proposal?.tracker_number}
+                    note="The PI is notified with this reason. The project end date stays unchanged."
+                    confirmLabel="Deny Request"
+                    onClose={() => setRejecting(false)}
+                    onSubmit={async (payload) => {
+                        const res = await post(`/no-cost-extensions/${extension.id}/reject`, payload);
+                        success(res?.message || 'No-cost extension denied.');
+                        onSave();
+                    }}
+                />
+            )}
         </div>
     );
 }

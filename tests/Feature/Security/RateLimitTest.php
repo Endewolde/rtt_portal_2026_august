@@ -1,6 +1,5 @@
 <?php
 
-use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\RateLimiter;
@@ -12,11 +11,12 @@ beforeEach(function () {
     RateLimiter::clear('login');
 });
 
-test('6th login attempt within 1 minute returns 429', function () {
+test('31st login attempt within 1 minute returns 429', function () {
     $payload = ['email' => 'test@example.com', 'password' => 'wrong'];
 
-    // 5 allowed attempts
-    for ($i = 0; $i < 5; $i++) {
+    // 30 allowed attempts per minute per IP (raised for campus networks sharing one IP;
+    // per-account lockout separately stops password guessing)
+    for ($i = 0; $i < 30; $i++) {
         $this->postJson('/api/v1/auth/login', $payload);
     }
 
@@ -29,7 +29,7 @@ test('6th login attempt within 1 minute returns 429', function () {
 test('rate limit response has correct JSON structure with retry_after', function () {
     $payload = ['email' => 'test@example.com', 'password' => 'wrong'];
 
-    for ($i = 0; $i < 5; $i++) {
+    for ($i = 0; $i < 30; $i++) {
         $this->postJson('/api/v1/auth/login', $payload);
     }
 
@@ -40,10 +40,10 @@ test('rate limit response has correct JSON structure with retry_after', function
         ->assertJsonPath('message', 'Too many requests. Please try again later.');
 });
 
-test('4th register attempt within 1 hour returns 429', function () {
+test('31st register attempt within 1 hour returns 429', function () {
     $base = ['name' => 'Test', 'email' => 'x@x.com', 'password' => 'Password1!', 'password_confirmation' => 'Password1!'];
 
-    for ($i = 0; $i < 3; $i++) {
+    for ($i = 0; $i < 30; $i++) {
         $this->postJson('/api/v1/auth/register', array_merge($base, ['email' => "user{$i}@test.com"]));
     }
 
@@ -54,7 +54,7 @@ test('4th register attempt within 1 hour returns 429', function () {
 
 test('X-RateLimit-Limit header present on API response', function () {
     $response = $this->postJson('/api/v1/auth/login', [
-        'email'    => 'test@example.com',
+        'email' => 'test@example.com',
         'password' => 'wrong',
     ]);
 
@@ -62,7 +62,7 @@ test('X-RateLimit-Limit header present on API response', function () {
 });
 
 test('X-RateLimit-Remaining decrements on each request', function () {
-    $first  = $this->postJson('/api/v1/auth/login', ['email' => 'a@a.com', 'password' => 'wrong']);
+    $first = $this->postJson('/api/v1/auth/login', ['email' => 'a@a.com', 'password' => 'wrong']);
     $second = $this->postJson('/api/v1/auth/login', ['email' => 'a@a.com', 'password' => 'wrong']);
 
     $remaining1 = (int) $first->headers->get('X-RateLimit-Remaining');

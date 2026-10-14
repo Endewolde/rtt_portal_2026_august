@@ -2,6 +2,7 @@
 
 use App\Exceptions\CannotWithdrawPIException;
 use App\Exceptions\MemberAlreadyInactiveException;
+use App\Models\BudgetAllocation;
 use App\Models\College;
 use App\Models\Department;
 use App\Models\FormSignature;
@@ -70,6 +71,14 @@ function conflict_makeProposalWithMembers(): array
     ProposalMember::create([
         'proposal_id' => $proposal->id, 'user_id' => $coI2->id,
         'role' => 'co_investigator', 'status' => 'active', 'contribution_percentage' => 33, 'joined_at' => now(),
+    ]);
+
+    // Budget requests need an approved allocation (BudgetRequestService).
+    BudgetAllocation::create([
+        'college_id' => $college->id, 'proposal_id' => $proposal->id, 'fiscal_year' => '2026',
+        'total_amount' => 200000.00, 'allocated_amount' => 0, 'remaining_balance' => 200000.00,
+        'allocation_type' => 'proposal', 'status' => 'approved',
+        'approved_by' => $central->id, 'approved_at' => now(), 'allocated_by' => $central->id,
     ]);
 
     return [$proposal, $pi, $coI, $coI2, $central];

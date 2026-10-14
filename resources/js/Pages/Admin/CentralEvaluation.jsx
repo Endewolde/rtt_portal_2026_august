@@ -10,6 +10,7 @@ import { useViewPreference } from '../../hooks/useViewPreference';
 import api from '../../lib/api';
 import { useToast } from '../../Components/Toast';
 import { formatCurrency, getCategoryLabel } from '../../lib/utils';
+import RejectWithReasonModal from '../../Components/RejectWithReasonModal';
 
 function ScoreBar({ score, max, label, color }) {
     const pct = max > 0 ? Math.min(100, (score / max) * 100) : 0;
@@ -436,7 +437,24 @@ export default function CentralEvaluation() {
                 )}
             </div>
 
-            {dialog && (
+            {dialog?.type === 'reject' && (
+                <RejectWithReasonModal
+                    context="central_evaluation"
+                    title="Reject Proposal"
+                    subtitle={`${dialog.proposal.tracker_number ?? ''} · Central Evaluation`}
+                    note="The PI and co-investigators are notified with this reason."
+                    confirmLabel="Reject Proposal"
+                    onClose={() => setDialog(null)}
+                    onSubmit={async (payload) => {
+                        const res = await api.post(`/proposals/${dialog.proposal.id}/central/reject`, payload);
+                        success(res.data?.message || 'Proposal rejected.');
+                        setDialog(null);
+                        load();
+                    }}
+                />
+            )}
+
+            {dialog && dialog.type !== 'reject' && (
                 <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
                         <h2 className="text-base font-semibold mb-2">

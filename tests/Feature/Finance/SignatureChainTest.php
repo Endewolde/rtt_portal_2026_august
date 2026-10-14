@@ -3,6 +3,7 @@
 use App\Events\AllSignaturesComplete;
 use App\Events\MemberRefusedSignature;
 use App\Exceptions\UnsignedMembersException;
+use App\Models\BudgetAllocation;
 use App\Models\College;
 use App\Models\Department;
 use App\Models\FormTemplate;
@@ -68,6 +69,14 @@ function sig_makeRequestWithTwoMembers(): array
         'proposal_id' => $proposal->id, 'user_id' => $coI->id,
         'role' => 'co_investigator', 'status' => 'active',
         'contribution_percentage' => 50, 'joined_at' => now(),
+    ]);
+
+    // Budget requests need an approved allocation (BudgetRequestService).
+    BudgetAllocation::create([
+        'college_id' => $college->id, 'proposal_id' => $proposal->id, 'fiscal_year' => '2026',
+        'total_amount' => 200000.00, 'allocated_amount' => 0, 'remaining_balance' => 200000.00,
+        'allocation_type' => 'proposal', 'status' => 'approved',
+        'approved_by' => $central->id, 'approved_at' => now(), 'allocated_by' => $central->id,
     ]);
 
     $template = FormTemplate::where('name', 'Research Budget Request')->first();

@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Models\EmailLog;
 use App\Models\User;
 use App\Services\MailConfigService;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -30,8 +31,10 @@ class SendBroadcastEmailJob implements ShouldQueue
                 Mail::raw($this->payload['message'], function ($m) use ($user) {
                     $m->to($user->email, $user->name)
                         ->subject($this->payload['subject']);
+                    $m->getSymfonyMessage()->getHeaders()->addTextHeader(EmailLog::SOURCE_HEADER, 'broadcast');
                 });
             } catch (\Exception $e) {
+                EmailLog::failed($user->email, $this->payload['subject'] ?? null, 'broadcast', $e);
                 Log::error('Broadcast email failed for '.$user->email.': '.$e->getMessage());
             }
         }

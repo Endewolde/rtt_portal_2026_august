@@ -4,6 +4,7 @@ import AppLayout from '../../Layouts/AppLayout';
 import api from '../../lib/api';
 import { useToast } from '../../Components/Toast';
 import { formatDate, getCategoryLabel } from '../../lib/utils';
+import RejectWithReasonModal from '../../Components/RejectWithReasonModal';
 
 const TABS = [
     { value: 'all', label: 'All' },
@@ -51,7 +52,6 @@ function ReviewModal({ proposal, onClose, onDone }) {
     const [loadingCert, setLoadingCert] = useState(true);
     const [saving, setSaving] = useState(false);
     const [rejecting, setRejecting] = useState(false);
-    const [reason, setReason] = useState('');
 
     useEffect(() => {
         const cert = (proposal.documents ?? []).find(d => d.document_type === 'ethical_clearance_certificate' && d.is_current);
@@ -74,19 +74,6 @@ function ReviewModal({ proposal, onClose, onDone }) {
             onDone();
         } catch (e) {
             error(e.response?.data?.message ?? 'Failed to approve.');
-        }
-        setSaving(false);
-    };
-
-    const reject = async () => {
-        if (!reason.trim()) { error('Please provide a reason for rejection.'); return; }
-        setSaving(true);
-        try {
-            await api.post(`/proposals/${proposal.id}/ethical-clearance/reject`, { reason });
-            success('Certificate returned to PI for correction.');
-            onDone();
-        } catch (e) {
-            error(e.response?.data?.message ?? 'Failed to reject.');
         }
         setSaving(false);
     };
@@ -123,28 +110,6 @@ function ReviewModal({ proposal, onClose, onDone }) {
                 </div>
 
                 <div className="p-5 border-t border-gray-100 space-y-3">
-                    {rejecting ? (
-                        <div className="space-y-3">
-                            <label className="text-xs font-medium text-gray-700 block">Reason for rejection (sent to PI)</label>
-                            <textarea
-                                value={reason}
-                                onChange={e => setReason(e.target.value)}
-                                rows={3}
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300"
-                                placeholder="Explain what needs to be corrected…"
-                            />
-                            <div className="flex gap-3 justify-end">
-                                <button onClick={() => setRejecting(false)} disabled={saving}
-                                    className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">
-                                    Back
-                                </button>
-                                <button onClick={reject} disabled={saving || !reason.trim()}
-                                    className="px-5 py-2 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">
-                                    {saving ? 'Sending…' : 'Return to PI'}
-                                </button>
-                            </div>
-                        </div>
-                    ) : (
                         <div className="flex gap-3 justify-end">
                             <button onClick={onClose} disabled={saving}
                                 className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">
@@ -159,9 +124,24 @@ function ReviewModal({ proposal, onClose, onDone }) {
                                 {saving ? 'Saving…' : 'Approve'}
                             </button>
                         </div>
-                    )}
                 </div>
             </div>
+
+            {rejecting && (
+                <RejectWithReasonModal
+                    context="ethical_clearance"
+                    title="Reject & Return Certificate"
+                    subtitle={`${proposal.tracker_number ?? ''} · ${proposal.title ?? ''}`}
+                    note="The certificate is returned to the PI with this reason so they can upload a corrected one."
+                    confirmLabel="Return to PI"
+                    onClose={() => setRejecting(false)}
+                    onSubmit={async (payload) => {
+                        await api.post(`/proposals/${proposal.id}/ethical-clearance/reject`, payload);
+                        success('Certificate returned to PI for correction.');
+                        onDone();
+                    }}
+                />
+            )}
         </div>
     );
 }

@@ -15,6 +15,7 @@ Route::get('/explore', fn () => Inertia::render('Public/Explore'));
 Route::get('/funding-opportunities', fn () => Inertia::render('Public/FundingOpportunities'));
 Route::get('/repository', fn () => Inertia::render('Public/Repository'));
 Route::get('/tracker', fn () => Inertia::render('Public/Tracker'));
+Route::get('/certificates/verify/{code}', fn () => Inertia::render('Public/VerifyCertificate'));
 Route::get('/conferences', fn () => Inertia::render('Public/Conferences'));
 Route::get('/conferences/{slug}', fn () => Inertia::render('Public/ConferenceDetail'));
 Route::get('/conferences/{slug}/submit-abstract', fn () => Inertia::render('Public/AbstractSubmit'));
@@ -24,6 +25,7 @@ Route::get('/my-abstracts', fn () => Inertia::render('Public/MyAbstracts'));
 // would always be false — the client handles auth entirely via useAuth.
 Route::get('/proposal-calls', fn () => Inertia::render('Admin/ProposalCallsAdmin'));
 Route::get('/proposal-calls/public', fn () => Inertia::render('Public/ProposalCalls'));
+Route::get('/proposal-calls/{id}/submissions', fn () => Inertia::render('Admin/ProposalCallSubmissions'));
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 Route::get('/login', fn () => Inertia::render('Auth/Login'));
@@ -60,6 +62,8 @@ Route::get('/admin/validation-queue', fn () => Inertia::render('Admin/Validation
 Route::get('/admin/appeals', fn () => Inertia::render('Admin/Appeals'));
 Route::get('/admin/deadline-extensions', fn () => Inertia::render('Admin/DeadlineExtensions'));
 Route::get('/admin/defence-extensions', fn () => Inertia::render('Admin/DefenceExtensions'));
+Route::get('/admin/turnaround', fn () => Inertia::render('Admin/Turnaround'));
+Route::get('/progress-reports', fn () => Inertia::render('Monitoring/ProgressReports'));
 Route::get('/admin/ethical-clearance', fn () => Inertia::render('Admin/EthicalClearance'));
 Route::get('/admin/budget-revisions', fn () => Inertia::render('Admin/BudgetRevisions'));
 Route::get('/admin/no-cost-extensions', fn () => Inertia::render('Admin/NoCostExtensions'));

@@ -6,6 +6,7 @@ use App\Models\BudgetSettlement;
 use App\Models\College;
 use App\Models\Department;
 use App\Models\FormTemplate;
+use App\Models\MidtermEvaluation;
 use App\Models\Proposal;
 use App\Models\ProposalCall;
 use App\Models\ProposalMember;
@@ -93,6 +94,14 @@ function sett_makeBase(): array
         'approved_by' => $central->id,
         'approved_at' => now(),
         'allocated_by' => $central->id,
+    ]);
+
+    // Settlement verification and completion workshops require a scored Mid-Term M&E
+    // with a "continue" recommendation.
+    MidtermEvaluation::create([
+        'proposal_id' => $proposal->id, 'evaluation_date' => now()->subMonth()->toDateString(),
+        'status' => 'scored', 'scheduled_by' => $central->id, 'progress_score' => 80,
+        'recommendation' => 'continue', 'scored_by' => $central->id, 'scored_at' => now()->subMonth(),
     ]);
 
     return [$proposal, $pi, $coI, $collegeAdmin, $finance];

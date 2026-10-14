@@ -47,11 +47,12 @@ class ReviewAssignmentService
         ?string $dueDate = null,
         bool $overrideWorkloadCap = false
     ): array {
-        $validStates = ['validated', 'blind_review_passed'];
+        // under_open_defence: adding reviewers to a defence that is already scheduled.
+        $validStates = ['validated', 'blind_review_passed', 'under_open_defence'];
 
         if (! in_array($proposal->status, $validStates)) {
             throw new \Exception(
-                "Proposal must be in validated or blind_review_passed state to assign reviewers. Current: {$proposal->status}"
+                "Proposal must be validated, past blind review, or in open defence to assign reviewers. Current: {$proposal->status}"
             );
         }
 

@@ -8,6 +8,8 @@ use App\Exceptions\InvalidTransitionException;
 use App\Exceptions\ReviewAlreadySubmittedException;
 use App\Exceptions\UnauthorizedReviewException;
 use App\Exceptions\UnauthorizedTransitionException;
+use App\Jobs\SendEmailNotificationJob;
+use App\Jobs\StoreInAppNotificationJob;
 use App\Models\DefenceSession;
 use App\Models\EvaluationQuestion;
 use App\Models\Proposal;
@@ -762,7 +764,7 @@ class ReviewScoreService
      * review evaluation type's actual category-weight sum (e.g. 60 out of a possible 80)
      * — not a normalized 0–100 percentage.
      */
-    public function processBlindReviewResult(Proposal $proposal): void
+    public function processBlindReviewResult(Proposal $proposal, ?string $moderationNote = null): void
     {
         if ($proposal->status !== 'under_blind_review') {
             return;
@@ -782,32 +784,176 @@ class ReviewScoreService
             return;
         }
 
+        $threshold = $this->thresholdValue('blind_threshold');
+
+        // Reviewers far apart (or on opposite sides of the pass mark): hold the
+        // automatic decision until an officer adds a reviewer or moderates.
+        if (! $moderationNote && ! $proposal->review_disagreement_resolved_at) {
+            $disagreement = $this->blindDisagreement($assignments, $threshold);
+
+            if ($disagreement) {
+                $this->flagDisagreement($proposal, $disagreement);
+
+                return;
+            }
+
+            if ($proposal->review_disagreement_flagged_at) {
+                // A further reviewer brought the panel back into agreement.
+                $proposal->forceFill(['review_disagreement' => null, 'review_disagreement_flagged_at' => null])->saveQuietly();
+            }
+        }
+
         $phase = $this->phaseScore($assignments->map(fn ($a) => $this->calculateWeightedDisplay($a)));
         $rawAvg = $phase['score'];
         $rawMax = $phase['max'];
         $scoreLabel = $rawMax > 0 ? "{$rawAvg}/{$rawMax}" : (string) $rawAvg;
 
-        $threshold = $this->thresholdValue('blind_threshold');
-
         $systemActor = User::role('central_officer')->first()
             ?? User::role('super_admin')->first();
 
-        if ($rawAvg >= $threshold) {
-            $this->workflowService->transition(
-                $proposal,
-                'pass_blind_review',
-                $systemActor,
-                "Blind review passed. Average score: {$scoreLabel}. Threshold: {$threshold}.",
-                ['automatic' => true, 'average_score' => $rawAvg, 'score_label' => $scoreLabel, 'threshold' => $threshold]
-            );
-        } else {
-            $this->workflowService->transition(
-                $proposal,
-                'fail_blind_review',
-                $systemActor,
-                "Blind review failed. Average score: {$scoreLabel}. Threshold: {$threshold}.",
-                ['automatic' => true, 'average_score' => $rawAvg, 'score_label' => $scoreLabel, 'threshold' => $threshold]
-            );
+        $passes = $rawAvg >= $threshold;
+        $note = ($passes ? 'Blind review passed.' : 'Blind review failed.')
+            ." Average score: {$scoreLabel}. Threshold: {$threshold}."
+            .($moderationNote ? " Decided despite reviewer disagreement — moderation note: {$moderationNote}" : '');
+
+        $this->workflowService->transition(
+            $proposal,
+            $passes ? 'pass_blind_review' : 'fail_blind_review',
+            $systemActor,
+            $note,
+            ['automatic' => true, 'average_score' => $rawAvg, 'score_label' => $scoreLabel, 'threshold' => $threshold]
+                + ($moderationNote ? ['moderated' => true, 'moderation_note' => $moderationNote] : [])
+        );
+    }
+
+    /**
+     * Do the blind reviewers disagree too much for an automatic decision? Either the
+     * gap between the highest and lowest score exceeds the configured share of the
+     * maximum (Settings → review_disagreement_threshold_pct, 0 = off), or reviewers
+     * fall on opposite sides of the pass mark.
+     *
+     * @param  Collection<int, ReviewAssignment>  $assignments  submitted blind-review assignments
+     * @return array{scores: list<array{label: string, score: float, max: float, passes: bool}>, spread: float, spread_pct: float, threshold_pct: float, pass_mark: float, split_verdict: bool, reasons: list<string>}|null
+     */
+    public function blindDisagreement(Collection $assignments, ?float $passMark = null): ?array
+    {
+        $thresholdPct = (float) (DB::table('app_settings')->where('key', 'review_disagreement_threshold_pct')->value('value') ?? 25);
+
+        if ($thresholdPct <= 0 || $assignments->count() < 2) {
+            return null;
+        }
+
+        $passMark ??= $this->thresholdValue('blind_threshold');
+        $letter = 'A';
+        $scores = $assignments->values()->map(function (ReviewAssignment $a) use (&$letter, $passMark) {
+            $display = $this->calculateWeightedDisplay($a);
+
+            return [
+                'label' => 'Reviewer '.$letter++,
+                'score' => round(min($display['score'], $display['max']), 2),
+                'max' => (float) $display['max'],
+                'passes' => $display['score'] >= $passMark,
+            ];
+        });
+
+        $max = (float) ($scores->max('max') ?: 0);
+        $spread = round($scores->max('score') - $scores->min('score'), 2);
+        $spreadPct = $max > 0 ? round($spread / $max * 100, 1) : 0.0;
+        $splitVerdict = $scores->contains('passes', true) && $scores->contains('passes', false);
+
+        $reasons = [];
+        if ($spreadPct > $thresholdPct) {
+            $reasons[] = "Scores differ by {$spread} points ({$spreadPct}% of the maximum; limit {$thresholdPct}%).";
+        }
+        if ($splitVerdict) {
+            $reasons[] = "Some reviewers' scores pass the threshold of {$passMark} and others' fail it.";
+        }
+
+        if ($reasons === []) {
+            return null;
+        }
+
+        return [
+            'scores' => $scores->all(),
+            'spread' => $spread,
+            'spread_pct' => $spreadPct,
+            'threshold_pct' => $thresholdPct,
+            'pass_mark' => $passMark,
+            'split_verdict' => $splitVerdict,
+            'reasons' => $reasons,
+        ];
+    }
+
+    /**
+     * Officer decides a held proposal with the scores it has, recording why.
+     *
+     * @throws \RuntimeException
+     */
+    public function decideDespiteDisagreement(Proposal $proposal, User $actor, string $note): Proposal
+    {
+        if ($proposal->status !== 'under_blind_review' || ! $proposal->review_disagreement_flagged_at) {
+            throw new \RuntimeException('This proposal is not waiting on a reviewer-disagreement decision.');
+        }
+
+        $proposal->forceFill([
+            'review_disagreement_resolved_at' => now(),
+            'review_disagreement_resolved_by' => $actor->id,
+            'review_disagreement_note' => $note,
+        ])->saveQuietly();
+
+        $this->processBlindReviewResult($proposal->fresh(), "{$note} ({$actor->name})");
+
+        return $proposal->fresh();
+    }
+
+    private function flagDisagreement(Proposal $proposal, array $disagreement): void
+    {
+        $firstTime = ! $proposal->review_disagreement_flagged_at;
+
+        $proposal->forceFill([
+            'review_disagreement' => $disagreement,
+            'review_disagreement_flagged_at' => $proposal->review_disagreement_flagged_at ?? now(),
+        ])->saveQuietly();
+
+        if (! $firstTime) {
+            return;
+        }
+
+        $directorRole = [
+            'research' => 'research_officer',
+            'community_engagement' => 'community_officer',
+            'technology_transfer' => 'technology_officer',
+        ][$proposal->category] ?? null;
+
+        $recipients = User::role('central_officer')->where('status', 'active')->get();
+        if ($directorRole) {
+            $recipients = $recipients->merge(User::role($directorRole)->where('status', 'active')->get());
+        }
+        $recipients = $recipients->merge(
+            User::role('college_officer')->where('status', 'active')->where('college_id', $proposal->college_id)->get()
+        )->unique('id');
+
+        $scoreList = collect($disagreement['scores'])->map(fn ($s) => "{$s['label']} {$s['score']}/{$s['max']}")->implode(', ');
+        $data = [
+            'proposal_id' => $proposal->id,
+            'tracker_number' => $proposal->tracker_number,
+            'title' => $proposal->title,
+            'message' => "Blind reviewers disagree on {$proposal->tracker_number} ({$scoreList}). "
+                .'The automatic decision is on hold — add a reviewer or decide with the current scores.',
+        ];
+
+        foreach ($recipients as $recipient) {
+            try {
+                StoreInAppNotificationJob::dispatchSync($recipient->id, 'review_disagreement', $data);
+            } catch (\Throwable $e) {
+                Log::error("Review disagreement notification failed: {$e->getMessage()}");
+            }
+
+            try {
+                SendEmailNotificationJob::dispatchSync($recipient, 'review_disagreement', $data);
+            } catch (\Throwable $e) {
+                Log::error("Review disagreement email failed: {$e->getMessage()}");
+            }
         }
     }
 
@@ -823,8 +969,14 @@ class ReviewScoreService
      */
     public function rejectFromBlindReview(Proposal $proposal, User $actor, string $reason): Proposal
     {
+        // Same as a validation rejection: the reason is what the PI's rejection
+        // notice and the proposal's rejection banner show.
+        DB::table('proposals')
+            ->where('id', $proposal->id)
+            ->update(['rejected_at' => now(), 'rejection_reason' => $reason]);
+
         return $this->workflowService->transition(
-            $proposal,
+            $proposal->fresh(),
             'fail_blind_review',
             $actor,
             $reason,

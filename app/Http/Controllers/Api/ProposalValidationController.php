@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Proposal;
+use App\Services\AnonymityCheckService;
 use App\Services\ProposalValidationService;
+use App\Support\RejectionReasons;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -91,8 +93,32 @@ class ProposalValidationController extends Controller
         ]);
     }
 
+    /** Re-run the anonymity check (e.g. after the PI uploaded a corrected document). */
+    public function anonymityCheck(string $id, Request $request, AnonymityCheckService $anonymity): JsonResponse
+    {
+        $user = $request->user();
+        if (! $user->can('proposals.validate') && ! $user->hasRole('college_officer')) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => [], 'meta' => []], 403);
+        }
+
+        $proposal = Proposal::findOrFail($id);
+        $result = $anonymity->check($proposal);
+
+        return response()->json([
+            'data' => array_merge($result, ['checked_at' => now()->toIso8601String()]),
+            'message' => match ($result['status']) {
+                AnonymityCheckService::STATUS_CLEAN => 'No identifying details found.',
+                AnonymityCheckService::STATUS_ISSUES => count($result['findings']).' possible identity reveal(s) found.',
+                default => 'No reviewer document could be read automatically — please check it by hand.',
+            },
+            'errors' => [],
+            'meta' => [],
+        ]);
+    }
+
     public function reject(string $id, Request $request): JsonResponse
     {
+        RejectionReasons::apply($request, 'proposal_validation');
         $request->validate(['reason' => 'required|string|min:10']);
         $proposal = Proposal::findOrFail($id);
         $rejected = $this->service->reject($proposal, $request->user(), $request->reason);

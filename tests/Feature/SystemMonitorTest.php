@@ -66,6 +66,10 @@ test('history endpoint returns grouped metrics', function () {
 });
 
 test('request stats returns aggregate counts', function () {
+    // Other test files leave request_logs rows behind when run in the full suite —
+    // start from a clean table so only the rows below are counted.
+    DB::table('request_logs')->delete();
+
     DB::table('request_logs')->insert([
         ['method' => 'GET', 'path' => '/api/v1/proposals', 'status_code' => 200, 'duration_ms' => 120, 'ip' => '127.0.0.1', 'user_id' => null, 'is_api' => 1, 'requested_at' => now()],
         ['method' => 'POST', 'path' => '/api/v1/auth/login', 'status_code' => 401, 'duration_ms' => 80, 'ip' => '127.0.0.1', 'user_id' => null, 'is_api' => 1, 'requested_at' => now()],

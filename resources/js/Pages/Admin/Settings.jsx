@@ -113,6 +113,10 @@ const KEY_LABELS = {
     ongoing_midterm_overdue_days: 'Ongoing Proposals — Midterm Overdue After (days)',
     max_active_pi_proposals: 'Max Active Proposals as PI (0 = unlimited)',
     max_active_coinvestigator_proposals: 'Max Active Proposals as Co-Investigator (0 = unlimited)',
+    review_disagreement_threshold_pct: 'Hold Blind Review When Reviewers Differ By More Than (% of max, 0 = off)',
+    progress_report_interval_months: 'Progress Report Every (months)',
+    certificate_signatory_name: 'Reviewer Certificate — Signatory Name',
+    certificate_signatory_title: 'Reviewer Certificate — Signatory Title',
     audit_log_retention_days: 'Audit Log Retention (days)', activity_logging: 'Activity Logging',
     error_logging: 'Error Logging', login_history_enabled: 'Login History',
     backup_schedule: 'Backup Schedule', backup_time: 'Backup Time 1', backup_time_2: 'Backup Time 2', backup_time_3: 'Backup Time 3', backup_retention_days: 'Backup Retention (days)',
@@ -223,6 +227,8 @@ const NUMBER_RANGES = {
     ongoing_midterm_overdue_days: { min: 7, max: 365, step: 1 },
     max_active_pi_proposals: { min: 0, max: 50, step: 1 },
     max_active_coinvestigator_proposals: { min: 0, max: 50, step: 1 },
+    review_disagreement_threshold_pct: { min: 0, max: 100, step: 1 },
+    progress_report_interval_months: { min: 1, max: 12, step: 1 },
 }
 
 // Keys that are internal / legacy and should not appear in the UI

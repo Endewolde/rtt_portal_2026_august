@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, Eye, AlertCircle } from 'lucide-react';
 import api from '../lib/api';
 import { useToast } from './Toast';
+import RejectWithReasonModal from './RejectWithReasonModal';
 
 export default function ContractReviewModal({ proposal, onClose, onDone }) {
     const { success, error } = useToast();
@@ -9,7 +10,6 @@ export default function ContractReviewModal({ proposal, onClose, onDone }) {
     const [loadingPdf, setLoadingPdf] = useState(true);
     const [saving, setSaving] = useState(false);
     const [rejecting, setRejecting] = useState(false);
-    const [reason, setReason] = useState('');
 
     useEffect(() => {
         const token = localStorage.getItem('rtt_token');
@@ -31,19 +31,6 @@ export default function ContractReviewModal({ proposal, onClose, onDone }) {
             onDone();
         } catch (e) {
             error(e.response?.data?.message ?? 'Failed to approve contract.');
-        }
-        setSaving(false);
-    };
-
-    const reject = async () => {
-        if (!reason.trim()) { error('Please provide a reason for rejection.'); return; }
-        setSaving(true);
-        try {
-            await api.post(`/proposals/${proposal.id}/contract/reject`, { reason });
-            success('Contract returned to PI for correction.');
-            onDone();
-        } catch (e) {
-            error(e.response?.data?.message ?? 'Failed to reject contract.');
         }
         setSaving(false);
     };
@@ -80,28 +67,6 @@ export default function ContractReviewModal({ proposal, onClose, onDone }) {
 
                 {/* Actions */}
                 <div className="p-5 border-t border-gray-100 space-y-3">
-                    {rejecting ? (
-                        <div className="space-y-3">
-                            <label className="text-xs font-medium text-gray-700 block">Reason for rejection (sent to PI)</label>
-                            <textarea
-                                value={reason}
-                                onChange={e => setReason(e.target.value)}
-                                rows={3}
-                                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300"
-                                placeholder="Explain what needs to be corrected…"
-                            />
-                            <div className="flex gap-3 justify-end">
-                                <button onClick={() => setRejecting(false)} disabled={saving}
-                                    className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">
-                                    Back
-                                </button>
-                                <button onClick={reject} disabled={saving || !reason.trim()}
-                                    className="px-5 py-2 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">
-                                    {saving ? 'Sending…' : 'Return to PI'}
-                                </button>
-                            </div>
-                        </div>
-                    ) : (
                         <div className="flex gap-3 justify-end">
                             <button onClick={onClose} disabled={saving}
                                 className="px-4 py-2 text-sm text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">
@@ -116,9 +81,24 @@ export default function ContractReviewModal({ proposal, onClose, onDone }) {
                                 {saving ? 'Saving…' : 'Approve Contract'}
                             </button>
                         </div>
-                    )}
                 </div>
             </div>
+
+            {rejecting && (
+                <RejectWithReasonModal
+                    context="contract"
+                    title="Reject & Return Contract"
+                    subtitle={`${proposal.tracker_number ?? ''} · ${proposal.title ?? ''}`}
+                    note="The contract is returned to the PI with this reason so they can correct and resubmit it."
+                    confirmLabel="Return to PI"
+                    onClose={() => setRejecting(false)}
+                    onSubmit={async (payload) => {
+                        await api.post(`/proposals/${proposal.id}/contract/reject`, payload);
+                        success('Contract returned to PI for correction.');
+                        onDone();
+                    }}
+                />
+            )}
         </div>
     );
 }

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Mail\TwoFactorCodeMail;
 use App\Models\AppSetting;
+use App\Models\EmailLog;
 use App\Models\NotificationPreference;
 use App\Models\User;
 use Illuminate\Auth\Events\Registered;
@@ -378,11 +379,15 @@ class AuthService
                     'verifyUrl' => $verifyUrl,
                     'senderName' => config('mail.from.name'),
                 ])->render(),
-                fn ($msg) => $msg->to($user->email, $user->name)
-                    ->subject('Please Verify Your Email — RTT Platform')
+                function ($msg) use ($user) {
+                    $msg->to($user->email, $user->name)->subject('Please Verify Your Email — RTT Platform');
+                    $msg->getSymfonyMessage()->getHeaders()->addTextHeader(EmailLog::SOURCE_HEADER, 'verify_email');
+                }
             );
-        } catch (\Exception) {
-            // Absorb mail failures silently; token is still stored for resend
+        } catch (\Exception $e) {
+            // Don't fail registration over mail — the token is stored for resend — but
+            // record it so a mail outage is visible on System Monitor.
+            EmailLog::failed($user->email, 'Please Verify Your Email — RTT Platform', 'verify_email', $e);
         }
     }
 }

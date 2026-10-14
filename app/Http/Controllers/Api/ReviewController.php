@@ -26,6 +26,7 @@ use App\Services\ReviewAssignmentService;
 use App\Services\ReviewScoreService;
 use App\Services\WorkflowService;
 use App\Support\AuditLogger;
+use App\Support\RejectionReasons;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -117,8 +118,37 @@ class ReviewController extends Controller
      * never have reached this stage (duplicate, ineligible, etc.), not a scoring
      * problem (that's reviews:correct-blind-review's job).
      */
+    /** Decide a proposal held for reviewer disagreement using the scores it has, with a moderation note. */
+    public function decideDespiteDisagreement(string $id, Request $request): JsonResponse
+    {
+        if (! $request->user()->hasAnyRole(['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer'])) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => [], 'meta' => []], 403);
+        }
+
+        $validated = $request->validate(['notes' => 'required|string|min:10|max:2000']);
+        $proposal = Proposal::findOrFail($id);
+
+        if ($request->_category_scope && $proposal->category !== $request->_category_scope) {
+            return response()->json(['data' => null, 'message' => 'You can only decide proposals in your own category.', 'errors' => [], 'meta' => []], 403);
+        }
+
+        try {
+            $proposal = $this->scoreService->decideDespiteDisagreement($proposal, $request->user(), $validated['notes']);
+        } catch (\RuntimeException $e) {
+            return response()->json(['data' => null, 'message' => $e->getMessage(), 'errors' => [], 'meta' => []], 422);
+        }
+
+        return response()->json([
+            'data' => ['status' => $proposal->status],
+            'message' => 'Decided with the current scores — the proposal is now '.Proposal::statusLabel($proposal->status).'.',
+            'errors' => [],
+            'meta' => [],
+        ]);
+    }
+
     public function rejectFromBlindReview(string $id, Request $request): JsonResponse
     {
+        RejectionReasons::apply($request, 'blind_review');
         $request->validate(['reason' => 'required|string|min:10']);
 
         $proposal = Proposal::findOrFail($id);
@@ -228,6 +258,74 @@ class ReviewController extends Controller
             'errors' => [],
             'meta' => [],
         ]);
+    }
+
+    /** The active defence session and its reviewer panel (Schedule Defence page, edit mode). */
+    public function defenceSession(string $id): JsonResponse
+    {
+        $proposal = Proposal::findOrFail($id);
+        $current = $this->defenceService->current($proposal);
+
+        return response()->json([
+            'data' => [
+                'session' => $current['session'],
+                'assignments' => $current['assignments']->map(fn (ReviewAssignment $a) => [
+                    'id' => $a->id,
+                    'reviewer_id' => $a->reviewer_id,
+                    'reviewer' => $a->reviewer,
+                    'status' => $a->status,
+                    'evaluation_type_id' => $a->evaluation_type_id,
+                ])->values(),
+            ],
+            'message' => '',
+            'errors' => [],
+            'meta' => [],
+        ]);
+    }
+
+    /** Update an open defence already under way: date, venue and reviewer panel. */
+    public function updateDefence(string $id, Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'scheduled_date' => 'required|date|after_or_equal:today',
+            'scheduled_time' => 'required',
+            'venue' => 'required|string|max:300',
+            'online_link' => 'nullable|url',
+            'reviewer_ids' => 'nullable|array',
+            'reviewer_ids.*' => 'uuid|exists:users,id',
+            'evaluation_type_id' => 'nullable|uuid|exists:evaluation_types,id',
+            'override_workload_cap' => 'sometimes|boolean',
+        ]);
+
+        if (! $request->user()->hasAnyRole(self::WORKLOAD_ROLES)) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => [], 'meta' => []], 403);
+        }
+
+        $proposal = Proposal::findOrFail($id);
+
+        try {
+            $result = $this->defenceService->update($proposal, $validated, $request->user());
+        } catch (\Exception $e) {
+            return response()->json(['data' => null, 'message' => $e->getMessage(), 'errors' => [], 'meta' => []], 422);
+        }
+
+        AuditLogger::log('defence.updated', Proposal::class, $proposal->id, $request->user()->id, null, [
+            'scheduled_date' => $validated['scheduled_date'],
+            'venue' => $validated['venue'],
+            'reviewers_added' => $result['added'],
+            'reviewers_removed' => $result['removed'],
+        ]);
+
+        $parts = array_filter([
+            $result['added'] ? "{$result['added']} reviewer(s) added" : null,
+            $result['removed'] ? "{$result['removed']} removed" : null,
+        ]);
+        $message = 'Open defence updated'.($parts ? ' — '.implode(', ', $parts) : '').'.';
+        if ($result['kept_submitted'] !== []) {
+            $message .= ' Kept '.implode(', ', $result['kept_submitted']).' — they already submitted a score.';
+        }
+
+        return response()->json(['data' => $result['session'], 'message' => $message, 'errors' => [], 'meta' => []]);
     }
 
     public function scheduleDefence(string $id, Request $request): JsonResponse
@@ -1070,7 +1168,22 @@ class ReviewController extends Controller
             ], 422);
         }
 
-        $evalType = ReviewAssignment::where('proposal_id', $id)->value('evaluation_type_id');
+        // Same phase as the proposal is in — a proposal in open defence also has blind
+        // review assignments, and copying one of those would add a "defence" reviewer
+        // who never counts toward the defence.
+        $phasePrefix = $proposal->status === 'under_open_defence' ? 'open_defence' : 'blind_review';
+        $evalType = ReviewAssignment::where('proposal_id', $id)
+            ->whereHas('evaluationType', fn ($q) => $q->where('name', 'like', $phasePrefix.'%'))
+            ->value('evaluation_type_id');
+
+        if (! $evalType) {
+            return response()->json([
+                'data' => null,
+                'message' => 'No '.str_replace('_', ' ', $phasePrefix).' evaluation type is set for this proposal yet — use Schedule Defence to choose one.',
+                'errors' => [],
+                'meta' => [],
+            ], 422);
+        }
 
         $assignment = ReviewAssignment::create([
             'proposal_id' => $id,

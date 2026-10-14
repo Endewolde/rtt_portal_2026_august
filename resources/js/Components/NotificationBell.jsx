@@ -142,6 +142,36 @@ const TYPE_CFG = {
         template: d => d.message || d.title || 'System notification',
         actionLabel: null, actionUrl: () => '/notifications',
     },
+    progress_report_due: {
+        icon: Calendar, color: 'amber', label: 'Progress Report Due', category: 'action',
+        template: d => d.message || 'Progress Report Due',
+        actionLabel: 'Open Reports', actionUrl: d => d.proposal_id ? `/proposals/${d.proposal_id}?tab=Progress` : '/progress-reports',
+    },
+    progress_report_overdue: {
+        icon: AlertCircle, color: 'red', label: 'Progress Report Overdue', category: 'action',
+        template: d => d.message || 'Progress Report Overdue',
+        actionLabel: 'Open Reports', actionUrl: d => d.proposal_id ? `/proposals/${d.proposal_id}?tab=Progress` : '/progress-reports',
+    },
+    progress_report_submitted: {
+        icon: ClipboardList, color: 'blue', label: 'Progress Report Submitted', category: 'action',
+        template: d => d.message || 'Progress Report Submitted',
+        actionLabel: 'Review Report', actionUrl: d => d.proposal_id ? `/proposals/${d.proposal_id}?tab=Progress` : '/progress-reports',
+    },
+    progress_report_reviewed: {
+        icon: CheckCircle2, color: 'green', label: 'Progress Report Reviewed', category: 'activity',
+        template: d => d.message || 'Progress Report Reviewed',
+        actionLabel: 'Open Reports', actionUrl: d => d.proposal_id ? `/proposals/${d.proposal_id}?tab=Progress` : '/progress-reports',
+    },
+    stage_reminder: {
+        icon: AlertTriangle, color: 'amber', label: 'Action Needed', category: 'action',
+        template: d => d.message || `${d.tracker_number || 'A proposal'} is waiting on you`,
+        actionLabel: 'Open Proposal', actionUrl: d => d.proposal_id ? `/proposals/${d.proposal_id}` : '/notifications',
+    },
+    review_disagreement: {
+        icon: AlertTriangle, color: 'amber', label: 'Reviewers Disagree', category: 'action',
+        template: d => d.message || `Blind reviewers disagree on ${d.tracker_number || 'a proposal'}`,
+        actionLabel: 'Open Proposal', actionUrl: d => d.proposal_id ? `/proposals/${d.proposal_id}` : '/admin/blind-review',
+    },
     defence_extension_requested: {
         icon: Calendar, color: 'amber', label: 'Defence Deadline Extension Request', category: 'action',
         template: d => d.message || `Score deadline extension requested for ${d.tracker_number || 'a proposal'}`,

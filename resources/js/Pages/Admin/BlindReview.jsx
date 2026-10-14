@@ -4,7 +4,7 @@ import { Link, usePage } from '@inertiajs/react';
 import {
     EyeOff, UserCheck, Calendar, Clock, AlertCircle, RefreshCw,
     Search, X, Building2, Users, CheckCircle2, UserPlus, Trash2,
-    ChevronRight, Activity, AlertTriangle, Shield,
+    ChevronRight, Activity, AlertTriangle, Shield, Scale,
 } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import StatusBadge from '../../Components/StatusBadge';
@@ -666,6 +666,13 @@ function ReviewCard({ proposal, onReassign, onExtend, onAddReviewer, onRemove })
                             </span>
                             <span className="text-xs text-gray-400">{getCategoryLabel(proposal.category)}</span>
                             <StatusBadge status={proposal.status} />
+                            {proposal.review_disagreement_flagged_at && !proposal.review_disagreement_resolved_at && (
+                                <Link href={`/proposals/${proposal.id}`}
+                                    title="Reviewers disagree — the automatic decision is on hold"
+                                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full hover:bg-amber-100">
+                                    <Scale size={10} /> Reviewers disagree
+                                </Link>
+                            )}
                             {overdue > 0 && (
                                 <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full">
                                     <AlertTriangle size={10} /> {overdue} overdue

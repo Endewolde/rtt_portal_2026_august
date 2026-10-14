@@ -35,7 +35,7 @@ function dash_makeUser(string $role, array $attrs = []): User
 function dash_makeCollegeUser(string $role): User
 {
     $college = College::create(['name' => 'Dash C '.rand(), 'code' => 'DC'.rand(10, 99)]);
-    $dept    = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'DD'.rand(10, 99)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'DD'.rand(10, 99)]);
 
     return dash_makeUser($role, ['college_id' => $college->id, 'department_id' => $dept->id]);
 }
@@ -43,7 +43,7 @@ function dash_makeCollegeUser(string $role): User
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 test('super admin gets proposals_by_status, pending_tasks, budget_utilization_summary, trend_chart', function () {
-    $admin   = dash_makeUser('super_admin');
+    $admin = dash_makeUser('super_admin');
     $widgets = app(DashboardService::class)->getWidgets($admin);
 
     expect($widgets)->toHaveKey('proposals_by_status')
@@ -52,15 +52,20 @@ test('super admin gets proposals_by_status, pending_tasks, budget_utilization_su
         ->toHaveKey('proposal_trend_chart');
 });
 
-test('reviewer gets reviewer_queue widget', function () {
+test('a reviewer gets the common widgets but no admin-only ones', function () {
+    // The dedicated reviewer_queue widget was retired — reviewers work from My Reviews.
     $reviewer = dash_makeUser('reviewer');
-    $widgets  = app(DashboardService::class)->getWidgets($reviewer);
+    $widgets = app(DashboardService::class)->getWidgets($reviewer);
 
-    expect($widgets)->toHaveKey('reviewer_queue');
+    expect($widgets)->toHaveKey('pending_tasks')
+        ->toHaveKey('recent_notifications')
+        ->not->toHaveKey('proposal_trend_chart')
+        ->not->toHaveKey('budget_utilization_summary');
 });
 
 test('PI gets my_proposals widget', function () {
-    $pi      = dash_makeCollegeUser('pi');
+    // Researchers who lead proposals hold the staff role.
+    $pi = dash_makeCollegeUser('staff');
     $widgets = app(DashboardService::class)->getWidgets($pi);
 
     expect($widgets)->toHaveKey('my_proposals');
@@ -74,14 +79,14 @@ test('finance gets budget_utilization_summary widget', function () {
 });
 
 test('college admin does NOT get budget_utilization_summary widget', function () {
-    $admin   = dash_makeCollegeUser('college_officer');
+    $admin = dash_makeCollegeUser('college_officer');
     $widgets = app(DashboardService::class)->getWidgets($admin);
 
     expect($widgets)->not->toHaveKey('budget_utilization_summary');
 });
 
 test('PI does NOT get trend_chart widget', function () {
-    $pi      = dash_makeCollegeUser('pi');
+    $pi = dash_makeCollegeUser('pi');
     $widgets = app(DashboardService::class)->getWidgets($pi);
 
     expect($widgets)->not->toHaveKey('proposal_trend_chart');
@@ -106,7 +111,7 @@ test('dashboard result is cached on second call', function () {
 });
 
 test('cache invalidated after invalidate() called', function () {
-    $admin   = dash_makeUser('super_admin');
+    $admin = dash_makeUser('super_admin');
     $service = app(DashboardService::class);
 
     $service->getWidgets($admin);

@@ -3,7 +3,7 @@ import {
     Megaphone, Plus, X, Search, Pencil, CheckCircle, XCircle,
     Eye, RefreshCw, Trash2, Upload, FileText, Download, Filter,
     Settings, AlertCircle, GraduationCap, Calendar, Clock,
-    AlignLeft, Users, Tag, ShieldCheck, BookOpen,
+    AlignLeft, Users, Tag, ShieldCheck, BookOpen, ChevronRight,
 } from 'lucide-react';
 import { Link, usePage } from '@inertiajs/react';
 import AppLayout from '../../Layouts/AppLayout';
@@ -693,7 +693,13 @@ export default function ProposalCallsAdmin() {
                                         <XCircle size={13} />
                                     </button>
                                 )}
-                                <span className="ml-auto text-xs text-gray-400">{c.proposals_count ?? 0} submissions</span>
+                                <Link
+                                    href={`/proposal-calls/${c.id}/submissions`}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="ml-auto inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-100"
+                                >
+                                    {c.proposals_count ?? 0} submitted <ChevronRight size={12} />
+                                </Link>
                             </div>
                         </div>
                     ))}
@@ -738,19 +744,19 @@ export default function ProposalCallsAdmin() {
                                         {c.end_date_formatted ?? formatDate(c.end_date)}
                                     </td>
                                     <td className="px-4 py-3">
-                                        <a href={`/proposals?call_id=${c.id}`}
+                                        <Link href={`/proposal-calls/${c.id}/submissions`}
                                             onClick={(e) => e.stopPropagation()}
                                             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors">
-                                            {c.proposals_count ?? 0} submissions
-                                        </a>
+                                            {c.proposals_count ?? 0} submitted
+                                        </Link>
                                     </td>
                                     <td className="px-4 py-3">
                                         <div className="flex items-center gap-1.5 justify-end" onClick={(e) => e.stopPropagation()}>
-                                            <a href={`/proposals?call_id=${c.id}`}
+                                            <Link href={`/proposal-calls/${c.id}/submissions`}
                                                 className="p-1.5 text-gray-400 hover:text-blue-600 transition-colors rounded"
                                                 title="View submissions">
                                                 <Eye size={15} />
-                                            </a>
+                                            </Link>
 
                                             {canManage && (
                                                 <>

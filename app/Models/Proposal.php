@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Support\TitleCase;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -82,6 +84,11 @@ class Proposal extends Model
         'rejected_at' => 'datetime',
         'extended_deadline' => 'datetime',
         'current_wizard_step' => 'integer',
+        'anonymity_findings' => 'array',
+        'anonymity_checked_at' => 'datetime',
+        'review_disagreement' => 'array',
+        'review_disagreement_flagged_at' => 'datetime',
+        'review_disagreement_resolved_at' => 'datetime',
     ];
 
     /**
@@ -96,6 +103,18 @@ class Proposal extends Model
             'accepted' => 'Central Evaluation',
             default => ucwords(str_replace('_', ' ', $status)),
         };
+    }
+
+    /**
+     * Proposal titles are stored and shown in one standard form — Title Case
+     * (see App\Support\TitleCase) — however the researcher typed them.
+     */
+    protected function title(): Attribute
+    {
+        return Attribute::make(
+            get: fn (?string $value) => TitleCase::format($value),
+            set: fn (?string $value) => TitleCase::format($value),
+        );
     }
 
     public function proposalCall(): BelongsTo

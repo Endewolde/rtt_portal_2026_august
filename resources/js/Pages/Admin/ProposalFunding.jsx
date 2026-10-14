@@ -9,6 +9,7 @@ import { useViewPreference } from '../../hooks/useViewPreference';
 import api from '../../lib/api';
 import { useToast } from '../../Components/Toast';
 import { formatDate, formatCurrency, getCategoryLabel } from '../../lib/utils';
+import RejectWithReasonModal from '../../Components/RejectWithReasonModal';
 
 function EditAmountModal({ proposal, onSave, onClose }) {
     const [amount, setAmount] = useState(proposal.award?.awarded_amount ?? 0);
@@ -157,58 +158,22 @@ function PIHistoryModal({ piId, piName, onClose }) {
 }
 
 function RevokeFundingModal({ proposal, onSave, onClose }) {
-    const [reason, setReason] = useState('');
-    const [saving, setSaving] = useState(false);
-    const { error, success } = useToast();
-
-    const save = async () => {
-        if (reason.trim().length < 10) { error('Please provide at least 10 characters explaining the reason.'); return; }
-        setSaving(true);
-        try {
-            const res = await api.post(`/proposals/${proposal.id}/funding/revoke`, { reason });
-            success(res.data?.message || 'Funding revoked.');
-            onSave();
-        } catch (e) { error(e.response?.data?.message || 'Failed to revoke funding.'); }
-        setSaving(false);
-    };
+    const { success } = useToast();
 
     return (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-                <div className="flex items-center gap-3 mb-1">
-                    <div className="h-9 w-9 bg-red-100 rounded-xl flex items-center justify-center shrink-0">
-                        <XCircle size={18} className="text-red-600" />
-                    </div>
-                    <h3 className="text-base font-semibold text-gray-900">Revoke Funding</h3>
-                </div>
-                <p className="text-xs text-gray-500 mb-1 font-mono">{proposal.tracker_number}</p>
-                <p className="text-xs text-gray-500 mb-4 line-clamp-2">{proposal.title}</p>
-
-                <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4">
-                    <p className="text-xs font-semibold text-amber-800">This action is irreversible via normal workflow.</p>
-                    <p className="text-xs text-amber-700 mt-0.5">The proposal will be moved to <strong>Rejected</strong> status and the PI will be notified.</p>
-                </div>
-
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Reason for Revocation <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                    value={reason}
-                    onChange={e => setReason(e.target.value)}
-                    rows={4}
-                    placeholder="Explain why the funding is being revoked..."
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 mb-4 resize-none"
-                />
-
-                <div className="flex gap-3">
-                    <button onClick={onClose} className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Cancel</button>
-                    <button onClick={save} disabled={saving}
-                        className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 disabled:opacity-60">
-                        {saving ? 'Revoking…' : 'Revoke Funding'}
-                    </button>
-                </div>
-            </div>
-        </div>
+        <RejectWithReasonModal
+            context="funding_revocation"
+            title="Revoke Funding"
+            subtitle={`${proposal.tracker_number ?? ''} · ${proposal.title ?? ''}`}
+            note="This cannot be undone through the normal workflow. The proposal moves to Rejected and the PI is notified with this reason."
+            confirmLabel="Revoke Funding"
+            onClose={onClose}
+            onSubmit={async (payload) => {
+                const res = await api.post(`/proposals/${proposal.id}/funding/revoke`, payload);
+                success(res.data?.message || 'Funding revoked.');
+                onSave();
+            }}
+        />
     );
 }
 

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Exceptions\BlindReviewPhaseIncompleteException;
 use App\Models\DefenceSession;
 use App\Models\Proposal;
+use App\Models\ReviewAssignment;
 use App\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -160,6 +161,115 @@ class DefenceSessionService
 
             return $session->fresh();
         });
+    }
+
+    /**
+     * The proposal's active defence session and its open-defence reviewers, for the
+     * Schedule Defence page in edit mode.
+     *
+     * @return array{session: DefenceSession|null, assignments: Collection<int, ReviewAssignment>}
+     */
+    public function current(Proposal $proposal): array
+    {
+        return [
+            'session' => DefenceSession::where('proposal_id', $proposal->id)->where('status', 'scheduled')->latest()->first(),
+            'assignments' => $this->defenceAssignments($proposal)->with(['reviewer:id,name,email,title', 'evaluationType:id,name,label'])->get(),
+        ];
+    }
+
+    /**
+     * Update an open defence that is already under way: date, time, venue and link,
+     * plus its reviewer panel — newly selected reviewers are assigned and notified,
+     * deselected ones removed (never one who already submitted a score). Changing the
+     * date resets the score deadline to the day after the new date.
+     *
+     * @param  array{scheduled_date: string, scheduled_time: string, venue: string, online_link?: string|null, reviewer_ids?: array<int, string>, evaluation_type_id?: string|null, override_workload_cap?: bool}  $data
+     * @return array{session: DefenceSession, added: int, removed: int, kept_submitted: array<int, string>}
+     *
+     * @throws \Exception
+     */
+    public function update(Proposal $proposal, array $data, User $actor): array
+    {
+        if ($proposal->status !== 'under_open_defence') {
+            throw new \Exception('Only a proposal currently in open defence can have its defence updated.');
+        }
+
+        $current = $this->defenceAssignments($proposal)->get();
+        $requested = collect($data['reviewer_ids'] ?? [])->unique()->values();
+        $toAdd = $requested->diff($current->pluck('reviewer_id'))->values();
+        $toRemove = $current->reject(fn (ReviewAssignment $a) => $requested->contains($a->reviewer_id));
+        $keptSubmitted = $toRemove->where('status', 'submitted');
+        $toRemove = $toRemove->where('status', '!=', 'submitted');
+
+        $evaluationTypeId = $data['evaluation_type_id'] ?? $current->first()?->evaluation_type_id;
+        if ($toAdd->isNotEmpty() && ! $evaluationTypeId) {
+            throw new \Exception('Select the open defence evaluation type before assigning reviewers.');
+        }
+
+        $dueDate = Carbon::parse($data['scheduled_date'])->addDay()->toDateString();
+
+        $session = DB::transaction(function () use ($proposal, $data, $actor, $toAdd, $toRemove, $evaluationTypeId, $dueDate) {
+            $session = DefenceSession::where('proposal_id', $proposal->id)->where('status', 'scheduled')->latest()->first();
+            $dateChanged = ! $session || $session->scheduled_date->toDateString() !== Carbon::parse($data['scheduled_date'])->toDateString();
+
+            $attributes = [
+                'scheduled_date' => $data['scheduled_date'],
+                'scheduled_time' => $data['scheduled_time'],
+                'venue' => $data['venue'],
+                'online_link' => $data['online_link'] ?? null,
+            ];
+
+            if ($session) {
+                // A new defence date means a new score deadline (day after it) — an
+                // extension granted for the old date no longer applies.
+                $session->update($attributes + ($dateChanged
+                    ? ['score_deadline_extended_until' => null, 'deadline_reminder_sent_at' => null, 'flagged_incomplete_at' => null]
+                    : []));
+            } else {
+                $session = DefenceSession::create($attributes + [
+                    'proposal_id' => $proposal->id,
+                    'status' => 'scheduled',
+                    'scheduled_by' => $actor->id,
+                ]);
+            }
+
+            if ($toRemove->isNotEmpty()) {
+                ReviewAssignment::whereIn('id', $toRemove->pluck('id'))->delete();
+            }
+
+            if ($dateChanged) {
+                $this->defenceAssignments($proposal)->where('status', '!=', 'submitted')->update(['due_date' => $dueDate]);
+            }
+
+            if ($toAdd->isNotEmpty()) {
+                $this->reviewAssignmentService->assign(
+                    $proposal,
+                    $toAdd->all(),
+                    $evaluationTypeId,
+                    $actor,
+                    ['venue' => $data['venue'], 'scheduled_date' => $data['scheduled_date'], 'scheduled_time' => $data['scheduled_time']],
+                    $dueDate,
+                    (bool) ($data['override_workload_cap'] ?? false)
+                );
+            }
+
+            return $session->fresh();
+        });
+
+        return [
+            'session' => $session,
+            'added' => $toAdd->count(),
+            'removed' => $toRemove->count(),
+            'kept_submitted' => $keptSubmitted->map(fn (ReviewAssignment $a) => $a->reviewer?->name ?? 'A reviewer')->values()->all(),
+        ];
+    }
+
+    /** Open-defence reviewer assignments that are still part of the panel. */
+    private function defenceAssignments(Proposal $proposal)
+    {
+        return ReviewAssignment::where('proposal_id', $proposal->id)
+            ->whereHas('evaluationType', fn ($q) => $q->where('name', 'like', 'open_defence%'))
+            ->whereNotIn('status', ['declined', 'cancelled']);
     }
 
     /**

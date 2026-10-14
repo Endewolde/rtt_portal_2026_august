@@ -13,6 +13,11 @@ import { useToast } from '../../Components/Toast';
 import ConfirmDialog from '../../Components/ConfirmDialog';
 import ResolveApprovalReportModal from '../../Components/ResolveApprovalReportModal';
 import ReportMistakenApprovalModal from '../../Components/ReportMistakenApprovalModal';
+import RejectWithReasonModal from '../../Components/RejectWithReasonModal';
+import AnonymityCheckPanel from '../../Components/AnonymityCheckPanel';
+import ReviewDisagreementPanel from '../../Components/ReviewDisagreementPanel';
+import ProgressReportsTab from '../../Components/ProgressReportsTab';
+import ProposalStatusGuide from '../../Components/ProposalStatusGuide';
 import { issueByKey } from '../../lib/approvalReportIssues';
 import { downloadFile } from '../../lib/download';
 
@@ -1881,14 +1886,15 @@ function ContractUploadSection({ proposal, onUploaded }) {
 export default function ProposalShow() {
     const { url } = usePage();
     const id = url.split('/')[2];
-    const { user, hasAnyRole } = useAuth();
+    const { user, hasAnyRole, hasPermission } = useAuth();
     const { hasSubFeature } = useFeature();
     const toast = useToast();
 
     const [proposal, setProposal] = useState(null);
     const [history, setHistory] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState('Overview');
+    // ?tab=Progress (from a notification link) opens that tab directly.
+    const [activeTab, setActiveTab] = useState(() => new URLSearchParams(window.location.search).get('tab') || 'Overview');
     const [dialog, setDialog] = useState(null);
     const [reason, setReason] = useState('');
     const [submitting, setSubmitting] = useState(false);
@@ -1897,6 +1903,8 @@ export default function ProposalShow() {
     const [approvalReports, setApprovalReports] = useState([]);
     const [resolvingReport, setResolvingReport] = useState(null);
     const [showReportModal, setShowReportModal] = useState(false);
+    const [rejectDialog, setRejectDialog] = useState(null); // 'reject' | 'reject_blind_review'
+    const [rejectPreset, setRejectPreset] = useState(null); // { code, details } — e.g. from the anonymity check
     const [withdrawingReportId, setWithdrawingReportId] = useState(null);
     const [confirmWithdrawReport, setConfirmWithdrawReport] = useState(null);
     const [extension, setExtension] = useState(null);
@@ -1964,6 +1972,7 @@ export default function ProposalShow() {
 
     const handleAction = (action) => {
         if (action === 'report_mistaken_approval') { setShowReportModal(true); return; }
+        if (action === 'reject' || action === 'reject_blind_review') { setRejectDialog(action); return; }
         setDialog(action);
         setReason('');
     };
@@ -1984,17 +1993,13 @@ export default function ProposalShow() {
         if (dialog !== 'approve' && !reason.trim()) { toast.warning('Reason is required.'); return; }
         setSubmitting(true);
         try {
-            if (dialog === 'reject_blind_review') {
-                await post(`/proposals/${id}/blind-review/reject`, { reason });
-                toast.error('Proposal rejected and removed from blind review.');
-            } else if (dialog === 'reopen') {
+            if (dialog === 'reopen') {
                 const res = await post(`/proposals/${id}/reopen`, { reason });
                 toast.success(res?.message || 'Proposal reopened for reconsideration.');
             } else {
                 await post(`/proposals/${id}/validation/${dialog}`, { reason });
                 if (dialog === 'approve') toast.success('Proposal approved for review.');
                 if (dialog === 'return')  toast.warning('Proposal returned to PI for correction.');
-                if (dialog === 'reject')  toast.error('Proposal has been rejected.');
             }
             setDialog(null);
             setReason('');
@@ -2329,6 +2334,27 @@ export default function ProposalShow() {
                         </div>
                     )}
 
+                    {['submitted', 'validated', 'under_blind_review', 'blind_review_passed'].includes(proposal.status)
+                        && (isAdmin || isOfficer || canRejectBlindReview) && (
+                        <AnonymityCheckPanel
+                            proposal={proposal}
+                            canRecheck={hasPermission('proposals.validate') || hasAnyRole(['college_officer'])}
+                            canReject={
+                                (proposal.status === 'submitted' && hasPermission('proposals.validate'))
+                                || (proposal.status === 'under_blind_review' && canRejectBlindReview)
+                            }
+                            onRejectAsNotAnonymous={(details) => {
+                                setRejectPreset({ code: 'not_anonymous', details });
+                                setRejectDialog(proposal.status === 'submitted' ? 'reject' : 'reject_blind_review');
+                            }}
+                            onChecked={load}
+                        />
+                    )}
+
+                    {proposal.status === 'under_blind_review' && (isAdmin || isOfficer) && (
+                        <ReviewDisagreementPanel proposal={proposal} canDecide={canRejectBlindReview} onDecided={load} />
+                    )}
+
                     {/* Approval reports — college officer flagged this as possibly mistakenly approved */}
                     {approvalReports.length > 0 && (canReviewApprovalReports || canReportMistakenApproval) && (
                         <div className="mt-4 space-y-2">
@@ -2396,6 +2422,29 @@ export default function ProposalShow() {
                         </div>
                     )}
 
+                    {rejectDialog && (
+                        <RejectWithReasonModal
+                            context={rejectDialog === 'reject' ? 'proposal_validation' : 'blind_review'}
+                            title={rejectDialog === 'reject' ? 'Reject Proposal' : 'Reject From Blind Review'}
+                            subtitle={`${proposal.tracker_number ?? ''} · ${proposal.title ?? ''}`}
+                            note="The PI and co-investigators are notified with this reason. Outstanding reviewer assignments are cancelled."
+                            confirmLabel="Reject Proposal"
+                            initialCode={rejectPreset?.code ?? ''}
+                            initialDetails={rejectPreset?.details ?? ''}
+                            onClose={() => { setRejectDialog(null); setRejectPreset(null); }}
+                            onSubmit={async (payload) => {
+                                const url = rejectDialog === 'reject'
+                                    ? `/proposals/${id}/validation/reject`
+                                    : `/proposals/${id}/blind-review/reject`;
+                                await post(url, payload);
+                                toast.error(rejectDialog === 'reject' ? 'Proposal has been rejected.' : 'Proposal rejected and removed from blind review.');
+                                setRejectDialog(null);
+                                setRejectPreset(null);
+                                load();
+                            }}
+                        />
+                    )}
+
                     {showReportModal && (
                         <ReportMistakenApprovalModal
                             proposal={proposal}
@@ -2446,9 +2495,13 @@ export default function ProposalShow() {
                 )}
 
                 {/* Tabs */}
+                {isProposalMember && (
+                    <ProposalStatusGuide proposalId={id} status={proposal.status} onOpenTab={setActiveTab} />
+                )}
+
                 <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                     <div className="flex border-b border-gray-200 overflow-x-auto">
-                        {TABS.map((tab) => (
+                        {[...TABS, ...(['funded', 'midterm_evaluation', 'completed', 'archived'].includes(proposal.status) ? ['Progress'] : [])].map((tab) => (
                             <button key={tab} onClick={() => setActiveTab(tab)}
                                 className={`px-5 py-3 text-sm font-medium shrink-0 border-b-2 transition-colors ${
                                     activeTab === tab
@@ -2645,6 +2698,8 @@ export default function ProposalShow() {
                             />
                         )}
 
+                        {activeTab === 'Progress' && <ProgressReportsTab proposalId={id} />}
+
                         {activeTab === 'Complaints' && (
                             <ComplaintsTab
                                 proposal={proposal}
@@ -2664,8 +2719,7 @@ export default function ProposalShow() {
                 <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
                         <h2 className="text-base font-semibold mb-3">
-                            {dialog === 'reject_blind_review' ? 'Reject From Blind Review'
-                                : dialog === 'reopen' ? 'Reopen for Reconsideration'
+                            {dialog === 'reopen' ? 'Reopen for Reconsideration'
                                 : <span className="capitalize">{dialog} Proposal</span>}
                         </h2>
                         {dialog === 'reopen' && (
@@ -2681,8 +2735,7 @@ export default function ProposalShow() {
                                 className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
                             <button onClick={confirmAction} disabled={submitting}
                                 className={`px-4 py-2 text-sm font-medium rounded-lg text-white disabled:opacity-60 ${
-                                    dialog === 'reject' || dialog === 'reject_blind_review' ? 'bg-red-600 hover:bg-red-700'
-                                        : dialog === 'reopen' ? 'bg-indigo-600 hover:bg-indigo-700'
+                                    dialog === 'reopen' ? 'bg-indigo-600 hover:bg-indigo-700'
                                         : 'bg-yellow-600 hover:bg-yellow-700'
                                 }`}>
                                 {submitting ? 'Processing…' : 'Confirm'}
@@ -2700,6 +2753,11 @@ export default function ProposalShow() {
                         <p className="text-sm text-gray-500 mb-5">
                             Approving will move this proposal to <strong>Validated</strong> status. Continue?
                         </p>
+                        {proposal.anonymity_status === 'issues' && (
+                            <p className="-mt-2 mb-5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                                The anonymity check found identifying details in this proposal. Reviewers may be able to tell who wrote it.
+                            </p>
+                        )}
                         <div className="flex justify-end gap-3">
                             <button onClick={() => setDialog(null)}
                                 className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>

@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import AppLayout from '../../Layouts/AppLayout';
+import ReviewCertificatesCard from '../../Components/ReviewCertificatesCard';
 import { useToast } from '../../Components/Toast';
 import { useFeature } from '../../hooks/useFeature';
 import api from '../../lib/api';
@@ -926,6 +927,7 @@ export default function ReviewIndex() {
     return (
         <AppLayout breadcrumb="Reviews">
             <div className="p-6 max-w-5xl mx-auto space-y-6">
+                <ReviewCertificatesCard />
 
                 {/* ── Page header ─────────────────────────────────────────── */}
                 <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">

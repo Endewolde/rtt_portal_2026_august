@@ -178,8 +178,10 @@ test('new roles exist in the database', function () {
     }
 });
 
-test('old roles no longer exist', function () {
-    foreach (['central_officer', 'college_officer', 'pi', 'reviewer', 'finance', 'department_head'] as $role) {
+test('retired roles no longer exist', function () {
+    // central_officer, college_officer, pi and reviewer are current roles (see
+    // RolePermissionSeeder); only these two were retired.
+    foreach (['finance', 'department_head'] as $role) {
         expect(Role::where('name', $role)->exists())->toBeFalse("Old role {$role} should be gone");
     }
 });

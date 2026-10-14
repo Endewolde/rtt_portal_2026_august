@@ -14,6 +14,7 @@ import { useConfirm } from '../../hooks/useConfirm';
 import { useToast } from '../../Components/Toast';
 import { formatDate, formatCurrency } from '../../lib/utils';
 import api from '../../lib/api';
+import RejectWithReasonModal from '../../Components/RejectWithReasonModal';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -829,13 +830,11 @@ function RequestCard({ request, userId, isOfficer, isAdmin, onRefresh }) {
         catch (e) { error(e.response?.data?.message ?? `${label} failed.`); }
     };
 
-    const doReject = async (notes) => {
-        try {
-            await api.post(`/budget-requests/${request.id}/reject`, { notes });
-            success('Budget request rejected. PI and members notified.');
-            setRejectModal(false);
-            onRefresh();
-        } catch (e) { error(e.response?.data?.message ?? 'Rejection failed.'); }
+    const doReject = async (payload) => {
+        await api.post(`/budget-requests/${request.id}/reject`, payload);
+        success('Budget request rejected. PI and members notified.');
+        setRejectModal(false);
+        onRefresh();
     };
 
     const doFinanceReturn = async (notes) => {
@@ -1069,12 +1068,14 @@ function RequestCard({ request, userId, isOfficer, isAdmin, onRefresh }) {
             )}
 
             {rejectModal && (
-                <NotesModal
+                <RejectWithReasonModal
+                    context="budget_request"
                     title="Reject Budget Request"
-                    placeholder="Explain the reason for rejection so the PI can correct and resubmit…"
+                    subtitle={request.proposal?.tracker_number}
+                    note="The PI and team members are notified with this reason so they can correct and resubmit."
                     confirmLabel="Reject & Notify PI"
-                    confirmCls="bg-red-600 hover:bg-red-700"
-                    onConfirm={doReject}
+                    detailsField="notes"
+                    onSubmit={doReject}
                     onClose={() => setRejectModal(false)}
                 />
             )}

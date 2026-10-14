@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { CheckCircle, RotateCcw, XCircle, Clock, ShieldCheck, RefreshCw, FileQuestion, X, Ban } from 'lucide-react';
+import { CheckCircle, RotateCcw, XCircle, Clock, ShieldCheck, ShieldAlert, ShieldQuestion, RefreshCw, FileQuestion, X, Ban } from 'lucide-react';
 import { Link } from '@inertiajs/react';
 import AppLayout from '../../Layouts/AppLayout';
 import WorkflowBreadcrumb from '../../Components/WorkflowBreadcrumb';
@@ -9,6 +9,28 @@ import { useViewPreference } from '../../hooks/useViewPreference';
 import { get, post } from '../../lib/api';
 import { formatDate, getCategoryLabel } from '../../lib/utils';
 import { useToast } from '../../Components/Toast';
+import RejectWithReasonModal from '../../Components/RejectWithReasonModal';
+
+/** Anonymity check result next to a proposal title (see AnonymityCheckService). */
+function AnonymityBadge({ status }) {
+    if (status === 'issues') {
+        return (
+            <span title="The anonymity check found the PI's or a team member's name, email or phone in the reviewer documents"
+                className="ml-2 inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 align-middle text-[11px] font-semibold text-red-700">
+                <ShieldAlert size={11} /> Identity found
+            </span>
+        );
+    }
+    if (status === 'not_checked') {
+        return (
+            <span title="The reviewer documents could not be read automatically — check them by hand"
+                className="ml-2 inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 align-middle text-[11px] font-semibold text-amber-700">
+                <ShieldQuestion size={11} /> Check by hand
+            </span>
+        );
+    }
+    return null;
+}
 
 function CountdownTimer({ endDate }) {
     const [display, setDisplay] = useState('');
@@ -54,7 +76,10 @@ function ProposalCard({ proposal, onAction, num, checked, onToggle }) {
                         {proposal.tracker_number}
                     </span>
                     <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-900 truncate">{proposal.title}</p>
+                        <p className="text-sm font-semibold text-gray-900 truncate">
+                            {proposal.title}
+                            <AnonymityBadge status={proposal.anonymity_status} />
+                        </p>
                         <p className="text-xs text-gray-500 mt-0.5 truncate">
                             {proposal.pi?.name ?? '—'} · {proposal.college?.name ?? '—'} · {formatDate(proposal.submitted_at)}
                         </p>
@@ -465,10 +490,32 @@ export default function ValidationQueue() {
                 )}
             </div>
 
-            {dialog && (
+            {dialog?.action === 'reject' && (
+                <RejectWithReasonModal
+                    context="proposal_validation"
+                    title="Reject Proposal"
+                    subtitle={data.find(p => p.id === dialog.proposalId)?.tracker_number}
+                    note="The PI and co-investigators are notified with this reason."
+                    confirmLabel="Reject Proposal"
+                    onClose={() => setDialog(null)}
+                    onSubmit={async (payload) => {
+                        await post(`/proposals/${dialog.proposalId}/validation/reject`, payload);
+                        toast.error('Proposal has been rejected.');
+                        setDialog(null);
+                        await load();
+                    }}
+                />
+            )}
+
+            {dialog && dialog.action !== 'reject' && (
                 <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
                         <h2 className="text-base font-semibold mb-3 capitalize">{dialog.action} Proposal</h2>
+                        {dialog.action === 'approve' && data.find(p => p.id === dialog.proposalId)?.anonymity_status === 'issues' && (
+                            <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                                The anonymity check found identifying details in this proposal. Open it to review what was found before approving.
+                            </p>
+                        )}
                         {dialog.action !== 'approve' && (
                             <textarea value={reason} onChange={(e) => setReason(e.target.value)}
                                 placeholder="Reason (required)…" rows={3}

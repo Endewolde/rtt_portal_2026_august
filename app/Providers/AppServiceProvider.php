@@ -3,10 +3,6 @@
 namespace App\Providers;
 
 use App\Enums\Feature;
-use App\Events\ProposalTransitioned;
-use App\Listeners\CancelReviewAssignmentsOnRejection;
-use App\Listeners\GenerateAwardOnFunding;
-use App\Listeners\SendProposalWorkflowNotifications;
 use App\Models\User;
 use App\Services\FeatureService;
 use Illuminate\Support\Facades\Event;
@@ -25,9 +21,9 @@ class AppServiceProvider extends ServiceProvider
         // Server has no IPv6 — force IPv4 to avoid multi-second retry delays on OAuth calls
         Http::globalOptions(['curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4]]);
 
-        Event::listen(ProposalTransitioned::class, GenerateAwardOnFunding::class);
-        Event::listen(ProposalTransitioned::class, SendProposalWorkflowNotifications::class);
-        Event::listen(ProposalTransitioned::class, CancelReviewAssignmentsOnRejection::class);
+        // Listeners in app/Listeners are auto-discovered from their handle() type-hints —
+        // registering them here as well made every one run twice (duplicate workflow
+        // emails and bell notifications). Only listeners outside app/Listeners go here.
         Event::listen(SocialiteWasCalled::class, [AzureExtendSocialite::class, 'handle']);
 
         $this->registerFeatureGates();

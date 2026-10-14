@@ -8,6 +8,8 @@ use App\Models\Proposal;
 use App\Models\ProposalBudget;
 use App\Models\User;
 use App\Models\WorkflowLog;
+use App\Services\ProgressReportService;
+use App\Services\ProposalStatusGuideService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -15,6 +17,13 @@ use Illuminate\Support\Str;
 
 class ProposalController extends Controller
 {
+    /**
+     * Roles whose work spans every proposal (central office, finance, support).
+     * Category and college officers are scoped below; everyone else sees only the
+     * proposals they lead.
+     */
+    private const SEE_ALL_PROPOSALS_ROLES = ['super_admin', 'admin', 'central_officer', 'finance_officer', 'support_officer'];
+
     /** Public, unauthenticated listing — only shows non-draft proposals. */
     public function publicIndex(Request $request): JsonResponse
     {
@@ -82,13 +91,15 @@ class ProposalController extends Controller
         $query = Proposal::with(['pi', 'college', 'proposalCall'])
             ->whereNull('deleted_at');
 
-        if ($user->hasAnyRole(['super_admin', 'central_officer'])) {
+        if ($user->hasAnyRole(self::SEE_ALL_PROPOSALS_ROLES)) {
             // See all — apply optional filters
         } elseif ($user->hasAnyRole(['research_officer', 'community_officer', 'technology_officer'])) {
             // Category-scoped: middleware already sets _category_scope
         } elseif ($user->hasRole('college_officer')) {
             $query->where('college_id', $user->college_id);
-        } elseif ($user->hasRole('staff')) {
+        } else {
+            // Everyone else (staff, pi, reviewers, any role not listed above) sees only
+            // their own proposals — never the whole system by default.
             $query->where('pi_user_id', $user->id);
         }
 
@@ -238,6 +249,19 @@ class ProposalController extends Controller
     public function update(string $id): JsonResponse
     {
         return response()->json(['data' => null, 'message' => 'Use the wizard step endpoints to update a proposal.'], 422);
+    }
+
+    /** Plain-language status and next steps for the research team (and the officers handling it). */
+    public function statusGuide(string $id, Request $request, ProposalStatusGuideService $guide, ProgressReportService $access): JsonResponse
+    {
+        $proposal = Proposal::findOrFail($id);
+        $user = $request->user();
+
+        if (! $access->isTeamMember($proposal, $user) && ! $access->canReview($proposal, $user)) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => [], 'meta' => []], 403);
+        }
+
+        return response()->json(['data' => $guide->guide($proposal), 'message' => '', 'errors' => [], 'meta' => []]);
     }
 
     public function destroy(string $id): JsonResponse

@@ -22,13 +22,17 @@ function api_makeBase(): array
 {
     $college1 = College::create(['name' => 'API C1 '.rand(), 'code' => 'A1'.rand(10, 99)]);
     $college2 = College::create(['name' => 'API C2 '.rand(), 'code' => 'A2'.rand(10, 99)]);
-    $dept1    = Department::create(['college_id' => $college1->id, 'name' => 'D1', 'code' => 'D1'.rand(10, 99)]);
-    $dept2    = Department::create(['college_id' => $college2->id, 'name' => 'D2', 'code' => 'D2'.rand(10, 99)]);
+    $dept1 = Department::create(['college_id' => $college1->id, 'name' => 'D1', 'code' => 'D1'.rand(10, 99)]);
+    $dept2 = Department::create(['college_id' => $college2->id, 'name' => 'D2', 'code' => 'D2'.rand(10, 99)]);
 
-    $central      = User::factory()->create(); $central->assignRole('central_officer');
-    $collegeAdmin = User::factory()->create(['college_id' => $college1->id]); $collegeAdmin->assignRole('college_officer');
-    $pi1          = User::factory()->create(['college_id' => $college1->id, 'department_id' => $dept1->id]); $pi1->assignRole('pi');
-    $pi2          = User::factory()->create(['college_id' => $college2->id, 'department_id' => $dept2->id]); $pi2->assignRole('pi');
+    $central = User::factory()->create();
+    $central->assignRole('central_officer');
+    $collegeAdmin = User::factory()->create(['college_id' => $college1->id]);
+    $collegeAdmin->assignRole('college_officer');
+    $pi1 = User::factory()->create(['college_id' => $college1->id, 'department_id' => $dept1->id]);
+    $pi1->assignRole('pi');
+    $pi2 = User::factory()->create(['college_id' => $college2->id, 'department_id' => $dept2->id]);
+    $pi2->assignRole('pi');
 
     $call = ProposalCall::create([
         'academic_year' => '2026', 'category' => 'research', 'title' => 'Call',
@@ -94,7 +98,7 @@ test('validation queue returns submitted proposals only', function () {
     $response = $this->actingAs($central)->getJson('/api/v1/proposals/validation-queue');
 
     $response->assertOk();
-    $statuses = collect($response->json('data.data'))->pluck('status')->unique()->toArray();
+    $statuses = collect($response->json('data'))->pluck('status')->unique()->toArray();
     expect($statuses)->toBe(['submitted']);
 });
 

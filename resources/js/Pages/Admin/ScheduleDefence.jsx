@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { usePage, router, Link } from '@inertiajs/react';
-import { Calendar, Users, Search, Info, Hourglass, ArrowRight } from 'lucide-react';
+import { Calendar, Users, Search, Info, Hourglass, ArrowRight, X } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import StatusBadge from '../../Components/StatusBadge';
 import api from '../../lib/api';
@@ -84,6 +84,10 @@ export default function ScheduleDefence() {
     const [submitting, setSubmitting]           = useState(false);
     const [error, setError]                     = useState(null);
     const [blindReviewHold, setBlindReviewHold] = useState(null);
+    // Edit mode: the proposal is already in open defence — update date/venue/panel.
+    const [panel, setPanel]                     = useState([]); // current defence assignments
+    const isEdit = proposal?.status === 'under_open_defence';
+    const lockedIds = panel.filter((a) => a.status === 'submitted').map((a) => a.reviewer_id);
 
     const [form, setForm] = useState({
         scheduled_date:     '',
@@ -115,7 +119,21 @@ export default function ScheduleDefence() {
                 setProposal(prop);
 
                 const readiness = readinessRes?.data?.data;
-                if (readiness && !readiness.can_schedule) {
+                if (prop?.status === 'under_open_defence') {
+                    api.get(`/proposals/${id}/defence/session`).then((r) => {
+                        const { session, assignments = [] } = r.data?.data ?? {};
+                        setPanel(assignments);
+                        setForm((f) => ({
+                            ...f,
+                            scheduled_date:     session?.scheduled_date ? String(session.scheduled_date).slice(0, 10) : '',
+                            scheduled_time:     session?.scheduled_time ? String(session.scheduled_time).slice(0, 5) : '',
+                            venue:              session?.venue ?? '',
+                            online_link:        session?.online_link ?? '',
+                            reviewer_ids:       assignments.map((a) => a.reviewer_id),
+                            evaluation_type_id: assignments[0]?.evaluation_type_id ?? f.evaluation_type_id,
+                        }));
+                    }).catch(() => setError('Could not load the current defence details.'));
+                } else if (readiness && !readiness.can_schedule) {
                     setBlindReviewHold({
                         collegeName: readiness.college_name,
                         pending: readiness.pending_blind_review ?? [],
@@ -156,6 +174,10 @@ export default function ScheduleDefence() {
         : null;
 
     const toggleReviewer = (reviewerId) => {
+        if (lockedIds.includes(reviewerId)) {
+            toast.warning('This reviewer has already submitted a score and stays on the panel.');
+            return;
+        }
         setForm((f) => ({
             ...f,
             reviewer_ids: f.reviewer_ids.includes(reviewerId)
@@ -181,15 +203,21 @@ export default function ScheduleDefence() {
         setSubmitting(true);
         setError(null);
         try {
-            await api.post(`/proposals/${id}/defence/schedule`, {
+            const payload = {
                 scheduled_date:     form.scheduled_date,
                 scheduled_time:     form.scheduled_time,
                 venue:              form.venue,
                 online_link:        form.online_link || null,
                 reviewer_ids:       form.reviewer_ids,
                 evaluation_type_id: form.evaluation_type_id || null,
-            });
-            toast.success('Open defence scheduled successfully.');
+            };
+            if (isEdit) {
+                const res = await api.put(`/proposals/${id}/defence/session`, payload);
+                toast.success(res.data?.message ?? 'Open defence updated.');
+            } else {
+                await api.post(`/proposals/${id}/defence/schedule`, payload);
+                toast.success('Open defence scheduled successfully.');
+            }
             router.visit('/admin/open-defence');
         } catch (e) {
             const body = e.response?.data;
@@ -220,7 +248,7 @@ export default function ScheduleDefence() {
     }
 
     return (
-        <AppLayout breadcrumb={`Proposals / ${proposal?.tracker_number ?? id} / Schedule Defence`}>
+        <AppLayout breadcrumb={`Proposals / ${proposal?.tracker_number ?? id} / ${isEdit ? 'Update Defence' : 'Schedule Defence'}`}>
             <div className="max-w-xl mx-auto space-y-5">
 
                 {blindReviewHold && (
@@ -252,6 +280,16 @@ export default function ScheduleDefence() {
                         <Calendar size={18} className="text-purple-600" />
                         <h2 className="text-base font-semibold text-gray-800">Defence Details</h2>
                     </div>
+
+                    {isEdit && (
+                        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+                            <Info size={13} className="mt-0.5 shrink-0" />
+                            <span>
+                                This defence is already scheduled. Changing the date resets the score deadline to the day after the new date
+                                and moves every reviewer's due date with it. Newly added reviewers are notified; reviewers who already scored stay on the panel.
+                            </span>
+                        </div>
+                    )}
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
@@ -343,9 +381,40 @@ export default function ScheduleDefence() {
                     <div>
                         <div className="flex items-center justify-between mb-2">
                             <label className="block text-sm font-medium text-gray-700">
-                                Assign Defence Reviewers <span className="text-xs text-gray-400">(optional)</span>
+                                {isEdit ? 'Defence Reviewers' : <>Assign Defence Reviewers <span className="text-xs text-gray-400">(optional)</span></>}
                             </label>
                         </div>
+                        {form.reviewer_ids.length > 0 && (
+                            <div className="mb-3 rounded-lg border border-purple-100 bg-purple-50/50 p-2.5">
+                                <p className="mb-1.5 text-xs font-semibold text-purple-800">
+                                    {isEdit ? 'Defence panel' : 'Selected reviewers'} ({form.reviewer_ids.length})
+                                </p>
+                                <div className="flex flex-wrap gap-1.5">
+                                    {form.reviewer_ids.map((rid) => {
+                                        const current = panel.find((a) => a.reviewer_id === rid);
+                                        const person = current?.reviewer ?? availableReviewers.find((r) => r.id === rid);
+                                        const locked = lockedIds.includes(rid);
+                                        return (
+                                            <span key={rid} className="inline-flex items-center gap-1.5 rounded-full border border-purple-200 bg-white px-2.5 py-1 text-xs font-medium text-gray-800">
+                                                {person ? `${person.title ? `${person.title} ` : ''}${person.name}` : 'Reviewer'}
+                                                {locked ? (
+                                                    <span className="rounded-full bg-emerald-100 px-1.5 text-[10px] font-semibold text-emerald-700">Scored</span>
+                                                ) : current ? (
+                                                    <span className="rounded-full bg-gray-100 px-1.5 text-[10px] font-semibold text-gray-500">Assigned</span>
+                                                ) : (
+                                                    <span className="rounded-full bg-purple-100 px-1.5 text-[10px] font-semibold text-purple-700">New</span>
+                                                )}
+                                                {!locked && (
+                                                    <button type="button" onClick={() => toggleReviewer(rid)} aria-label="Remove reviewer" className="text-gray-400 hover:text-red-500">
+                                                        <X size={12} />
+                                                    </button>
+                                                )}
+                                            </span>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
                         <div className="flex items-center border border-gray-300 rounded-lg px-3 py-2 mb-2 focus-within:ring-2 focus-within:ring-purple-500">
                             <Search size={14} className="text-gray-400 mr-2 shrink-0" />
                             <input value={reviewerSearch} onChange={(e) => setReviewerSearch(e.target.value)}
@@ -415,7 +484,7 @@ export default function ScheduleDefence() {
 
                 <div className="flex gap-3 pb-6">
                     <button
-                        onClick={() => router.visit(`/proposals/${id}`)}
+                        onClick={() => router.visit(isEdit ? '/admin/open-defence' : `/proposals/${id}`)}
                         className="flex-1 px-4 py-2.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50"
                     >
                         Cancel
@@ -426,7 +495,7 @@ export default function ScheduleDefence() {
                         title={blindReviewHold ? 'Available once every blind review in your college is complete' : undefined}
                         className="flex-1 rounded-lg bg-purple-700 py-2.5 text-sm font-semibold text-white hover:bg-purple-800 disabled:opacity-60 disabled:cursor-not-allowed"
                     >
-                        {submitting ? 'Scheduling…' : 'Schedule Defence'}
+                        {submitting ? (isEdit ? 'Saving…' : 'Scheduling…') : (isEdit ? 'Save Changes' : 'Schedule Defence')}
                     </button>
                 </div>
             </div>

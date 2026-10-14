@@ -462,81 +462,6 @@ function ReassignModal({ assignment, proposalId, currentAssignments, onSave, onC
     );
 }
 
-function AddReviewerModal({ proposalId, currentAssignments, onSave, onClose }) {
-    const [selectedId, setSelectedId] = useState('');
-    const [dueDate, setDueDate]       = useState('');
-    const [saving, setSaving]         = useState(false);
-    const { error } = useToast();
-
-    const alreadyAssignedIds = new Set(
-        (currentAssignments ?? [])
-            .filter(a => a.status !== 'declined')
-            .map(a => a.reviewer_id ?? a.reviewer?.id)
-            .filter(Boolean)
-    );
-
-    const save = async (overrideWorkloadCap = false) => {
-        if (!selectedId || !dueDate) return;
-        setSaving(true);
-        try {
-            await api.post(`/proposals/${proposalId}/review/add-reviewer`, {
-                reviewer_id: selectedId, due_date: dueDate, override_workload_cap: overrideWorkloadCap,
-            });
-            onSave();
-        } catch (e) {
-            const msg = e.response?.data?.message || 'Failed to add reviewer.';
-            if (msg.includes('max workload')) {
-                error(msg, { action: { label: 'Assign Anyway', onClick: () => save(true) } });
-            } else {
-                error(msg);
-            }
-        }
-        setSaving(false);
-    };
-
-    return (
-        <ModalShell
-            title="Add Reviewer"
-            subtitle="Search and add a new reviewer to this proposal"
-            onClose={onClose}
-            footer={
-                <div className="space-y-3">
-                    <div>
-                        <label className="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-                            Due Date <span className="text-red-400">*</span>
-                        </label>
-                        <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
-                            min={new Date(Date.now() + 86400000).toISOString().slice(0, 10)}
-                            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
-                    </div>
-                    <div className="flex gap-3">
-                        <button onClick={onClose}
-                            className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-700 hover:bg-gray-50 font-medium transition-colors">
-                            Cancel
-                        </button>
-                        <button onClick={() => save()} disabled={!selectedId || !dueDate || saving}
-                            className="flex-1 px-4 py-2.5 bg-purple-600 text-white rounded-xl text-sm font-semibold hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-                            {saving ? <><RefreshCw size={13} className="animate-spin inline mr-1.5" />Adding…</> : 'Add Reviewer'}
-                        </button>
-                    </div>
-                </div>
-            }
-        >
-            <div className="px-6 pt-4 shrink-0">
-                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Select Reviewer</p>
-            </div>
-            <div className="px-6 pb-2 flex flex-col flex-1 gap-2 min-h-0 overflow-hidden">
-                <ReviewerSearchList
-                    proposalId={proposalId}
-                    selectedId={selectedId}
-                    onSelect={setSelectedId}
-                    alreadyAssignedIds={alreadyAssignedIds}
-                />
-            </div>
-        </ModalShell>
-    );
-}
-
 // ─── Awaiting Schedule Row ────────────────────────────────────────────────────
 
 function AwaitingRow({ proposal }) {
@@ -587,7 +512,7 @@ function AwaitingRow({ proposal }) {
 
 // ─── Defence Card ─────────────────────────────────────────────────────────────
 
-function DefenceCard({ proposal, onReassign, onExtend, onAddReviewer, onRemove, onRequestDeadlineExtension }) {
+function DefenceCard({ proposal, onReassign, onExtend, onRemove, onRequestDeadlineExtension }) {
     const assignments  = (proposal.review_assignments ?? []).filter(a => (a.evaluation_type?.name ?? '').startsWith('open_defence'));
     const submitted    = assignments.filter(a => a.status === 'submitted').length;
     const overdue      = assignments.filter(a => a.due_date && daysUntil(a.due_date) < 0 && a.status !== 'submitted').length;
@@ -622,6 +547,14 @@ function DefenceCard({ proposal, onReassign, onExtend, onAddReviewer, onRemove, 
 
                     {/* Right side: review popover + progress bar */}
                     <div className="shrink-0 flex flex-col items-end gap-2">
+                        {assignments.length === 0 ? (
+                            <Link
+                                href={`/proposals/${proposal.id}/defence`}
+                                className="inline-flex items-center gap-1.5 rounded-xl bg-purple-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm shadow-purple-200 hover:bg-purple-700"
+                            >
+                                <Calendar size={13} /> Schedule Defence
+                            </Link>
+                        ) : (
                         <BlindReviewPopover
                             assignments={assignments}
                             onReassign={onReassign}
@@ -630,6 +563,7 @@ function DefenceCard({ proposal, onReassign, onExtend, onAddReviewer, onRemove, 
                             proposalId={proposal.id}
                             allAssignments={assignments}
                         />
+                        )}
                         {assignments.length > 0 && (
                             <div className="h-1.5 w-20 bg-gray-100 rounded-full overflow-hidden">
                                 <div
@@ -653,12 +587,12 @@ function DefenceCard({ proposal, onReassign, onExtend, onAddReviewer, onRemove, 
 
             {/* ── Footer ── */}
             <div className={`px-5 py-3 border-t flex items-center justify-between ${allSubmitted ? 'border-green-200 bg-green-50/50' : 'border-gray-100 bg-gray-50/50'}`}>
-                <button
-                    onClick={() => onAddReviewer(proposal.id, assignments)}
+                <Link
+                    href={`/proposals/${proposal.id}/defence`}
                     className="flex items-center gap-1.5 text-xs text-purple-600 hover:text-purple-800 font-semibold transition-colors"
                 >
-                    <UserPlus size={13} /> Add Reviewer
-                </button>
+                    <UserPlus size={13} /> {assignments.length === 0 ? 'Assign Reviewers' : 'Add Reviewer'}
+                </Link>
 
                 {allSubmitted ? (
                     <span className="text-xs font-semibold text-green-600 flex items-center gap-1.5">
@@ -735,7 +669,6 @@ export default function OpenDefence() {
     const [collegeFilter, setCollegeFilter]      = useState('');
     const [loading, setLoading]                  = useState(true);
     const [reassignModal, setReassignModal]       = useState(null);
-    const [addReviewerModal, setAddReviewerModal] = useState(null);
     const [removeConfirm, setRemoveConfirm]       = useState(null);
     const [removing, setRemoving]                 = useState(false);
     const [defenceHold, setDefenceHold]           = useState(null);
@@ -783,7 +716,6 @@ export default function OpenDefence() {
     }, []);
 
     const openReassign    = (assignment, proposalId, currentAssignments) => setReassignModal({ assignment, proposalId, currentAssignments });
-    const openAddReviewer = (proposalId, currentAssignments)             => setAddReviewerModal({ proposalId, currentAssignments });
     const confirmRemove   = (assignment)                                  => setRemoveConfirm(assignment);
 
     const doRemove = async () => {
@@ -801,7 +733,6 @@ export default function OpenDefence() {
     const afterSave = () => {
         success('Saved successfully.');
         setReassignModal(null);
-        setAddReviewerModal(null);
         load();
     };
 
@@ -1030,7 +961,6 @@ export default function OpenDefence() {
                                                     proposal={p}
                                                     onReassign={openReassign}
                                                     onExtend={() => openDeadlineExtension(p)}
-                                                    onAddReviewer={openAddReviewer}
                                                     onRemove={confirmRemove}
                                                     onRequestDeadlineExtension={openDeadlineExtension}
                                                 />
@@ -1052,14 +982,6 @@ export default function OpenDefence() {
                     currentAssignments={reassignModal.currentAssignments}
                     onSave={afterSave}
                     onClose={() => setReassignModal(null)}
-                />
-            )}
-            {addReviewerModal && (
-                <AddReviewerModal
-                    proposalId={addReviewerModal.proposalId}
-                    currentAssignments={addReviewerModal.currentAssignments}
-                    onSave={afterSave}
-                    onClose={() => setAddReviewerModal(null)}
                 />
             )}
             {deadlineExtensionFor && (

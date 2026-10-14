@@ -52,15 +52,14 @@ test('ICalBuilder escapes commas and semicolons in summary', function () {
 // ─── HTTP endpoint tests ──────────────────────────────────────────────────────
 
 test('unauthenticated user cannot download calendar', function () {
-    $this->getJson('/api/v1/calendar/events.ics')->assertUnauthorized();
+    $this->getJson('/api/v1/calendar/export')->assertUnauthorized();
 });
 
 test('authenticated user downloads a valid ics file', function () {
     $user = User::factory()->create();
     $user->assignRole('pi');
 
-    $res = $this->actingAs($user, 'sanctum')
-        ->get('/api/v1/calendar/events.ics');
+    $res = $this->get('/api/v1/calendar/export?token='.$user->createToken('calendar')->plainTextToken);
 
     $res->assertStatus(200);
     expect($res->headers->get('Content-Type'))->toContain('text/calendar');
@@ -84,8 +83,7 @@ test('calendar includes active proposal call deadlines', function () {
         'status' => 'active', 'is_open' => true, 'created_by' => $admin->id,
     ]);
 
-    $res = $this->actingAs($user, 'sanctum')
-        ->get('/api/v1/calendar/events.ics');
+    $res = $this->get('/api/v1/calendar/export?token='.$user->createToken('calendar')->plainTextToken);
 
     expect($res->streamedContent())->toContain('Call Deadline: Q3 Research Call');
 });
@@ -103,8 +101,7 @@ test('closed proposal calls are not included', function () {
         'status' => 'closed', 'is_open' => false, 'created_by' => $admin->id,
     ]);
 
-    $res = $this->actingAs($user, 'sanctum')
-        ->get('/api/v1/calendar/events.ics');
+    $res = $this->get('/api/v1/calendar/export?token='.$user->createToken('calendar')->plainTextToken);
 
     expect($res->streamedContent())->not->toContain('Old Call');
 });

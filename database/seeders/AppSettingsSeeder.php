@@ -97,6 +97,14 @@ class AppSettingsSeeder extends Seeder
             // "Active" = any status except archived/rejected (WorkflowStage.is_terminal).
             ['key' => 'max_active_pi_proposals', 'value' => '0', 'type' => 'number', 'group' => 'thresholds'],
             ['key' => 'max_active_coinvestigator_proposals', 'value' => '0', 'type' => 'number', 'group' => 'thresholds'],
+            // Hold the automatic blind-review decision when reviewers' scores differ by more
+            // than this % of the maximum (or fall on both sides of the pass mark). 0 = off.
+            ['key' => 'review_disagreement_threshold_pct', 'value' => '25', 'type' => 'number', 'group' => 'thresholds'],
+            // Funded projects report progress every N months; the last period is the final report.
+            ['key' => 'progress_report_interval_months', 'value' => '3', 'type' => 'number', 'group' => 'thresholds'],
+            // Who signs reviewer certificates of service.
+            ['key' => 'certificate_signatory_name', 'value' => '', 'type' => 'string', 'group' => 'general'],
+            ['key' => 'certificate_signatory_title', 'value' => 'Director, Research & Technology Transfer', 'type' => 'string', 'group' => 'general'],
 
             // Audit & Logging
             ['key' => 'audit_log_retention_days', 'value' => '365',  'type' => 'number',  'group' => 'audit'],

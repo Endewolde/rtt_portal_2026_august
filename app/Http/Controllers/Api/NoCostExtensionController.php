@@ -8,6 +8,7 @@ use App\Models\NoCostExtensionRequest;
 use App\Models\Proposal;
 use App\Models\User;
 use App\Support\AuditLogger;
+use App\Support\RejectionReasons;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -139,6 +140,7 @@ class NoCostExtensionController extends Controller
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
+        RejectionReasons::apply($request, 'no_cost_extension');
         $validated = $request->validate(['reason' => 'required|string|min:10']);
 
         $extension = NoCostExtensionRequest::with('proposal')->findOrFail($id);

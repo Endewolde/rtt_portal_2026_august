@@ -7,6 +7,7 @@ use App\Jobs\SendEmailNotificationJob;
 use App\Jobs\StoreInAppNotificationJob;
 use App\Models\Proposal;
 use App\Models\User;
+use App\Support\RejectionReasons;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -143,6 +144,7 @@ class ContractController extends Controller
             ], 422);
         }
 
+        RejectionReasons::apply($request, 'contract');
         $request->validate(['reason' => 'required|string|max:1000']);
 
         $proposal->update([

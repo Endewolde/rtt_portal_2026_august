@@ -1,16 +1,21 @@
 name: Deploy to Production
 
+# Deploy only after CI has passed on main — never ship a commit whose tests fail.
 on:
-  push:
+  workflow_run:
+    workflows: ["RTT Platform CI"]
+    types: [completed]
     branches: [main]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1

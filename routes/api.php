@@ -46,6 +46,7 @@ use App\Http\Controllers\Api\MidtermEvaluationController;
 use App\Http\Controllers\Api\NoCostExtensionController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OngoingProposalsController;
+use App\Http\Controllers\Api\ProgressReportController;
 use App\Http\Controllers\Api\ProposalAiScoreController;
 use App\Http\Controllers\Api\ProposalAppealController;
 use App\Http\Controllers\Api\ProposalApprovalReportController;
@@ -62,6 +63,7 @@ use App\Http\Controllers\Api\ResearcherHubController;
 use App\Http\Controllers\Api\ResearchImpactController;
 use App\Http\Controllers\Api\ResearchOutputController;
 use App\Http\Controllers\Api\ResourceController;
+use App\Http\Controllers\Api\ReviewCertificateController;
 use App\Http\Controllers\Api\ReviewController;
 use App\Http\Controllers\Api\ReviewDeadlineController;
 use App\Http\Controllers\Api\ReviewerMatchController;
@@ -72,6 +74,7 @@ use App\Http\Controllers\Api\SimilarityController;
 use App\Http\Controllers\Api\StatsController;
 use App\Http\Controllers\Api\SystemMonitorController;
 use App\Http\Controllers\Api\ThematicAreaController;
+use App\Http\Controllers\Api\TurnaroundController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Middleware\AuditCrudMiddleware;
 use App\Models\FormTemplate;
@@ -84,6 +87,8 @@ Route::prefix('v1')->group(function () {
 
     // Login notices — public (shown before sign-in, no auth needed)
     Route::get('/login-notices/active', [LoginNoticeController::class, 'active']);
+    // Public certificate verification — throttled to stop code guessing
+    Route::middleware('throttle:30,1')->get('/certificates/verify/{code}', [ReviewCertificateController::class, 'verify']);
 
     // ── Public auth — rate limited ────────────────────────────────────────────
     // 30 attempts per minute per IP
@@ -253,6 +258,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/preferences', [SystemMonitorController::class, 'getPreferences']);
             Route::put('/preferences', [SystemMonitorController::class, 'savePreferences']);
             Route::post('/test-alert', [SystemMonitorController::class, 'testAlert']);
+            Route::get('/email-log', [SystemMonitorController::class, 'emailLog']);
             Route::get('/failed-jobs', [SystemMonitorController::class, 'failedJobs']);
             Route::post('/failed-jobs/retry-all', [SystemMonitorController::class, 'retryAllFailedJobs']);
             Route::delete('/failed-jobs/flush', [SystemMonitorController::class, 'flushFailedJobs']);
@@ -308,6 +314,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/proposal-calls/{id}/close', [ProposalCallController::class, 'close']);
         Route::post('/proposal-calls/{id}/reopen', [ProposalCallController::class, 'reopen']);
         Route::delete('/proposal-calls/{id}', [ProposalCallController::class, 'destroy']);
+        Route::get('/proposal-calls/{id}/submissions', [ProposalCallController::class, 'submissions']);
         Route::post('/proposal-calls/{id}/guidelines', [ProposalCallController::class, 'uploadGuidelines']);
         Route::get('/proposal-calls/{id}/guidelines/download', [ProposalCallController::class, 'downloadGuidelines']);
 
@@ -333,11 +340,13 @@ Route::prefix('v1')->group(function () {
         Route::delete('/proposals/{id}/documents/{docId}', [ProposalWizardController::class, 'deleteDocument']);
         Route::post('/proposals/{id}/submit', [ProposalWizardController::class, 'submit']);
         Route::get('/proposals/{id}/workflow-history', [ProposalController::class, 'workflowHistory']);
+        Route::get('/proposals/{id}/status-guide', [ProposalController::class, 'statusGuide']);
         Route::get('/proposals/{id}/budget', [ProposalController::class, 'budget']);
 
         // Validation
         Route::post('/proposals/validation/bulk-approve', [ProposalValidationController::class, 'bulkApprove']);
         Route::post('/proposals/{id}/validation/approve', [ProposalValidationController::class, 'approve']);
+        Route::post('/proposals/{id}/anonymity-check', [ProposalValidationController::class, 'anonymityCheck']);
         Route::post('/proposals/{id}/validation/return', [ProposalValidationController::class, 'return']);
         Route::post('/proposals/{id}/validation/reject', [ProposalValidationController::class, 'reject']);
 
@@ -350,14 +359,29 @@ Route::prefix('v1')->group(function () {
         Route::get('/review-assignments/{id}', [ReviewController::class, 'showAssignment']);
         Route::post('/review-assignments/{id}/score', [ReviewController::class, 'submitScore']);
         Route::post('/proposals/{id}/blind-review/reject', [ReviewController::class, 'rejectFromBlindReview']);
+        Route::post('/proposals/{id}/blind-review/decide-disagreement', [ReviewController::class, 'decideDespiteDisagreement']);
         Route::post('/proposals/{id}/reopen', [ReviewController::class, 'reopen']);
         Route::get('/defence/college-readiness', [ReviewController::class, 'collegeDefenceReadiness']);
         // Open defence score deadlines — per-proposal extension requests + approvals
         Route::post('/defence-sessions/{id}/deadline-extensions', [DefenceDeadlineController::class, 'requestExtension']);
         Route::get('/defence-deadline-extensions', [DefenceDeadlineController::class, 'index']);
+        // Reviewer certificates of service
+        Route::get('/review-certificates', [ReviewCertificateController::class, 'index']);
+        Route::get('/review-certificates/download', [ReviewCertificateController::class, 'download']);
+        // Periodic progress reports on funded projects
+        Route::get('/proposals/{proposalId}/progress-reports', [ProgressReportController::class, 'index']);
+        Route::post('/progress-reports/{id}/submit', [ProgressReportController::class, 'submit']);
+        Route::post('/progress-reports/{id}/review', [ProgressReportController::class, 'review']);
+        Route::get('/progress-reports/{id}/attachment', [ProgressReportController::class, 'attachment']);
+        Route::get('/progress-reports', [ProgressReportController::class, 'overview']);
+        // Turnaround dashboard — time per stage, stuck proposals, reviewer turnaround
+        Route::get('/analytics/turnaround', [TurnaroundController::class, 'index']);
+        Route::post('/analytics/turnaround/{id}/remind', [TurnaroundController::class, 'remind']);
         Route::post('/defence-deadline-extensions/{id}/decide', [DefenceDeadlineController::class, 'decide']);
         Route::get('/proposals/{id}/defence/readiness', [ReviewController::class, 'defenceReadiness']);
         Route::post('/proposals/{id}/defence/schedule', [ReviewController::class, 'scheduleDefence']);
+        Route::get('/proposals/{id}/defence/session', [ReviewController::class, 'defenceSession']);
+        Route::put('/proposals/{id}/defence/session', [ReviewController::class, 'updateDefence']);
         Route::post('/proposals/{id}/defence/process-result', [ReviewController::class, 'processDefenceResultByProposal']);
         Route::post('/defence-sessions/{id}/process-result', [ReviewController::class, 'processDefenceResult']);
         Route::get('/evaluation-types', [ReviewController::class, 'evaluationTypes']);
