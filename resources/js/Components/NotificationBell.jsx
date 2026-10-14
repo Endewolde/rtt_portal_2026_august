@@ -162,6 +162,16 @@ const TYPE_CFG = {
         template: d => d.message || 'Progress Report Reviewed',
         actionLabel: 'Open Reports', actionUrl: d => d.proposal_id ? `/proposals/${d.proposal_id}?tab=Progress` : '/progress-reports',
     },
+    review_certificate_released: {
+        icon: Trophy, color: 'yellow', label: 'Certificate Ready', category: 'activity',
+        template: d => d.message || 'Your certificate of review service is ready',
+        actionLabel: 'Open My Reviews', actionUrl: () => '/reviews',
+    },
+    review_certificate_revoked: {
+        icon: AlertTriangle, color: 'red', label: 'Certificate Revoked', category: 'activity',
+        template: d => d.message || 'Your certificate of review service was revoked',
+        actionLabel: 'Open My Reviews', actionUrl: () => '/reviews',
+    },
     stage_reminder: {
         icon: AlertTriangle, color: 'amber', label: 'Action Needed', category: 'action',
         template: d => d.message || `${d.tracker_number || 'A proposal'} is waiting on you`,

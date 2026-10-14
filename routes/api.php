@@ -368,6 +368,10 @@ Route::prefix('v1')->group(function () {
         // Reviewer certificates of service
         Route::get('/review-certificates', [ReviewCertificateController::class, 'index']);
         Route::get('/review-certificates/download', [ReviewCertificateController::class, 'download']);
+        Route::get('/review-certificates/admin', [ReviewCertificateController::class, 'overview']);
+        Route::post('/review-certificates/admin/release', [ReviewCertificateController::class, 'release']);
+        Route::post('/review-certificates/{id}/revoke', [ReviewCertificateController::class, 'revoke']);
+        Route::post('/review-certificates/{id}/reinstate', [ReviewCertificateController::class, 'reinstate']);
         // Periodic progress reports on funded projects
         Route::get('/proposals/{proposalId}/progress-reports', [ProgressReportController::class, 'index']);
         Route::post('/progress-reports/{id}/submit', [ProgressReportController::class, 'submit']);

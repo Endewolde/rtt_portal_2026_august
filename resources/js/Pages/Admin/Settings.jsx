@@ -115,6 +115,8 @@ const KEY_LABELS = {
     max_active_coinvestigator_proposals: 'Max Active Proposals as Co-Investigator (0 = unlimited)',
     review_disagreement_threshold_pct: 'Hold Blind Review When Reviewers Differ By More Than (% of max, 0 = off)',
     progress_report_interval_months: 'Progress Report Every (months)',
+    certificate_min_reviews: 'Reviewer Certificate — Minimum Completed Reviews per Year',
+    certificate_on_time_only: 'Reviewer Certificate — Count Only Reviews Submitted On Time',
     certificate_signatory_name: 'Reviewer Certificate — Signatory Name',
     certificate_signatory_title: 'Reviewer Certificate — Signatory Title',
     audit_log_retention_days: 'Audit Log Retention (days)', activity_logging: 'Activity Logging',

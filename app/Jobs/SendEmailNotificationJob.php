@@ -110,6 +110,8 @@ class SendEmailNotificationJob implements ShouldQueue
             'progress_report_overdue' => 'Progress Report Overdue — '.($this->data['tracker_number'] ?? ''),
             'progress_report_submitted' => 'Progress Report Submitted for Review — '.($this->data['tracker_number'] ?? ''),
             'progress_report_reviewed' => 'Your Progress Report Was Reviewed — '.($this->data['tracker_number'] ?? ''),
+            'review_certificate_released' => 'Your Certificate of Review Service — '.($this->data['academic_year'] ?? ''),
+            'review_certificate_revoked' => 'Certificate of Review Service Revoked — '.($this->data['academic_year'] ?? ''),
             'stage_reminder' => 'Action Needed — '.($this->data['tracker_number'] ?? '').' Is Waiting On You',
             'review_disagreement' => 'Blind Reviewers Disagree — Decision On Hold — '.($this->data['tracker_number'] ?? ''),
             'approval_report_resolved' => 'Your Mistaken-Approval Report Was Reviewed — '.($this->data['tracker_number'] ?? ''),

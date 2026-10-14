@@ -7,11 +7,15 @@ use App\Models\Proposal;
 use App\Models\ProposalCall;
 use App\Models\ReviewAssignment;
 use App\Models\ReviewCertificate;
+use App\Models\ReviewCertificateRelease;
 use App\Models\User;
 use App\Services\ReviewCertificateService;
 use chillerlan\QRCode\QRCode;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+use Illuminate\Testing\TestResponse;
 
 uses(RefreshDatabase::class);
 
@@ -32,9 +36,21 @@ beforeEach(function () {
     ]);
     $this->blind = EvaluationType::create(['name' => 'blind_review_rc', 'label' => 'Blind', 'proposal_category' => 'research', 'is_active' => true]);
     $this->defence = EvaluationType::create(['name' => 'open_defence_rc', 'label' => 'Defence', 'proposal_category' => 'research', 'is_active' => true]);
+    rc_setting('certificate_min_reviews', '2');
+    rc_setting('certificate_on_time_only', 'false');
 });
 
-function rc_review(object $ctx, EvaluationType $type, string $status = 'submitted', string $year = '2025/2026'): void
+function rc_setting(string $key, string $value): void
+{
+    DB::table('app_settings')->updateOrInsert(['key' => $key], ['id' => (string) Str::uuid(), 'value' => $value, 'type' => 'string', 'group' => 'general']);
+}
+
+function rc_release(object $ctx): TestResponse
+{
+    return $ctx->actingAs($ctx->central, 'sanctum')->postJson('/api/v1/review-certificates/admin/release', ['academic_year' => '2025/2026']);
+}
+
+function rc_review(object $ctx, EvaluationType $type, string $status = 'submitted', string $year = '2025/2026', ?User $reviewer = null, bool $late = false): void
 {
     $pi = User::factory()->create();
     $proposal = Proposal::create([
@@ -43,8 +59,9 @@ function rc_review(object $ctx, EvaluationType $type, string $status = 'submitte
         'college_id' => $ctx->college->id, 'department_id' => $ctx->dept->id, 'academic_year' => $year, 'created_by' => $pi->id,
     ]);
     ReviewAssignment::create([
-        'proposal_id' => $proposal->id, 'reviewer_id' => $ctx->reviewer->id, 'evaluation_type_id' => $type->id,
+        'proposal_id' => $proposal->id, 'reviewer_id' => ($reviewer ?? $ctx->reviewer)->id, 'evaluation_type_id' => $type->id,
         'assigned_by' => $ctx->central->id, 'status' => $status, 'assigned_at' => now(), 'submitted_at' => $status === 'submitted' ? now() : null,
+        'due_date' => $late ? now()->subDays(3)->toDateString() : now()->addDays(3)->toDateString(),
     ]);
 }
 
@@ -65,38 +82,94 @@ test('a reviewer sees completed reviews per academic year, unfinished ones exclu
         ->assertJsonPath('data.0.total', 3);
 });
 
-test('downloading issues a certificate PDF with a stable verification code', function () {
+test('before release a reviewer sees whether they qualify but cannot download', function () {
     rc_review($this, $this->blind);
-
-    $first = $this->actingAs($this->reviewer, 'sanctum')->get('/api/v1/review-certificates/download?academic_year=2025/2026');
-    $first->assertOk();
-    expect($first->headers->get('Content-Type'))->toContain('application/pdf');
-
-    $code = ReviewCertificate::first()->code;
     rc_review($this, $this->defence);
-    $this->actingAs($this->reviewer, 'sanctum')->get('/api/v1/review-certificates/download?academic_year=2025/2026')->assertOk();
 
-    $certificate = ReviewCertificate::first();
-    expect(ReviewCertificate::count())->toBe(1)
-        ->and($certificate->code)->toBe($code)
-        ->and($certificate->total())->toBe(2);
+    $this->actingAs($this->reviewer, 'sanctum')->getJson('/api/v1/review-certificates')
+        ->assertJsonPath('data.0.released', false)
+        ->assertJsonPath('data.0.eligible', true)
+        ->assertJsonPath('data.0.min_reviews', 2);
+
+    $this->actingAs($this->reviewer, 'sanctum')
+        ->get('/api/v1/review-certificates/download?academic_year=2025/2026', ['Accept' => 'application/json'])
+        ->assertNotFound()
+        ->assertJsonPath('message', 'Certificates for 2025/2026 have not been released yet.');
 });
 
-test('no certificate for a year without completed reviews', function () {
+test('releasing issues certificates only to reviewers who meet the minimum, with counts frozen', function () {
+    rc_review($this, $this->blind);
+    rc_review($this, $this->defence);
+    $occasional = User::factory()->create();
+    rc_review($this, $this->blind, reviewer: $occasional);
+
+    rc_release($this)->assertOk()->assertJsonPath('data.stats.issued', 1);
+
+    expect(ReviewCertificate::where('user_id', $occasional->id)->exists())->toBeFalse()
+        ->and(DB::table('notifications')->where('notifiable_id', $this->reviewer->id)->where('type', 'review_certificate_released')->exists())->toBeTrue();
+
+    rc_review($this, $this->blind);
+    $download = $this->actingAs($this->reviewer, 'sanctum')->get('/api/v1/review-certificates/download?academic_year=2025/2026');
+    $download->assertOk();
+    expect($download->headers->get('Content-Type'))->toContain('application/pdf')
+        ->and(ReviewCertificate::where('user_id', $this->reviewer->id)->first()->total())->toBe(2);
+
+    $this->actingAs($occasional, 'sanctum')
+        ->get('/api/v1/review-certificates/download?academic_year=2025/2026', ['Accept' => 'application/json'])
+        ->assertNotFound();
+    rc_release($this)->assertStatus(422);
+});
+
+test('when only on-time reviews count, late ones do not qualify', function () {
+    rc_setting('certificate_on_time_only', 'true');
+    rc_review($this, $this->blind);
+    rc_review($this, $this->defence, late: true);
+
+    $this->actingAs($this->reviewer, 'sanctum')->getJson('/api/v1/review-certificates')
+        ->assertJsonPath('data.0.late', 1)
+        ->assertJsonPath('data.0.counted', 1)
+        ->assertJsonPath('data.0.eligible', false);
+
+    rc_release($this)->assertStatus(422);
+});
+
+test('only the central office can release and revoke', function () {
+    rc_review($this, $this->blind);
+    rc_review($this, $this->blind);
+
+    $this->actingAs($this->reviewer, 'sanctum')->postJson('/api/v1/review-certificates/admin/release', ['academic_year' => '2025/2026'])->assertForbidden();
+    $this->actingAs($this->reviewer, 'sanctum')->getJson('/api/v1/review-certificates/admin')->assertForbidden();
+    expect(ReviewCertificateRelease::count())->toBe(0);
+});
+
+test('a revoked certificate cannot be downloaded and verifies as revoked until reinstated', function () {
+    rc_review($this, $this->blind);
+    rc_review($this, $this->blind);
+    rc_release($this);
+    $certificate = ReviewCertificate::first();
+
+    $this->actingAs($this->central, 'sanctum')->postJson("/api/v1/review-certificates/{$certificate->id}/revoke", ['reason' => 'Issued in error to this reviewer.'])->assertOk();
+
     $this->actingAs($this->reviewer, 'sanctum')
         ->get('/api/v1/review-certificates/download?academic_year=2025/2026', ['Accept' => 'application/json'])
         ->assertNotFound();
+    $this->getJson("/api/v1/certificates/verify/{$certificate->code}")->assertOk()->assertJsonPath('data.status', 'revoked');
+
+    $this->actingAs($this->central, 'sanctum')->postJson("/api/v1/review-certificates/{$certificate->id}/reinstate")->assertOk();
+    $this->getJson("/api/v1/certificates/verify/{$certificate->code}")->assertJsonPath('data.status', 'valid');
 });
 
-test('anyone can verify a certificate, which never names the proposals', function () {
+test('anyone can verify a released certificate, which never names the proposals', function () {
     rc_review($this, $this->blind);
-    $this->actingAs($this->reviewer, 'sanctum')->get('/api/v1/review-certificates/download?academic_year=2025/2026');
+    rc_review($this, $this->blind);
+    rc_release($this);
     $code = ReviewCertificate::first()->code;
 
     $response = $this->getJson("/api/v1/certificates/verify/{$code}")
         ->assertOk()
         ->assertJsonPath('data.reviewer', 'Dr. Almaz Haile')
-        ->assertJsonPath('data.total', 1);
+        ->assertJsonPath('data.status', 'valid')
+        ->assertJsonPath('data.total', 2);
 
     expect($response->getContent())->not->toContain('Secret Proposal');
 

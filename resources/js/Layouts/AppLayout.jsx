@@ -80,6 +80,7 @@ const ROUTE_PERMISSIONS = [
     // college_officer's own scoped view, not just admin-tier + category officers.
     ['/admin/analytics',           [..._A, ..._OR, 'college_officer']],
     ['/admin/turnaround',          [..._A, ..._OR, 'college_officer']],
+    ['/admin/review-certificates', _A],
     ['/admin/proposal-pipeline',   [..._A, ..._OR, 'college_officer']],
     ['/admin/college-phase-completion', [..._A, ..._OR, 'college_officer']],
     ['/ongoing-proposals',         [..._A, ..._OR, 'college_officer']],
@@ -927,6 +928,10 @@ export default function AppLayout({ children, breadcrumb }) {
                     label: 'Deadline Extensions', href: '/admin/deadline-extensions', icon: 'CalendarClock',
                     show: hasAnyRole([...ALL_ADMIN, ...OFFICER_ROLES]),
                     badge: c => c.deadline_extensions_pending,
+                },
+                {
+                    label: 'Reviewer Certificates', href: '/admin/review-certificates', icon: 'Award',
+                    show: hasAnyRole(ALL_ADMIN),
                 },
                 {
                     label: 'Defence Extensions', href: '/admin/defence-extensions', icon: 'CalendarPlus',

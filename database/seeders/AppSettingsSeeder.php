@@ -104,6 +104,9 @@ class AppSettingsSeeder extends Seeder
             ['key' => 'progress_report_interval_months', 'value' => '3', 'type' => 'number', 'group' => 'thresholds'],
             // Who signs reviewer certificates of service.
             ['key' => 'certificate_signatory_name', 'value' => '', 'type' => 'string', 'group' => 'general'],
+            // Reviewer certificates: completed reviews needed in a year, and whether late ones count.
+            ['key' => 'certificate_min_reviews', 'value' => '3', 'type' => 'number', 'group' => 'general'],
+            ['key' => 'certificate_on_time_only', 'value' => 'false', 'type' => 'boolean', 'group' => 'general'],
             ['key' => 'certificate_signatory_title', 'value' => 'Vice President, Research & Technology Transfer', 'type' => 'string', 'group' => 'general'],
 
             // Audit & Logging
