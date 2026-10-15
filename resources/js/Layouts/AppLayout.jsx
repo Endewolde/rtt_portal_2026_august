@@ -4,7 +4,7 @@ import {
     LayoutDashboard, FileText, Megaphone, PlusCircle, Search,
     CheckSquare, ClipboardCheck, AlertCircle, AlertTriangle,
     PieChart, DollarSign, CreditCard, CheckCircle,
-    Activity, Award, BookOpen, Database, FileLock2,
+    Activity, Award, BookOpen, Database, FileLock2, LifeBuoy,
     BarChart, BarChart2, TrendingUp, TrendingDown,
     Users, Building, Building2, Shield, Settings, Bell, Key,
     Globe, LogOut, FlaskConical, Brain, ChevronLeft, ChevronRight, X, Menu,
@@ -21,6 +21,7 @@ import SwitchLoginModal from '../Components/SwitchLoginModal'
 import ConfirmDialog from '../Components/ConfirmDialog'
 import OpenDefenceHoldModal from '../Components/OpenDefenceHoldModal'
 import CommandPalette from '../Components/CommandPalette'
+import AssistantPanel from '../Components/AssistantPanel'
 import PendingInvitationsModal from '../Components/PendingInvitationsModal'
 import InvitationResponsePopup from '../Components/InvitationResponsePopup'
 import { useToast } from '../Components/Toast'
@@ -82,6 +83,7 @@ const ROUTE_PERMISSIONS = [
     ['/admin/turnaround',          [..._A, ..._OR, 'college_officer']],
     ['/admin/review-certificates', _A],
     ['/admin/data-requests',       ['super_admin', 'admin']],
+    ['/admin/help-articles',       ['super_admin', 'admin']],
     ['/admin/proposal-pipeline',   [..._A, ..._OR, 'college_officer']],
     ['/admin/college-phase-completion', [..._A, ..._OR, 'college_officer']],
     ['/ongoing-proposals',         [..._A, ..._OR, 'college_officer']],
@@ -380,7 +382,7 @@ const ICONS = {
     LayoutDashboard, FileText, Megaphone, PlusCircle, Search,
     CheckSquare, ClipboardCheck, AlertCircle, AlertTriangle,
     PieChart, DollarSign, CreditCard, CheckCircle,
-    Activity, Award, BookOpen, Database, FileLock2,
+    Activity, Award, BookOpen, Database, FileLock2, LifeBuoy,
     BarChart, BarChart2, TrendingUp, TrendingDown,
     Users, Building, Building2, Shield, Settings, Bell, Key,
     FolderOpen, EyeOff, Presentation, ClipboardList,
@@ -856,6 +858,7 @@ export default function AppLayout({ children, breadcrumb }) {
                 { label: 'Dashboard',       href: '/dashboard',      icon: 'LayoutDashboard', show: true },
                 { label: 'My Research Hub', href: '/researcher-hub', icon: 'Brain',           show: true },
                 { label: 'Calendar',        href: '/calendar',       icon: 'CalendarDays',    show: true },
+                { label: 'Help Centre',     href: '/help',           icon: 'LifeBuoy',        show: true },
             ],
         },
         {
@@ -1204,6 +1207,7 @@ export default function AppLayout({ children, breadcrumb }) {
                 { label: 'Public Site',    href: '/admin/public-site',   icon: 'Globe',       show: hasRole('super_admin') || hasRole('admin') },
                 { label: 'Login Notices',  href: '/admin/login-notices', icon: 'Megaphone',   show: hasAnyRole(ALL_ADMIN) },
                 { label: 'FAQs',           href: '/admin/faqs',          icon: 'HelpCircle',  show: hasAnyRole(ALL_ADMIN) },
+                { label: 'Help Articles',  href: '/admin/help-articles', icon: 'BookOpen',    show: hasRole('super_admin') || hasRole('admin') },
                 { label: 'Data Requests',  href: '/admin/data-requests', icon: 'FileLock2',   show: hasRole('super_admin') || hasRole('admin') },
                 { label: 'Feedback',       href: '/admin/feedback',      icon: 'MessageSquareHeart', show: hasAnyRole(ALL_ADMIN) },
             ],
@@ -1697,6 +1701,7 @@ export default function AppLayout({ children, breadcrumb }) {
             />
 
             <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+            <AssistantPanel />
 
             {/* Pending co-PI invitation modal — only for staff when feature is on */}
             {authReady && hasSubFeature('workflow.co_pi_acceptance') && hasRole('staff') && (

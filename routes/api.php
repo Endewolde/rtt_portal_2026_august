@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\ActionCountController;
 use App\Http\Controllers\Api\AiAdviceController;
 use App\Http\Controllers\Api\AnalyticsController;
 use App\Http\Controllers\Api\AnnualReportController;
+use App\Http\Controllers\Api\AssistantController;
 use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AwardController;
@@ -351,6 +352,18 @@ Route::prefix('v1')->group(function () {
         Route::get('/proposals/{id}/ai-review-summary', [AiAdviceController::class, 'summary']);
         Route::middleware('throttle:10,1')->post('/proposals/{id}/ai-review-summary', [AiAdviceController::class, 'runSummary']);
         Route::get('/submission-eligibility', [ProposalController::class, 'submissionEligibility']);
+
+        // Assistant and help centre
+        Route::middleware('throttle:30,1')->post('/assistant/ask', [AssistantController::class, 'ask']);
+        Route::get('/assistant/suggestions', [AssistantController::class, 'suggestions']);
+        Route::post('/assistant/queries/{id}/feedback', [AssistantController::class, 'feedback']);
+        Route::get('/help/articles', [AssistantController::class, 'articles']);
+        Route::get('/help/articles/{slug}', [AssistantController::class, 'article']);
+        Route::get('/admin/help-articles', [AssistantController::class, 'adminIndex']);
+        Route::post('/admin/help-articles', [AssistantController::class, 'store']);
+        Route::put('/admin/help-articles/{id}', [AssistantController::class, 'update']);
+        Route::delete('/admin/help-articles/{id}', [AssistantController::class, 'destroy']);
+        Route::get('/admin/assistant-insights', [AssistantController::class, 'insights']);
 
         // Personal data: download your own data, ask for it to be deleted; admins handle requests
         Route::get('/me/data-export', [PersonalDataController::class, 'export']);
