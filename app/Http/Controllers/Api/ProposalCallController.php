@@ -181,6 +181,7 @@ class ProposalCallController extends Controller
             'start_date' => ['required', 'date_format:Y-m-d\TH:i'],
             'end_date' => ['required', 'date_format:Y-m-d\TH:i', 'after:start_date'],
             'max_proposals_per_pi' => ['nullable', 'integer', 'min:1'],
+            'funding_budget' => ['nullable', 'numeric', 'min:0', 'max:9999999999999'],
         ]);
 
         $call = $this->service->create($validated, $user);
@@ -210,6 +211,7 @@ class ProposalCallController extends Controller
             'category' => ['sometimes', 'string', 'max:50'],
             'academic_year' => ['sometimes', 'string', 'regex:/^\d{4}-\d{4}$/'],
             'max_proposals_per_pi' => ['sometimes', 'nullable', 'integer', 'min:1'],
+            'funding_budget' => ['sometimes', 'nullable', 'numeric', 'min:0', 'max:9999999999999'],
         ]);
 
         try {

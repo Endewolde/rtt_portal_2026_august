@@ -45,6 +45,7 @@ class ProposalCallResource extends JsonResource
 
             'proposals_count'      => $this->proposals_count ?? 0,
             'max_proposals_per_pi' => $this->max_proposals_per_pi,
+            'funding_budget' => $this->funding_budget !== null ? (float) $this->funding_budget : null,
             'guidelines_file'      => $this->guidelines_file,
             'guidelines_filename'  => $this->guidelines_file ? basename($this->guidelines_file) : null,
             'created_at'           => $this->created_at?->toIso8601String(),

@@ -12,6 +12,8 @@ import { useToast } from '../../Components/Toast';
 import { formatCurrency, getCategoryLabel } from '../../lib/utils';
 import RejectWithReasonModal from '../../Components/RejectWithReasonModal';
 import ApproveFundingModal from '../../Components/ApproveFundingModal';
+import MeritList from '../../Components/MeritList';
+import AiReviewSummary from '../../Components/AiReviewSummary';
 
 function ScoreBar({ score, max, label, color }) {
     const pct = max > 0 ? Math.min(100, (score / max) * 100) : 0;
@@ -121,6 +123,8 @@ export default function CentralEvaluation() {
     const [collegeFilter, setCollegeFilter] = useState('');
     const [loading, setLoading]       = useState(true);
     const [dialog, setDialog]         = useState(null);
+    const [mode, setMode]             = useState('proposals');
+    const [meritKey, setMeritKey]     = useState(0);
     const [budgetMap, setBudgetMap]         = useState({});
     const [expandedBudget, setExpandedBudget] = useState(null);
     const [piHistoryMap, setPiHistoryMap]   = useState({});
@@ -234,7 +238,24 @@ export default function CentralEvaluation() {
                     </FilterBar>
                 </div>
 
-                {loading ? (
+                <div className="mb-4 inline-flex rounded-xl bg-gray-100 p-1 text-sm">
+                    {[['proposals', 'Proposals'], ['merit', 'Merit List & Budget']].map(([key, label]) => (
+                        <button key={key} onClick={() => setMode(key)}
+                            className={`rounded-lg px-3.5 py-1.5 font-medium transition-colors ${mode === key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                            {label}
+                        </button>
+                    ))}
+                </div>
+
+                {mode === 'merit' ? (
+                    <MeritList
+                        refreshKey={meritKey}
+                        onApprove={(proposalId) => {
+                            const proposal = allProposals.find((p) => p.id === proposalId);
+                            if (proposal) openApprove(proposal);
+                        }}
+                    />
+                ) : loading ? (
                     <div className="flex justify-center py-20">
                         <div className="w-8 h-8 border-4 border-teal-600 border-t-transparent rounded-full animate-spin" />
                     </div>
@@ -378,6 +399,11 @@ export default function CentralEvaluation() {
                                         )}
                                     </div>
 
+                                    {/* AI review summary */}
+                                    <div className="mx-4 mb-3">
+                                        <AiReviewSummary proposalId={p.id} />
+                                    </div>
+
                                     {/* Action footer */}
                                     <div className="flex items-center justify-between gap-4 px-4 py-3.5 border-t border-gray-100">
                                         <p className="text-sm text-gray-600">
@@ -424,6 +450,7 @@ export default function CentralEvaluation() {
                     onClose={() => setDialog(null)}
                     onSubmit={async (payload) => {
                         const res = await api.post(`/proposals/${dialog.proposal.id}/central/approve`, payload);
+                        setMeritKey((k) => k + 1);
                         success(res.data?.message || 'Proposal approved for funding.', {
                             action: { label: 'Go to Funding', onClick: () => { window.location.href = '/admin/funding'; } },
                         });

@@ -68,6 +68,7 @@ test('a reviewer scoring a proposal only sees the proposal document and budget s
         'assigned_by' => $admin->id, 'status' => 'pending', 'assigned_at' => now(), 'due_date' => now()->addDays(7)->toDateString(),
     ]);
 
+    acceptReviewerAgreement($reviewer);
     $response = $this->actingAs($reviewer, 'sanctum')
         ->getJson("/api/v1/review-assignments/{$assignment->id}");
 

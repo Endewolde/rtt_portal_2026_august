@@ -18,3 +18,8 @@ createInertiaApp({
     },
     progress: { color: '#1a365d' },
 });
+
+// Installable as a phone app; the worker only provides an offline page (see public/sw.js).
+if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost')) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+}

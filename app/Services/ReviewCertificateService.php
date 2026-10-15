@@ -7,6 +7,7 @@ use App\Jobs\StoreInAppNotificationJob;
 use App\Models\ReviewCertificate;
 use App\Models\ReviewCertificateRelease;
 use App\Models\User;
+use App\Support\PdfAssets;
 use Barryvdh\DomPDF\Facade\Pdf;
 use chillerlan\QRCode\Common\EccLevel;
 use chillerlan\QRCode\Output\QRGdImagePNG;
@@ -341,7 +342,7 @@ class ReviewCertificateService
             'reviewerTitle' => $certificate->user->title,
             'orgName' => $settings['organization_name'] ?? 'Wolaita Sodo University',
             'systemName' => $settings['system_name'] ?? 'RTT Platform',
-            'logo' => $this->embeddedLogo($settings['system_logo'] ?? null),
+            'logo' => PdfAssets::embeddedImage($settings['system_logo'] ?? null),
             'signatoryName' => $settings['certificate_signatory_name'] ?? '',
             'signatoryTitle' => $settings['certificate_signatory_title'] ?? self::DEFAULT_SIGNATORY_TITLE,
             'verifyUrl' => $verifyUrl,
@@ -368,23 +369,6 @@ class ReviewCertificateService
             'quietzoneSize' => 1,
             'outputBase64' => true,
         ])))->render($url);
-    }
-
-    /** dompdf can't fetch remote images — embed the uploaded logo as a data URI. */
-    private function embeddedLogo(?string $logo): ?string
-    {
-        if (! $logo) {
-            return null;
-        }
-
-        $path = public_path(ltrim(parse_url($logo, PHP_URL_PATH) ?? '', '/'));
-        if (! is_file($path)) {
-            return null;
-        }
-
-        $mime = mime_content_type($path) ?: 'image/png';
-
-        return "data:{$mime};base64,".base64_encode(file_get_contents($path));
     }
 
     private function newCode(): string

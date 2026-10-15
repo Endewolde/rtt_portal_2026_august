@@ -55,6 +55,9 @@ function ro_assignment(): array
         'status' => 'pending', 'assigned_at' => now(),
     ]);
 
+    acceptReviewerAgreement($reviewer);
+    acceptReviewerAgreement($intruder);
+
     return [$reviewer, $intruder, $assignment, $question];
 }
 

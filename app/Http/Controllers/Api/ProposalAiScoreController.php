@@ -42,7 +42,7 @@ class ProposalAiScoreController extends Controller
             return response()->json(['data' => null, 'message' => 'AI scoring is not configured. Set ANTHROPIC_API_KEY, GEMINI_API_KEY, or GROQ_API_KEY in your .env.', 'errors' => []], 503);
         }
 
-        $service = new ProposalAiScoringService;
+        $service = app(ProposalAiScoringService::class);
         $score = $service->score($proposal);
 
         if ($score->status === 'failed') {

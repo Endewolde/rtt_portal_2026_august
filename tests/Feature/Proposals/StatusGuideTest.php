@@ -109,3 +109,21 @@ test('people outside the proposal cannot see its guide', function () {
 
     $this->actingAs($stranger, 'sanctum')->getJson('/api/v1/proposals/'.($this->make)('submitted')->id.'/status-guide')->assertForbidden();
 });
+
+test('the guide answers in Amharic when the reader chose it', function () {
+    $p = ($this->make)('submitted');
+
+    $guide = $this->actingAs($this->pi, 'sanctum')
+        ->getJson("/api/v1/proposals/{$p->id}/status-guide", ['X-Locale' => 'am'])
+        ->assertOk()->json('data');
+
+    expect($guide['headline'])->toBe('ገብቷል — ማረጋገጫ እየጠበቀ ነው');
+});
+
+test('an unknown language falls back to English', function () {
+    $p = ($this->make)('submitted');
+
+    $this->actingAs($this->pi, 'sanctum')
+        ->getJson("/api/v1/proposals/{$p->id}/status-guide", ['X-Locale' => 'xx'])
+        ->assertJsonPath('data.headline', 'Submitted — waiting for validation');
+});

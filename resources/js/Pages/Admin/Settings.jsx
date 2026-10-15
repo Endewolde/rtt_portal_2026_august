@@ -121,6 +121,9 @@ const KEY_LABELS = {
     eligibility_block_overdue_reports: 'Block New Submissions While a Progress Report Is Overdue',
     eligibility_max_active_grants: 'Maximum Active Grants per PI (0 = no limit)',
     eligibility_unsettled_days: 'Block New Submissions if Funds Are Unsettled After (days, 0 = off)',
+    ai_coach_enabled: 'AI Writing Coach for Research Teams (before submission)',
+    ai_review_summary_enabled: 'AI Review Summary for the Central Committee',
+    reviewer_agreement_text: 'Reviewer Confidentiality Agreement (leave empty for the built-in wording)',
     certificate_min_reviews: 'Reviewer Certificate — Minimum Completed Reviews per Year',
     certificate_on_time_only: 'Reviewer Certificate — Count Only Reviews Submitted On Time',
     certificate_signatory_name: 'Reviewer Certificate — Signatory Name',
@@ -162,6 +165,7 @@ const KEY_LABELS = {
     slider_slide_4_color: 'Slide 4 Accent Colour', slider_slide_4_icon: 'Slide 4 Icon',
     // Public site
     public_header_tagline:     'Header Tagline',
+    public_header_subtitle:    'Subtitle Under University Name',
     public_footer_tagline:     'Footer Tagline',
     public_hero_badge:         'Badge Text',
     public_hero_heading:       'Main Heading',
@@ -1562,6 +1566,7 @@ function PublicSitePanel({ values, onChange, onSave, isAdmin = false }) {
                     <p className="text-xs text-gray-400 ml-1">— top utility bar text</p>
                 </div>
                 {tf('public_header_tagline', 'string', 'Text shown in the thin bar above the main navigation (e.g. "WSU — Research & Technology Transfer Platform").')}
+                {tf('public_header_subtitle', 'string', 'Line under the university name next to the logo (default "Research & Technology Transfer").')}
                 {tf('public_footer_tagline', 'string', 'Secondary text shown at the bottom-right of the footer (e.g. "Research & Technology Transfer Platform").')}
             </div>
 

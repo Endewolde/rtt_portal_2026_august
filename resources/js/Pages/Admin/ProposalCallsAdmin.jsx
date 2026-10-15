@@ -3,7 +3,7 @@ import {
     Megaphone, Plus, X, Search, Pencil, CheckCircle, XCircle,
     Eye, RefreshCw, Trash2, Upload, FileText, Download, Filter,
     Settings, AlertCircle, GraduationCap, Calendar, Clock,
-    AlignLeft, Users, Tag, ShieldCheck, BookOpen, ChevronRight,
+    AlignLeft, Users, Tag, ShieldCheck, BookOpen, ChevronRight, Wallet,
 } from 'lucide-react';
 import { Link, usePage } from '@inertiajs/react';
 import AppLayout from '../../Layouts/AppLayout';
@@ -67,6 +67,7 @@ const EMPTY_FORM = {
     title: '', category: 'research', academic_year: '',
     description: '', eligibility: '', start_date: '', end_date: '',
     max_proposals_per_pi: '',
+    funding_budget: '',
     guidelines_file: null, guidelines_filename: null,
 };
 
@@ -159,6 +160,7 @@ function ProposalCallModal({ initial, defaultAcademicYear, onClose, onSaved }) {
                 start_date:           form.start_date,
                 end_date:             form.end_date,
                 max_proposals_per_pi: form.max_proposals_per_pi || null,
+                funding_budget:       form.funding_budget === '' ? null : Number(form.funding_budget),
             };
 
             let savedCall;
@@ -334,6 +336,14 @@ function ProposalCallModal({ initial, defaultAcademicYear, onClose, onSaved }) {
                             onChange={(e) => set('max_proposals_per_pi', e.target.value)}
                             placeholder="e.g. 2"
                             className={input(errors.max_proposals_per_pi)} />
+                    </Field>
+
+                    <Field label="Total Funding Budget (ETB)" icon={Wallet} error={errors.funding_budget?.[0]}
+                        hint="The money available to fund proposals from this call. Central Evaluation ranks passing proposals against it and warns before it is overspent. Leave blank if not fixed.">
+                        <input type="number" min="0" step="1000" value={form.funding_budget}
+                            onChange={(e) => set('funding_budget', e.target.value)}
+                            placeholder="e.g. 5000000"
+                            className={input(errors.funding_budget)} />
                     </Field>
 
                     {/* ── Details ── */}
@@ -552,6 +562,7 @@ export default function ProposalCallsAdmin() {
             start_date:           toDateTimeLocal(call.start_date),
             end_date:             toDateTimeLocal(call.end_date),
             max_proposals_per_pi: call.max_proposals_per_pi ?? '',
+            funding_budget: call.funding_budget ?? '',
             guidelines_file:      call.guidelines_file ?? null,
             guidelines_filename:  call.guidelines_filename ?? null,
         });

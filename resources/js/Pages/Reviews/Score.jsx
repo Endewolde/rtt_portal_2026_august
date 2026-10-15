@@ -10,6 +10,7 @@ import { downloadFile } from '../../lib/download';
 import { useConfirm } from '../../hooks/useConfirm';
 import api from '../../lib/api';
 import { useToast } from '../../Components/Toast';
+import ReviewerAgreementModal from '../../Components/ReviewerAgreementModal';
 
 // ── Score colour ramp ─────────────────────────────────────────────────────────
 
@@ -99,9 +100,11 @@ export default function ReviewScore() {
     const [loading, setLoading]       = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [submitted, setSubmitted]   = useState(false);
+    const [needsAgreement, setNeedsAgreement] = useState(false);
+    const [reloadKey, setReloadKey]   = useState(0);
 
     useEffect(() => {
-        api.get(`/review-assignments/${assignmentId}`)
+        api.get(`/review-assignments/${assignmentId}`, { skipErrorToast: true })
             .then(res => {
                 const data = res.data?.data ?? res.data;
                 setAssignment(data);
@@ -115,9 +118,12 @@ export default function ReviewScore() {
                 setAnswers(pre);
                 if (data?.status === 'submitted') setSubmitted(true);
             })
-            .catch(() => toast.error('Failed to load review assignment.'))
+            .catch((e) => {
+                if (e.response?.data?.meta?.code === 'agreement_required') setNeedsAgreement(true);
+                else toast.error('Failed to load review assignment.');
+            })
             .finally(() => setLoading(false));
-    }, [assignmentId]);
+    }, [assignmentId, reloadKey]);
 
     const updateAnswer = (qid, field, value) =>
         setAnswers(prev => ({ ...prev, [qid]: { ...prev[qid], [field]: value } }));
@@ -205,6 +211,15 @@ export default function ReviewScore() {
                     <p className="text-sm text-gray-400">Loading review…</p>
                 </div>
             </div>
+        </AppLayout>
+    );
+
+    if (needsAgreement) return (
+        <AppLayout breadcrumb="Score Review">
+            <ReviewerAgreementModal
+                onAccepted={() => { setNeedsAgreement(false); setLoading(true); setReloadKey((k) => k + 1); }}
+                onClose={() => router.visit('/reviews')}
+            />
         </AppLayout>
     );
 

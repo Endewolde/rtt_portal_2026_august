@@ -57,6 +57,8 @@ function coi_assignment(): array
         'status' => 'pending', 'assigned_at' => now(),
     ]);
 
+    acceptReviewerAgreement($reviewer);
+
     return [$reviewer, $officer, $assignment, $question];
 }
 

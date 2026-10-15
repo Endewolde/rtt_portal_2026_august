@@ -23,6 +23,7 @@ use App\Services\DefenceDeadlineService;
 use App\Services\DefenceSessionService;
 use App\Services\MailConfigService;
 use App\Services\ReviewAssignmentService;
+use App\Services\ReviewerAgreementService;
 use App\Services\ReviewerConflictService;
 use App\Services\ReviewScoreService;
 use App\Services\WorkflowService;
@@ -35,6 +36,9 @@ use Illuminate\Support\Facades\Log;
 
 class ReviewController extends Controller
 {
+    /** Officers who manage reviews and may open any assignment. */
+    private const ASSIGNMENT_VIEWER_ROLES = ['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer', 'college_officer'];
+
     private const WORKLOAD_ROLES = [
         'super_admin', 'admin', 'central_officer', 'research_officer',
         'community_officer', 'technology_officer', 'college_officer',
@@ -99,6 +103,10 @@ class ReviewController extends Controller
     public function submitScore(string $id, Request $request): JsonResponse
     {
         $request->validate(['answers' => 'required|array']);
+
+        if ($blocked = $this->agreementRequired($request->user())) {
+            return $blocked;
+        }
 
         $assignment = ReviewAssignment::findOrFail($id);
         $result = $this->scoreService->submitScore($assignment, $request->answers, $request->user());
@@ -1336,8 +1344,19 @@ class ReviewController extends Controller
         return response()->json(['data' => $assignments]);
     }
 
-    public function showAssignment(string $id): JsonResponse
+    public function showAssignment(string $id, Request $request): JsonResponse
     {
+        $user = $request->user();
+        $isOwnReview = ReviewAssignment::whereKey($id)->where('reviewer_id', $user->id)->exists();
+
+        // Only the assigned reviewer, or the officers who manage reviews, may open an assignment.
+        if (! $isOwnReview && ! $user->hasAnyRole(self::ASSIGNMENT_VIEWER_ROLES)) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => [], 'meta' => []], 403);
+        }
+        if ($isOwnReview && ($blocked = $this->agreementRequired($user))) {
+            return $blocked;
+        }
+
         $assignment = ReviewAssignment::with([
             'proposal.college',
             'proposal.documents',
@@ -1386,6 +1405,21 @@ class ReviewController extends Controller
         }
 
         return response()->json(['data' => $data]);
+    }
+
+    /** A reviewer must accept this year's confidentiality agreement before opening or scoring a proposal. */
+    private function agreementRequired(User $user): ?JsonResponse
+    {
+        if (app(ReviewerAgreementService::class)->hasAccepted($user)) {
+            return null;
+        }
+
+        return response()->json([
+            'data' => null,
+            'message' => 'Please accept the reviewer confidentiality agreement for this academic year before opening proposals to review.',
+            'errors' => [],
+            'meta' => ['code' => 'agreement_required'],
+        ], 403);
     }
 
     public function declareCoi(string $id, Request $request): JsonResponse

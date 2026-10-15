@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Check, X, Compass, AlertCircle, ArrowRight, Clock } from 'lucide-react';
 import { get } from '../lib/api';
+import { useT, useLanguage } from '../lib/i18n';
 
 const DOT = {
     done:     'bg-emerald-500 text-white',
@@ -12,11 +13,13 @@ const DOT = {
 
 /** "Where is my proposal and what do I do next" — shown to the research team at the top of the proposal page. */
 export default function ProposalStatusGuide({ proposalId, status, onOpenTab }) {
+    const t = useT();
+    const [lang] = useLanguage();
     const [guide, setGuide] = useState(null);
 
     useEffect(() => {
         get(`/proposals/${proposalId}/status-guide`).then((r) => setGuide(r.data)).catch(() => setGuide(null));
-    }, [proposalId, status]);
+    }, [proposalId, status, lang]);
 
     if (!guide) return null;
 
@@ -36,7 +39,7 @@ export default function ProposalStatusGuide({ proposalId, status, onOpenTab }) {
                             <span className={`h-0.5 flex-1 ${i === guide.steps.length - 1 ? 'opacity-0' : step.state === 'done' ? 'bg-emerald-400' : 'bg-gray-200'}`} />
                         </div>
                         <span className={`mt-1.5 text-[11px] leading-tight ${step.state === 'current' ? 'font-semibold text-blue-700' : step.state === 'stopped' ? 'font-semibold text-red-600' : 'text-gray-500'}`}>
-                            {step.label}
+                            {t(step.label)}
                         </span>
                     </li>
                 ))}
@@ -53,8 +56,8 @@ export default function ProposalStatusGuide({ proposalId, status, onOpenTab }) {
                     {guide.typical_days && guide.days_in_stage !== null && (
                         <p className={`mt-1.5 inline-flex items-center gap-1 text-xs ${guide.taking_longer ? 'text-amber-700' : 'text-gray-400'}`}>
                             <Clock size={12} />
-                            {guide.days_in_stage} day{guide.days_in_stage === 1 ? '' : 's'} at this step · usually about {guide.typical_days} days
-                            {guide.taking_longer && ' — taking longer than usual'}
+                            {t(guide.days_in_stage === 1 ? '1 day at this step · usually about :typical days' : ':days days at this step · usually about :typical days', { days: guide.days_in_stage, typical: guide.typical_days })}
+                            {guide.taking_longer && t(' — taking longer than usual')}
                         </p>
                     )}
                 </div>
@@ -63,7 +66,7 @@ export default function ProposalStatusGuide({ proposalId, status, onOpenTab }) {
             {/* What you need to do */}
             {guide.actions.length > 0 && (
                 <div className="border-t border-gray-100 bg-gray-50/60 px-5 py-3">
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">What you need to do</p>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">{t('What you need to do')}</p>
                     <ul className="space-y-2">
                         {guide.actions.map((a) => (
                             <li key={a.label} className={`flex flex-wrap items-center gap-3 rounded-lg border bg-white px-3 py-2.5 ${a.urgent ? 'border-red-200' : 'border-gray-200'}`}>
@@ -74,7 +77,7 @@ export default function ProposalStatusGuide({ proposalId, status, onOpenTab }) {
                                 </div>
                                 {a.tab && onOpenTab && (
                                     <button onClick={() => onOpenTab(a.tab)} className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 hover:underline">
-                                        Open <ArrowRight size={12} />
+                                        {t('Open')} <ArrowRight size={12} />
                                     </button>
                                 )}
                             </li>

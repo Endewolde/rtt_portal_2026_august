@@ -23,6 +23,14 @@
         <link rel="icon" href="{{ $meta['favicon'] }}">
     @endif
 
+    {{-- Installable on phones (Add to Home Screen) --}}
+    <link rel="manifest" href="/manifest.webmanifest">
+    <meta name="theme-color" content="#1e3a8a">
+    <link rel="apple-touch-icon" href="/pwa-icon/192.png">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="{{ $meta['system_name'] }}">
+
     @viteReactRefresh
     @vite(['resources/css/app.css', 'resources/js/app.jsx'])
     @inertiaHead

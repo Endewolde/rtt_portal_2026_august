@@ -110,6 +110,11 @@ class AppSettingsSeeder extends Seeder
             // Who signs reviewer certificates of service.
             ['key' => 'certificate_signatory_name', 'value' => '', 'type' => 'string', 'group' => 'general'],
             // Reviewer certificates: completed reviews needed in a year, and whether late ones count.
+            // Reviewer confidentiality agreement accepted once per academic year (empty = built-in wording).
+            // AI advice (sends proposal text / reviewer comments to the configured AI provider).
+            ['key' => 'ai_coach_enabled', 'value' => 'true', 'type' => 'boolean', 'group' => 'general'],
+            ['key' => 'ai_review_summary_enabled', 'value' => 'true', 'type' => 'boolean', 'group' => 'general'],
+            ['key' => 'reviewer_agreement_text', 'value' => '', 'type' => 'textarea', 'group' => 'general'],
             ['key' => 'certificate_min_reviews', 'value' => '3', 'type' => 'number', 'group' => 'general'],
             ['key' => 'certificate_on_time_only', 'value' => 'false', 'type' => 'boolean', 'group' => 'general'],
             ['key' => 'certificate_signatory_title', 'value' => 'Vice President, Research & Technology Transfer', 'type' => 'string', 'group' => 'general'],

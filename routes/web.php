@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Auth\OAuthController;
 use App\Http\Controllers\DocumentController;
+use App\Http\Controllers\PwaController;
 use App\Models\AppSetting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -10,6 +11,8 @@ use Inertia\Inertia;
 
 // ── Public ────────────────────────────────────────────────────────────────────
 Route::get('/', fn () => Inertia::render('Public/Home'));
+Route::get('/manifest.webmanifest', [PwaController::class, 'manifest']);
+Route::get('/pwa-icon/{size}.png', [PwaController::class, 'icon'])->whereNumber('size');
 Route::get('/download', fn () => Inertia::render('Public/Download'));
 Route::get('/explore', fn () => Inertia::render('Public/Explore'));
 Route::get('/funding-opportunities', fn () => Inertia::render('Public/FundingOpportunities'));

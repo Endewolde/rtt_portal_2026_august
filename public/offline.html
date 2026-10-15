@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>You're offline</title>
+<style>
+  :root { --ink: #111827; --muted: #6b7280; --brand: #1e3a8a; --bg: #f9fafb; --card: #ffffff; --line: #e5e7eb; }
+  @media (prefers-color-scheme: dark) { :root { --ink: #f3f4f6; --muted: #9ca3af; --brand: #93c5fd; --bg: #0b1220; --card: #111827; --line: #1f2937; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px; background: var(--bg); color: var(--ink); font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .card { max-width: 380px; width: 100%; background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 28px 24px; text-align: center; }
+  .icon { width: 56px; height: 56px; margin: 0 auto 14px; border-radius: 16px; display: grid; place-items: center; background: color-mix(in srgb, var(--brand) 14%, transparent); color: var(--brand); font-size: 26px; }
+  h1 { margin: 0 0 6px; font-size: 19px; }
+  p { margin: 0 0 18px; color: var(--muted); font-size: 14px; line-height: 1.5; }
+  button { border: 0; border-radius: 12px; padding: 11px 18px; background: var(--brand); color: #fff; font-weight: 600; font-size: 14px; cursor: pointer; }
+</style>
+</head>
+<body>
+  <main class="card">
+    <div class="icon" aria-hidden="true">⦸</div>
+    <h1>You're offline</h1>
+    <p>The research platform needs an internet connection. Your work isn't lost — check your connection and try again.</p>
+    <button onclick="location.reload()">Try again</button>
+  </main>
+</body>
+</html>

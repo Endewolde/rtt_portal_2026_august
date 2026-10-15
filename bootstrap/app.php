@@ -11,6 +11,7 @@ use App\Http\Middleware\EnsureFeatureEnabled;
 use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\SecurityHeaders;
+use App\Http\Middleware\SetLocaleFromHeader;
 use App\Http\Middleware\TrackRequestMetrics;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Console\Scheduling\Schedule;
@@ -34,6 +35,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
         $middleware->append(SecurityHeaders::class);
         $middleware->append(TrackRequestMetrics::class);
+        $middleware->append(SetLocaleFromHeader::class);
         $middleware->alias([
             'college.scope' => EnsureCollegeScope::class,
             'category.scope' => EnsureCategoryScope::class,

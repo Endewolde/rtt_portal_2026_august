@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Award;
 use App\Models\Proposal;
+use App\Models\ProposalCall;
 use App\Models\User;
 use App\Services\AwardService;
+use App\Services\FundingBudgetService;
 use App\Services\ReviewScoreService;
 use App\Services\WorkflowService;
 use App\Support\RejectionReasons;
@@ -19,6 +21,7 @@ class CentralEvaluationController extends Controller
     public function __construct(
         private WorkflowService $workflowService,
         private ReviewScoreService $scoreService,
+        private FundingBudgetService $fundingBudget,
         private AwardService $awardService,
     ) {}
 
@@ -30,6 +33,7 @@ class CentralEvaluationController extends Controller
 
         $query = Proposal::where('status', 'accepted')
             ->with([
+                'proposalCall:id,title,funding_budget',
                 'pi:id,name,email',
                 'college:id,name',
                 'reviewAssignments.evaluationType.categories.questions',
@@ -46,8 +50,9 @@ class CentralEvaluationController extends Controller
             $query->where('college_id', $request->_college_scope);
         }
 
+        $budgets = [];
         $proposals = $query->get()
-            ->map(function (Proposal $p) {
+            ->map(function (Proposal $p) use (&$budgets) {
                 // Live recalculation against CURRENT threshold settings and CURRENT
                 // evaluation-criteria weights — never cached, so this list is always
                 // up to date even if thresholds/criteria changed after the proposal's
@@ -69,10 +74,37 @@ class CentralEvaluationController extends Controller
                     'defence_below_threshold' => $snapshot['defence_below_threshold'],
                     'decision_mode' => $snapshot['decision_mode'],
                     'budget_total' => $budgetTotal,
+                    'call_budget' => $p->proposalCall
+                        ? ($budgets[$p->proposal_call_id] ??= ['call_title' => $p->proposalCall->title] + $this->fundingBudget->summary($p->proposalCall))
+                        : null,
                 ]);
             });
 
         return response()->json(['data' => $proposals, 'message' => '', 'errors' => [], 'meta' => []]);
+    }
+
+    /** Proposals awaiting the central decision, per call, ranked by combined score against the call's budget. */
+    public function meritList(Request $request): JsonResponse
+    {
+        if (! $request->user()?->can('awards.view')) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.'], 403);
+        }
+
+        $scope = ['college_id' => $request->_college_scope, 'category' => $request->_category_scope];
+
+        $calls = ProposalCall::whereIn('id', Proposal::where('status', 'accepted')
+            ->when($scope['college_id'], fn ($q, $id) => $q->where('college_id', $id))
+            ->when($scope['category'], fn ($q, $c) => $q->where('category', $c))
+            ->select('proposal_call_id'))
+            ->orderByDesc('academic_year')
+            ->get();
+
+        return response()->json([
+            'data' => $calls->map(fn (ProposalCall $call) => $this->fundingBudget->meritList($call, $scope))->values(),
+            'message' => '',
+            'errors' => [],
+            'meta' => [],
+        ]);
     }
 
     public function centralApprove(Request $request, string $id): JsonResponse
@@ -80,9 +112,23 @@ class CentralEvaluationController extends Controller
         $request->validate([
             'awarded_amount' => 'required|numeric|min:1',
             'remarks' => 'nullable|string|max:2000',
+            'acknowledge_over_budget' => 'sometimes|boolean',
         ]);
 
-        $proposal = Proposal::findOrFail($id);
+        $proposal = Proposal::with('proposalCall')->findOrFail($id);
+
+        // Going over the call's budget needs an explicit confirmation.
+        if ($proposal->proposalCall && ! $request->boolean('acknowledge_over_budget')) {
+            $budget = $this->fundingBudget->summary($proposal->proposalCall, $proposal->id);
+            if ($budget['remaining'] !== null && (float) $request->awarded_amount > $budget['remaining']) {
+                return response()->json([
+                    'data' => ['remaining' => $budget['remaining'], 'over_by' => round((float) $request->awarded_amount - $budget['remaining'], 2)],
+                    'message' => 'Over budget: this award is more than the '.number_format(max(0, $budget['remaining']), 2).' ETB left in the call\'s funding budget.',
+                    'errors' => [],
+                    'meta' => ['code' => 'over_budget'],
+                ], 422);
+            }
+        }
 
         try {
             // Create or update the award BEFORE transitioning so that when the

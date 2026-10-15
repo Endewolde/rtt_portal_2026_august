@@ -47,6 +47,7 @@ class HandleInertiaRequests extends Middleware
                     'password_login_enabled',
                     // Public site content
                     'public_header_tagline',
+                    'public_header_subtitle',
                     'public_footer_tagline',
                     'public_hero_badge',
                     'public_hero_heading',

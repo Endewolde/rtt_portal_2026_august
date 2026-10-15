@@ -19,6 +19,7 @@ import ReviewDisagreementPanel from '../../Components/ReviewDisagreementPanel';
 import ProgressReportsTab from '../../Components/ProgressReportsTab';
 import ProposalStatusGuide from '../../Components/ProposalStatusGuide';
 import ProposalVersions from '../../Components/ProposalVersions';
+import DefenceRecordButton from '../../Components/DefenceRecordButton';
 import { issueByKey } from '../../lib/approvalReportIssues';
 import { downloadFile } from '../../lib/download';
 
@@ -2695,6 +2696,11 @@ export default function ProposalShow() {
                             )
                         )}
 
+                        {activeTab === 'Reviews' && (isAdmin || isOfficer) && ['under_open_defence', 'accepted', 'funded', 'midterm_evaluation', 'completed', 'archived', 'rejected'].includes(proposal.status) && (
+                            <div className="mb-3 flex justify-end">
+                                <DefenceRecordButton proposalId={id} trackerNumber={proposal.tracker_number} className="rounded-lg border border-gray-200 bg-white px-3 py-1.5" />
+                            </div>
+                        )}
                         {activeTab === 'Reviews' && (
                             <ReviewResultsTab
                                 proposalId={id}

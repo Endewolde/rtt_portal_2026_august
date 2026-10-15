@@ -16,6 +16,7 @@ import { useToast } from '../../Components/Toast';
 import RoleRestrictedModal from '../../Components/RoleRestrictedModal';
 import ProposalLimitModal from '../../Components/ProposalLimitModal';
 import SubmissionEligibilityNotice from '../../Components/SubmissionEligibilityNotice';
+import AiWritingCoach from '../../Components/AiWritingCoach';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -914,6 +915,8 @@ function Step7Submit({ proposalId, stepData, budgetItems, onSuccess, onGoToStep,
                 currentRole={currentRole}
                 requiredRole="Staff"
             />
+
+            <AiWritingCoach proposalId={proposalId} />
 
             {/* Checklist */}
             <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5">

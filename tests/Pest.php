@@ -1,5 +1,7 @@
 <?php
 
+use App\Models\User;
+use App\Services\ReviewerAgreementService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -44,7 +46,8 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function something()
+/** Record that a reviewer accepted this year's confidentiality agreement (required before opening or scoring a review). */
+function acceptReviewerAgreement(User $reviewer): void
 {
-    // ..
+    app(ReviewerAgreementService::class)->accept($reviewer, '127.0.0.1');
 }

@@ -37,6 +37,7 @@ export default function ApproveFundingModal({ proposal, onSubmit, onClose }) {
     const [remarks, setRemarks] = useState('');
     const [history, setHistory] = useState(null);
     const [saving, setSaving] = useState(false);
+    const [overBudgetOk, setOverBudgetOk] = useState(false);
 
     useEffect(() => {
         if (!proposal.pi?.id) return;
@@ -58,13 +59,16 @@ export default function ApproveFundingModal({ proposal, onSubmit, onClose }) {
     const totalMax = (proposal.blind_max ?? 0) + (proposal.defence_max ?? 0);
     const passes = (proposal.combined_score ?? 0) >= (proposal.threshold ?? 0);
     const activeGrants = history?.active_funded?.length ?? 0;
-    const canSubmit = amountValid && !saving;
+    const callBudget = proposal.call_budget?.budget != null ? proposal.call_budget : null;
+    const afterAward = callBudget && value ? callBudget.remaining - value : null;
+    const overBudget = afterAward !== null && afterAward < 0;
+    const canSubmit = amountValid && !saving && (!overBudget || overBudgetOk);
 
     const submit = async () => {
         if (!canSubmit) return;
         setSaving(true);
         try {
-            await onSubmit({ awarded_amount: value, remarks: remarks.trim() || null });
+            await onSubmit({ awarded_amount: value, remarks: remarks.trim() || null, acknowledge_over_budget: overBudget && overBudgetOk });
         } catch (e) {
             const errors = e?.response?.data?.errors;
             error(errors && Object.keys(errors).length ? Object.values(errors).flat()[0] : (e?.response?.data?.message ?? 'The approval could not be saved.'));
@@ -187,6 +191,24 @@ export default function ApproveFundingModal({ proposal, onSubmit, onClose }) {
                             )}
                         </div>
                     </div>
+
+                    {/* Call budget */}
+                    {callBudget && (
+                        <div className={`rounded-xl border px-4 py-3 ${overBudget ? 'border-rose-200 bg-rose-50' : 'border-gray-200 bg-gray-50/70'}`}>
+                            <p className="flex items-center gap-1.5 text-xs font-semibold text-gray-700"><Wallet size={13} className="text-gray-400" /> Call budget · {proposal.call_budget.call_title}</p>
+                            <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                                <div><p className="text-gray-500">Budget</p><p className="font-semibold tabular-nums text-gray-900">{formatCurrency(callBudget.budget)}</p></div>
+                                <div><p className="text-gray-500">Left now</p><p className="font-semibold tabular-nums text-gray-900">{formatCurrency(callBudget.remaining)}</p></div>
+                                <div><p className="text-gray-500">After this award</p><p className={`font-semibold tabular-nums ${overBudget ? 'text-rose-700' : 'text-emerald-700'}`}>{afterAward === null ? '—' : formatCurrency(afterAward)}</p></div>
+                            </div>
+                            {overBudget && (
+                                <label className="mt-3 flex cursor-pointer items-start gap-2 text-xs text-rose-800">
+                                    <input type="checkbox" checked={overBudgetOk} onChange={(e) => setOverBudgetOk(e.target.checked)} className="mt-0.5 rounded border-rose-300" />
+                                    <span>This award is {formatCurrency(-afterAward)} more than is left in the call's budget. Approve it anyway.</span>
+                                </label>
+                            )}
+                        </div>
+                    )}
 
                     {/* Remarks */}
                     <div>

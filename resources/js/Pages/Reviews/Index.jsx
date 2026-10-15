@@ -4,11 +4,12 @@ import {
     ClipboardCheck, Clock, AlertCircle, Download,
     CheckCircle2, ChevronRight, BookOpen, EyeOff,
     Presentation, Calendar, Shield, Star, ChevronDown, ChevronUp,
-    MessageSquare, Loader2, ShieldAlert, Send, ExternalLink,
+    MessageSquare, Loader2, ShieldAlert, Send, ExternalLink, Lock,
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import AppLayout from '../../Layouts/AppLayout';
 import ReviewCertificatesCard from '../../Components/ReviewCertificatesCard';
+import ReviewerAgreementModal from '../../Components/ReviewerAgreementModal';
 import { useToast } from '../../Components/Toast';
 import { useFeature } from '../../hooks/useFeature';
 import api from '../../lib/api';
@@ -863,6 +864,12 @@ export default function ReviewIndex() {
     const [yearFilter, setYearFilter]         = useState(app_settings?.current_academic_year ?? '');
     const [loading, setLoading]               = useState(true);
     const [activeTab, setActiveTab]           = useState('blind');
+    const [agreement, setAgreement]           = useState(null);
+    const [showAgreement, setShowAgreement]   = useState(false);
+
+    useEffect(() => {
+        api.get('/reviewer-agreement').then((r) => setAgreement(r.data?.data ?? null)).catch(() => {});
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     const [abstractItems, setAbstractItems]     = useState([]);
     const [abstractsLoading, setAbstractsLoading] = useState(true);
@@ -927,6 +934,24 @@ export default function ReviewIndex() {
     return (
         <AppLayout breadcrumb="Reviews">
             <div className="p-6 max-w-5xl mx-auto space-y-6">
+                {agreement && !agreement.accepted && (
+                    <div className="flex flex-col gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex items-start gap-3">
+                            <Lock size={18} className="mt-0.5 shrink-0 text-indigo-600" />
+                            <div>
+                                <p className="text-sm font-semibold text-indigo-900">Accept the {agreement.academic_year} confidentiality agreement</p>
+                                <p className="text-xs text-indigo-700">You'll need to accept it once this year before opening any proposal to review.</p>
+                            </div>
+                        </div>
+                        <button onClick={() => setShowAgreement(true)} className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Read &amp; accept</button>
+                    </div>
+                )}
+                {showAgreement && (
+                    <ReviewerAgreementModal
+                        onAccepted={() => { setShowAgreement(false); setAgreement((a) => ({ ...a, accepted: true })); }}
+                        onClose={() => setShowAgreement(false)}
+                    />
+                )}
                 <ReviewCertificatesCard />
 
                 {/* ── Page header ─────────────────────────────────────────── */}

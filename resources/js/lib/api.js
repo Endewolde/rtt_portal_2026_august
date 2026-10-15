@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getLanguage } from './i18n';
 
 const api = axios.create({
     baseURL: '/api/v1',
@@ -13,6 +14,9 @@ api.interceptors.request.use((config) => {
 
     const token = localStorage.getItem('rtt_token');
     if (token) config.headers['Authorization'] = `Bearer ${token}`;
+
+    // Lets the server answer in the reader's chosen language where it has translations.
+    config.headers['X-Locale'] = getLanguage();
 
     return config;
 });

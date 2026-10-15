@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { Link, usePage } from '@inertiajs/react';
 import { FlaskConical, Menu, X, Search, Download, ChevronDown, Clock, Calendar, ArrowRight, Flame, CalendarDays, MapPin, Video, Building2, Globe, Star, FileText, ShieldCheck } from 'lucide-react';
 import { get } from '../lib/api';
+import { useT } from '../lib/i18n';
+import LanguageSwitch from '../Components/LanguageSwitch';
 
 // ─── Inline social SVG icons ──────────────────────────────────────────────────
 
@@ -76,6 +78,7 @@ function calcDeadline(endDate) {
 // ─── Open Calls dropdown ──────────────────────────────────────────────────────
 
 function OpenCallsDropdown({ calls, loading, primaryColor, currentPath }) {
+    const t = useT();
     const [open,    setOpen]    = useState(false);
     const [mounted, setMounted] = useState(false); // keeps DOM alive during fade-out
     const [shown,   setShown]   = useState(false); // drives CSS opacity/transform
@@ -120,7 +123,7 @@ function OpenCallsDropdown({ calls, loading, primaryColor, currentPath }) {
                     isActive || open ? 'text-white bg-black/20' : 'text-white/85 hover:text-white hover:bg-black/10'
                 }`}
             >
-                Open Calls
+                {t('Open Calls')}
 
                 {/* Badge with ping ripple blink */}
                 {count > 0 && (
@@ -192,8 +195,8 @@ function OpenCallsDropdown({ calls, loading, primaryColor, currentPath }) {
                     {/* Empty state */}
                     {!loading && count === 0 && (
                         <div className="px-4 py-8 text-center">
-                            <p className="text-sm text-gray-500">No funding calls are open right now.</p>
-                            <p className="text-xs text-gray-400 mt-1">Check back soon for new opportunities.</p>
+                            <p className="text-sm text-gray-500">{t('No funding calls are open right now.')}</p>
+                            <p className="text-xs text-gray-400 mt-1">{t('Check back soon for new opportunities.')}</p>
                         </div>
                     )}
 
@@ -306,6 +309,7 @@ function calcDaysTo(startDate) {
 }
 
 function ConferencesDropdown({ conferences, loading, primaryColor, currentPath }) {
+    const t = useT();
     const [open,    setOpen]    = useState(false);
     const [mounted, setMounted] = useState(false);
     const [shown,   setShown]   = useState(false);
@@ -333,7 +337,7 @@ function ConferencesDropdown({ conferences, loading, primaryColor, currentPath }
             <button className={`relative px-4 h-10 flex items-center gap-1.5 text-sm font-medium transition-colors ${
                 isActive || open ? 'text-white bg-black/20' : 'text-white/85 hover:text-white hover:bg-black/10'
             }`}>
-                Conferences
+                {t('Conferences')}
                 {count > 0 && (
                     <span className="relative inline-flex">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-50"
@@ -389,8 +393,8 @@ function ConferencesDropdown({ conferences, loading, primaryColor, currentPath }
                     {!loading && count === 0 && (
                         <div className="px-4 py-8 text-center">
                             <CalendarDays size={32} className="mx-auto text-gray-200 mb-3" />
-                            <p className="text-sm text-gray-500">No upcoming conferences right now.</p>
-                            <p className="text-xs text-gray-400 mt-1">Check back soon for new events.</p>
+                            <p className="text-sm text-gray-500">{t('No upcoming conferences right now.')}</p>
+                            <p className="text-xs text-gray-400 mt-1">{t('Check back soon for new events.')}</p>
                         </div>
                     )}
 
@@ -494,6 +498,7 @@ const DEFAULT_NAV = [
 // ─── Layout ───────────────────────────────────────────────────────────────────
 
 export default function PublicLayout({ children }) {
+    const t = useT();
     const [mobileOpen,      setMobileOpen]      = useState(false);
     const [bannerDismissed, setBannerDismissed] = useState(false);
     const [developerModal,  setDeveloperModal]  = useState(false);
@@ -522,6 +527,7 @@ export default function PublicLayout({ children }) {
     const annActive     = s.announcement_active === 'true';
     const annMsg        = s.announcement_message || '';
     const headerTagline  = s.public_header_tagline  || `${orgName} — Research & Technology Transfer Platform`;
+    const headerSubtitle = s.public_header_subtitle || 'Research & Technology Transfer';
     const footerTagline  = s.public_footer_tagline  || 'Research & Technology Transfer Platform';
 
     // Build dynamic nav from settings (falls back to defaults)
@@ -613,7 +619,7 @@ export default function PublicLayout({ children }) {
                                 style={{ color: topbarText }}
                             >
                                 <Download size={10} />
-                                Downloads
+                                {t('Downloads')}
                             </Link>
                             <span className="w-px h-3 mx-1 opacity-20" style={{ backgroundColor: topbarText }} />
                             <Link
@@ -622,8 +628,10 @@ export default function PublicLayout({ children }) {
                                 style={{ color: topbarText }}
                             >
                                 <ShieldCheck size={11} />
-                                Verify Certificate
+                                {t('Verify Certificate')}
                             </Link>
+                            <span className="w-px h-3 mx-1 opacity-20" style={{ backgroundColor: topbarText }} />
+                            <LanguageSwitch color={topbarText} />
                         </div>
                     </div>
                 </div>
@@ -656,7 +664,7 @@ export default function PublicLayout({ children }) {
                                     </div>
                                     {!scrolled && (
                                         <div className="text-xs font-medium tracking-wide text-slate-500 mt-0.5">
-                                            Research &amp; Technology Transfer
+                                            {t(headerSubtitle)}
                                         </div>
                                     )}
                                 </div>
@@ -688,18 +696,18 @@ export default function PublicLayout({ children }) {
                                 <Link href="/dashboard"
                                     className="px-5 py-2 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90"
                                     style={{ backgroundColor: primaryColor }}>
-                                    Dashboard
+                                    {t('Dashboard')}
                                 </Link>
                             ) : (
                                 <>
                                     <Link href="/login"
                                         className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 text-gray-700 hover:bg-gray-50 transition-colors">
-                                        Sign In
+                                        {t('Sign In')}
                                     </Link>
                                     <Link href="/register"
                                         className="px-5 py-2 rounded-lg text-sm font-semibold text-white transition-all hover:opacity-90"
                                         style={{ backgroundColor: primaryColor }}>
-                                        Create Account
+                                        {t('Create Account')}
                                     </Link>
                                 </>
                             )}
@@ -750,7 +758,7 @@ export default function PublicLayout({ children }) {
                                         className={`px-4 h-full flex items-center text-sm font-medium transition-colors ${
                                             active ? 'text-white bg-black/20' : 'text-white/80 hover:text-white hover:bg-black/10'
                                         }`}>
-                                        {l.label}
+                                        {t(l.label)}
                                     </Link>
                                 );
                             })}
@@ -759,13 +767,13 @@ export default function PublicLayout({ children }) {
                                     <Link href="/tracker"
                                         className="flex items-center gap-1.5 h-10 px-4 text-white/80
                                                    hover:text-white hover:bg-black/10 transition-colors text-sm">
-                                        <Search size={15} /> Track
+                                        <Search size={15} /> {t('Track')}
                                     </Link>
                                 )}
                                 <Link href="/my-abstracts"
                                     className="flex items-center gap-1.5 h-10 px-4 text-white/80
                                                hover:text-white hover:bg-black/10 transition-colors text-sm">
-                                    <FileText size={15} /> My Abstracts
+                                    <FileText size={15} /> {t('My Abstracts')}
                                 </Link>
                             </div>
                         </div>
@@ -781,7 +789,7 @@ export default function PublicLayout({ children }) {
                                     onClick={() => setMobileOpen(false)}
                                     className="flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-medium
                                                text-gray-700 hover:bg-gray-50 transition-colors">
-                                    <span>{l.label}</span>
+                                    <span>{t(l.label)}</span>
                                     {l.href === '/proposal-calls/public' && openCalls.length > 0 && (
                                         <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full text-white"
                                             style={{ backgroundColor: primaryColor }}>
@@ -794,42 +802,46 @@ export default function PublicLayout({ children }) {
                                 <Link href="/tracker"
                                     onClick={() => setMobileOpen(false)}
                                     className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-                                    <Search size={15} className="text-gray-400" /> Track Proposal
+                                    <Search size={15} className="text-gray-400" /> {t('Track Proposal')}
                                 </Link>
                             )}
                             <Link href="/certificates/verify"
                                 onClick={() => setMobileOpen(false)}
                                 className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-                                <ShieldCheck size={15} className="text-gray-400" /> Verify Certificate
+                                <ShieldCheck size={15} className="text-gray-400" /> {t('Verify Certificate')}
                             </Link>
                             <Link href="/my-abstracts"
                                 onClick={() => setMobileOpen(false)}
                                 className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-                                <FileText size={15} className="text-gray-400" /> My Abstracts
+                                <FileText size={15} className="text-gray-400" /> {t('My Abstracts')}
                             </Link>
                             <Link href="/download"
                                 onClick={() => setMobileOpen(false)}
                                 className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
-                                <Download size={15} className="text-gray-400" /> Downloads
+                                <Download size={15} className="text-gray-400" /> {t('Downloads')}
                             </Link>
                         </nav>
+                        <div className="px-4 pt-3 flex items-center justify-between text-sm text-gray-600">
+                            <span>{t('Language')}</span>
+                            <LanguageSwitch className="text-gray-700" />
+                        </div>
                         <div className="px-4 pb-4 pt-2 border-t border-gray-100 flex flex-col gap-2">
                             {token ? (
                                 <Link href="/dashboard"
                                     className="py-2.5 px-3 rounded-lg text-sm font-semibold text-white text-center"
                                     style={{ backgroundColor: primaryColor }}>
-                                    Dashboard
+                                    {t('Dashboard')}
                                 </Link>
                             ) : (
                                 <>
                                     <Link href="/login"
                                         className="py-2.5 px-3 rounded-lg text-sm font-medium text-center border border-gray-200 text-gray-700">
-                                        Sign In
+                                        {t('Sign In')}
                                     </Link>
                                     <Link href="/register"
                                         className="py-2.5 px-3 rounded-lg text-sm font-semibold text-white text-center"
                                         style={{ backgroundColor: primaryColor }}>
-                                        Create Account
+                                        {t('Create Account')}
                                     </Link>
                                 </>
                             )}
@@ -884,11 +896,11 @@ export default function PublicLayout({ children }) {
 
                         {/* Platform */}
                         <div>
-                            <h4 className="text-xs font-semibold text-white uppercase tracking-widest mb-4">Platform</h4>
+                            <h4 className="text-xs font-semibold text-white uppercase tracking-widest mb-4">{t('Platform')}</h4>
                             <ul className="space-y-2.5 text-sm">
                                 {navItems.map(l => (
                                     <li key={l.href}>
-                                        <Link href={l.href} className="hover:text-white transition-colors">{l.label}</Link>
+                                        <Link href={l.href} className="hover:text-white transition-colors">{t(l.label)}</Link>
                                     </li>
                                 ))}
                             </ul>
@@ -896,31 +908,31 @@ export default function PublicLayout({ children }) {
 
                         {/* Account */}
                         <div>
-                            <h4 className="text-xs font-semibold text-white uppercase tracking-widest mb-4">Account</h4>
+                            <h4 className="text-xs font-semibold text-white uppercase tracking-widest mb-4">{t('Account')}</h4>
                             <ul className="space-y-2.5 text-sm">
-                                <li><Link href="/login"     className="hover:text-white transition-colors">Sign In</Link></li>
-                                <li><Link href="/register"  className="hover:text-white transition-colors">Register</Link></li>
-                                <li><Link href="/dashboard" className="hover:text-white transition-colors">Dashboard</Link></li>
+                                <li><Link href="/login"     className="hover:text-white transition-colors">{t('Sign In')}</Link></li>
+                                <li><Link href="/register"  className="hover:text-white transition-colors">{t('Register')}</Link></li>
+                                <li><Link href="/dashboard" className="hover:text-white transition-colors">{t('Dashboard')}</Link></li>
                             </ul>
                         </div>
 
                         {/* Verify & resources */}
                         <div>
-                            <h4 className="text-xs font-semibold text-white uppercase tracking-widest mb-4">Verify &amp; Resources</h4>
+                            <h4 className="text-xs font-semibold text-white uppercase tracking-widest mb-4">{t('Verify & Resources')}</h4>
                             <ul className="space-y-2.5 text-sm">
                                 <li>
                                     <Link href="/certificates/verify" className="inline-flex items-center gap-1.5 hover:text-white transition-colors">
-                                        <ShieldCheck size={14} /> Verify a Certificate
+                                        <ShieldCheck size={14} /> {t('Verify a Certificate')}
                                     </Link>
                                 </li>
                                 <li>
                                     <Link href="/tracker" className="inline-flex items-center gap-1.5 hover:text-white transition-colors">
-                                        <Search size={14} /> Track a Proposal
+                                        <Search size={14} /> {t('Track a Proposal')}
                                     </Link>
                                 </li>
                                 <li>
                                     <Link href="/download" className="inline-flex items-center gap-1.5 hover:text-white transition-colors">
-                                        <Download size={14} /> Downloads
+                                        <Download size={14} /> {t('Downloads')}
                                     </Link>
                                 </li>
                             </ul>
@@ -957,7 +969,7 @@ export default function PublicLayout({ children }) {
                          onClick={e => e.stopPropagation()}>
                         {/* Header */}
                         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
-                            <h3 className="text-sm font-bold text-gray-900">Built by</h3>
+                            <h3 className="text-sm font-bold text-gray-900">{t('Built by')}</h3>
                             <button onClick={() => setDeveloperModal(false)}
                                 className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
                                 <X size={16} />

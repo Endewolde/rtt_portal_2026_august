@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\AbstractAdminController;
 use App\Http\Controllers\Api\AbstractController;
 use App\Http\Controllers\Api\ActionCountController;
+use App\Http\Controllers\Api\AiAdviceController;
 use App\Http\Controllers\Api\AnalyticsController;
 use App\Http\Controllers\Api\AnnualReportController;
 use App\Http\Controllers\Api\AuditLogController;
@@ -67,6 +68,7 @@ use App\Http\Controllers\Api\ResourceController;
 use App\Http\Controllers\Api\ReviewCertificateController;
 use App\Http\Controllers\Api\ReviewController;
 use App\Http\Controllers\Api\ReviewDeadlineController;
+use App\Http\Controllers\Api\ReviewerAgreementController;
 use App\Http\Controllers\Api\ReviewerMatchController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\SettingsController;
@@ -343,6 +345,11 @@ Route::prefix('v1')->group(function () {
         Route::get('/proposals/{id}/workflow-history', [ProposalController::class, 'workflowHistory']);
         Route::get('/proposals/{id}/status-guide', [ProposalController::class, 'statusGuide']);
         Route::get('/proposals/{id}/versions', [ProposalController::class, 'versions']);
+        Route::get('/proposals/{id}/defence-record', [ProposalController::class, 'defenceRecord']);
+        Route::get('/proposals/{id}/ai-coach', [AiAdviceController::class, 'coach']);
+        Route::middleware('throttle:10,1')->post('/proposals/{id}/ai-coach', [AiAdviceController::class, 'runCoach']);
+        Route::get('/proposals/{id}/ai-review-summary', [AiAdviceController::class, 'summary']);
+        Route::middleware('throttle:10,1')->post('/proposals/{id}/ai-review-summary', [AiAdviceController::class, 'runSummary']);
         Route::get('/submission-eligibility', [ProposalController::class, 'submissionEligibility']);
 
         // Personal data: download your own data, ask for it to be deleted; admins handle requests
@@ -366,6 +373,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/proposals/{id}/available-reviewers', [ReviewController::class, 'availableReviewers']);
         Route::post('/proposals/{id}/review/assign', [ReviewController::class, 'assign']);
         // /my and /coi-conflicts must be before /{id} so the static segment wins the route match
+        Route::get('/reviewer-agreement', [ReviewerAgreementController::class, 'show']);
+        Route::post('/reviewer-agreement', [ReviewerAgreementController::class, 'accept']);
         Route::get('/review-assignments/my', [ReviewController::class, 'myAssignments']);
         Route::get('/review-assignments/coi-conflicts', [ReviewController::class, 'coiConflicts']);
         Route::get('/review-assignments/{id}', [ReviewController::class, 'showAssignment']);
@@ -493,6 +502,7 @@ Route::prefix('v1')->group(function () {
 
         // Central evaluation
         Route::get('/central-evaluation', [CentralEvaluationController::class, 'index']);
+        Route::get('/central-evaluation/merit-list', [CentralEvaluationController::class, 'meritList']);
         Route::get('/central-evaluation/pi/{userId}/funding-history', [CentralEvaluationController::class, 'piFundingHistory']);
         Route::post('/proposals/{id}/central/approve', [CentralEvaluationController::class, 'centralApprove']);
         Route::post('/proposals/{id}/central/reject', [CentralEvaluationController::class, 'centralReject']);

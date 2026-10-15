@@ -14,7 +14,9 @@ class ProposalCall extends Model
     use HasUuids, SoftDeletes;
 
     protected $primaryKey = 'id';
+
     public $incrementing = false;
+
     protected $keyType = 'string';
 
     protected $fillable = [
@@ -30,13 +32,15 @@ class ProposalCall extends Model
         'status',
         'is_open',
         'max_proposals_per_pi',
+        'funding_budget',
         'created_by',
     ];
 
     protected $casts = [
-        'is_open'    => 'boolean',
+        'is_open' => 'boolean',
         'start_date' => 'datetime',
-        'end_date'   => 'datetime',
+        'end_date' => 'datetime',
+        'funding_budget' => 'decimal:2',
     ];
 
     public function scopeActive(Builder $query): Builder

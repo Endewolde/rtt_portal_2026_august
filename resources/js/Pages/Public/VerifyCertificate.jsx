@@ -3,6 +3,7 @@ import { router, usePage } from '@inertiajs/react';
 import { ShieldCheck, ShieldX, Award, Search, QrCode } from 'lucide-react';
 import PublicLayout from '../../Layouts/PublicLayout';
 import { get } from '../../lib/api';
+import { useT } from '../../lib/i18n';
 
 /** "5 (3 blind, 2 open defence)" */
 function breakdown(c) {
@@ -13,11 +14,12 @@ function breakdown(c) {
 const formatDate = (iso) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 
 function Details({ rows }) {
+    const t = useT();
     return (
         <dl className="divide-y divide-gray-100 px-6 text-sm">
             {rows.map(([k, v]) => (
                 <div key={k} className="flex justify-between gap-4 py-3">
-                    <dt className="text-gray-500">{k}</dt>
+                    <dt className="text-gray-500">{t(k)}</dt>
                     <dd className="text-right font-medium text-gray-900">{v}</dd>
                 </div>
             ))}
@@ -26,6 +28,7 @@ function Details({ rows }) {
 }
 
 function LookupForm({ initial = '', compact = false }) {
+    const t = useT();
     const [value, setValue] = useState(initial);
     const code = value.trim().toUpperCase();
 
@@ -36,7 +39,7 @@ function LookupForm({ initial = '', compact = false }) {
 
     return (
         <form onSubmit={submit} className={compact ? 'mt-8' : ''}>
-            {compact && <p className="mb-2 text-center text-xs font-medium text-gray-500">Check another certificate</p>}
+            {compact && <p className="mb-2 text-center text-xs font-medium text-gray-500">{t('Check another certificate')}</p>}
             <div className="flex gap-2">
                 <div className="flex flex-1 items-center gap-2 rounded-xl border border-gray-300 bg-white px-3 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100">
                     <Search size={16} className="shrink-0 text-gray-400" />
@@ -51,7 +54,7 @@ function LookupForm({ initial = '', compact = false }) {
                 </div>
                 <button type="submit" disabled={!code}
                     className="rounded-xl bg-blue-600 px-5 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50">
-                    Verify
+                    {t('Verify')}
                 </button>
             </div>
         </form>
@@ -60,6 +63,7 @@ function LookupForm({ initial = '', compact = false }) {
 
 /** Public page anyone can use to confirm a reviewer certificate is genuine — by link/QR code or by typing its number. */
 export default function VerifyCertificate() {
+    const t = useT();
     const { url } = usePage();
     const match = url.split('?')[0].match(/\/certificates\/verify\/([^/]+)/);
     const code = match ? decodeURIComponent(match[1]) : '';
@@ -81,13 +85,13 @@ export default function VerifyCertificate() {
                 {!code ? (
                     <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-sm">
                         <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600"><ShieldCheck size={24} /></div>
-                        <h1 className="text-center text-xl font-bold text-gray-900">Verify a Certificate</h1>
+                        <h1 className="text-center text-xl font-bold text-gray-900">{t('Verify a Certificate')}</h1>
                         <p className="mx-auto mb-6 mt-1.5 max-w-sm text-center text-sm text-gray-500">
-                            Confirm that a certificate of review service was genuinely issued. Enter the certificate number printed at the bottom of the certificate.
+                            {t('Confirm that a certificate of review service was genuinely issued. Enter the certificate number printed at the bottom of the certificate.')}
                         </p>
                         <LookupForm />
                         <p className="mt-5 flex items-center justify-center gap-1.5 text-xs text-gray-400">
-                            <QrCode size={13} /> Or scan the QR code on the certificate with your phone camera.
+                            <QrCode size={13} /> {t('Or scan the QR code on the certificate with your phone camera.')}
                         </p>
                     </div>
                 ) : state.loading ? (
@@ -97,8 +101,8 @@ export default function VerifyCertificate() {
                         <div className="flex items-center gap-3 bg-red-50 px-6 py-5">
                             <ShieldX size={28} className="text-red-600" />
                             <div>
-                                <p className="text-lg font-bold text-red-900">Certificate revoked</p>
-                                <p className="text-sm text-red-700">This certificate was issued but is no longer valid.</p>
+                                <p className="text-lg font-bold text-red-900">{t('Certificate revoked')}</p>
+                                <p className="text-sm text-red-700">{t('This certificate was issued but is no longer valid.')}</p>
                             </div>
                         </div>
                         <Details rows={[
@@ -113,8 +117,8 @@ export default function VerifyCertificate() {
                         <div className="flex items-center gap-3 bg-emerald-50 px-6 py-5">
                             <ShieldCheck size={28} className="text-emerald-600" />
                             <div>
-                                <p className="text-lg font-bold text-emerald-900">Certificate verified</p>
-                                <p className="text-sm text-emerald-700">This certificate of review service is genuine.</p>
+                                <p className="text-lg font-bold text-emerald-900">{t('Certificate verified')}</p>
+                                <p className="text-sm text-emerald-700">{t('This certificate of review service is genuine.')}</p>
                             </div>
                         </div>
                         <Details rows={[
@@ -128,7 +132,7 @@ export default function VerifyCertificate() {
                 ) : (
                     <div className="rounded-2xl border border-red-200 bg-white p-8 text-center shadow-sm">
                         <ShieldX size={32} className="mx-auto text-red-500" />
-                        <p className="mt-3 text-lg font-bold text-gray-900">Certificate not found</p>
+                        <p className="mt-3 text-lg font-bold text-gray-900">{t('Certificate not found')}</p>
                         <p className="mt-1 text-sm text-gray-500">No certificate with number <span className="font-mono">{code}</span> exists. Check the number and try again.</p>
                     </div>
                 )}

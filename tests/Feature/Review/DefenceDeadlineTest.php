@@ -67,6 +67,7 @@ function dd_assignment(Proposal $proposal, User $assignedBy, string $status = 'p
 {
     $reviewer = User::factory()->create();
     $reviewer->assignRole('reviewer');
+    acceptReviewerAgreement($reviewer);
     $type = EvaluationType::firstOrCreate(
         ['name' => 'open_defence_dd'],
         ['label' => 'Open Defence', 'proposal_category' => 'research', 'is_active' => true]

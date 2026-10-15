@@ -8,12 +8,14 @@ use App\Models\Proposal;
 use App\Models\ProposalBudget;
 use App\Models\User;
 use App\Models\WorkflowLog;
+use App\Services\DefenceRecordService;
 use App\Services\ProgressReportService;
 use App\Services\ProposalStatusGuideService;
 use App\Services\ProposalVersionService;
 use App\Services\SubmissionEligibilityService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -264,6 +266,22 @@ class ProposalController extends Controller
         }
 
         return response()->json(['data' => $guide->guide($proposal), 'message' => '', 'errors' => [], 'meta' => []]);
+    }
+
+    /** The open defence record as a PDF, for the officers who oversee the proposal. */
+    public function defenceRecord(string $id, Request $request, DefenceRecordService $records, ProgressReportService $access): Response|JsonResponse
+    {
+        $proposal = Proposal::findOrFail($id);
+
+        if (! $access->canReview($proposal, $request->user())) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => [], 'meta' => []], 403);
+        }
+
+        try {
+            return $records->pdf($proposal, $request->user());
+        } catch (\RuntimeException $e) {
+            return response()->json(['data' => null, 'message' => $e->getMessage(), 'errors' => [], 'meta' => []], 404);
+        }
     }
 
     /** Whether the signed-in user may submit a new proposal right now, and if not, why. */

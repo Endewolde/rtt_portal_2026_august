@@ -109,6 +109,7 @@ const DEFAULTS = {
             [`public_feature_${i + 1}_show`,  'true'],
         ])
     ),
+    public_header_subtitle:    'Research & Technology Transfer',
     public_features_title:     'Everything You Need to Manage Research',
     public_features_subtitle:  'A complete platform for the full research lifecycle, built for academic institutions.',
     public_cta_title:          'Ready to Start Your Research Journey?',
@@ -623,6 +624,13 @@ export default function PublicSite() {
                                     placeholder="e.g. Track Your Proposal"
                                     {...fieldProps} />
                             </div>
+                        </Card>
+
+                        <Card title="Header" subtitle="The line under the university name, next to the logo.">
+                            <Field label="Subtitle under the university name"
+                                fieldKey="public_header_subtitle"
+                                placeholder="Research & Technology Transfer"
+                                {...fieldProps} />
                         </Card>
 
                         <Card title="Footer & Branding">

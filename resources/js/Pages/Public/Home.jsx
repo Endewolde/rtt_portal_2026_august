@@ -13,6 +13,7 @@ import {
 import PublicLayout from '../../Layouts/PublicLayout';
 import { get } from '../../lib/api';
 import { resolveFeatures } from '../../lib/publicFeatures';
+import { useT } from '../../lib/i18n';
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
@@ -53,6 +54,7 @@ function useInView(threshold = 0.3) {
 // ─── Stat counter (hook must live at component level) ─────────────────────────
 
 function StatCounter({ label, value, enabled, color }) {
+    const t = useT();
     const num      = parseInt(String(value ?? 0).replace(/\D/g, ''), 10);
     const animated = useCountUp(num, enabled && num > 0);
     const display  = num > 0 ? animated.toLocaleString() : '—';
@@ -61,7 +63,7 @@ function StatCounter({ label, value, enabled, color }) {
             <span className="text-2xl font-extrabold tabular-nums text-white">{display}</span>
             <div className="flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
-                <span className="text-xs text-slate-400 font-medium">{label}</span>
+                <span className="text-xs text-slate-400 font-medium">{t(label)}</span>
             </div>
         </div>
     );
@@ -214,6 +216,7 @@ function areaTopics(area) {
 }
 
 function SubTopics({ area }) {
+    const t = useT();
     const topics = areaTopics(area);
     const shown = topics.slice(0, 3);
     if (!topics.length) return null;
@@ -227,7 +230,7 @@ function SubTopics({ area }) {
             ))}
             {topics.length > shown.length && (
                 <span className="rounded-md px-1.5 py-0.5 text-[11px] font-medium text-slate-400" title={topics.slice(3).join(' · ')}>
-                    +{topics.length - shown.length} more
+                    {t(':count more', { count: topics.length - shown.length })}
                 </span>
             )}
         </div>
@@ -237,6 +240,7 @@ function SubTopics({ area }) {
 // ─── Proposal call card ───────────────────────────────────────────────────────
 
 function CallCard({ call }) {
+    const t = useT();
     const cfg = CAT[call.category] ?? CAT.other;
 
     const handleApply = () => {
@@ -282,7 +286,7 @@ function CallCard({ call }) {
                                          rounded-full border"
                             style={{ color: cfg.color, borderColor: `${cfg.color}30`,
                                      backgroundColor: `${cfg.color}10` }}>
-                            {cfg.label}
+                            {t(cfg.label)}
                         </span>
                         <span className="text-[10px] text-slate-400 font-medium">{call.academic_year}</span>
                     </div>
@@ -341,7 +345,7 @@ function CallCard({ call }) {
                                        hover:shadow-md hover:opacity-95 active:scale-[0.98]`}`}>
                     {deadline?.closed
                         ? 'Call Closed'
-                        : <><span>Apply Now</span> <ArrowRight size={13} /></>}
+                        : <><span>{t('Apply Now')}</span> <ArrowRight size={13} /></>}
                 </button>
             </div>
         </article>
@@ -363,22 +367,23 @@ const DEFAULT_STEPS = [
 // ─── Section heading ──────────────────────────────────────────────────────────
 
 function SectionHead({ eyebrow, title, action, actionHref, light = false }) {
+    const t = useT();
     return (
         <div className="flex items-center justify-between mb-8">
             <div>
                 {eyebrow && (
                     <p className={`text-[10px] font-bold uppercase tracking-widest mb-1.5
                                    ${light ? 'text-white/40' : 'text-slate-400'}`}>
-                        {eyebrow}
+                        {t(eyebrow)}
                     </p>
                 )}
-                <h2 className={`text-2xl font-extrabold ${light ? 'text-white' : 'text-slate-900'}`}>{title}</h2>
+                <h2 className={`text-2xl font-extrabold ${light ? 'text-white' : 'text-slate-900'}`}>{t(title)}</h2>
             </div>
             {action && (
                 <Link href={actionHref}
                     className={`flex items-center gap-1 text-xs font-semibold transition-colors
                                 ${light ? 'text-white/50 hover:text-white' : 'text-slate-400 hover:text-slate-900'}`}>
-                    {action} <ChevronRight size={13} />
+                    {t(action)} <ChevronRight size={13} />
                 </Link>
             )}
         </div>
@@ -474,6 +479,7 @@ const VALIDATED_CATEGORY_META = {
 };
 
 function ValidatedByCategory({ items }) {
+    const t = useT();
     const max = Math.max(1, ...items.map(i => i.count));
 
     return (
@@ -491,7 +497,7 @@ function ValidatedByCategory({ items }) {
                                     style={{ background: `${meta.color}22`, color: meta.color }}>
                                     <Icon size={12} />
                                 </span>
-                                <span className="text-xs font-medium text-slate-300 truncate">{item.label}</span>
+                                <span className="text-xs font-medium text-slate-300 truncate">{t(item.label)}</span>
                             </div>
                             <span className="text-sm font-bold text-white tabular-nums shrink-0 ml-2">
                                 {item.count.toLocaleString()}
@@ -511,6 +517,7 @@ function ValidatedByCategory({ items }) {
 // ─── Hero Stat Card ───────────────────────────────────────────────────────────
 
 function HeroStatCard({ stat, label, color, icon, inView, secondaryStats, ringPct, categoryBreakdown }) {
+    const t = useT();
     const num      = parseInt(String(stat ?? 0).replace(/\D/g, ''), 10);
     const animated = useCountUp(num, inView && num > 0, 1400);
     const radius   = 44;
@@ -544,7 +551,7 @@ function HeroStatCard({ stat, label, color, icon, inView, secondaryStats, ringPc
                         {num > 0 ? animated.toLocaleString() : '—'}
                     </div>
                     <div className="text-sm font-semibold mt-2 transition-colors duration-700" style={{ color }}>
-                        {label}
+                        {t(label)}
                     </div>
                 </div>
                 {showRing && (
@@ -575,7 +582,7 @@ function HeroStatCard({ stat, label, color, icon, inView, secondaryStats, ringPc
             {categoryBreakdown ? (
                 <>
                     <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-3">
-                        Validated by Category
+                        {t('Validated by Category')}
                     </div>
                     <ValidatedByCategory items={categoryBreakdown} />
                 </>
@@ -588,7 +595,7 @@ function HeroStatCard({ stat, label, color, icon, inView, secondaryStats, ringPc
                             <div className="text-xl font-bold text-white tabular-nums">
                                 {parseInt(String(s.value ?? 0)) > 0 ? parseInt(String(s.value ?? 0)).toLocaleString() : '—'}
                             </div>
-                            <div className="text-[11px] text-slate-400 mt-0.5 font-medium">{s.label}</div>
+                            <div className="text-[11px] text-slate-400 mt-0.5 font-medium">{t(s.label)}</div>
                         </div>
                     ))}
                 </div>
@@ -616,6 +623,7 @@ const SLIDE_DEFAULT_SUBTITLES  = [
 ];
 
 function HeroSlider({ stats, primaryColor, heroBg, orgName, ctaPrimary, ctaSecondary, s }) {
+    const t = useT();
     const slideCount = Math.min(6, Math.max(1, parseInt(s['slider_slide_count'] || 4)));
     const SLIDES = Array.from({ length: slideCount }, (_, i) => i + 1).map((n, i) => {
         const k = f => s[`slider_slide_${n}_${f}`];
@@ -634,7 +642,7 @@ function HeroSlider({ stats, primaryColor, heroBg, orgName, ctaPrimary, ctaSecon
             image:    k('image')    || '',
             statKey:  SLIDE_STAT_KEYS[i],
             statLabel: stats.academic_year && i === 0
-                ? `${stats.academic_year} Proposals`
+                ? t(':year Proposals', { year: stats.academic_year })
                 : SLIDE_STAT_LABELS[i],
         };
     });
@@ -764,25 +772,25 @@ function HeroSlider({ stats, primaryColor, heroBg, orgName, ctaPrimary, ctaSecon
                             style={{ animationDelay: '0ms' }}>
                             <span className="w-2 h-2 rounded-full animate-pulse transition-colors duration-700"
                                 style={{ background: slide.color }} />
-                            <span className="text-xs font-semibold text-white/55">{slide.eyebrow}</span>
+                            <span className="text-xs font-semibold text-white/55">{t(slide.eyebrow)}</span>
                         </div>
 
                         {/* Heading */}
                         <h1 className="hero-animate text-4xl sm:text-5xl lg:text-[3.25rem] font-extrabold leading-[1.1]
                                        tracking-tight text-white mb-5"
                             style={{ animationDelay: '70ms' }}>
-                            {slide.heading}
+                            {t(slide.heading)}
                             <br />
                             <span className="bg-clip-text text-transparent transition-all duration-700"
                                 style={{ backgroundImage: `linear-gradient(130deg, ${slide.color}, ${slide.color}88 60%, #e2e8f0)` }}>
-                                {slide.highlight}
+                                {t(slide.highlight)}
                             </span>
                         </h1>
 
                         {/* Subtitle */}
                         <p className="hero-animate text-base text-slate-400 leading-relaxed mb-9 max-w-lg"
                             style={{ animationDelay: '150ms' }}>
-                            {slide.subtitle}
+                            {t(slide.subtitle)}
                         </p>
 
                         {/* CTAs */}
@@ -793,13 +801,13 @@ function HeroSlider({ stats, primaryColor, heroBg, orgName, ctaPrimary, ctaSecon
                                            text-white shadow-xl transition-all duration-200 hover:scale-105"
                                 style={{ background: `linear-gradient(135deg, ${slide.color}, ${slide.color}bb)`,
                                          boxShadow: `0 8px 30px ${slide.color}40` }}>
-                                {slide.cta1.text} <ArrowRight size={15} />
+                                {t(slide.cta1.text)} <ArrowRight size={15} />
                             </a>
                             <a href={slide.cta2.href}
                                 className="inline-flex items-center gap-2 px-7 py-3.5 rounded-xl text-sm font-semibold
                                            text-white/65 border border-white/15 bg-white/5 backdrop-blur-sm
                                            transition-all duration-200 hover:bg-white/10 hover:text-white">
-                                {slide.cta2.text}
+                                {t(slide.cta2.text)}
                             </a>
                         </div>
 
@@ -868,7 +876,7 @@ function HeroSlider({ stats, primaryColor, heroBg, orgName, ctaPrimary, ctaSecon
                     style={{ background: 'rgba(255,255,255,0.035)' }}>
                     <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-white/8">
                         {[
-                            { value: stats.total_proposals, label: stats.academic_year ? `${stats.academic_year} Proposals` : 'Proposals', color: primaryColor,  icon: <FileText  size={13} /> },
+                            { value: stats.total_proposals, label: stats.academic_year ? t(':year Proposals', { year: stats.academic_year }) : 'Proposals', color: primaryColor,  icon: <FileText  size={13} /> },
                             { value: stats.funded,          label: 'Funded Projects',    color: '#10b981', icon: <Award     size={13} /> },
                             { value: stats.colleges,        label: 'Colleges',           color: '#f59e0b', icon: <Layers    size={13} /> },
                             { value: stats.departments,     label: 'Departments',        color: '#8b5cf6', icon: <Users     size={13} /> },
@@ -899,6 +907,7 @@ function HeroSlider({ stats, primaryColor, heroBg, orgName, ctaPrimary, ctaSecon
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function Home() {
+    const t = useT();
     const [calls, setCalls]               = useState([]);
     const [stats, setStats]               = useState({});
     const [thematicAreas, setThematicAreas] = useState([]);
@@ -1016,7 +1025,7 @@ export default function Home() {
                             <Link href="/proposal-calls/public"
                                 className="inline-flex items-center gap-2 text-sm font-semibold transition-colors hover:opacity-70"
                                 style={{ color: primaryColor }}>
-                                Browse all open calls <ArrowRight size={14} />
+                                {t('Browse all open calls')} <ArrowRight size={14} />
                             </Link>
                         </div>
                     </div>
@@ -1045,8 +1054,8 @@ export default function Home() {
                                             style={{ background: `linear-gradient(135deg, ${primaryColor}, ${primaryColor}cc)` }}>
                                             {String(i + 1).padStart(2, '0')}
                                         </div>
-                                        <h3 className="font-bold text-slate-900 mb-2 text-sm">{step.title}</h3>
-                                        <p className="text-xs text-slate-500 leading-relaxed">{step.desc}</p>
+                                        <h3 className="font-bold text-slate-900 mb-2 text-sm">{t(step.title)}</h3>
+                                        <p className="text-xs text-slate-500 leading-relaxed">{t(step.desc)}</p>
                                     </div>
                                 </div>
                             ))}
@@ -1097,7 +1106,7 @@ export default function Home() {
                     style={{ background: `linear-gradient(135deg, ${featuresBg} 0%, ${featuresBg}dd 100%)` }}>
                     <div className="max-w-7xl mx-auto px-6">
                         <SectionHead eyebrow="Platform Capabilities" title={featTitle} light />
-                        <p className="text-slate-300 text-sm mb-10 max-w-lg -mt-4">{featSub}</p>
+                        <p className="text-slate-300 text-sm mb-10 max-w-lg -mt-4">{t(featSub)}</p>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                             {features.map((f) => (
@@ -1108,8 +1117,8 @@ export default function Home() {
                                         style={{ backgroundColor: `${primaryColor}33` }}>
                                         <f.icon size={18} className="text-blue-300" />
                                     </div>
-                                    <h3 className="font-semibold text-white text-sm mb-1.5">{f.title}</h3>
-                                    <p className="text-xs text-slate-300 leading-relaxed">{f.desc}</p>
+                                    <h3 className="font-semibold text-white text-sm mb-1.5">{t(f.title)}</h3>
+                                    <p className="text-xs text-slate-300 leading-relaxed">{t(f.desc)}</p>
                                 </div>
                             ))}
                         </div>
@@ -1146,16 +1155,16 @@ export default function Home() {
                                 <HelpCircle size={22} style={{ color: primaryColor }} />
                             </div>
                             <div className="flex-1 text-center sm:text-left">
-                                <p className="font-semibold text-slate-800 text-sm">Still have questions?</p>
+                                <p className="font-semibold text-slate-800 text-sm">{t('Still have questions?')}</p>
                                 <p className="text-xs text-slate-500 mt-0.5">
-                                    Contact the Research & Technology Transfer office or use the feedback form below.
+                                    {t('Contact the Research & Technology Transfer office or use the feedback form below.')}
                                 </p>
                             </div>
                             <a href="/tracker"
                                 className="shrink-0 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl
                                            text-xs font-bold text-white transition-all hover:opacity-90"
                                 style={{ background: `linear-gradient(135deg, ${primaryColor}, ${primaryColor}cc)` }}>
-                                Track Your Proposal <ArrowRight size={13} />
+                                {t('Track Your Proposal')} <ArrowRight size={13} />
                             </a>
                         </div>
                     </div>
@@ -1175,22 +1184,22 @@ export default function Home() {
                                     Get Started
                                 </p>
                                 <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mb-3 leading-snug">
-                                    {ctaTitle}
+                                    {t(ctaTitle)}
                                 </h2>
-                                <p className="text-slate-500 text-sm leading-relaxed">{ctaSub}</p>
+                                <p className="text-slate-500 text-sm leading-relaxed">{t(ctaSub)}</p>
                             </div>
                             <div className="flex flex-col sm:flex-row gap-3 shrink-0">
                                 <a href="/proposal-calls/public"
                                     className="inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl
                                                text-sm font-bold text-white shadow-lg transition-all hover:opacity-90 hover:scale-105"
                                     style={{ background: `linear-gradient(135deg, ${primaryColor}, ${primaryColor}cc)` }}>
-                                    {ctaBtn1} <ArrowRight size={15} />
+                                    {t(ctaBtn1)} <ArrowRight size={15} />
                                 </a>
                                 <a href="/tracker"
                                     className="inline-flex items-center justify-center gap-2 px-8 py-3.5 rounded-xl
                                                text-sm font-semibold border-2 text-slate-700 hover:bg-gray-50 transition-colors"
                                     style={{ borderColor: `${primaryColor}50` }}>
-                                    {ctaBtn2}
+                                    {t(ctaBtn2)}
                                 </a>
                             </div>
                         </div>

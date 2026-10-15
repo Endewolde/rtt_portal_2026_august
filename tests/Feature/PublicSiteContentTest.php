@@ -48,11 +48,12 @@ test('capability cards and all six steps saved by an admin reach the homepage', 
     $admin = User::factory()->create();
     $admin->assignRole('super_admin');
 
-    foreach (['public_feature_2_title' => 'Fair Review', 'public_feature_8_show' => 'false', 'public_step_6_title' => 'Funding & Impact'] as $key => $value) {
+    foreach (['public_header_subtitle' => 'Office of the Vice President for Research', 'public_feature_2_title' => 'Fair Review', 'public_feature_8_show' => 'false', 'public_step_6_title' => 'Funding & Impact'] as $key => $value) {
         $this->actingAs($admin, 'sanctum')->putJson("/api/v1/settings/app/{$key}", ['value' => $value])->assertOk();
     }
 
     $this->get('/')->assertInertia(fn (AssertableInertia $page) => $page
+        ->where('app_settings.public_header_subtitle', 'Office of the Vice President for Research')
         ->where('app_settings.public_feature_2_title', 'Fair Review')
         ->where('app_settings.public_feature_8_show', 'false')
         ->where('app_settings.public_step_6_title', 'Funding & Impact'));

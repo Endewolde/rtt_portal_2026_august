@@ -18,6 +18,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../Components/Toast';
 import { getCategoryLabel } from '../../lib/utils';
 import OpenDefenceHoldModal from '../../Components/OpenDefenceHoldModal';
+import DefenceRecordButton from '../../Components/DefenceRecordButton';
 import DefenceDeadlineStrip, { RequestDeadlineExtensionModal } from '../../Components/DefenceDeadlineStrip';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -587,12 +588,15 @@ function DefenceCard({ proposal, onReassign, onExtend, onRemove, onRequestDeadli
 
             {/* ── Footer ── */}
             <div className={`px-5 py-3 border-t flex items-center justify-between ${allSubmitted ? 'border-green-200 bg-green-50/50' : 'border-gray-100 bg-gray-50/50'}`}>
-                <Link
-                    href={`/proposals/${proposal.id}/defence`}
-                    className="flex items-center gap-1.5 text-xs text-purple-600 hover:text-purple-800 font-semibold transition-colors"
-                >
-                    <UserPlus size={13} /> {assignments.length === 0 ? 'Assign Reviewers' : 'Add Reviewer'}
-                </Link>
+                <div className="flex items-center gap-4">
+                    <Link
+                        href={`/proposals/${proposal.id}/defence`}
+                        className="flex items-center gap-1.5 text-xs text-purple-600 hover:text-purple-800 font-semibold transition-colors"
+                    >
+                        <UserPlus size={13} /> {assignments.length === 0 ? 'Assign Reviewers' : 'Add Reviewer'}
+                    </Link>
+                    {assignments.length > 0 && <DefenceRecordButton proposalId={proposal.id} trackerNumber={proposal.tracker_number} />}
+                </div>
 
                 {allSubmitted ? (
                     <span className="text-xs font-semibold text-green-600 flex items-center gap-1.5">
