@@ -330,13 +330,13 @@ class AssistantService
             return collect();
         }
 
-        $results = $this->match($user, $groups);
+        $results = $this->match($user, $groups, $question);
 
         // Nothing found: correct likely typos against the words the articles use, then retry.
         if ($results->isEmpty()) {
             $corrected = $this->correctTypos($user, $groups);
             if ($corrected !== $groups) {
-                $results = $this->match($user, $corrected);
+                $results = $this->match($user, $corrected, $question);
             }
         }
 
@@ -348,19 +348,19 @@ class AssistantService
      *
      * @param  list<list<string>>  $groups  each question word with its synonyms and singular/plural forms
      */
-    private function match(User $user, array $groups): Collection
+    private function match(User $user, array $groups, string $question = ''): Collection
     {
         $terms = collect($groups)->flatten()->unique()->implode(' ');
-        $results = $this->fullText($user, $terms, $groups);
+        $results = $this->fullText($user, $terms, $groups, $question);
 
-        return $results->isNotEmpty() ? $results : $this->likeSearch($user, $terms);
+        return $results->isNotEmpty() ? $results : $this->likeSearch($user, $terms, $question);
     }
 
     /** @param list<list<string>> $groups */
-    private function fullText(User $user, string $terms, array $groups = []): Collection
+    private function fullText(User $user, string $terms, array $groups = [], string $question = ''): Collection
     {
         if (DB::getDriverName() !== 'mysql') {
-            return $this->likeSearch($user, $terms);
+            return $this->likeSearch($user, $terms, $question);
         }
 
         $rows = HelpArticle::visibleTo($user)
@@ -377,7 +377,8 @@ class AssistantService
         // Rank by how much of the question the article's title and keywords cover, so an
         // exact topic beats an article that merely repeats a word; drop off-topic weak matches.
         $bestRelevance = max(0.01, (float) $rows->max('relevance'));
-        $rows = $rows->map(function ($r) use ($groups, $bestRelevance) {
+        $asked = $this->normalizeQuestion($question);
+        $rows = $rows->map(function ($r) use ($groups, $bestRelevance, $asked) {
             $titleWords = array_filter(preg_split('/[^\pL\pN]+/u', Str::lower($r->title)));
             // The article's common questions count as topic words, like its keywords.
             $keywords = Str::lower($r->keywords.' '.$r->questions);
@@ -386,6 +387,11 @@ class AssistantService
             ))->count();
             $r->coverage = $groups === [] ? 0 : $covered / count($groups);
             $r->score = (float) $r->relevance / $bestRelevance * 10 + 15 * $r->coverage;
+
+            // Asked almost exactly as one of the article's common questions: that article is the answer.
+            if ($asked !== '' && $this->asksListedQuestion($asked, (string) $r->questions)) {
+                $r->score += 20;
+            }
 
             return $r;
         })->reject(fn ($r) => $r->coverage === 0.0 && (float) $r->relevance < 2)->sortByDesc('score')->values();
@@ -400,17 +406,42 @@ class AssistantService
         return $rows->filter(fn ($r) => (float) $r->score >= $best * 0.35)->take(3)->values();
     }
 
-    private function likeSearch(User $user, string $terms): Collection
+    private function normalizeQuestion(string $question): string
+    {
+        return trim(preg_replace('/[^\pL\pN]+/u', ' ', Str::lower(str_replace(['’', "'"], '', $question))));
+    }
+
+    private function asksListedQuestion(string $asked, string $questions): bool
+    {
+        foreach (preg_split('/\R/', $questions) as $listed) {
+            $listed = $this->normalizeQuestion($listed);
+            if ($listed === '') {
+                continue;
+            }
+            similar_text($asked, $listed, $percent);
+            if ($percent >= 90) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function likeSearch(User $user, string $terms, string $question = ''): Collection
     {
         $words = array_filter(explode(' ', $terms), fn ($w) => mb_strlen($w) >= 3);
+        $asked = $this->normalizeQuestion($question);
 
         return HelpArticle::visibleTo($user)->get()
-            ->map(function ($a) use ($words) {
+            ->map(function ($a) use ($words, $asked) {
                 $hay = Str::lower($a->title.' '.$a->summary.' '.$a->keywords.' '.$a->questions.' '.$a->body);
                 $topic = Str::lower($a->title.' '.$a->keywords.' '.$a->questions);
                 // Only count an article whose title or keywords mention the question — a shared common word in the body isn't enough.
                 $onTopic = collect($words)->contains(fn ($w) => str_contains($topic, $w));
                 $a->relevance = $onTopic ? collect($words)->sum(fn ($w) => substr_count($hay, $w) + (str_contains($topic, $w) ? 3 : 0)) : 0;
+                if ($asked !== '' && $this->asksListedQuestion($asked, (string) $a->questions)) {
+                    $a->relevance += 1000;
+                }
 
                 return $a;
             })

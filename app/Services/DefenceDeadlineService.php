@@ -260,6 +260,10 @@ class DefenceDeadlineService
         $session->loadMissing(['proposal:id,college_id,category', 'deadlineExtensions.requestedBy:id,name', 'deadlineExtensions.decidedBy:id,name']);
         $deadline = $session->scoreDeadline();
         $outstanding = $this->outstandingDefenceAssignments($session->proposal_id)->count();
+        $panelSize = ReviewAssignment::where('proposal_id', $session->proposal_id)
+            ->whereHas('evaluationType', fn ($q) => $q->where('name', 'like', 'open_defence%'))
+            ->whereNotIn('status', ['declined', 'cancelled'])
+            ->count();
         $pending = $session->deadlineExtensions->firstWhere('status', 'pending');
 
         $phase = match (true) {
@@ -275,8 +279,10 @@ class DefenceDeadlineService
             'is_extended' => $session->score_deadline_extended_until !== null,
             'phase' => $phase,
             'outstanding_scores' => $outstanding,
+            'panel_size' => $panelSize,
             'flagged' => $session->flagged_incomplete_at !== null,
             'can_request_extension' => $viewer
+                && $panelSize > 0
                 && $session->status === 'scheduled'
                 && ! $pending
                 && $viewer->hasRole('college_officer')

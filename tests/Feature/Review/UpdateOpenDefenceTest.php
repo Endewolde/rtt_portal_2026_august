@@ -8,6 +8,7 @@ use App\Models\Proposal;
 use App\Models\ProposalCall;
 use App\Models\ReviewAssignment;
 use App\Models\User;
+use App\Services\DefenceDeadlineService;
 use Database\Seeders\RolePermissionSeeder;
 use Database\Seeders\WorkflowStageSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -159,4 +160,50 @@ test('adding a single reviewer during open defence uses the defence evaluation t
         ->assertCreated();
 
     expect(ReviewAssignment::where('reviewer_id', $newcomer->id)->value('evaluation_type_id'))->toBe($this->defenceType->id);
+});
+
+test('a defence panel can\'t be emptied, and leaving reviewers out of an update keeps the panel', function () {
+    $a = ud_reviewer();
+    ud_assign($this, $a, $this->defenceType);
+
+    $this->actingAs($this->central, 'sanctum')
+        ->putJson("/api/v1/proposals/{$this->proposal->id}/defence/session", ud_payload($this, []))
+        ->assertStatus(422)
+        ->assertJsonPath('message', fn ($m) => str_contains($m, 'at least one panel member'));
+
+    $payload = ud_payload($this, [], ['venue' => 'Hall B']);
+    unset($payload['reviewer_ids']);
+    $this->actingAs($this->central, 'sanctum')
+        ->putJson("/api/v1/proposals/{$this->proposal->id}/defence/session", $payload)
+        ->assertOk();
+
+    expect(ReviewAssignment::where('reviewer_id', $a->id)->exists())->toBeTrue()
+        ->and($this->session->fresh()->venue)->toBe('Hall B');
+});
+
+test('the last defence panel member can\'t be removed', function () {
+    $only = ud_assign($this, ud_reviewer(), $this->defenceType);
+
+    $this->actingAs($this->central, 'sanctum')
+        ->deleteJson("/api/v1/review-assignments/{$only->id}/remove")
+        ->assertStatus(422)
+        ->assertJsonPath('message', fn ($m) => str_contains($m, 'last panel member'));
+
+    $other = ud_assign($this, ud_reviewer(), $this->defenceType);
+    $this->actingAs($this->central, 'sanctum')
+        ->deleteJson("/api/v1/review-assignments/{$only->id}/remove")
+        ->assertOk();
+
+    expect(ReviewAssignment::whereKey($other->id)->exists())->toBeTrue();
+});
+
+test('an empty panel is reported as such, not as all scores submitted', function () {
+    $deadline = app(DefenceDeadlineService::class)->present($this->session, $this->central);
+
+    expect($deadline['panel_size'])->toBe(0)
+        ->and($deadline['outstanding_scores'])->toBe(0)
+        ->and($deadline['can_request_extension'])->toBeFalse();
+
+    ud_assign($this, ud_reviewer(), $this->defenceType);
+    expect(app(DefenceDeadlineService::class)->present($this->session->fresh(), $this->central)['panel_size'])->toBe(1);
 });

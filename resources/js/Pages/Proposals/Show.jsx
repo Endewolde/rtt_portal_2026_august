@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { usePage, Link, router } from '@inertiajs/react';
-import { UserCheck, Calendar, Award, CheckCircle, RotateCcw, XCircle, ExternalLink, AlertCircle, ChevronDown, ChevronUp, ArrowUpCircle, MessageSquare, PlusCircle, Pencil, Trash2, Upload, FileText, Eye, Sparkles, RefreshCw, Star, CalendarClock, ClipboardList } from 'lucide-react';
+import { UserCheck, Calendar, Award, CheckCircle, RotateCcw, XCircle, ExternalLink, AlertCircle, ChevronDown, ChevronUp, ArrowUpCircle, MessageSquare, PlusCircle, Pencil, Trash2, Building2, Scale, ShieldCheck, Upload, FileText, Eye, Sparkles, RefreshCw, Star, CalendarClock, ClipboardList } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import StatusBadge from '../../Components/StatusBadge';
 import TrackerNumberDisplay from '../../Components/TrackerNumberDisplay';
@@ -22,6 +22,11 @@ import ProposalVersions from '../../Components/ProposalVersions';
 import DefenceRecordButton from '../../Components/DefenceRecordButton';
 import { issueByKey } from '../../lib/approvalReportIssues';
 import { downloadFile } from '../../lib/download';
+import {
+    AWAITING, CATEGORY_FOR_OFFICER, STAGE_LABELS, topicLabel, complaintPermissions,
+    ComplaintStatusBadge, LevelBadge, AgeNote, ComplaintTimeline,
+    FileComplaintModal, RespondModal, EscalateModal, EditModal,
+} from '../../Components/ComplaintKit';
 
 const TABS = ['Overview', 'Team', 'Budget', 'Documents', 'History', 'Reviews', 'Complaints'];
 
@@ -57,287 +62,108 @@ const REJECTION_ACTION_STAGE_MAP = {
     fail_defence: 'open_defence',
 };
 
-const COMPLAINT_STAGE_LABELS = {
-    blind_review:  'Blind Review',
-    open_defence:  'Open Defence',
-    post_funding:  'Post Funding',
-};
-
-const COMPLAINT_TYPE_LABELS = {
-    budget:     'Budget',
-    rejection:  'Rejection',
-    other:      'Other',
-    escalation: 'Escalation',
-};
-
-const COMPLAINT_STATUS_COLORS = {
-    open:         'bg-blue-100 text-blue-700',
-    under_review: 'bg-yellow-100 text-yellow-700',
-    resolved:     'bg-green-100 text-green-700',
-    dismissed:    'bg-gray-100 text-gray-500',
-    escalated:    'bg-orange-100 text-orange-700',
-};
-
-const LEVEL_COLORS = {
-    college: 'bg-blue-50 text-blue-600 border border-blue-200',
-    officer: 'bg-purple-50 text-purple-600 border border-purple-200',
-};
-
-// ── File Complaint Modal ─────────────────────────────────────────────────────
-
-function FileComplaintModal({ proposal, level, rejectedVia, onSave, onClose }) {
-    const isOfficer = level === 'officer';
-    const stage     = COMPLAINT_STAGE_MAP[proposal.status] ?? REJECTION_ACTION_STAGE_MAP[rejectedVia] ?? null;
-
-    const [description,   setDescription]   = useState('');
-    const [complaintType, setComplaintType] = useState('budget');
-    const [saving,        setSaving]        = useState(false);
-    const { error } = useToast();
-
-    const minLen    = 50;
-    const tooShort  = description.trim().length < minLen;
-
-    const submit = async () => {
-        if (tooShort) { error(`Description must be at least ${minLen} characters.`); return; }
-        setSaving(true);
-        try {
-            if (isOfficer) {
-                await post(`/proposals/${proposal.id}/complaints/officer`, { complaint_type: complaintType, description });
-            } else {
-                await post(`/proposals/${proposal.id}/complaints`, { stage, description });
-            }
-            onSave();
-        } catch (e) {
-            error(e.response?.data?.message || e.response?.data?.errors?.description?.[0] || 'Failed to submit complaint.');
-        }
-        setSaving(false);
-    };
-
-    const title = isOfficer
-        ? 'File Post-Funding Complaint'
-        : `File Complaint — ${COMPLAINT_STAGE_LABELS[stage] ?? 'Review'} Phase`;
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
-                <h2 className="text-base font-semibold text-gray-900 mb-1">{title}</h2>
-                <p className="text-xs text-gray-500 mb-4 font-mono">{proposal.tracker_number}</p>
-
-                {isOfficer && (
-                    <>
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Complaint Type</label>
-                        <select
-                            value={complaintType}
-                            onChange={e => setComplaintType(e.target.value)}
-                            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 mb-3"
-                        >
-                            <option value="budget">Budget Dispute</option>
-                            <option value="rejection">Rejection Appeal</option>
-                            <option value="other">Other</option>
-                        </select>
-                    </>
-                )}
-
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Description <span className="text-red-500">*</span>
-                    <span className="ml-1 font-normal text-gray-400">(min {minLen} characters)</span>
-                </label>
-                <textarea
-                    value={description}
-                    onChange={e => setDescription(e.target.value)}
-                    rows={6}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 mb-1"
-                    placeholder="Describe your complaint in detail…"
-                />
-                <p className={`text-xs mb-4 ${tooShort ? 'text-red-400' : 'text-green-600'}`}>
-                    {description.trim().length} / {minLen} characters minimum
-                </p>
-
-                <div className="flex gap-3 justify-end">
-                    <button onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
-                        Cancel
-                    </button>
-                    <button
-                        onClick={submit}
-                        disabled={saving || tooShort}
-                        className={`px-4 py-2 text-white rounded-lg text-sm font-semibold disabled:opacity-50 ${
-                            isOfficer ? 'bg-purple-700 hover:bg-purple-800' : 'bg-blue-700 hover:bg-blue-800'
-                        }`}
-                    >
-                        {saving ? 'Submitting…' : 'Submit Complaint'}
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-// ── Escalate Modal ───────────────────────────────────────────────────────────
-
-function EscalateComplaintModal({ complaint, onSave, onClose }) {
-    const [description, setDescription] = useState('');
-    const [saving,      setSaving]      = useState(false);
-    const { error } = useToast();
-
-    const submit = async () => {
-        if (description.trim().length < 30) { error('Please provide at least 30 characters.'); return; }
-        setSaving(true);
-        try {
-            await post(`/complaints/${complaint.id}/escalate`, { description });
-            onSave();
-        } catch (e) {
-            error(e.response?.data?.message || 'Failed to escalate.');
-        }
-        setSaving(false);
-    };
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
-                <h2 className="text-base font-semibold text-gray-900 mb-1">Escalate Complaint</h2>
-                <p className="text-xs text-gray-500 mb-3">
-                    This complaint will be escalated to the responsible Research / Community / Technology Officer.
-                </p>
-                <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4 text-xs text-amber-700">
-                    Escalations are reviewed by the relevant officer based on your proposal's research category.
-                </div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Reason for escalation <span className="text-red-500">*</span>
-                </label>
-                <textarea
-                    value={description}
-                    onChange={e => setDescription(e.target.value)}
-                    rows={5}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-orange-500 mb-5"
-                    placeholder="Explain why you are not satisfied with the college officer's response…"
-                />
-                <div className="flex gap-3 justify-end">
-                    <button onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
-                        Cancel
-                    </button>
-                    <button
-                        onClick={submit}
-                        disabled={saving || description.trim().length < 30}
-                        className="px-4 py-2 bg-orange-500 text-white rounded-lg text-sm font-semibold hover:bg-orange-600 disabled:opacity-50"
-                    >
-                        {saving ? 'Escalating…' : 'Escalate'}
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-// ── Edit Complaint Modal ─────────────────────────────────────────────────────
-
-function EditComplaintModal({ complaint, onSave, onClose }) {
-    const [description, setDescription] = useState(complaint.description ?? '');
-    const [saving,      setSaving]      = useState(false);
-    const { error } = useToast();
-    const tooShort = description.trim().length < 50;
-
-    const submit = async () => {
-        if (tooShort) { error('Description must be at least 50 characters.'); return; }
-        setSaving(true);
-        try {
-            await put(`/complaints/${complaint.id}`, { description });
-            onSave();
-        } catch (e) {
-            error(e.response?.data?.message || 'Failed to update complaint.');
-        }
-        setSaving(false);
-    };
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
-                <h2 className="text-base font-semibold text-gray-900 mb-1">Edit Complaint</h2>
-                <p className="text-xs text-gray-500 mb-4 font-mono">{complaint.proposal?.tracker_number ?? '—'}</p>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Description <span className="text-red-500">*</span>
-                    <span className="ml-1 font-normal text-gray-400">(min 50 characters)</span>
-                </label>
-                <textarea
-                    value={description}
-                    onChange={e => setDescription(e.target.value)}
-                    rows={6}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500 mb-1"
-                />
-                <p className={`text-xs mb-4 ${tooShort ? 'text-red-400' : 'text-green-600'}`}>
-                    {description.trim().length} / 50 characters minimum
-                </p>
-                <div className="flex gap-3 justify-end">
-                    <button onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
-                        Cancel
-                    </button>
-                    <button
-                        onClick={submit}
-                        disabled={saving || tooShort}
-                        className="px-4 py-2 bg-blue-700 text-white rounded-lg text-sm font-semibold hover:bg-blue-800 disabled:opacity-50"
-                    >
-                        {saving ? 'Saving…' : 'Save Changes'}
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-}
-
-// ── Withdraw Confirm Modal ───────────────────────────────────────────────────
-
-function WithdrawConfirmModal({ complaint, onConfirm, onClose }) {
-    const [withdrawing, setWithdrawing] = useState(false);
-    const { error } = useToast();
-
-    const confirm = async () => {
-        setWithdrawing(true);
-        try {
-            await del(`/complaints/${complaint.id}`);
-            onConfirm();
-        } catch (e) {
-            error(e.response?.data?.message || 'Failed to withdraw complaint.');
-        }
-        setWithdrawing(false);
-    };
-
-    return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-                <h2 className="text-base font-semibold text-gray-900 mb-2">Withdraw Complaint</h2>
-                <p className="text-sm text-gray-600 mb-2">
-                    Are you sure you want to withdraw this complaint about{' '}
-                    <span className="font-mono font-semibold">{complaint.proposal?.tracker_number ?? '—'}</span>?
-                </p>
-                <div className="bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-5 text-xs text-red-700">
-                    This action is permanent and cannot be undone.
-                </div>
-                <div className="flex gap-3 justify-end">
-                    <button onClick={onClose} className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
-                        Cancel
-                    </button>
-                    <button
-                        onClick={confirm}
-                        disabled={withdrawing}
-                        className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-semibold hover:bg-red-700 disabled:opacity-50"
-                    >
-                        {withdrawing ? 'Withdrawing…' : 'Withdraw Complaint'}
-                    </button>
-                </div>
-            </div>
-        </div>
-    );
-}
-
 // ── Complaints Tab Content ───────────────────────────────────────────────────
 
-function ComplaintsTab({ proposal, userId, isProposalMember, isOfficer, isAdmin, rejectedVia }) {
+function ComplaintLevelCard({ icon: Icon, tone, title, who, count, canFile, availability, onFile }) {
+    return (
+        <div className="flex flex-col rounded-2xl border border-gray-200 bg-white p-4">
+            <div className="flex items-start gap-3">
+                <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${tone}`}><Icon size={18} /></span>
+                <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-bold text-gray-900">{title}</p>
+                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-gray-600">{count}</span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-gray-500">{who}</p>
+                </div>
+            </div>
+            <div className="mt-3 flex flex-1 items-end justify-between gap-3 border-t border-gray-100 pt-3">
+                <p className={`text-xs ${canFile ? 'font-medium text-green-700' : 'text-gray-400'}`}>{availability}</p>
+                {canFile && (
+                    <button onClick={onFile}
+                        className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800">
+                        <PlusCircle size={13} /> File complaint
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+}
+
+function ComplaintCard({ complaint: c, permissions, expanded, onToggle, onAction }) {
+    const { canRespond, canEscalate, canEdit, canWithdraw } = permissions(c);
+    const hasActions = canRespond || canEscalate || canEdit || canWithdraw;
+
+    return (
+        <div className={`overflow-hidden rounded-2xl border bg-white transition-shadow ${expanded ? 'border-gray-300 shadow-sm' : 'border-gray-200 hover:shadow-sm'}`}>
+            <button onClick={onToggle} aria-expanded={expanded} className="flex w-full items-start gap-3 px-4 py-3.5 text-left">
+                <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <LevelBadge level={c.level} />
+                        <span className="text-xs font-medium text-gray-600">{topicLabel(c)}</span>
+                        {c.escalated_from_id && (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-orange-50 px-1.5 py-0.5 text-[11px] font-semibold text-orange-700">
+                                <ArrowUpCircle size={10} /> Escalation
+                            </span>
+                        )}
+                    </div>
+                    {!expanded && <p className="mt-1.5 line-clamp-2 text-sm text-gray-700">{c.description}</p>}
+                    <p className="mt-1.5 text-xs text-gray-400">
+                        {c.complainant?.name ?? 'Research team'} · {formatDate(c.created_at)}
+                    </p>
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1.5">
+                    <ComplaintStatusBadge status={c.status} />
+                    <AgeNote complaint={c} />
+                    {expanded ? <ChevronUp size={14} className="text-gray-400" /> : <ChevronDown size={14} className="text-gray-400" />}
+                </div>
+            </button>
+
+            {expanded && (
+                <div className="border-t border-gray-100 px-4 py-4">
+                    <ComplaintTimeline complaint={c} />
+                    {hasActions && (
+                        <div className="mt-4 flex flex-wrap justify-end gap-2 border-t border-gray-100 pt-4">
+                            {canWithdraw && (
+                                <button onClick={() => onAction('withdraw', c)}
+                                    className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50">
+                                    <Trash2 size={13} /> Withdraw
+                                </button>
+                            )}
+                            {canEdit && (
+                                <button onClick={() => onAction('edit', c)}
+                                    className="inline-flex items-center gap-1.5 rounded-xl border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50">
+                                    <Pencil size={13} /> Edit
+                                </button>
+                            )}
+                            {canEscalate && (
+                                <button onClick={() => onAction('escalate', c)}
+                                    className="inline-flex items-center gap-1.5 rounded-xl bg-orange-500 px-3 py-2 text-xs font-semibold text-white hover:bg-orange-600">
+                                    <ArrowUpCircle size={13} /> Escalate to Level 2
+                                </button>
+                            )}
+                            {canRespond && (
+                                <button onClick={() => onAction('respond', c)}
+                                    className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800">
+                                    <MessageSquare size={13} /> Respond
+                                </button>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+}
+
+function ComplaintsTab({ proposal, userId, isProposalMember, rejectedVia }) {
+    const { hasRole, hasAnyRole } = useAuth();
     const [complaints,  setComplaints]  = useState([]);
     const [loading,     setLoading]     = useState(true);
     const [filing,      setFiling]      = useState(null); // 'college' | 'officer'
-    const [escalating,  setEscalating]  = useState(null);
-    const [editing,     setEditing]     = useState(null);
-    const [withdrawing, setWithdrawing] = useState(null);
+    const [action,      setAction]      = useState(null); // { type, complaint }
     const [expanded,    setExpanded]    = useState(null);
+    const [withdrawing, setWithdrawing] = useState(false);
     const { success, error } = useToast();
 
     // Also stays open after a terminal rejection specifically caused by failing the
@@ -346,13 +172,25 @@ function ComplaintsTab({ proposal, userId, isProposalMember, isOfficer, isAdmin,
     // (disputing the decision is Request Reconsideration's job, scoped separately to
     // central-evaluation rejections only).
     const rejectedOnReviewScore = proposal.status === 'rejected' && rejectedVia in REJECTION_ACTION_STAGE_MAP;
+    const collegeStage   = COMPLAINT_STAGE_MAP[proposal.status] ?? REJECTION_ACTION_STAGE_MAP[rejectedVia] ?? null;
     const canFileCollege = isProposalMember && (COLLEGE_COMPLAINT_STATUSES.includes(proposal.status) || rejectedOnReviewScore);
     const canFileOfficer = isProposalMember && FUNDED_STATUSES.includes(proposal.status);
+
+    const who = {
+        userId,
+        isAdmin: hasAnyRole(['super_admin', 'admin', 'central_officer']),
+        isCollegeOfficer: hasRole('college_officer'),
+        officerRole: Object.keys(CATEGORY_FOR_OFFICER).find(r => hasRole(r)),
+    };
+    const permissions = (c) => complaintPermissions(c, who);
 
     const load = () => {
         setLoading(true);
         get(`/proposals/${proposal.id}/complaints`)
-            .then(r => setComplaints(r.data ?? []))
+            .then(r => {
+                const owner = { id: proposal.id, tracker_number: proposal.tracker_number, title: proposal.title, category: proposal.category, college_id: proposal.college_id };
+                setComplaints((r.data ?? []).map(c => ({ ...c, proposal: owner })));
+            })
             .catch(() => error('Failed to load complaints.'))
             .finally(() => setLoading(false));
     };
@@ -361,198 +199,120 @@ function ComplaintsTab({ proposal, userId, isProposalMember, isOfficer, isAdmin,
 
     const handleSaved = (msg) => {
         setFiling(null);
-        setEscalating(null);
-        setEditing(null);
-        setWithdrawing(null);
+        setAction(null);
         success(msg);
         load();
     };
 
-    const collegeComplaints = complaints.filter(c => c.level === 'college');
-    const officerComplaints = complaints.filter(c => c.level === 'officer');
-
-    const renderComplaint = (c) => {
-        const isExpanded  = expanded === c.id;
-        const isOwner     = c.complainant_id === userId;
-        const isEditable  = isOwner && ['open', 'under_review'].includes(c.status);
-        const isWithdrawable = isOwner && c.status === 'open';
-        const canEscalate = isProposalMember
-            && isOwner
-            && c.level === 'college'
-            && ['resolved', 'dismissed'].includes(c.status);
-
-        return (
-            <div key={c.id} className="border border-gray-200 rounded-xl overflow-hidden">
-                <div
-                    className="flex items-center justify-between gap-3 px-4 py-3 bg-white cursor-pointer hover:bg-gray-50 transition-colors"
-                    onClick={() => setExpanded(isExpanded ? null : c.id)}
-                >
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${LEVEL_COLORS[c.level]}`}>
-                            {c.level === 'college' ? 'Level 1' : 'Level 2'}
-                        </span>
-                        <span className="text-xs text-gray-500 shrink-0">
-                            {c.complaint_type
-                                ? COMPLAINT_TYPE_LABELS[c.complaint_type] ?? c.complaint_type
-                                : COMPLAINT_STAGE_LABELS[c.stage] ?? c.stage}
-                        </span>
-                        {c.escalated_from_id && (
-                            <span className="text-xs bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full shrink-0">Escalated</span>
-                        )}
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${COMPLAINT_STATUS_COLORS[c.status] ?? 'bg-gray-100 text-gray-600'}`}>
-                            {c.status?.replace(/_/g, ' ')}
-                        </span>
-                        <span className="text-xs text-gray-400">{formatDate(c.created_at)}</span>
-                        {isExpanded ? <ChevronUp size={13} className="text-gray-400" /> : <ChevronDown size={13} className="text-gray-400" />}
-                    </div>
-                </div>
-                {isExpanded && (
-                    <div className="px-4 py-4 border-t border-gray-100 bg-gray-50 space-y-3">
-                        <div>
-                            <p className="text-xs font-medium text-gray-500 mb-1">Filed by</p>
-                            <p className="text-sm text-gray-800">{c.complainant?.name ?? '—'}</p>
-                        </div>
-                        <div>
-                            <p className="text-xs font-medium text-gray-500 mb-1">Description</p>
-                            <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{c.description}</p>
-                        </div>
-                        {c.response && (
-                            <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                                <p className="text-xs font-medium text-green-700 mb-1">
-                                    Response {c.resolved_by?.name ? `by ${c.resolved_by.name}` : ''} · {formatDate(c.resolved_at)}
-                                </p>
-                                <p className="text-sm text-green-800 leading-relaxed">{c.response}</p>
-                            </div>
-                        )}
-                        {canEscalate && (
-                            <button
-                                onClick={() => setEscalating(c)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 text-white text-xs font-medium rounded-lg hover:bg-orange-600"
-                            >
-                                <ArrowUpCircle size={12} /> Escalate to Officer Level
-                            </button>
-                        )}
-                        {isEditable && (
-                            <button
-                                onClick={(e) => { e.stopPropagation(); setEditing(c); }}
-                                className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 text-gray-600 text-xs font-medium rounded-lg hover:bg-gray-50"
-                            >
-                                <Pencil size={12} /> Edit
-                            </button>
-                        )}
-                        {isWithdrawable && (
-                            <button
-                                onClick={(e) => { e.stopPropagation(); setWithdrawing(c); }}
-                                className="flex items-center gap-1.5 px-3 py-1.5 border border-red-200 text-red-600 text-xs font-medium rounded-lg hover:bg-red-50"
-                            >
-                                <Trash2 size={12} /> Withdraw
-                            </button>
-                        )}
-                    </div>
-                )}
-            </div>
-        );
+    const withdraw = async () => {
+        setWithdrawing(true);
+        try {
+            await del(`/complaints/${action.complaint.id}`);
+            handleSaved('Complaint withdrawn.');
+        } catch (e) {
+            error(e.response?.data?.message || 'Failed to withdraw complaint.');
+        }
+        setWithdrawing(false);
     };
+
+    const collegeCount = complaints.filter(c => c.level === 'college').length;
+    const officerCount = complaints.filter(c => c.level === 'officer').length;
+    const awaitingCount = complaints.filter(c => AWAITING.includes(c.status)).length;
+
+    const collegeAvailability = canFileCollege
+        ? `Open now for the ${STAGE_LABELS[collegeStage] ?? 'review'} stage`
+        : FUNDED_STATUSES.includes(proposal.status)
+            ? 'Closed — the review stages are over'
+            : 'Opens during blind review and open defence';
+    const officerAvailability = canFileOfficer
+        ? 'Open now — the project is funded'
+        : 'Opens once the project is funded';
 
     if (loading) {
         return (
-            <div className="flex justify-center py-10">
-                <div className="w-7 h-7 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            <div className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                    {[0, 1].map(i => <div key={i} className="h-36 animate-pulse rounded-2xl border border-gray-200 bg-gray-50" />)}
+                </div>
+                {[0, 1].map(i => <div key={i} className="h-20 animate-pulse rounded-2xl border border-gray-200 bg-gray-50" />)}
             </div>
         );
     }
 
     return (
-        <div className="space-y-6">
-            {/* Level 1 — College complaints */}
-            <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <p className="text-sm font-semibold text-gray-800">Level 1 — College Office</p>
-                        <p className="text-xs text-gray-500">Blind review & open defence phase complaints</p>
-                    </div>
-                    {canFileCollege && (
-                        <button
-                            onClick={() => setFiling('college')}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-700 text-white text-xs font-semibold rounded-lg hover:bg-blue-800"
-                        >
-                            <PlusCircle size={13} /> File Complaint
-                        </button>
-                    )}
-                </div>
-                {!canFileCollege && isProposalMember && !FUNDED_STATUSES.includes(proposal.status) && (
-                    <p className="text-xs text-gray-400 italic">
-                        Complaints can be filed during the Blind Review or Open Defence phases, or afterward if the
-                        proposal was rejected for not meeting the review score threshold.
-                    </p>
-                )}
-                {collegeComplaints.length === 0
-                    ? <p className="text-xs text-gray-400">No college-level complaints on record.</p>
-                    : <div className="space-y-2">{collegeComplaints.map(renderComplaint)}</div>
-                }
+        <div className="space-y-5">
+            <div className="grid gap-4 md:grid-cols-2">
+                <ComplaintLevelCard icon={Building2} tone="bg-sky-50 text-sky-700" title="Level 1 · College office"
+                    who="Concerns about how the blind review or open defence was conducted"
+                    count={collegeCount} canFile={canFileCollege}
+                    availability={isProposalMember ? collegeAvailability : 'Filed by the research team'}
+                    onFile={() => setFiling('college')} />
+                <ComplaintLevelCard icon={Scale} tone="bg-violet-50 text-violet-700" title="Level 2 · Category director"
+                    who="Post-funding concerns (budget, decisions), and escalated Level 1 complaints"
+                    count={officerCount} canFile={canFileOfficer}
+                    availability={isProposalMember ? officerAvailability : 'Filed by the research team'}
+                    onFile={() => setFiling('officer')} />
             </div>
 
-            <div className="border-t border-gray-200" />
-
-            {/* Level 2 — Officer complaints */}
-            <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <p className="text-sm font-semibold text-gray-800">Level 2 — Research / Community / Technology Office</p>
-                        <p className="text-xs text-gray-500">Post-funding complaints (budget, rejection, other)</p>
-                    </div>
-                    {canFileOfficer && (
-                        <button
-                            onClick={() => setFiling('officer')}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-700 text-white text-xs font-semibold rounded-lg hover:bg-purple-800"
-                        >
-                            <PlusCircle size={13} /> File Complaint
-                        </button>
+            <div>
+                <div className="mb-3 flex items-center justify-between">
+                    <p className="text-sm font-semibold text-gray-900">
+                        Complaint history <span className="font-normal text-gray-400">({complaints.length})</span>
+                    </p>
+                    {awaitingCount > 0 && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
+                            {awaitingCount} awaiting a response
+                        </span>
                     )}
                 </div>
-                {!canFileOfficer && isProposalMember && !COLLEGE_COMPLAINT_STATUSES.includes(proposal.status) && (
-                    <p className="text-xs text-gray-400 italic">
-                        Post-funding complaints are available after the proposal has been funded.
-                    </p>
+
+                {complaints.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-10 text-center">
+                        <ShieldCheck size={26} className="mx-auto text-gray-300" />
+                        <p className="mt-2 text-sm font-medium text-gray-700">No complaints on this proposal</p>
+                        <p className="mx-auto mt-1 max-w-sm text-xs text-gray-500">
+                            {isProposalMember
+                                ? 'If something about the review or the funded project seems wrong, you can raise it while the level above is open.'
+                                : 'Complaints filed by the research team will appear here.'}
+                        </p>
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        {complaints.map(c => (
+                            <ComplaintCard key={c.id} complaint={c} permissions={permissions}
+                                expanded={expanded === c.id}
+                                onToggle={() => setExpanded(expanded === c.id ? null : c.id)}
+                                onAction={(type, complaint) => setAction({ type, complaint })} />
+                        ))}
+                    </div>
                 )}
-                {officerComplaints.length === 0
-                    ? <p className="text-xs text-gray-400">No officer-level complaints on record.</p>
-                    : <div className="space-y-2">{officerComplaints.map(renderComplaint)}</div>
-                }
             </div>
 
             {filing && (
-                <FileComplaintModal
-                    proposal={proposal}
-                    level={filing}
-                    rejectedVia={rejectedVia}
-                    onSave={() => handleSaved('Complaint submitted successfully.')}
-                    onClose={() => setFiling(null)}
-                />
+                <FileComplaintModal proposal={proposal} level={filing} stage={collegeStage}
+                    onSave={() => handleSaved('Complaint submitted — you\'ll be notified when it is answered.')}
+                    onClose={() => setFiling(null)} />
             )}
-            {escalating && (
-                <EscalateComplaintModal
-                    complaint={escalating}
-                    onSave={() => handleSaved('Complaint escalated to officer level.')}
-                    onClose={() => setEscalating(null)}
-                />
+            {action?.type === 'respond' && (
+                <RespondModal complaint={action.complaint}
+                    onSave={(resolution) => handleSaved(resolution === 'dismissed' ? 'Complaint dismissed — the complainant has been notified.' : 'Complaint resolved — the complainant has been notified.')}
+                    onClose={() => setAction(null)} />
             )}
-            {editing && (
-                <EditComplaintModal
-                    complaint={editing}
-                    onSave={() => handleSaved('Complaint updated.')}
-                    onClose={() => setEditing(null)}
-                />
+            {action?.type === 'escalate' && (
+                <EscalateModal complaint={action.complaint} onSave={() => handleSaved('Complaint escalated to Level 2.')} onClose={() => setAction(null)} />
             )}
-            {withdrawing && (
-                <WithdrawConfirmModal
-                    complaint={withdrawing}
-                    onConfirm={() => handleSaved('Complaint withdrawn.')}
-                    onClose={() => setWithdrawing(null)}
-                />
+            {action?.type === 'edit' && (
+                <EditModal complaint={action.complaint} onSave={() => handleSaved('Complaint updated.')} onClose={() => setAction(null)} />
             )}
+            <ConfirmDialog
+                open={action?.type === 'withdraw'}
+                title="Withdraw complaint"
+                description="Withdraw this complaint? It will be removed and can't be restored."
+                confirmLabel={withdrawing ? 'Withdrawing…' : 'Withdraw'}
+                confirmVariant="danger"
+                onConfirm={withdraw}
+                onCancel={() => setAction(null)}
+            />
         </div>
     );
 }
@@ -2450,6 +2210,7 @@ export default function ProposalShow() {
                     {showReportModal && (
                         <ReportMistakenApprovalModal
                             proposal={proposal}
+                            previousReport={approvalReports.find(r => r.status === 'reviewed' && r.outcome === 'approval_stands') ?? null}
                             onClose={() => setShowReportModal(false)}
                             onReported={() => { setShowReportModal(false); loadApprovalReports(); load(); }}
                         />
@@ -2718,8 +2479,6 @@ export default function ProposalShow() {
                                 proposal={proposal}
                                 userId={user?.id}
                                 isProposalMember={isProposalMember}
-                                isOfficer={isOfficer}
-                                isAdmin={isAdmin}
                                 rejectedVia={rejectedVia}
                             />
                         )}

@@ -195,11 +195,18 @@ class DefenceSessionService
         }
 
         $current = $this->defenceAssignments($proposal)->get();
-        $requested = collect($data['reviewer_ids'] ?? [])->unique()->values();
+        // Leaving reviewer_ids out keeps the panel as it is; only an explicit list changes it.
+        $requested = array_key_exists('reviewer_ids', $data) && $data['reviewer_ids'] !== null
+            ? collect($data['reviewer_ids'])->unique()->values()
+            : $current->pluck('reviewer_id')->values();
         $toAdd = $requested->diff($current->pluck('reviewer_id'))->values();
         $toRemove = $current->reject(fn (ReviewAssignment $a) => $requested->contains($a->reviewer_id));
         $keptSubmitted = $toRemove->where('status', 'submitted');
         $toRemove = $toRemove->where('status', '!=', 'submitted');
+
+        if ($requested->isEmpty() && $keptSubmitted->isEmpty()) {
+            throw new \Exception('An open defence needs at least one panel member. Add a reviewer before removing the last one.');
+        }
 
         $evaluationTypeId = $data['evaluation_type_id'] ?? $current->first()?->evaluation_type_id;
         if ($toAdd->isNotEmpty() && ! $evaluationTypeId) {
@@ -255,6 +262,11 @@ class DefenceSessionService
 
             return $session->fresh();
         });
+
+        // Removing the only reviewers still to score can leave everyone else finished.
+        if ($toRemove->isNotEmpty() && $toAdd->isEmpty()) {
+            $this->reviewScoreService->processOpenDefenceResultIfComplete($proposal->fresh());
+        }
 
         return [
             'session' => $session,

@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { ShieldQuestion, X, Info } from 'lucide-react';
+import { ShieldQuestion, X, Info, History } from 'lucide-react';
 import { post } from '../lib/api';
-import { getStatusLabel } from '../lib/utils';
+import { formatDate, getStatusLabel } from '../lib/utils';
 import { useToast } from './Toast';
 import { APPROVAL_REPORT_ISSUES } from '../lib/approvalReportIssues';
 import ReasonSelect from './ReasonSelect';
@@ -11,16 +11,20 @@ const MAX_DETAILS = 2000;
 /**
  * College officer flags a proposal as possibly mistakenly approved: pick the issue
  * from the list (or "Other" with a description), optionally add details.
+ *
+ * When `previousReport` is given (an earlier report where the approval stood), the
+ * officer is reporting again and must explain what is new.
  */
-export default function ReportMistakenApprovalModal({ proposal, onClose, onReported }) {
+export default function ReportMistakenApprovalModal({ proposal, previousReport = null, onClose, onReported }) {
     const { success, error } = useToast();
     const [issueType, setIssueType] = useState('');
     const [details, setDetails] = useState('');
     const [saving, setSaving] = useState(false);
 
     const isOther = issueType === 'other';
+    const detailsRequired = isOther || !!previousReport;
     const detailsTooShort = details.trim().length > 0 && details.trim().length < 10;
-    const canSubmit = issueType && !saving && (isOther ? details.trim().length >= 10 : !detailsTooShort);
+    const canSubmit = issueType && !saving && (detailsRequired ? details.trim().length >= 10 : !detailsTooShort);
     const pullsBack = ['under_blind_review', 'blind_review_passed'].includes(proposal.status);
 
     const submit = async () => {
@@ -51,7 +55,7 @@ export default function ReportMistakenApprovalModal({ proposal, onClose, onRepor
                             <ShieldQuestion size={20} />
                         </div>
                         <div>
-                            <h2 className="text-lg font-bold text-gray-900">Report Mistaken Approval</h2>
+                            <h2 className="text-lg font-bold text-gray-900">{previousReport ? 'Report Again' : 'Report Mistaken Approval'}</h2>
                             <p className="mt-0.5 text-xs text-gray-500">
                                 <span className="font-mono">{proposal.tracker_number}</span> · {getStatusLabel(proposal.status)}
                             </p>
@@ -63,6 +67,21 @@ export default function ReportMistakenApprovalModal({ proposal, onClose, onRepor
                 </div>
 
                 <div className="space-y-5 px-6 py-5">
+                    {previousReport && (
+                        <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-xs text-emerald-900">
+                            <p className="flex items-center gap-1.5 font-semibold">
+                                <History size={13} /> Reported {formatDate(previousReport.created_at)} — approval stood
+                            </p>
+                            {previousReport.resolution_notes && (
+                                <p className="mt-1.5 leading-relaxed text-emerald-800">
+                                    “{previousReport.resolution_notes}”
+                                    {previousReport.reviewed_by?.name && <span className="text-emerald-600"> — {previousReport.reviewed_by.name}</span>}
+                                </p>
+                            )}
+                            <p className="mt-1.5 text-emerald-700">Explain what is new — evidence or an issue the director didn't consider.</p>
+                        </div>
+                    )}
+
                     <div>
                         <label className="mb-1.5 block text-xs font-semibold text-gray-700">
                             What is wrong with this proposal? <span className="text-red-500">*</span>
@@ -74,7 +93,9 @@ export default function ReportMistakenApprovalModal({ proposal, onClose, onRepor
                         <div>
                             <label className="mb-1.5 flex items-center justify-between text-xs font-semibold text-gray-700">
                                 <span>
-                                    {isOther ? <>Describe the issue <span className="text-red-500">*</span></> : <>Additional details <span className="font-normal text-gray-400">(optional)</span></>}
+                                    {previousReport
+                                        ? <>What is new since the last report? <span className="text-red-500">*</span></>
+                                        : isOther ? <>Describe the issue <span className="text-red-500">*</span></> : <>Additional details <span className="font-normal text-gray-400">(optional)</span></>}
                                 </span>
                                 <span className={`font-normal tabular-nums ${details.length > MAX_DETAILS ? 'text-red-500' : 'text-gray-400'}`}>
                                     {details.length}/{MAX_DETAILS}
@@ -90,7 +111,7 @@ export default function ReportMistakenApprovalModal({ proposal, onClose, onRepor
                                     : 'e.g. where you found it — page, section or document name…'}
                                 className="w-full resize-none rounded-xl border border-gray-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
                             />
-                            {(isOther || detailsTooShort) && details.trim().length < 10 && (
+                            {(detailsRequired || detailsTooShort) && details.trim().length < 10 && (
                                 <p className="mt-1 text-xs text-gray-400">Please write at least 10 characters.</p>
                             )}
                         </div>

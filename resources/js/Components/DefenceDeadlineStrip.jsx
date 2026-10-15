@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Clock, CalendarPlus, AlertTriangle, CheckCircle2, X, Hourglass } from 'lucide-react';
+import { Clock, CalendarPlus, AlertTriangle, CheckCircle2, X, Hourglass, UserX } from 'lucide-react';
 import { post } from '../lib/api';
 import { useToast } from './Toast';
 
@@ -129,15 +129,19 @@ export default function DefenceDeadlineStrip({ deadline, onRequestExtension }) {
 
     const remaining = formatRemaining(new Date(deadline.deadline).getTime() - now);
     const passed = deadline.phase === 'passed' || !remaining;
-    const done = deadline.outstanding_scores === 0;
+    // Nothing outstanding only means "done" when someone is actually on the panel.
+    const noPanel = (deadline.panel_size ?? 1) === 0;
+    const done = !noPanel && deadline.outstanding_scores === 0;
 
-    const tone = done
+    const tone = noPanel
+        ? 'border-amber-100 bg-amber-50/70 text-amber-800'
+        : done
         ? 'border-green-100 bg-green-50/60 text-green-800'
         : passed
             ? 'border-red-100 bg-red-50/70 text-red-800'
             : 'border-purple-100 bg-purple-50/50 text-purple-900';
 
-    const Icon = done ? CheckCircle2 : passed ? AlertTriangle : deadline.phase === 'upcoming' ? Clock : Hourglass;
+    const Icon = noPanel ? UserX : done ? CheckCircle2 : passed ? AlertTriangle : deadline.phase === 'upcoming' ? Clock : Hourglass;
 
     return (
         <div className={`flex flex-wrap items-center gap-x-3 gap-y-2 border-t px-5 py-2.5 text-xs ${tone}`}>
@@ -147,7 +151,9 @@ export default function DefenceDeadlineStrip({ deadline, onRequestExtension }) {
                 {deadline.is_extended && <span className="ml-1.5 rounded-full bg-purple-100 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700">Extended</span>}
             </span>
             <span className="font-semibold">
-                {done
+                {noPanel
+                    ? 'No panel members — add reviewers before scores can be collected'
+                    : done
                     ? 'All scores submitted'
                     : passed
                         ? `Deadline passed · ${deadline.outstanding_scores} score${deadline.outstanding_scores === 1 ? '' : 's'} missing`
@@ -162,7 +168,7 @@ export default function DefenceDeadlineStrip({ deadline, onRequestExtension }) {
                         <Clock size={11} /> Extension to {formatDeadline(deadline.pending_extension.requested_until)} awaiting approval
                     </span>
                 )}
-                {!done && deadline.can_request_extension && onRequestExtension && (
+                {!done && !noPanel && deadline.can_request_extension && onRequestExtension && (
                     <button
                         onClick={onRequestExtension}
                         className="inline-flex items-center gap-1 rounded-lg border border-purple-300 bg-white px-2.5 py-1 font-semibold text-purple-700 hover:bg-purple-50"

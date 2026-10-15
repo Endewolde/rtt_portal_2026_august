@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Link } from '@inertiajs/react';
-import { ShieldQuestion, RefreshCw, Clock, CheckCircle2, XCircle, User, CalendarDays, ChevronRight } from 'lucide-react';
+import { ShieldQuestion, RefreshCw, Clock, CheckCircle2, XCircle, User, CalendarDays, ChevronRight, RotateCcw } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import { get, post } from '../../lib/api';
 import { formatDate, getCategoryLabel } from '../../lib/utils';
 import { useToast } from '../../Components/Toast';
 import ResolveApprovalReportModal from '../../Components/ResolveApprovalReportModal';
+import ReportMistakenApprovalModal from '../../Components/ReportMistakenApprovalModal';
 import { issueByKey } from '../../lib/approvalReportIssues';
 
 const TABS = [
@@ -31,6 +32,7 @@ export default function ApprovalReports() {
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState('open');
     const [reviewing, setReviewing] = useState(null);
+    const [reportingAgain, setReportingAgain] = useState(null);
     const [canResolve, setCanResolve] = useState(false);
     const { error } = useToast();
 
@@ -112,7 +114,8 @@ export default function ApprovalReports() {
                 ) : (
                     <div className="space-y-3">
                         {reports.map(rep => (
-                            <ReportCard key={rep.id} report={rep} filter={filter} canResolve={canResolve} onReview={() => setReviewing(rep)} />
+                            <ReportCard key={rep.id} report={rep} filter={filter} canResolve={canResolve}
+                                onReview={() => setReviewing(rep)} onReportAgain={() => setReportingAgain(rep)} />
                         ))}
                     </div>
                 )}
@@ -125,11 +128,20 @@ export default function ApprovalReports() {
                     onClose={() => setReviewing(null)}
                 />
             )}
+
+            {reportingAgain && (
+                <ReportMistakenApprovalModal
+                    proposal={reportingAgain.proposal}
+                    previousReport={reportingAgain}
+                    onReported={() => { setReportingAgain(null); setFilter('open'); load(); }}
+                    onClose={() => setReportingAgain(null)}
+                />
+            )}
         </AppLayout>
     );
 }
 
-function ReportCard({ report, filter, canResolve, onReview }) {
+function ReportCard({ report, filter, canResolve, onReview, onReportAgain }) {
     const [expanded, setExpanded] = useState(false);
 
     return (
@@ -193,6 +205,14 @@ function ReportCard({ report, filter, canResolve, onReview }) {
                         {filter === 'open' && !canResolve && (
                             <span className="text-xs font-medium text-amber-600 whitespace-nowrap">Awaiting response</span>
                         )}
+                        {report.can_report_again && (
+                            <button
+                                onClick={onReportAgain}
+                                className="flex items-center gap-1.5 px-3.5 py-2 border border-amber-300 bg-amber-50 text-amber-800 text-xs font-semibold rounded-xl hover:bg-amber-100 transition-colors"
+                            >
+                                <RotateCcw size={13} /> Report again
+                            </button>
+                        )}
                         <button
                             onClick={() => setExpanded(v => !v)}
                             className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
@@ -226,6 +246,14 @@ function ReportCard({ report, filter, canResolve, onReview }) {
                                     {report.reviewed_by?.name} · {formatDate(report.reviewed_at)}
                                 </p>
                             </div>
+                        )}
+
+                        {report.outcome === 'approval_stands' && !canResolve && !report.can_report_again && (
+                            <p className="text-xs text-gray-400">
+                                {['validated', 'under_blind_review', 'blind_review_passed'].includes(report.proposal?.status)
+                                    ? 'A newer report has already been filed for this proposal.'
+                                    : `The proposal has moved on to ${STATUS_LABELS[report.proposal?.status] ?? report.proposal?.status}, so it can no longer be reported.`}
+                            </p>
                         )}
 
                         {filter === 'withdrawn' && (

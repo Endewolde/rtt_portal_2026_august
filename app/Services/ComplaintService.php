@@ -162,19 +162,28 @@ class ComplaintService
         string $response,
         string $resolution
     ): Complaint {
-        // College officers can only resolve Level 1 complaints for their college
-        if ($responder->hasRole('college_officer')) {
-            $proposal = $complaint->proposal ?? Proposal::find($complaint->proposal_id);
-            if ($complaint->level !== 'college' || $proposal?->college_id !== $responder->college_id) {
-                throw new UnauthorizedResolutionException('You can only respond to college-level complaints for your own college.');
-            }
+        if (! in_array($complaint->status, ['open', 'under_review'], true)) {
+            throw new UnauthorizedResolutionException('This complaint has already been closed.');
         }
 
-        // Category officers can only resolve Level 2 complaints for their category
-        $categoryOfficers = ['research_officer', 'community_officer', 'technology_officer'];
-        if ($responder->hasAnyRole($categoryOfficers)) {
-            if ($complaint->level !== 'officer') {
-                throw new UnauthorizedResolutionException('You can only respond to officer-level complaints.');
+        $proposal = $complaint->proposal ?? Proposal::find($complaint->proposal_id);
+
+        if (! $responder->hasAnyRole(['super_admin', 'admin', 'central_officer'])) {
+            // College officers resolve Level 1 complaints for their own college
+            if ($responder->hasRole('college_officer')) {
+                if ($complaint->level !== 'college' || $proposal?->college_id !== $responder->college_id) {
+                    throw new UnauthorizedResolutionException('You can only respond to college-level complaints for your own college.');
+                }
+            } elseif ($responder->hasAnyRole(array_values(self::CATEGORY_OFFICER))) {
+                // Category officers resolve Level 2 complaints in their own category
+                if ($complaint->level !== 'officer') {
+                    throw new UnauthorizedResolutionException('You can only respond to officer-level complaints.');
+                }
+                if (! $responder->hasRole(self::CATEGORY_OFFICER[$proposal?->category] ?? '')) {
+                    throw new UnauthorizedResolutionException('You can only respond to complaints about proposals in your category.');
+                }
+            } else {
+                throw new UnauthorizedResolutionException('Only the responsible officer can respond to this complaint.');
             }
         }
 

@@ -271,3 +271,29 @@ test('ethical_clearances_pending counts only submitted (awaiting review) proposa
     $response->assertOk();
     expect($response->json('data.ethical_clearances_pending'))->toBe(1);
 });
+
+test('open_complaints matches the officer\'s Complaints page; researchers see recently answered ones', function () {
+    [$collegeA, $deptA, $central, $call] = ac_makeBase();
+    $collegeB = College::create(['name' => 'AC College B '.rand(), 'code' => 'AB'.rand(10000, 99999)]);
+    $deptB = Department::create(['college_id' => $collegeB->id, 'name' => 'D', 'code' => 'ABD'.rand(10000, 99999)]);
+    $proposalA = ac_proposal($collegeA, $deptA, $call, 'under_blind_review');
+    $proposalB = ac_proposal($collegeB, $deptB, $call, 'under_blind_review');
+
+    $complaint = fn (Proposal $p, string $status, array $extra = []) => App\Models\Complaint::create([
+        'proposal_id' => $p->id, 'complainant_id' => $p->pi_user_id, 'stage' => 'blind_review', 'level' => 'college',
+        'description' => str_repeat('A clear complaint. ', 4), 'status' => $status,
+    ] + $extra);
+
+    $complaint($proposalA, 'open');                 // counted: own college, awaiting, assigned to nobody in particular
+    $complaint($proposalA, 'under_review');         // counted
+    $complaint($proposalA, 'escalated');            // closed at Level 1 — not counted
+    $complaint($proposalB, 'open');                 // other college — not counted
+    $complaint($proposalA, 'resolved', ['resolved_at' => now()->subDays(2)]);
+
+    $officerA = User::factory()->create(['college_id' => $collegeA->id]);
+    $officerA->assignRole('college_officer');
+
+    expect($this->actingAs($officerA, 'sanctum')->getJson('/api/v1/action-counts')->json('data.open_complaints'))->toBe(2)
+        ->and($this->actingAs($central, 'sanctum')->getJson('/api/v1/action-counts')->json('data.open_complaints'))->toBe(3)
+        ->and($this->actingAs(User::find($proposalA->pi_user_id), 'sanctum')->getJson('/api/v1/action-counts')->json('data.my_complaints_answered'))->toBe(1);
+});

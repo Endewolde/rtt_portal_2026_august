@@ -602,6 +602,10 @@ function DefenceCard({ proposal, onReassign, onExtend, onRemove, onRequestDeadli
                     <span className="text-xs font-semibold text-green-600 flex items-center gap-1.5">
                         <CheckCircle2 size={13} /> Result processed automatically
                     </span>
+                ) : assignments.length === 0 ? (
+                    <span className="text-xs font-semibold text-amber-600 flex items-center gap-1.5">
+                        <AlertTriangle size={13} /> No panel members assigned
+                    </span>
                 ) : (
                     <span className="text-xs text-gray-400">
                         Waiting for {assignments.length - submitted} more review{assignments.length - submitted !== 1 ? 's' : ''}

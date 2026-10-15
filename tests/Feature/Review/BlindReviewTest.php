@@ -564,6 +564,25 @@ test('removing one of two reviewers does NOT revert the proposal while another r
     expect(Proposal::find($proposal->id)->status)->toBe('under_blind_review');
 });
 
+test('removing the only reviewer still to score does not send the proposal back to validated', function () {
+    [$proposal] = makeProposalInState('validated');
+    $done = User::factory()->create();
+    $done->assignRole('reviewer');
+    $late = User::factory()->create();
+    $late->assignRole('reviewer');
+    $type = makeBlindType();
+
+    $assignments = $this->assignmentService->assign($proposal, [$done->id, $late->id], $type->id, $this->centralUser);
+    $assignments[0]->update(['status' => 'submitted', 'submitted_at' => now()]);
+
+    $this->actingAs($this->centralUser, 'sanctum')
+        ->deleteJson("/api/v1/review-assignments/{$assignments[1]->id}/remove")
+        ->assertOk();
+
+    expect(Proposal::find($proposal->id)->status)->not->toBe('validated');
+    $this->assertDatabaseMissing('workflow_logs', ['proposal_id' => $proposal->id, 'action' => 'unassign_reviewers']);
+});
+
 test('removing a reviewer whose review was already submitted is still rejected', function () {
     [$proposal] = makeProposalInState('validated');
     $reviewer = User::factory()->create();

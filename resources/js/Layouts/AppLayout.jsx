@@ -152,7 +152,7 @@ const ROUTE_PERM_REQUIRED = {
     '/reports/annual':            'reports.view_any',
     '/reports':                   'reports.view_any',
     // Other
-    '/complaints':                'complaints.view_any',
+    '/complaints':                'complaints.view',
 }
 
 // Sub-feature gate per page — mirrors every hasSubFeature(...) check already used to
@@ -889,6 +889,11 @@ export default function AppLayout({ children, breadcrumb }) {
                 {
                     label: 'Funded Proposals', href: '/my-research', icon: 'Trophy',
                     show: hasRole('staff'),
+                },
+                {
+                    label: 'My Complaints', href: '/complaints', icon: 'AlertCircle',
+                    show: perm('complaints.create') && !perm('complaints.view_any') && hasSubFeature('complaints.manage'),
+                    badge: c => c.my_complaints_answered,
                 },
                 {
                     label: 'Awarded Proposals', href: '/admin/awarded', icon: 'Trophy',

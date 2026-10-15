@@ -8,8 +8,8 @@ function inline(text) {
 }
 
 /**
- * Help article text: blank-line separated paragraphs, "1." numbered lists, "- " bullets
- * and **bold**. Deliberately tiny and safe — article text is never injected as HTML.
+ * Help article text: blank-line separated paragraphs, "## " section headings, "1."
+ * numbered lists, "- " bullets and **bold**. Deliberately tiny and safe — article text is never injected as HTML.
  */
 export default function HelpBody({ text, className = '' }) {
     const blocks = String(text ?? '').trim().split(/\n\s*\n/);
@@ -18,6 +18,16 @@ export default function HelpBody({ text, className = '' }) {
         <div className={`space-y-3 text-sm leading-relaxed text-gray-700 ${className}`}>
             {blocks.map((block, i) => {
                 const lines = block.split('\n').filter((l) => l.trim() !== '');
+                // "## Heading" starts a section; anything after it in the same block is rendered below.
+                if (lines[0]?.startsWith('## ')) {
+                    const rest = lines.slice(1).join('\n');
+                    return (
+                        <div key={i} className="space-y-3">
+                            <h3 className="pt-2 text-[13px] font-semibold uppercase tracking-wide text-gray-500">{lines[0].slice(3)}</h3>
+                            {rest && <HelpBody text={rest} />}
+                        </div>
+                    );
+                }
                 if (lines.every((l) => /^\s*\d+\.\s/.test(l))) {
                     return <ol key={i} className="list-decimal space-y-1.5 pl-5">{lines.map((l, j) => <li key={j}>{inline(l.replace(/^\s*\d+\.\s/, ''))}</li>)}</ol>;
                 }

@@ -621,3 +621,47 @@ test('a resolution note is required', function () {
 
     par_resolve($report, 'approval_stands', 'short')->assertStatus(422);
 });
+
+test('after a report is resolved as approval stands, the officer can report the proposal again', function () {
+    [$proposal, $college] = par_makeProposal('under_blind_review');
+    par_blindAssignment($proposal, 0, 'pending');
+    [$officer, $report] = par_report($proposal, $college);
+
+    par_resolve($report, 'approval_stands')->assertOk();
+    expect($proposal->fresh()->status)->toBe('under_blind_review');
+
+    $this->actingAs($officer, 'sanctum')->getJson('/api/v1/approval-reports?status=reviewed')
+        ->assertOk()
+        ->assertJsonPath('data.data.0.can_report_again', true);
+
+    // A repeat report has to say what is new.
+    $this->actingAs($officer, 'sanctum')
+        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['issue_type' => 'ineligible_team'])
+        ->assertStatus(422)
+        ->assertJsonPath('message', fn ($m) => str_contains($m, 'Explain what is new'));
+
+    $this->actingAs($officer, 'sanctum')
+        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", [
+            'issue_type' => 'other',
+            'reason' => 'New evidence: the PI is ineligible under this call.',
+        ])
+        ->assertCreated();
+
+    // The older report no longer offers "report again" once a newer one exists.
+    $this->actingAs($officer, 'sanctum')->getJson('/api/v1/approval-reports?status=reviewed')
+        ->assertJsonPath('data.data.0.can_report_again', false);
+
+    expect($proposal->fresh()->status)->toBe('validated')
+        ->and(ProposalApprovalReport::where('proposal_id', $proposal->id)->where('status', 'open')->count())->toBe(1);
+});
+
+test('report again is not offered once the proposal has moved past blind review', function () {
+    [$proposal, $college] = par_makeProposal('blind_review_passed');
+    [$officer, $report] = par_report($proposal, $college);
+    par_resolve($report, 'approval_stands')->assertOk();
+
+    DB::table('proposals')->where('id', $proposal->id)->update(['status' => 'under_open_defence']);
+
+    $this->actingAs($officer, 'sanctum')->getJson('/api/v1/approval-reports?status=reviewed')
+        ->assertJsonPath('data.data.0.can_report_again', false);
+});

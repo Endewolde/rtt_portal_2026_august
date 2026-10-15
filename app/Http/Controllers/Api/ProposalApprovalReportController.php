@@ -80,6 +80,20 @@ class ProposalApprovalReportController extends Controller
             return response()->json(['data' => null, 'message' => 'A report is already open for this proposal.', 'errors' => []], 422);
         }
 
+        // Reporting again after a director decided the approval stands: say what is new.
+        $previouslyUpheld = ProposalApprovalReport::where('proposal_id', $proposalId)
+            ->where('status', 'reviewed')
+            ->where('outcome', self::OUTCOME_APPROVAL_STANDS)
+            ->exists();
+
+        if ($previouslyUpheld && mb_strlen(trim((string) $request->reason)) < 10) {
+            return response()->json([
+                'data' => null,
+                'message' => 'This proposal was reported before and the approval stood. Explain what is new (at least 10 characters).',
+                'errors' => ['reason' => ['Explain what is new since the last report was reviewed.']],
+            ], 422);
+        }
+
         $returnedForInvestigation = $proposal->status !== 'validated';
 
         try {
@@ -186,6 +200,10 @@ class ProposalApprovalReportController extends Controller
             ->when($request->status, fn ($q, $s) => $q->where('status', $s))
             ->orderByDesc('created_at')
             ->paginate(20);
+
+        $reports->getCollection()->each(
+            fn (ProposalApprovalReport $report) => $report->setAttribute('can_report_again', $this->canReportAgain($report, $user))
+        );
 
         return response()->json(['data' => $reports, 'message' => '', 'errors' => [], 'meta' => ['can_resolve' => (bool) $isReviewer]]);
     }
@@ -470,5 +488,29 @@ class ProposalApprovalReportController extends Controller
                 Log::error("Approval report email notify failed: {$e->getMessage()}");
             }
         }
+    }
+
+    /**
+     * The reporting college officer may raise a proposal again after the approval was
+     * upheld — while it is still at a reportable stage, in their college, and nothing
+     * newer has been filed about it.
+     */
+    private function canReportAgain(ProposalApprovalReport $report, User $user): bool
+    {
+        $proposal = $report->proposal;
+
+        if ($report->status !== 'reviewed'
+            || $report->outcome !== self::OUTCOME_APPROVAL_STANDS
+            || ! $user->hasRole('college_officer')
+            || ! $proposal
+            || $proposal->college_id !== $user->college_id
+            || ! in_array($proposal->status, self::REPORTABLE_STATUSES, true)) {
+            return false;
+        }
+
+        return ! ProposalApprovalReport::where('proposal_id', $proposal->id)
+            ->where('id', '!=', $report->id)
+            ->where(fn ($q) => $q->where('status', 'open')->orWhere('created_at', '>=', $report->created_at))
+            ->exists();
     }
 }

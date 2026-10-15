@@ -132,6 +132,34 @@ test('admin sees all complaint levels for a proposal', function () {
     $response->assertOk()->assertJsonCount(2, 'data');
 });
 
+test('officers only see complaints on proposals they are responsible for; admins see all', function () {
+    [$proposal, $pi] = http_makeBase();
+    Complaint::create([
+        'proposal_id' => $proposal->id, 'complainant_id' => $pi->id, 'stage' => 'blind_review',
+        'level' => 'college', 'description' => http_description(), 'status' => 'open',
+    ]);
+    Complaint::create([
+        'proposal_id' => $proposal->id, 'complainant_id' => $pi->id, 'stage' => 'post_funding',
+        'level' => 'officer', 'complaint_type' => 'budget', 'description' => http_description(), 'status' => 'open',
+    ]);
+
+    $otherCollege = College::create(['name' => 'Other '.rand(), 'code' => 'OC'.rand(10000, 99999)]);
+    $otherCollegeOfficer = User::factory()->create(['college_id' => $otherCollege->id]);
+    $otherCollegeOfficer->assignRole('college_officer');
+    $technologyOfficer = User::factory()->create();
+    $technologyOfficer->assignRole('technology_officer');
+    $researchOfficer = User::factory()->create();
+    $researchOfficer->assignRole('research_officer');
+    $admin = User::factory()->create();
+    $admin->assignRole('admin');
+
+    $url = "/api/v1/proposals/{$proposal->id}/complaints";
+    $this->actingAs($otherCollegeOfficer)->getJson($url)->assertOk()->assertJsonCount(0, 'data');
+    $this->actingAs($technologyOfficer)->getJson($url)->assertOk()->assertJsonCount(0, 'data');
+    $this->actingAs($researchOfficer)->getJson($url)->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.level', 'officer');
+    $this->actingAs($admin)->getJson($url)->assertOk()->assertJsonCount(2, 'data');
+});
+
 // ─── POST /proposals/{id}/complaints (college level) ─────────────────────────
 
 test('PI can file a blind_review complaint when proposal is under blind review', function () {
@@ -305,6 +333,74 @@ test('college officer cannot respond to officer-level complaint', function () {
     $response->assertStatus(422);
 });
 
+test('the person who filed a complaint cannot resolve it themselves', function () {
+    [$proposal, $pi] = http_makeBase();
+
+    $complaint = Complaint::create([
+        'proposal_id' => $proposal->id, 'complainant_id' => $pi->id, 'stage' => 'blind_review',
+        'level' => 'college', 'description' => http_description(), 'status' => 'open',
+    ]);
+
+    $this->actingAs($pi)->postJson("/api/v1/complaints/{$complaint->id}/respond", [
+        'response' => 'Resolving my own complaint should never be allowed.', 'resolution' => 'resolved',
+    ])->assertStatus(422);
+
+    expect($complaint->fresh()->status)->toBe('open');
+});
+
+test('a category officer only responds to complaints in their own category', function () {
+    [$proposal, $pi] = http_makeBase();
+    $proposal->update(['category' => 'technology_transfer']);
+    $researchOfficer = User::factory()->create();
+    $researchOfficer->assignRole('research_officer');
+
+    $complaint = Complaint::create([
+        'proposal_id' => $proposal->id, 'complainant_id' => $pi->id, 'stage' => 'post_funding',
+        'level' => 'officer', 'complaint_type' => 'budget', 'description' => http_description(), 'status' => 'open',
+    ]);
+
+    $this->actingAs($researchOfficer)->postJson("/api/v1/complaints/{$complaint->id}/respond", [
+        'response' => 'Responding to another category is not allowed.', 'resolution' => 'resolved',
+    ])->assertStatus(422);
+});
+
+test('a closed complaint cannot be answered again, and the list shows who answered it', function () {
+    [$proposal, $pi, $central] = http_makeBase();
+
+    $complaint = Complaint::create([
+        'proposal_id' => $proposal->id, 'complainant_id' => $pi->id, 'stage' => 'blind_review',
+        'level' => 'college', 'description' => http_description(), 'status' => 'open',
+    ]);
+
+    $this->actingAs($central)->postJson("/api/v1/complaints/{$complaint->id}/respond", [
+        'response' => 'Reviewed and resolved by the central office.', 'resolution' => 'resolved',
+    ])->assertOk();
+
+    $this->actingAs($central)->postJson("/api/v1/complaints/{$complaint->id}/respond", [
+        'response' => 'A second answer overwriting the first.', 'resolution' => 'dismissed',
+    ])->assertStatus(422);
+
+    $this->actingAs($pi)->getJson('/api/v1/complaints')
+        ->assertOk()
+        ->assertJsonPath('data.0.status', 'resolved')
+        ->assertJsonPath('data.0.resolved_by.name', $central->name);
+});
+
+test('admins see every complaint, beyond the first twenty', function () {
+    [$proposal, $pi] = http_makeBase();
+    $admin = User::factory()->create();
+    $admin->assignRole('admin');
+
+    foreach (range(1, 22) as $i) {
+        Complaint::create([
+            'proposal_id' => $proposal->id, 'complainant_id' => $pi->id, 'stage' => 'blind_review',
+            'level' => 'college', 'description' => http_description(), 'status' => 'resolved',
+        ]);
+    }
+
+    $this->actingAs($admin)->getJson('/api/v1/complaints')->assertOk()->assertJsonCount(22, 'data');
+});
+
 // ─── GET /complaints index scoping ───────────────────────────────────────────
 
 test('college officer index returns only their college complaints', function () {
@@ -334,7 +430,7 @@ test('college officer index returns only their college complaints', function () 
     ]);
 
     $response = $this->actingAs($collegeOfficer)->getJson('/api/v1/complaints?level=college');
-    $proposalIds = collect($response->json('data.data'))->pluck('proposal_id');
+    $proposalIds = collect($response->json('data'))->pluck('proposal_id');
 
     expect($proposalIds->every(fn ($id) => $id === $proposal->id))->toBeTrue();
 });

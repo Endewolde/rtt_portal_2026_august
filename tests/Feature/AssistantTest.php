@@ -97,3 +97,13 @@ test('only admins can edit articles; everyone reads the help centre', function (
 test('help:evaluate reports how well the articles answer their own questions', function () {
     $this->artisan('help:evaluate')->expectsOutputToContain('questions · first result')->assertSuccessful();
 });
+
+test('a question asked the way an article lists it finds that article first', function () {
+    $wordy = HelpArticle::create(['slug' => 'zz-wordy', 'title' => 'Quarry permits and quarry fees', 'category' => 'Test', 'is_published' => true,
+        'summary' => 'Quarry permits.', 'keywords' => 'quarry permit quarry fee', 'body' => str_repeat('Quarry permit fee. ', 20)]);
+    $listed = HelpArticle::create(['slug' => 'zz-listed', 'title' => 'Site access', 'category' => 'Test', 'is_published' => true,
+        'summary' => 'Getting onto a site.', 'keywords' => 'site access', 'body' => 'Ask the site office.', 'questions' => 'Do I need a quarry permit to visit?']);
+
+    expect(($this->ask)($this->pi, 'do i need a quarry permit to visit')['articles'][0]['slug'])->toBe('zz-listed')
+        ->and(($this->ask)($this->pi, 'quarry permit fee')['articles'][0]['slug'])->toBe('zz-wordy');
+});

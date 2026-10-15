@@ -1253,7 +1253,7 @@ class ReviewController extends Controller
 
     public function removeReviewer(string $id, Request $request): JsonResponse
     {
-        $assignment = ReviewAssignment::with('proposal')->findOrFail($id);
+        $assignment = ReviewAssignment::with(['proposal', 'evaluationType:id,name'])->findOrFail($id);
 
         if (in_array($assignment->status, ['submitted'])) {
             return response()->json([
@@ -1265,15 +1265,35 @@ class ReviewController extends Controller
         }
 
         $proposal = $assignment->proposal;
+        $isDefence = str_starts_with((string) $assignment->evaluationType?->name, 'open_defence');
+
+        // An open defence can't be left without a panel: there would be no one to score it.
+        if ($isDefence && $proposal?->status === 'under_open_defence') {
+            $othersOnPanel = ReviewAssignment::where('proposal_id', $proposal->id)
+                ->where('id', '!=', $assignment->id)
+                ->whereHas('evaluationType', fn ($q) => $q->where('name', 'like', 'open_defence%'))
+                ->whereNotIn('status', ['declined', 'cancelled'])
+                ->exists();
+
+            if (! $othersOnPanel) {
+                return response()->json([
+                    'data' => null,
+                    'message' => 'This is the last panel member. Add another reviewer before removing this one.',
+                    'errors' => [],
+                    'meta' => [],
+                ], 422);
+            }
+        }
+
         $assignment->delete();
 
-        // Removing the last active blind-review reviewer would otherwise leave the
-        // proposal stuck at under_blind_review with nobody assigned and no way to
-        // reopen the Assign Reviewers UI (which only shows for status=validated) —
-        // revert it back so it re-enters the awaiting-assignment list.
+        // Removing the last blind reviewer would otherwise leave the proposal stuck at
+        // under_blind_review with nobody assigned — revert it so it can be assigned again.
+        // If others have already submitted, the removal may instead complete the review.
         if ($proposal && $proposal->status === 'under_blind_review') {
             $remaining = ReviewAssignment::where('proposal_id', $proposal->id)
-                ->whereIn('status', ['pending', 'accepted', 'in_progress'])
+                ->whereHas('evaluationType', fn ($q) => $q->where('name', 'like', 'blind_review%'))
+                ->whereIn('status', ['pending', 'accepted', 'in_progress', 'submitted'])
                 ->exists();
 
             if (! $remaining) {
@@ -1288,6 +1308,16 @@ class ReviewController extends Controller
                     Log::error("Failed to revert proposal to validated after last reviewer removed: {$e->getMessage()}");
                 }
             }
+        }
+
+        // The removed reviewer may have been the only one still to score.
+        try {
+            if ($proposal) {
+                $this->scoreService->processBlindReviewResult($proposal->fresh());
+                $this->scoreService->processOpenDefenceResultIfComplete($proposal->fresh());
+            }
+        } catch (\Throwable $e) {
+            Log::error("Automatic result after reviewer removal failed: {$e->getMessage()}");
         }
 
         return response()->json([

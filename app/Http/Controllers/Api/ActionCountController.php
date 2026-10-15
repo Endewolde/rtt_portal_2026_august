@@ -120,11 +120,22 @@ class ActionCountController extends Controller
         }
 
         // ── 8. Open complaints in this user's scope ───────────────────────────
+        // Same scope as the Complaints page: everything for central, Level 1 for the
+        // officer's college, Level 2 for the director's categories.
         $openComplaints = 0;
         if ($isCentral || $isOfficer || $isCollegeStaff) {
-            $q = DB::table('complaints')->whereIn('status', ['open', 'pending_response', 'escalated']);
+            $q = DB::table('complaints')
+                ->join('proposals', 'complaints.proposal_id', '=', 'proposals.id')
+                ->whereIn('complaints.status', ['open', 'under_review']);
             if (! $isCentral) {
-                $q->where('assigned_to', $userId);
+                $q->where(function ($scope) use ($isCollegeStaff, $isOfficer, $officerCategories, $user) {
+                    if ($isCollegeStaff) {
+                        $scope->orWhere(fn ($c) => $c->where('complaints.level', 'college')->where('proposals.college_id', $user->college_id));
+                    }
+                    if ($isOfficer) {
+                        $scope->orWhere(fn ($c) => $c->where('complaints.level', 'officer')->whereIn('proposals.category', $officerCategories));
+                    }
+                });
             }
             $openComplaints = $q->count();
         }
@@ -143,6 +154,13 @@ class ActionCountController extends Controller
             ->count();
 
         // ── 11. My draft proposals (PI/staff: need to be submitted) ───────────
+        // A researcher's complaints answered this past week — clears itself once read.
+        $myComplaintsAnswered = DB::table('complaints')
+            ->where('complainant_id', $userId)
+            ->whereIn('status', ['resolved', 'dismissed'])
+            ->where('resolved_at', '>=', now()->subDays(7))
+            ->count();
+
         $myProposalsDraft = 0;
         if ($isPI) {
             $myProposalsDraft = DB::table('proposals')
@@ -393,6 +411,7 @@ class ActionCountController extends Controller
                 // New
                 'proposal_calls_active' => $proposalCallsActive,
                 'my_proposals_draft' => $myProposalsDraft,
+                'my_complaints_answered' => $myComplaintsAnswered,
                 'awarded_without_allocation' => $awardedWithoutAllocation,
                 'blind_review_queue' => $blindReviewQueue,
                 'open_defence_queue' => $openDefenceQueue,
