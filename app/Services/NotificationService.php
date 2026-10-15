@@ -13,7 +13,8 @@ class NotificationService
 {
     /**
      * Send a notification through all channels enabled for this user.
-     * In-app storage is synchronous; email/Telegram are queued.
+     * In-app storage is synchronous; email/Telegram are queued when a worker is running,
+     * otherwise sent straight after the response (see DispatchesToWorkerWhenAlive).
      *
      * @param  string  $event  e.g. 'submission_success'
      * @param  array  $data  Event-specific payload
@@ -29,11 +30,11 @@ class NotificationService
         $inAppEnabled = $prefs ? (bool) $prefs->inapp_enabled : true;
 
         if ($emailEnabled && $recipient->email) {
-            SendEmailNotificationJob::dispatch($recipient, $event, $data);
+            SendEmailNotificationJob::deliver($recipient, $event, $data);
         }
 
         if ($telegramEnabled && $recipient->telegram_chat_id) {
-            SendTelegramNotificationJob::dispatch($recipient->telegram_chat_id, $event, $data);
+            SendTelegramNotificationJob::deliver($recipient->telegram_chat_id, $event, $data);
         }
 
         if ($inAppEnabled) {

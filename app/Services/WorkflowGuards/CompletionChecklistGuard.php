@@ -19,13 +19,14 @@ class CompletionChecklistGuard
             return false;
         }
 
-        // If the proposal has budget requests, ensure all have an approved settlement.
+        // Every released budget must be fully settled (finance-verified is the final settlement step).
         $hasPendingSettlement = $proposal->budgetRequests()
-            ->whereDoesntHave('settlement', fn ($q) => $q->where('status', 'approved'))
+            ->where('status', 'disbursed')
+            ->whereDoesntHave('settlement', fn ($q) => $q->where('status', 'finance_verified'))
             ->exists();
 
         if ($hasPendingSettlement) {
-            $this->failReason = 'All budget requests must have an approved settlement before archiving.';
+            $this->failReason = 'All released funds must be settled and verified by finance before archiving.';
 
             return false;
         }

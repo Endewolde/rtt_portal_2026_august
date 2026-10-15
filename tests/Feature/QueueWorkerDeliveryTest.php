@@ -11,7 +11,23 @@ use Illuminate\Support\Facades\DB;
 
 uses(RefreshDatabase::class);
 
-test('without a live worker, mail is sent immediately as before', function () {
+test('during a web request without a worker, mail is sent after the response so the user is not kept waiting', function () {
+    Bus::fake();
+    Cache::forget('queue_worker_heartbeat');
+    $console = new ReflectionProperty(app(), 'isRunningInConsole');
+    $console->setValue(app(), false);
+
+    try {
+        SendEmailNotificationJob::deliver(User::factory()->create(), 'generic', ['message' => 'Hi']);
+    } finally {
+        $console->setValue(app(), true);
+    }
+
+    Bus::assertDispatchedAfterResponse(SendEmailNotificationJob::class);
+    Bus::assertNotDispatchedSync(SendEmailNotificationJob::class);
+});
+
+test('in scheduled commands without a worker, mail is sent immediately', function () {
     Bus::fake();
     Cache::forget('queue_worker_heartbeat');
 

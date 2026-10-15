@@ -172,6 +172,11 @@ class Proposal extends Model
         return $this->hasMany(BudgetRequest::class);
     }
 
+    public function researchOutputs(): HasMany
+    {
+        return $this->hasMany(ResearchOutput::class);
+    }
+
     public function workflowLogs(): HasMany
     {
         return $this->hasMany(WorkflowLog::class);

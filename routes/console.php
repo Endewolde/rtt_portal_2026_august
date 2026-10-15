@@ -40,3 +40,6 @@ Schedule::call(fn () => QueueHeartbeatJob::queueIfIdle())->name('queue-worker-he
 
 // Retention settings (drafts, read notifications, unused accounts) — each off until configured.
 Schedule::command('rtt:data-retention')->dailyAt('02:30');
+
+// Completed projects move to the archive 30 days after completion.
+Schedule::command('proposals:archive-completed')->dailyAt('03:00');

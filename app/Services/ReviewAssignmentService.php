@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Exceptions\ConflictingReviewerException;
 use App\Exceptions\ReviewerOverloadedException;
+use App\Jobs\SendRawMailJob;
 use App\Jobs\StoreInAppNotificationJob;
 use App\Models\Proposal;
 use App\Models\ReviewAssignment;
@@ -12,13 +13,11 @@ use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 
 class ReviewAssignmentService
 {
     public function __construct(
         private readonly WorkflowService $workflowService,
-        private readonly MailConfigService $mailConfig,
         private readonly ReviewerConflictService $conflicts
     ) {}
 
@@ -250,11 +249,11 @@ class ReviewAssignmentService
 
         if ($reviewer->email) {
             try {
-                $this->mailConfig->applyFromDatabase();
-                $subject = "{$reviewType} Assignment — {$proposal->tracker_number}";
-                Mail::html(
+                SendRawMailJob::deliver(
                     view('emails.notifications.review_assignment', array_merge($data, ['recipient' => $reviewer]))->render(),
-                    fn ($msg) => $msg->to($reviewer->email, $reviewer->name)->subject($subject)
+                    $reviewer->email,
+                    $reviewer->name,
+                    "{$reviewType} Assignment — {$proposal->tracker_number}",
                 );
             } catch (\Exception $e) {
                 Log::error("Review assignment email failed for {$reviewer->email}: ".$e->getMessage());

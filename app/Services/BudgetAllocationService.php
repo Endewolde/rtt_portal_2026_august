@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Jobs\SendRawMailJob;
 use App\Jobs\StoreInAppNotificationJob;
 use App\Models\Award;
 use App\Models\BudgetAllocation;
@@ -11,7 +12,6 @@ use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 
 class BudgetAllocationService
 {
@@ -162,8 +162,6 @@ class BudgetAllocationService
             return;
         }
 
-        app(MailConfigService::class)->applyFromDatabase();
-
         $data = [
             'title' => $proposal->title,
             'tracker_number' => $proposal->tracker_number,
@@ -172,10 +170,11 @@ class BudgetAllocationService
         ];
 
         try {
-            Mail::html(
+            SendRawMailJob::deliver(
                 view('emails.notifications.budget_allocated', array_merge($data, ['recipient' => $pi]))->render(),
-                fn ($msg) => $msg->to($pi->email, $pi->name)
-                    ->subject("Budget Allocated — {$proposal->tracker_number}")
+                $pi->email,
+                $pi->name,
+                "Budget Allocated — {$proposal->tracker_number}",
             );
         } catch (\Exception $e) {
             Log::error("Budget allocation email failed for {$pi->email}: ".$e->getMessage());

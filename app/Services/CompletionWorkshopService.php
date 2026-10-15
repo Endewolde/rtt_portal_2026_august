@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Jobs\ArchiveProposalJob;
 use App\Models\BudgetSettlement;
 use App\Models\CompletionWorkshop;
 use App\Models\MidtermEvaluation;
@@ -128,8 +127,7 @@ class CompletionWorkshopService
 
         $this->createOrUpdateRepositoryRecord($completedProposal);
 
-        ArchiveProposalJob::dispatch($completedProposal->id)
-            ->delay(now()->addDays(30));
+        // Archived 30 days later by the daily proposals:archive-completed sweep.
 
         $pi = User::find($completedProposal->pi_user_id);
         if ($pi) {

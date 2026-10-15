@@ -1,6 +1,5 @@
 <?php
 
-use App\Jobs\ArchiveProposalJob;
 use App\Jobs\StoreInAppNotificationJob;
 use App\Models\BudgetRequest;
 use App\Models\BudgetSettlement;
@@ -151,7 +150,7 @@ test('repository record auto-created when proposal moves to completed', function
     expect(RepositoryRecord::where('proposal_id', $proposal->id)->exists())->toBeTrue();
 });
 
-test('ArchiveProposalJob dispatched with delay after finalization', function () {
+test('a finalized project is archived by the daily sweep 30 days later, not by a waiting queue job', function () {
     [$proposal, $pi, $central, $collegeAdmin] = cw_makeBase();
     $service = app(CompletionWorkshopService::class);
 
@@ -159,10 +158,13 @@ test('ArchiveProposalJob dispatched with delay after finalization', function () 
         'date' => now()->addMonths(2)->toDateString(), 'time' => '10:00:00', 'venue' => 'Hall E',
     ], $central);
 
-    Queue::fake();
     $service->finalizeWorkshop($workshop, 85.0, $collegeAdmin);
+    expect($proposal->fresh()->status)->toBe('completed');
 
-    Queue::assertPushed(ArchiveProposalJob::class, fn ($job) => $job->proposalId === $proposal->id);
+    $this->travel(31)->days();
+    $this->artisan('proposals:archive-completed')->assertSuccessful();
+
+    expect($proposal->fresh()->status)->toBe('archived');
 });
 
 test('PI notified on completion', function () {

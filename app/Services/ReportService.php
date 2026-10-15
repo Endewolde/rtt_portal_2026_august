@@ -106,7 +106,8 @@ class ReportService
         ]);
 
         if ($this->shouldQueue($filters)) {
-            GenerateReportJob::dispatch($snapshot->id);
+            // Queued with a worker; without one it runs right after the response, so it can't sit at "processing" forever.
+            GenerateReportJob::deliver($snapshot->id);
 
             return $snapshot;
         }
