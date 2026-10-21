@@ -52,7 +52,7 @@ return [
         'page_paths' => ['/admin/validation-queue'], 'action_label' => 'Open validation queue', 'action_url' => '/admin/validation-queue',
     ],
     [
-        'slug' => 'central-evaluation', 'category' => $c, 'roles' => R::DIRECTORS,
+        'slug' => 'central-evaluation', 'category' => $c, 'roles' => [...R::DIRECTORS, ...R::RTT_MANAGER],
         'title' => 'Making funding decisions in Central Evaluation',
         'summary' => 'Use the merit list and call budget, read the reviews, then approve or reject.',
         'keywords' => 'central evaluation funding decision approve fund merit list ranking budget award',
@@ -74,7 +74,7 @@ return [
         'page_paths' => ['/admin/central-evaluation'], 'action_label' => 'Open central evaluation', 'action_url' => '/admin/central-evaluation',
     ],
     [
-        'slug' => 'award-and-letters', 'category' => $c, 'roles' => R::CENTRAL,
+        'slug' => 'award-and-letters', 'category' => $c, 'roles' => [...R::CENTRAL, ...R::RTT_MANAGER],
         'title' => 'Awards, grant references and grant letters',
         'summary' => 'Approving for funding creates the award; generate the grant letter from Grant Letters.',
         'keywords' => 'award grant letter reference number funding letter generate print template all funded proposals list funded',
@@ -155,17 +155,18 @@ return [
     [
         'slug' => 'approval-reports-admin', 'category' => $c, 'roles' => R::DIRECTORS,
         'title' => 'Reviewing mistaken-approval reports',
-        'summary' => 'Decide whether a reported approval stands or is revoked.',
-        'keywords' => 'approval reports mistaken approval resolve stands revoked',
-        'questions' => ['How do I resolve an approval report?', 'What happens if the approval is revoked?', 'What happens if the approval stands?', 'Where are mistaken approval reports?', 'Is the proposal paused while a report is open?'],
+        'summary' => 'Decide whether a reported approval stands, is revoked, or the project is already ongoing.',
+        'keywords' => 'approval reports mistaken approval resolve stands revoked already ongoing running move to ongoing funded',
+        'questions' => ['How do I resolve an approval report?', 'What happens if the approval is revoked?', 'What happens if the approval stands?', 'Where are mistaken approval reports?', 'Is the proposal paused while a report is open?', 'How do I move an already running project to ongoing?'],
         'body' => "College officers can report a proposal they believe was approved by mistake. Open **Approval Reports**.\n\n"
             ."## Deciding\n"
             ."- **Approval stands** — the proposal is restored and continues.\n"
-            ."- **Revoked** — the proposal is rejected, with both officers' notes recorded.",
+            ."- **Revoked** — the proposal is rejected, with both officers' notes recorded.\n"
+            ."- **Already ongoing — move** — the project is already running: enter the amount awarded (and the grant reference and original approval date if known). It becomes Funded and appears under **Ongoing Proposals**; pending reviews are cancelled and the team is notified.",
         'page_paths' => ['/admin/approval-reports'],
     ],
     [
-        'slug' => 'call-budget', 'category' => $c, 'roles' => R::CENTRAL,
+        'slug' => 'call-budget', 'category' => $c, 'roles' => [...R::CENTRAL, ...R::RTT_MANAGER],
         'title' => 'Setting a call\'s funding budget',
         'summary' => 'Enter the total budget on the call so the merit list can show the cut-off.',
         'keywords' => 'call budget total funding envelope ceiling proposal call create edit',
@@ -192,5 +193,31 @@ return [
             ."## Revoking\n"
             .'Use **Revoke** with a reason (sent to the reviewer). The public check then shows the certificate as revoked. **Reinstate** reverses it.',
         'page_paths' => ['/admin/review-certificates'], 'action_label' => 'Open reviewer certificates', 'action_url' => '/admin/review-certificates',
+    ],
+    [
+        'slug' => 'college-rtt-manager', 'category' => $c, 'roles' => [...R::RTT_MANAGER, ...R::ADMIN, ...R::CENTRAL],
+        'title' => 'The College RTT Manager role',
+        'summary' => 'Central evaluation, funding, progress reports and reporting for one college\'s proposals, across every category.',
+        'keywords' => 'college rtt manager role college research manager my college proposals funding decision central evaluation scope',
+        'questions' => [
+            'What can a College RTT Manager do?', 'Which proposals can I see as RTT manager?', 'Can I approve funding for my college?',
+            'Why can\'t I see another college\'s proposals?', 'How do I make someone a College RTT Manager?', 'Can I revoke funding?',
+            'Do I validate proposals or assign reviewers?', 'Will I be notified when a proposal reaches central evaluation?',
+        ],
+        'body' => "The **College RTT Manager** looks after one college's research proposals in **every category** — research, community engagement and technology transfer.\n\n"
+            ."## What you can do\n"
+            ."- **All Proposals** — see every proposal from your college.\n"
+            ."- **Central Evaluation** — approve proposals for funding with the awarded amount, or reject them, for your college.\n"
+            ."- **Proposal Funding** — adjust award amounts and, if needed, **revoke funding** with a reason.\n"
+            ."- **Progress Reports** — review your college's reports and chase late ones.\n"
+            ."- **Reports**, **Report Builder** and **College Dashboard** — always limited to your college.\n"
+            ."- **Proposal Pipeline** — your college's proposals at every stage.\n\n"
+            ."## What stays with others\n"
+            ."Validating submissions, assigning reviewers and running open defences stay with the **college officer** and the **category directors**. Proposals from other colleges are never shown to you.\n\n"
+            ."## Notifications\n"
+            ."You're notified when one of your college's proposals passes open defence and is **ready for central evaluation**, and about progress reports to review.\n\n"
+            ."## Setting up the role (administrators)\n"
+            ."Give the user the **College RTT Manager** role on **Users**. The user must belong to a **college** first — the role can't be given without one.",
+        'page_paths' => ['/admin/central-evaluation', '/admin/funding'], 'action_label' => 'Open central evaluation', 'action_url' => '/admin/central-evaluation',
     ],
 ];

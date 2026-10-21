@@ -25,7 +25,7 @@ class LoginNoticeController extends Controller
     /** Admin — paginated list of all notices. */
     public function index(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('content.manage')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -40,7 +40,7 @@ class LoginNoticeController extends Controller
     /** Admin — create a notice. */
     public function store(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('content.manage')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -70,7 +70,7 @@ class LoginNoticeController extends Controller
     /** Admin — update a notice. */
     public function update(Request $request, LoginNotice $loginNotice): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('content.manage')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -96,7 +96,7 @@ class LoginNoticeController extends Controller
     /** Admin — delete a notice. */
     public function destroy(Request $request, LoginNotice $loginNotice): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('content.manage')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 

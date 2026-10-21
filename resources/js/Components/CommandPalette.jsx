@@ -10,6 +10,7 @@ import {
     Hash, Clock,
 } from 'lucide-react'
 import { get } from '../lib/api'
+import { canOpenPath } from '../lib/routeAccess'
 import { useAuth } from '../hooks/useAuth'
 import { cn } from '../lib/utils'
 
@@ -28,57 +29,51 @@ const STATUS_COLORS = {
     draft:               'bg-gray-400',
 }
 
-function buildNavItems(hasPermission, hasRole, hasAnyRole) {
-    const p = hasPermission
-    const r = hasRole
-    const ra = hasAnyRole
-    const ADMIN = ['super_admin', 'admin', 'central_officer']
-    const OFFICERS = ['research_officer', 'community_officer', 'technology_officer']
-
+function buildNavItems(hasPermission) {
     return [
-        { group: 'Navigation', label: 'Dashboard',           href: '/dashboard',                icon: LayoutDashboard, show: true },
-        { group: 'Navigation', label: 'My Research Hub',     href: '/researcher-hub',           icon: Brain, show: true },
-        { group: 'Navigation', label: 'Calendar',            href: '/calendar',                 icon: CalendarDays, show: true },
-        { group: 'Navigation', label: 'Notifications',       href: '/notifications',            icon: Activity, show: true },
-        { group: 'Navigation', label: 'My Profile',          href: '/profile',                  icon: Users, show: true },
+        { group: 'Navigation', label: 'Dashboard',           href: '/dashboard',                icon: LayoutDashboard },
+        { group: 'Navigation', label: 'My Research Hub',     href: '/researcher-hub',           icon: Brain },
+        { group: 'Navigation', label: 'Calendar',            href: '/calendar',                 icon: CalendarDays },
+        { group: 'Navigation', label: 'Notifications',       href: '/notifications',            icon: Activity },
+        { group: 'Navigation', label: 'My Profile',          href: '/profile',                  icon: Users },
 
-        { group: 'Proposals',  label: 'All Proposals',       href: '/proposals',                icon: FileText, show: p('proposals.view_any') },
-        { group: 'Proposals',  label: 'New Application',     href: '/proposals/create',         icon: PlusCircle, show: p('proposals.create') },
-        { group: 'Proposals',  label: 'My Proposals',        href: '/my-proposals',             icon: FolderOpen, show: p('proposals.submit') },
-        { group: 'Proposals',  label: 'Proposal Calls',      href: '/proposal-calls',           icon: Megaphone, show: true },
-        { group: 'Proposals',  label: 'Awarded Proposals',   href: '/admin/awarded',            icon: Trophy, show: p('proposals.view_any') },
-        { group: 'Proposals',  label: 'Completed Archive',   href: '/admin/completed-archive',  icon: Archive, show: p('proposals.view_any') },
+        { group: 'Proposals',  label: 'All Proposals',       href: '/proposals',                icon: FileText },
+        { group: 'Proposals',  label: 'New Application',     href: '/proposals/create',         icon: PlusCircle },
+        { group: 'Proposals',  label: 'My Proposals',        href: '/my-proposals',             icon: FolderOpen },
+        { group: 'Proposals',  label: 'Proposal Calls',      href: '/proposal-calls',           icon: Megaphone },
+        { group: 'Proposals',  label: 'Awarded Proposals',   href: '/admin/awarded',            icon: Trophy },
+        { group: 'Proposals',  label: 'Completed Archive',   href: '/admin/completed-archive',  icon: Archive },
 
-        { group: 'Review',     label: 'Validation Queue',    href: '/admin/validation-queue',   icon: CheckSquare, show: p('proposals.validate') },
-        { group: 'Review',     label: 'Central Evaluation',  href: '/admin/central-evaluation', icon: ClipboardList, show: p('proposals.validate') },
-        { group: 'Review',     label: 'Blind Review',        href: '/admin/blind-review',       icon: EyeOff, show: p('reviews.view_any') },
-        { group: 'Review',     label: 'Open Defence',        href: '/admin/open-defence',       icon: Presentation, show: p('defence_sessions.view_any') },
-        { group: 'Review',     label: 'Assigned Reviews',    href: '/reviews',                  icon: CheckSquare, show: p('review_assignments.view_any') },
-        { group: 'Review',     label: 'Grant Letters',       href: '/admin/grant-letters',      icon: ScrollText, show: ra([...ADMIN, ...OFFICERS]) },
-        { group: 'Review',     label: 'Appeals',             href: '/admin/appeals',            icon: Scale, show: ra([...ADMIN, ...OFFICERS]) },
+        { group: 'Review',     label: 'Validation Queue',    href: '/admin/validation-queue',   icon: CheckSquare },
+        { group: 'Review',     label: 'Central Evaluation',  href: '/admin/central-evaluation', icon: ClipboardList },
+        { group: 'Review',     label: 'Blind Review',        href: '/admin/blind-review',       icon: EyeOff },
+        { group: 'Review',     label: 'Open Defence',        href: '/admin/open-defence',       icon: Presentation },
+        { group: 'Review',     label: 'Assigned Reviews',    href: '/reviews',                  icon: CheckSquare },
+        { group: 'Review',     label: 'Grant Letters',       href: '/admin/grant-letters',      icon: ScrollText },
+        { group: 'Review',     label: 'Appeals',             href: '/admin/appeals',            icon: Scale },
 
-        { group: 'Finance',    label: 'Proposal Funding',    href: '/admin/funding',            icon: BadgeDollarSign, show: p('proposals.validate') },
-        { group: 'Finance',    label: 'Budget Allocations',  href: '/budget-allocations',       icon: DollarSign, show: p('budget_allocations.view_any') },
-        { group: 'Finance',    label: 'Budget Requests',     href: '/budget-requests',          icon: DollarSign, show: p('budget_requests.view_any') },
-        { group: 'Finance',    label: 'Disbursements',       href: '/disbursements',            icon: CreditCard, show: p('disbursements.view_any') },
-        { group: 'Finance',    label: 'Settlements',         href: '/settlements',              icon: CheckCircle, show: p('settlements.view_any') },
+        { group: 'Finance',    label: 'Proposal Funding',    href: '/admin/funding',            icon: BadgeDollarSign },
+        { group: 'Finance',    label: 'Budget Allocations',  href: '/budget-allocations',       icon: DollarSign },
+        { group: 'Finance',    label: 'Budget Requests',     href: '/budget-requests',          icon: DollarSign },
+        { group: 'Finance',    label: 'Disbursements',       href: '/disbursements',            icon: CreditCard },
+        { group: 'Finance',    label: 'Settlements',         href: '/settlements',              icon: CheckCircle },
 
-        { group: 'Monitoring', label: 'Midterm Evaluations', href: '/midterm-evaluations',      icon: Activity, show: p('midterm_evaluations.view_any') },
-        { group: 'Monitoring', label: 'Completion Workshops',href: '/completion-workshops',     icon: Award, show: p('completion_workshops.view_any') },
-        { group: 'Monitoring', label: 'Research Outputs',    href: '/research-outputs',         icon: BookOpen, show: p('research_outputs.view_any') },
-        { group: 'Monitoring', label: 'Repository',          href: '/repository',               icon: Database, show: p('repository.view_any') },
-        { group: 'Monitoring', label: 'Research Impact',     href: '/research-impact',          icon: TrendingUp, show: p('research_outputs.view_any') },
+        { group: 'Monitoring', label: 'Midterm Evaluations', href: '/midterm-evaluations',      icon: Activity },
+        { group: 'Monitoring', label: 'Completion Workshops',href: '/completion-workshops',     icon: Award },
+        { group: 'Monitoring', label: 'Research Outputs',    href: '/research-outputs',         icon: BookOpen },
+        { group: 'Monitoring', label: 'Repository',          href: '/repository',               icon: Database },
+        { group: 'Monitoring', label: 'Research Impact',     href: '/research-impact',          icon: TrendingUp },
 
-        { group: 'Reports',    label: 'Generate Reports',    href: '/reports',                  icon: BarChart, show: p('reports.view_any') },
-        { group: 'Reports',    label: 'Proposal Statistics', href: '/proposals',                icon: TrendingUp, show: p('reports.view_any') },
-        { group: 'Reports',    label: 'Analytics Dashboard', href: '/admin/analytics',          icon: BarChart, show: ra(ADMIN) },
+        { group: 'Reports',    label: 'Generate Reports',    href: '/reports',                  icon: BarChart },
+        { group: 'Reports',    label: 'Proposal Statistics', href: '/proposals',                icon: TrendingUp },
+        { group: 'Reports',    label: 'Analytics Dashboard', href: '/admin/analytics',          icon: BarChart },
 
-        { group: 'Admin',      label: 'Users',               href: '/admin/users',              icon: Users, show: p('users.view_any') },
-        { group: 'Admin',      label: 'Colleges',            href: '/admin/colleges',           icon: Building, show: p('colleges.view_any') },
-        { group: 'Admin',      label: 'Audit Logs',          href: '/admin/audit-logs',         icon: Shield, show: p('audit_logs.view_any') },
-        { group: 'Admin',      label: 'Settings',            href: '/admin/settings',           icon: Settings, show: ra(['super_admin', 'admin']) },
-        { group: 'Admin',      label: 'Public Site',         href: '/admin/public-site',        icon: Globe, show: ra(['super_admin', 'admin']) },
-    ].filter(item => item.show)
+        { group: 'Admin',      label: 'Users',               href: '/admin/users',              icon: Users },
+        { group: 'Admin',      label: 'Colleges',            href: '/admin/colleges',           icon: Building },
+        { group: 'Admin',      label: 'Audit Logs',          href: '/admin/audit-logs',         icon: Shield },
+        { group: 'Admin',      label: 'Settings',            href: '/admin/settings',           icon: Settings },
+        { group: 'Admin',      label: 'Public Site',         href: '/admin/public-site',        icon: Globe },
+    ].filter(item => canOpenPath(item.href, hasPermission))
 }
 
 const RECENT_KEY = 'rtt_cmd_recent'
@@ -91,7 +86,7 @@ function saveRecent(href, label) {
 }
 
 export default function CommandPalette({ open, onClose }) {
-    const { hasPermission, hasRole, hasAnyRole } = useAuth()
+    const { hasPermission } = useAuth()
     const [query, setQuery] = useState('')
     const [proposalResults, setProposalResults] = useState([])
     const [loading, setLoading] = useState(false)
@@ -99,7 +94,7 @@ export default function CommandPalette({ open, onClose }) {
     const inputRef = useRef(null)
     const listRef = useRef(null)
 
-    const navItems = buildNavItems(hasPermission, hasRole, hasAnyRole)
+    const navItems = buildNavItems(hasPermission)
 
     const filteredNav = query.trim()
         ? navItems.filter(item =>

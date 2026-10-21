@@ -43,21 +43,9 @@ class CompletionWorkshopController extends Controller
      */
     private function scopeToUser($query, $user): void
     {
-        if ($user->hasRole('college_officer') ||
-            ($user->hasRole('support_officer') && $user->college_id)) {
-            $query->whereHas('proposal', fn ($q) => $q->where('college_id', $user->college_id));
-        } elseif ($user->hasRole('research_officer')) {
-            $query->whereHas('proposal', fn ($q) => $q->where('category', 'research'));
-        } elseif ($user->hasRole('community_officer')) {
-            $query->whereHas('proposal', fn ($q) => $q->where('category', 'community_engagement'));
-        } elseif ($user->hasRole('technology_officer')) {
-            $query->whereHas('proposal', fn ($q) => $q->where('category', 'technology_transfer'));
-        } elseif (! $user->hasAnyRole(['super_admin', 'central_officer', 'support_officer'])) {
-            $query->whereHas('proposal', fn ($q) => $q->where('pi_user_id', $user->id)
-                ->orWhereHas('members', fn ($sq) => $sq->where('user_id', $user->id)->where('status', 'active')
-                )
-            );
-        }
+        // Within the role's data scope; PIs and team members see their own projects.
+        $user->accessScope()->constrainThrough($query, 'proposal', fn ($q) => $q->whereHas('proposal', fn ($q) => $q->where('pi_user_id', $user->id)
+            ->orWhereHas('members', fn ($sq) => $sq->where('user_id', $user->id)->where('status', 'active'))));
     }
 
     public function show(string $id): JsonResponse
@@ -97,15 +85,7 @@ class CompletionWorkshopController extends Controller
             ->with(['pi:id,name,email', 'college:id,name'])
             ->orderBy('tracker_number');
 
-        if ($user->hasRole('college_officer')) {
-            $query->where('college_id', $user->college_id);
-        } elseif ($user->hasRole('research_officer')) {
-            $query->where('category', 'research');
-        } elseif ($user->hasRole('community_officer')) {
-            $query->where('category', 'community_engagement');
-        } elseif ($user->hasRole('technology_officer')) {
-            $query->where('category', 'technology_transfer');
-        }
+        $user->accessScope()->constrain($query, 'proposals', fn ($q) => $q->where('proposals.pi_user_id', $user->id));
 
         return response()->json([
             'data' => $query->get(['id', 'tracker_number', 'title', 'pi_user_id', 'college_id', 'category', 'duration_months']),
@@ -171,9 +151,7 @@ class CompletionWorkshopController extends Controller
             ->whereDoesntHave('completionWorkshop', fn ($q) => $q->whereIn('status', ['scheduled', 'completed'])
             );
 
-        if ($user->hasRole('college_officer')) {
-            $query->where('college_id', $user->college_id);
-        }
+        $user->accessScope()->constrain($query, 'proposals', fn ($q) => $q->where('proposals.pi_user_id', $user->id));
 
         $proposals = $query->get();
         $scheduled = 0;
@@ -339,8 +317,7 @@ class CompletionWorkshopController extends Controller
         $user = $request->user();
 
         $isPI = $workshop->proposal?->pi_user_id === $user->id;
-        $isOfficer = $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'college_officer',
-            'research_officer', 'community_officer', 'technology_officer', 'support_officer']);
+        $isOfficer = $user->can('completion_workshops.discuss');
 
         if (! $isPI && ! $isOfficer) {
             abort(403, 'Only the PI or an officer can answer questions.');
@@ -367,7 +344,7 @@ class CompletionWorkshopController extends Controller
         $user = $request->user();
 
         $isOwner = $question->user_id === $user->id;
-        $isAdmin = $user->hasAnyRole(['super_admin', 'admin', 'central_officer']);
+        $isAdmin = $user->can('completion_workshops.moderate');
 
         if (! $isOwner && ! $isAdmin) {
             abort(403, 'You can only delete your own questions.');

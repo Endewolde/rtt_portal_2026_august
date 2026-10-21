@@ -10,8 +10,6 @@ use Illuminate\Http\Request;
 
 class ExpenditureController extends Controller
 {
-    private const MANAGERS = ['super_admin', 'admin', 'research_officer', 'central_officer', 'finance_officer'];
-
     public function index(Request $request, string $awardId): JsonResponse
     {
         $award = ExternalFundAward::findOrFail($awardId);
@@ -35,7 +33,7 @@ class ExpenditureController extends Controller
 
     public function store(Request $request, string $awardId): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::MANAGERS)) {
+        if (! $request->user()?->can('external_funds.expenditure')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 

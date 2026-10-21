@@ -302,16 +302,12 @@ function DisburseModal({ request, onClose, onSuccess }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function Disbursements() {
-    const { user, hasAnyRole }  = useAuth();
+    const { user, hasPermission }  = useAuth();
     const { success, error }    = useToast();
     const [view, setView]       = useViewPreference('disbursements', 'card');
 
-    const isFinance = hasAnyRole([
-        'super_admin', 'admin', 'central_officer', 'finance_officer',
-        'research_officer', 'community_officer', 'technology_officer',
-    ]);
-    const isCollegeOfficer = hasAnyRole(['college_officer']);
-    const canDisburse = isFinance || isCollegeOfficer;
+    const isFinance = hasPermission('funds.disburse');
+    const canDisburse = isFinance;
 
     const [activeTab,       setActiveTab]       = useState(canDisburse ? 'pending' : 'disbursed');
     const [disbursements,   setDisbursements]   = useState([]);

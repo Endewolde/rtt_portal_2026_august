@@ -11,10 +11,9 @@ use App\Models\ProposalCall;
 use App\Models\ProposalMember;
 use App\Models\ThresholdSetting;
 use App\Models\User;
-use App\Services\AwardService;
+use App\Services\LegacyGrantService;
 use App\Services\TrackerNumberService;
 use App\Services\WorkflowService;
-use App\Support\AuditLogger;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -40,25 +39,13 @@ class OngoingProposalsController extends Controller
 {
     private const ONGOING_STATUSES = ['funded', 'midterm_evaluation', 'completed'];
 
-    // staff/PI also holds proposals.view_any, so role-array gating (not a bare
-    // permission check) is required to keep this admin-monitoring page from them.
-    private const ALLOWED_ROLES = [
-        'super_admin', 'admin', 'central_officer',
-        'research_officer', 'community_officer', 'technology_officer',
-        'college_officer',
-    ];
-
-    // Matches WorkflowStageSeeder's $adminCore for the completed -> archived transition.
-    private const ARCHIVE_ROLES = ['super_admin', 'central_officer'];
-
-    // Bypasses the entire submit/review/validate/blind-review/open-defence
-    // workflow, so it's restricted to the admin-core roles rather than the
-    // broader officer set that can use the rest of this dashboard.
-    private const LEGACY_GRANT_ROLES = ['super_admin', 'admin', 'central_officer'];
+    // Access: monitoring.ongoing (the page), monitoring.archive (completed ->
+    // archived) and monitoring.legacy_grants (bypasses the whole review workflow,
+    // so admin-core only by default) — see config/access.php.
 
     public function __construct(
         private WorkflowService $workflowService,
-        private AwardService $awardService,
+        private LegacyGrantService $legacyGrants,
     ) {}
 
     private const SORTABLE_COLUMNS = [
@@ -73,7 +60,7 @@ class OngoingProposalsController extends Controller
     {
         $user = $request->user();
 
-        if (! $user?->hasAnyRole(self::ALLOWED_ROLES)) {
+        if (! $user?->can('monitoring.ongoing')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
         }
 
@@ -128,7 +115,7 @@ class OngoingProposalsController extends Controller
     {
         $user = $request->user();
 
-        if (! $user?->hasAnyRole(self::ALLOWED_ROLES)) {
+        if (! $user?->can('monitoring.ongoing')) {
             abort(403, 'Unauthorized.');
         }
 
@@ -170,7 +157,7 @@ class OngoingProposalsController extends Controller
     {
         $user = $request->user();
 
-        if (! $user?->hasAnyRole(self::ARCHIVE_ROLES)) {
+        if (! $user?->can('monitoring.archive')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
         }
 
@@ -194,7 +181,7 @@ class OngoingProposalsController extends Controller
     {
         $user = $request->user();
 
-        if (! $user?->hasAnyRole(self::LEGACY_GRANT_ROLES)) {
+        if (! $user?->can('monitoring.legacy_grants')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
         }
 
@@ -231,7 +218,7 @@ class OngoingProposalsController extends Controller
     {
         $user = $request->user();
 
-        if (! $user?->hasAnyRole(self::LEGACY_GRANT_ROLES)) {
+        if (! $user?->can('monitoring.legacy_grants')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
         }
 
@@ -278,7 +265,7 @@ class OngoingProposalsController extends Controller
     {
         $user = $request->user();
 
-        if (! $user?->hasAnyRole(self::LEGACY_GRANT_ROLES)) {
+        if (! $user?->can('monitoring.legacy_grants')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
         }
 
@@ -395,7 +382,7 @@ class OngoingProposalsController extends Controller
     /** Distinct academic years already recorded on proposals — feeds the New Proposal form's dropdown. */
     public function academicYears(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::LEGACY_GRANT_ROLES)) {
+        if (! $request->user()?->can('monitoring.legacy_grants')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
         }
 
@@ -437,21 +424,9 @@ class OngoingProposalsController extends Controller
     /** Null when eligible, otherwise the reason it can't be legacy-granted. Shared by the single and bulk-import paths. */
     private function legacyGrantEligibilityError(Proposal $proposal): ?string
     {
-        if (in_array($proposal->status, [...self::ONGOING_STATUSES, 'archived'], true)) {
-            return 'This proposal is already funded, ongoing, or archived.';
-        }
-
-        if ($proposal->award) {
-            return 'This proposal already has an award record.';
-        }
-
-        return null;
+        return $this->legacyGrants->eligibilityError($proposal);
     }
 
-    /**
-     * The actual write path shared by grantLegacy() and grantLegacyImport(): raw status
-     * write + workflow_logs + audit_logs + Award creation, all in one transaction.
-     */
     private function performLegacyGrant(
         Proposal $proposal,
         User $user,
@@ -460,50 +435,13 @@ class OngoingProposalsController extends Controller
         ?string $grantReference,
         ?Carbon $approvedAt,
     ): Award {
-        return DB::transaction(function () use ($proposal, $user, $justification, $amount, $grantReference, $approvedAt) {
-            $fromStage = $proposal->status;
-
-            DB::table('proposals')->where('id', $proposal->id)->update([
-                'status' => 'funded',
-                'updated_at' => now(),
-            ]);
-
-            DB::table('workflow_logs')->insert([
-                'id' => (string) Str::uuid(),
-                'proposal_id' => $proposal->id,
-                'from_stage' => $fromStage,
-                'action' => 'grant_legacy',
-                'to_stage' => 'funded',
-                'actor_id' => $user->id,
-                'notes' => $justification,
-                'metadata' => json_encode(['override' => true, 'source' => 'ongoing_proposals_legacy_grant']),
-                'created_at' => now(),
-            ]);
-
-            AuditLogger::log(
-                'proposal.grant_legacy',
-                Proposal::class,
-                $proposal->id,
-                $user->id,
-                ['status' => $fromStage],
-                ['status' => 'funded', 'awarded_amount' => $amount, 'justification' => $justification],
-            );
-
-            return $this->awardService->createForFundedProposal(
-                $proposal->fresh(),
-                $user,
-                $amount,
-                $justification,
-                $grantReference,
-                $approvedAt,
-            );
-        });
+        return $this->legacyGrants->grant($proposal, $user, $justification, $amount, $grantReference, $approvedAt);
     }
 
     /** CSV template for bulk legacy grants — same 4 columns grantLegacyImport() expects. */
     public function grantLegacyImportTemplate(Request $request): StreamedResponse|JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::LEGACY_GRANT_ROLES)) {
+        if (! $request->user()?->can('monitoring.legacy_grants')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
         }
 
@@ -533,7 +471,7 @@ class OngoingProposalsController extends Controller
     {
         $user = $request->user();
 
-        if (! $user?->hasAnyRole(self::LEGACY_GRANT_ROLES)) {
+        if (! $user?->can('monitoring.legacy_grants')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
         }
 

@@ -62,7 +62,7 @@ class CalendarController extends Controller
             });
 
         // Reviewers — review assignment due dates
-        if ($user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer'])) {
+        if ($user->can('calendar.all')) {
             $assignmentQuery = ReviewAssignment::with('proposal:id,tracker_number,title')
                 ->whereIn('status', ['pending', 'in_progress'])
                 ->whereNotNull('due_date');
@@ -150,7 +150,7 @@ class CalendarController extends Controller
             ]));
 
         // Review due dates (officers/admins)
-        if ($user?->hasAnyRole(['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer'])) {
+        if ($user?->can('calendar.all')) {
             ReviewAssignment::with('proposal:id,tracker_number')
                 ->whereIn('status', ['pending', 'in_progress'])
                 ->whereNotNull('due_date')
@@ -171,7 +171,7 @@ class CalendarController extends Controller
             ->where('status', 'scheduled')
             ->whereBetween('scheduled_date', [$from, $to])
             ->get()
-            ->filter(fn ($d) => $user?->hasAnyRole(['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer', 'college_officer'])
+            ->filter(fn ($d) => $user?->canAny(['calendar.all', 'reviews.manage'])
                 || $d->proposal?->pi_user_id === $user?->id
             )
             ->each(fn ($d) => $events->push([

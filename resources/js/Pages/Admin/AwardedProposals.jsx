@@ -156,21 +156,12 @@ export default function AwardedProposals() {
         try {
             const results = await Promise.all(
                 FUNDED_STATUSES.map(s =>
-                    api.get('/proposals', { params: { status: s, per_page: 200 } })
+                    api.get('/proposals', { params: { status: s, per_page: 200, with_award: 1 } })
                         .then(r => r.data?.data?.data ?? r.data?.data ?? [])
                         .catch(() => [])
                 )
             );
-            const all = results.flat();
-            const withAwards = await Promise.all(
-                all.map(async p => {
-                    try {
-                        const r = await api.get(`/proposals/${p.id}/award`);
-                        return { ...p, award: r.data?.data ?? null };
-                    } catch { return { ...p, award: null }; }
-                })
-            );
-            setProposals(withAwards);
+            setProposals(results.flat().map(p => ({ ...p, award: p.award ?? null })));
         } catch { error('Failed to load awarded proposals.'); }
         setLoading(false);
     };

@@ -24,7 +24,7 @@ return [
         'page_paths' => ['/ongoing-proposals'], 'action_label' => 'Open ongoing proposals', 'action_url' => '/ongoing-proposals',
     ],
     [
-        'slug' => 'progress-reports-admin', 'category' => $c, 'roles' => R::OFFICERS,
+        'slug' => 'progress-reports-admin', 'category' => $c, 'roles' => [...R::OFFICERS, ...R::RTT_MANAGER],
         'title' => 'Reviewing progress reports',
         'summary' => 'Accept reports or send them back, and chase the ones that are late.',
         'keywords' => 'progress reports review accept revision late overdue chase monitoring',

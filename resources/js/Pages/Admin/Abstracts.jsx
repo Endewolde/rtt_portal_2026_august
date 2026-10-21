@@ -1107,8 +1107,8 @@ function ManageAbstractsTab() {
 // ─── Page ──────────────────────────────────────────────────────────────────────
 
 export default function AdminAbstracts() {
-    const { hasAnyRole } = useAuth();
-    const isAdmin = hasAnyRole(['super_admin', 'admin', 'central_officer']);
+    const { hasPermission } = useAuth();
+    const isAdmin = hasPermission('conferences.manage');
 
     return (
         <AppLayout breadcrumb="Abstracts">

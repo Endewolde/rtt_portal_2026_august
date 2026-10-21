@@ -117,6 +117,10 @@ class CentralEvaluationController extends Controller
 
         $proposal = Proposal::with('proposalCall')->findOrFail($id);
 
+        if ($denied = $this->outOfScope($request, $proposal)) {
+            return $denied;
+        }
+
         // Going over the call's budget needs an explicit confirmation.
         if ($proposal->proposalCall && ! $request->boolean('acknowledge_over_budget')) {
             $budget = $this->fundingBudget->summary($proposal->proposalCall, $proposal->id);
@@ -186,6 +190,10 @@ class CentralEvaluationController extends Controller
         $request->validate(['reason' => 'required|string|min:10']);
 
         $proposal = Proposal::findOrFail($id);
+
+        if ($denied = $this->outOfScope($request, $proposal)) {
+            return $denied;
+        }
 
         try {
             DB::table('proposals')->where('id', $proposal->id)
@@ -278,11 +286,15 @@ class CentralEvaluationController extends Controller
         RejectionReasons::apply($request, 'funding_revocation');
         $request->validate(['reason' => 'required|string|min:10']);
 
-        if (! $request->user()?->hasAnyRole(['super_admin', 'central_officer'])) {
+        if (! $request->user()?->can('funding.revoke')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
         $proposal = Proposal::findOrFail($id);
+
+        if ($denied = $this->outOfScope($request, $proposal)) {
+            return $denied;
+        }
 
         if ($proposal->status !== 'funded') {
             return response()->json(['message' => 'Only funded proposals can have their funding revoked.'], 422);
@@ -313,5 +325,19 @@ class CentralEvaluationController extends Controller
                 'meta' => [],
             ], 422);
         }
+    }
+
+    /**
+     * College RTT managers act only on their own college's proposals, and category
+     * directors only on their own category's.
+     */
+    private function outOfScope(Request $request, Proposal $proposal): ?JsonResponse
+    {
+        $outside = ($request->_college_scope && $proposal->college_id !== $request->_college_scope)
+            || ($request->_category_scope && $proposal->category !== $request->_category_scope);
+
+        return $outside
+            ? response()->json(['data' => null, 'message' => 'This proposal is outside your college or category.', 'errors' => [], 'meta' => []], 403)
+            : null;
     }
 }

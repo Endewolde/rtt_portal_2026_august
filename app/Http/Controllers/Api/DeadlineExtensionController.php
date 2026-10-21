@@ -14,8 +14,6 @@ use Illuminate\Support\Facades\Log;
 
 class DeadlineExtensionController extends Controller
 {
-    private const OFFICER_ROLES = ['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer'];
-
     /** PI requests more time to finish and submit a draft past its call's deadline. */
     public function store(string $proposalId, Request $request): JsonResponse
     {
@@ -62,7 +60,7 @@ class DeadlineExtensionController extends Controller
     /** Officer lists all extension requests. */
     public function index(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::OFFICER_ROLES)) {
+        if (! $request->user()?->can('deadline_extensions.resolve')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -83,7 +81,7 @@ class DeadlineExtensionController extends Controller
     /** Officer grants or denies an extension request. */
     public function resolve(string $id, Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::OFFICER_ROLES)) {
+        if (! $request->user()?->can('deadline_extensions.resolve')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -150,7 +148,8 @@ class DeadlineExtensionController extends Controller
             return;
         }
 
-        $officers = User::role($role)->where('status', 'active')->get();
+        $officers = User::role($role)->where('status', 'active')->get()
+            ->merge(User::customRoleHolders('deadline_extensions.resolve', $proposal->college_id, $proposal->category))->unique('id');
         foreach ($officers as $officer) {
             try {
                 SendEmailNotificationJob::deliver($officer, 'deadline_extension_requested', [

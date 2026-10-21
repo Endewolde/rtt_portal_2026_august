@@ -1,5 +1,6 @@
 import { Link } from '@inertiajs/react';
 import { Check, Lock, ClipboardCheck, EyeOff, Presentation, ClipboardList, BadgeDollarSign } from 'lucide-react';
+import { canOpenPath } from '../lib/routeAccess';
 import { useAuth } from '../hooks/useAuth';
 
 const STEPS = [
@@ -8,45 +9,35 @@ const STEPS = [
         href:   '/admin/validation-queue',
         status: 'submitted',
         icon:   ClipboardCheck,
-        roles:  ['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer'],
-        perm:   'proposals.validate',
     },
     {
         label:  'Blind Review',
         href:   '/admin/blind-review',
         status: 'under_blind_review',
         icon:   EyeOff,
-        roles:  ['super_admin', 'admin', 'central_officer', 'college_officer'],
-        perm:   'reviews.view_any',
     },
     {
         label:  'Open Defence',
         href:   '/admin/open-defence',
         status: 'under_open_defence',
         icon:   Presentation,
-        roles:  ['super_admin', 'admin', 'central_officer', 'college_officer'],
-        perm:   'defence_sessions.view_any',
     },
     {
         label:  'Central Eval',
         href:   '/admin/central-evaluation',
         status: 'accepted',
         icon:   ClipboardList,
-        roles:  ['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer'],
-        perm:   'proposals.validate',
     },
     {
         label:  'Funding',
         href:   '/admin/funding',
         status: 'funded',
         icon:   BadgeDollarSign,
-        roles:  ['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer'],
-        perm:   'proposals.validate',
     },
 ];
 
 export default function WorkflowBreadcrumb({ current }) {
-    const { hasAnyRole, hasPermission } = useAuth();
+    const { hasPermission } = useAuth();
 
     const currentIdx = STEPS.findIndex(s => s.status === current);
 
@@ -56,7 +47,7 @@ export default function WorkflowBreadcrumb({ current }) {
                 {STEPS.map((step, i) => {
                     const isCurrent  = i === currentIdx;
                     const isDone     = i < currentIdx;
-                    const hasAccess  = hasAnyRole(step.roles) && hasPermission(step.perm);
+                    const hasAccess  = canOpenPath(step.href, hasPermission);
                     const Icon       = step.icon;
 
                     // ── Connector line ──────────────────────────────────────

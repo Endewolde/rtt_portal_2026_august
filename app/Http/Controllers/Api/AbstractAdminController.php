@@ -20,7 +20,7 @@ class AbstractAdminController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        if (! $user?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $user?->can('conferences.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -72,7 +72,7 @@ class AbstractAdminController extends Controller
 
     public function show(string $id, Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('conferences.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -84,7 +84,7 @@ class AbstractAdminController extends Controller
     public function updateStatus(Request $request, string $id): JsonResponse
     {
         $user = $request->user();
-        if (! $user?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $user?->can('conferences.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -110,7 +110,7 @@ class AbstractAdminController extends Controller
 
     public function assignReviewer(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('conferences.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -151,7 +151,7 @@ class AbstractAdminController extends Controller
 
     public function export(Request $request): StreamedResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('conferences.manage')) {
             abort(403);
         }
 
@@ -187,7 +187,7 @@ class AbstractAdminController extends Controller
 
     public function sendNextSteps(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('conferences.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 

@@ -92,7 +92,7 @@ class ConferenceController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('conferences.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -112,7 +112,7 @@ class ConferenceController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('conferences.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -151,7 +151,7 @@ class ConferenceController extends Controller
 
     public function show(string $id, Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('conferences.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -164,7 +164,7 @@ class ConferenceController extends Controller
 
     public function update(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('conferences.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -215,7 +215,7 @@ class ConferenceController extends Controller
 
     public function destroy(string $id, Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('conferences.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -232,7 +232,7 @@ class ConferenceController extends Controller
 
     public function uploadBanner(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('conferences.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -249,7 +249,7 @@ class ConferenceController extends Controller
 
     public function storeSpeaker(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('conferences.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -273,7 +273,7 @@ class ConferenceController extends Controller
 
     public function updateSpeaker(Request $request, string $id, string $speakerId): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('conferences.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -295,7 +295,7 @@ class ConferenceController extends Controller
 
     public function destroySpeaker(string $id, string $speakerId, Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('conferences.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -306,7 +306,7 @@ class ConferenceController extends Controller
 
     public function uploadSpeakerPhoto(Request $request, string $id, string $speakerId): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('conferences.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -323,7 +323,7 @@ class ConferenceController extends Controller
 
     public function storeSession(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('conferences.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -356,7 +356,7 @@ class ConferenceController extends Controller
 
     public function updateSession(Request $request, string $id, string $sessionId): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('conferences.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -389,7 +389,7 @@ class ConferenceController extends Controller
 
     public function destroySession(string $id, string $sessionId, Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('conferences.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -438,7 +438,7 @@ class ConferenceController extends Controller
     /** Admin — list registrations for a conference. */
     public function registrations(string $id, Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('conferences.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -454,7 +454,7 @@ class ConferenceController extends Controller
     /** Admin — export registrations as CSV. */
     public function exportRegistrations(string $id, Request $request): StreamedResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('conferences.manage')) {
             abort(403);
         }
 

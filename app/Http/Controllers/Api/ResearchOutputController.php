@@ -45,20 +45,8 @@ class ResearchOutputController extends Controller
             ->with(['college:id,name'])
             ->select('id', 'tracker_number', 'title', 'college_id', 'status', 'academic_year', 'category');
 
-        if ($user->hasAnyRole(['college_officer'])) {
-            $query->where('college_id', $user->college_id);
-        } elseif ($user->hasRole('research_officer')) {
-            $query->where('category', 'research');
-        } elseif ($user->hasRole('community_officer')) {
-            $query->where('category', 'community_engagement');
-        } elseif ($user->hasRole('technology_officer')) {
-            $query->where('category', 'technology_transfer');
-        } elseif (! $user->hasAnyRole(['super_admin', 'central_officer'])) {
-            $query->where(fn ($q) => $q->where('pi_user_id', $user->id)
-                ->orWhereHas('members', fn ($sq) => $sq->where('user_id', $user->id)->where('status', 'active')
-                )
-            );
-        }
+        $user->accessScope()->constrain($query, 'proposals', fn ($q) => $q->where(fn ($q) => $q->where('pi_user_id', $user->id)
+            ->orWhereHas('members', fn ($sq) => $sq->where('user_id', $user->id)->where('status', 'active'))));
 
         return response()->json(['data' => $query->orderBy('title')->get(), 'message' => '', 'errors' => [], 'meta' => []]);
     }
@@ -230,13 +218,13 @@ class ResearchOutputController extends Controller
     {
         $user = $request->user();
 
-        if (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'college_officer'])) {
+        if (! $user->can('research_outputs.verify')) {
             abort(403, 'Only college officers can verify research outputs.');
         }
 
         $output = ResearchOutput::with(['proposal:id,college_id'])->findOrFail($id);
 
-        if ($user->hasRole('college_officer') && $output->proposal?->college_id !== $user->college_id) {
+        if (! $user->accessScope()->covers($output->proposal?->college_id, $output->proposal?->category)) {
             abort(403, 'You can only verify outputs from your college.');
         }
 
@@ -268,7 +256,7 @@ class ResearchOutputController extends Controller
     {
         $user = $request->user();
 
-        if (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer'])) {
+        if (! $user->can('research_outputs.approve')) {
             abort(403, 'Only research officers or admins can approve research outputs.');
         }
 
@@ -303,49 +291,22 @@ class ResearchOutputController extends Controller
 
     private function scopeToUser(Builder $query, User $user): void
     {
-        if ($user->hasAnyRole(['super_admin', 'central_officer'])) {
-            return;
-        }
-
-        if ($user->hasAnyRole(['college_officer'])) {
-            $query->whereHas('proposal', fn ($q) => $q->where('college_id', $user->college_id));
-
-            return;
-        }
-
-        if ($user->hasRole('research_officer')) {
-            $query->whereHas('proposal', fn ($q) => $q->where('category', 'research'));
-
-            return;
-        }
-
-        if ($user->hasRole('community_officer')) {
-            $query->whereHas('proposal', fn ($q) => $q->where('category', 'community_engagement'));
-
-            return;
-        }
-
-        if ($user->hasRole('technology_officer')) {
-            $query->whereHas('proposal', fn ($q) => $q->where('category', 'technology_transfer'));
-
-            return;
-        }
-
-        $query->where(fn ($q) => $q->where('recorded_by', $user->id)
+        // Within the role's data scope; others see outputs they recorded or that
+        // belong to their own projects.
+        $user->accessScope()->constrainThrough($query, 'proposal', fn ($q) => $q->where(fn ($q) => $q->where('recorded_by', $user->id)
             ->orWhereHas('proposal', fn ($sq) => $sq->where('pi_user_id', $user->id)
-                ->orWhereHas('members', fn ($ssq) => $ssq->where('user_id', $user->id)->where('status', 'active')
-                )
-            )
-        );
+                ->orWhereHas('members', fn ($ssq) => $ssq->where('user_id', $user->id)->where('status', 'active')))));
     }
 
     private function authorizeProposalAccess(User $user, string $proposalId): void
     {
-        if ($user->hasAnyRole(['super_admin', 'central_officer', 'college_officer', 'research_officer', 'community_officer', 'technology_officer'])) {
+        $proposal = Proposal::findOrFail($proposalId);
+
+        // Officers may record outputs for any project within their scope.
+        if ($user->can('research_outputs.record_any') && $user->accessScope()->covers($proposal->college_id, $proposal->category)) {
             return;
         }
 
-        $proposal = Proposal::findOrFail($proposalId);
         $isMember = $proposal->members()->where('user_id', $user->id)->where('status', 'active')->exists();
 
         if ($proposal->pi_user_id !== $user->id && ! $isMember) {

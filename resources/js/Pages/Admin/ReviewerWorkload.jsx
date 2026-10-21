@@ -4,9 +4,11 @@ import {
     Building2, ClipboardList, EyeOff, Presentation,
     ChevronDown, ChevronRight, FileDown, BarChart2,
     Clock, CheckCircle2, AlertCircle, TrendingUp, TrendingDown, Minus, FileText, AlertTriangle,
+    Wallet, FileSpreadsheet,
 } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import api from '../../lib/api';
+import { downloadFile } from '../../lib/download';
 import { useToast } from '../../Components/Toast';
 
 // ─── CSV download helper ───────────────────────────────────────────────────────
@@ -182,6 +184,8 @@ export default function ReviewerWorkload() {
     const [tab, setTab]                 = useState('summary'); // 'summary' | 'all' | 'analytics'
     const [analytics, setAnalytics]     = useState(null);
     const [analyticsLoading, setAnalyticsLoading] = useState(false);
+    const [paymentYear, setPaymentYear] = useState('');
+    const [paymentDownloading, setPaymentDownloading] = useState(false);
 
     const load = async () => {
         setLoading(true);
@@ -277,6 +281,27 @@ export default function ReviewerWorkload() {
     const openCount       = filteredAssignments.filter(a => a.evaluation_type?.name?.startsWith('open')).length;
 
     // ── Download helpers ──────────────────────────────────────────────────────
+
+    const academicYears = useMemo(
+        () => [...new Set(assignments.map(a => a.proposal?.academic_year).filter(Boolean))].sort().reverse(),
+        [assignments],
+    );
+
+    // Excel built on the server: one row per review with the reviewer's totals, plus a payment summary sheet.
+    const downloadPaymentReport = async () => {
+        setPaymentDownloading(true);
+        const params = new URLSearchParams();
+        if (filterCollege) params.set('college_id', filterCollege);
+        if (paymentYear) params.set('academic_year', paymentYear);
+        params.set('review_type', filterEvalType);
+        params.set('reviewer_type', filterReviewerType);
+        try {
+            await downloadFile(`/admin/reviewer-workload/payment-report?${params}`, `reviewer_payment_report${paymentYear ? `_${paymentYear}` : ''}.xlsx`);
+        } catch (e) {
+            error(e.response?.data?.message || 'Could not prepare the payment report.');
+        }
+        setPaymentDownloading(false);
+    };
 
     const downloadAll = () => {
         const headers = [
@@ -453,6 +478,32 @@ export default function ReviewerWorkload() {
                                 {opt.label}
                             </button>
                         ))}
+                    </div>
+                </div>
+
+                {/* Payment report */}
+                <div className="flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/70 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-start gap-3">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white">
+                            <Wallet size={17} />
+                        </span>
+                        <div>
+                            <p className="text-sm font-semibold text-emerald-900">Reviewer payment report</p>
+                            <p className="text-xs text-emerald-800/80">
+                                Excel with every review — reviewer, proposal, type, status, college, completed and not completed — plus a per-reviewer payment summary. Uses the college, review-type and reviewer filters above.
+                            </p>
+                        </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                        <select value={paymentYear} onChange={e => setPaymentYear(e.target.value)} aria-label="Academic year"
+                            className="rounded-lg border border-emerald-200 bg-white px-2.5 py-2 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                            <option value="">All years</option>
+                            {academicYears.map(y => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                        <button onClick={downloadPaymentReport} disabled={paymentDownloading}
+                            className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60">
+                            <FileSpreadsheet size={13} /> {paymentDownloading ? 'Preparing…' : 'Download Excel'}
+                        </button>
                     </div>
                 </div>
 

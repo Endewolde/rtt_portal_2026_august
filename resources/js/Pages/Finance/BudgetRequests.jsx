@@ -776,15 +776,16 @@ function DisburseModal({ request, onClose, onSuccess }) {
 function RequestCard({ request, userId, isOfficer, isAdmin, onRefresh }) {
     const { error, success } = useToast();
     const { confirm, Dialog } = useConfirm();
-    const { hasRole, hasAnyRole } = useAuth();
+    const { hasPermission } = useAuth();
     const [expanded,        setExpanded]        = useState(false);
     const [showEdit,        setShowEdit]        = useState(false);
     const [rejectModal,     setRejectModal]     = useState(false);
     const [finReturnModal,  setFinReturnModal]  = useState(false);
     const [showDisburse,    setShowDisburse]    = useState(false);
 
-    const isCollegeOfficer  = hasRole('college_officer');
-    const isFinanceOfficer  = hasAnyRole(['finance_officer', 'super_admin', 'admin', 'central_officer']);
+    // Same stages as the server: the college stage is for those who can't give the finance approval.
+    const isFinanceOfficer  = hasPermission('budget_requests.approve_finance');
+    const isCollegeOfficer  = hasPermission('budget_requests.approve_college') && !isFinanceOfficer;
 
     const sigs        = request.signatures ?? [];
     const signed      = sigs.filter(s => s.status === 'signed').length;
@@ -804,7 +805,7 @@ function RequestCard({ request, userId, isOfficer, isAdmin, onRefresh }) {
     const canFinanceApprove = isFinanceOfficer && request.status === 'college_approved';
     const canFinanceReturn  = isFinanceOfficer && request.status === 'college_approved';
     // Finance officer or college officer: disburse on approved requests
-    const canDisburse       = (isFinanceOfficer || isCollegeOfficer) && request.status === 'approved';
+    const canDisburse       = hasPermission('funds.disburse') && request.status === 'approved';
 
     const handleDelete = async () => {
         const ok = await confirm({
@@ -1107,14 +1108,13 @@ function RequestCard({ request, userId, isOfficer, isAdmin, onRefresh }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function BudgetRequests() {
-    const { user, hasRole, hasAnyRole } = useAuth();
+    const { user, hasPermission, accessScope } = useAuth();
     const { success, error }   = useToast();
     const [view, setView]      = useViewPreference('budget_requests', 'card');
 
-    const isPI     = hasRole('staff');
-    const isAdmin  = hasAnyRole(['super_admin', 'central_officer', 'finance_officer',
-                                 'college_officer', 'support_officer',
-                                 'research_officer', 'community_officer', 'technology_officer']);
+    // Researchers request money for their own projects; officers see requests within their scope.
+    const isPI     = accessScope.type === 'own' && hasPermission('budget_requests.create');
+    const isAdmin  = accessScope.type !== 'own' && hasPermission('budget_requests.view_any');
 
     const [requests,        setRequests]        = useState([]);
     const [fundedProposals, setFundedProposals] = useState([]);
@@ -1271,7 +1271,7 @@ export default function BudgetRequests() {
                                         key={r.id}
                                         request={r}
                                         userId={user?.id}
-                                        isOfficer={isAdmin && !hasAnyRole(['super_admin', 'central_officer', 'finance_officer'])}
+                                        isOfficer={isAdmin && !hasPermission('budget_requests.approve_finance')}
                                         isAdmin={isAdmin}
                                         onRefresh={load}
                                     />
@@ -1321,7 +1321,7 @@ export default function BudgetRequests() {
                                             key={r.id}
                                             request={r}
                                             userId={user?.id}
-                                            isOfficer={isAdmin && !hasAnyRole(['super_admin', 'central_officer', 'finance_officer'])}
+                                            isOfficer={isAdmin && !hasPermission('budget_requests.approve_finance')}
                                             isAdmin={isAdmin}
                                             onRefresh={load}
                                         />

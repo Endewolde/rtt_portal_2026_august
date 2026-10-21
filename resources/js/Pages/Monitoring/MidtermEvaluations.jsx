@@ -736,12 +736,11 @@ function EvaluationCard({ evaluation, isPI, isOfficer, onRefresh }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function MidtermEvaluations() {
-    const { hasRole, hasAnyRole } = useAuth()
+    const { hasPermission, accessScope } = useAuth()
     const { success, error } = useToast()
 
-    const isOfficer = hasAnyRole(['super_admin', 'admin', 'central_officer', 'college_officer',
-                                   'research_officer', 'community_officer', 'technology_officer'])
-    const isPI      = hasRole('staff')
+    const isOfficer = hasPermission('monitoring.ongoing')
+    const isPI      = accessScope.type === 'own'
 
     const [evaluations,     setEvaluations]     = useState([])
     const [fundedProposals, setFundedProposals] = useState([])

@@ -67,6 +67,11 @@ const TYPE_CFG = {
         template: d => `Proposal ${d.tracker_number || ''} passed blind review — schedule an open defence session`,
         actionLabel: 'Schedule Defence', actionUrl: () => '/admin/open-defence',
     },
+    central_eval_ready_officer: {
+        icon: CheckCircle2, color: 'blue', label: 'Central Evaluation Needed', category: 'action',
+        template: d => `Proposal ${d.tracker_number || ''} passed open defence — make the funding decision`,
+        actionLabel: 'Open Central Evaluation', actionUrl: () => '/admin/central-evaluation',
+    },
     decision_result: {
         icon: Bell, color: 'gray', label: 'Decision Update', category: 'activity',
         template: d => d.title || `Decision on ${d.tracker_number || 'proposal'}`,

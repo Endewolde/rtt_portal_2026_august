@@ -54,8 +54,8 @@ class UserController extends Controller
         $query = User::with(['roles:id,name', 'college:id,name', 'department:id,name'])->orderBy($sortBy, $sortDir);
 
         // College Admin scoped to own college
-        if ($isAdmin && $request->user()->hasRole('college_officer') && $request->user()->college_id) {
-            $query->where('college_id', $request->user()->college_id);
+        if ($isAdmin && $request->user()->accessScope()->isCollege()) {
+            $query->where('college_id', $request->user()->accessScope()->collegeId);
         }
 
         if ($search = $request->query('search')) {
@@ -124,8 +124,8 @@ class UserController extends Controller
 
         // Same scoping as index() — a college officer's stats must reflect only
         // their own college, not the platform-wide totals.
-        if ($request->user()->hasRole('college_officer') && $request->user()->college_id) {
-            $base->where('college_id', $request->user()->college_id);
+        if ($request->user()->accessScope()->isCollege()) {
+            $base->where('college_id', $request->user()->accessScope()->collegeId);
         }
 
         return response()->json([
@@ -172,6 +172,10 @@ class UserController extends Controller
         // cross the super_admin boundary in either direction — see store()/update().
         if ($validated['role'] === 'super_admin' || $oldRole === 'super_admin') {
             return response()->json(['data' => null, 'message' => 'The super_admin role cannot be granted or removed here.', 'errors' => []], 403);
+        }
+
+        if ($missing = $this->missingCollege([$validated['role']], $target->college_id)) {
+            return $missing;
         }
 
         $target->syncRoles([$validated['role']]);
@@ -277,6 +281,10 @@ class UserController extends Controller
         // which adds its own safeguards (password re-confirmation).
         if ($request->role === 'super_admin') {
             return response()->json(['message' => 'super_admin cannot be granted here — use the dedicated Create Super Admin action.'], 403);
+        }
+
+        if ($missing = $this->missingCollege([$request->role], $request->college_id)) {
+            return $missing;
         }
 
         $user = User::create([
@@ -409,6 +417,11 @@ class UserController extends Controller
         $roleChanging = $request->filled('role') && $request->role !== $user->getRoleNames()->first();
         if ($roleChanging && ($request->role === 'super_admin' || $user->hasRole('super_admin'))) {
             return response()->json(['message' => 'The super_admin role cannot be granted or removed here.'], 403);
+        }
+
+        if ($request->filled('role')
+            && ($missing = $this->missingCollege([$request->role], $request->exists('college_id') ? $request->college_id : $user->college_id))) {
+            return $missing;
         }
 
         $fields = ['name', 'title', 'email', 'college_id', 'department_id', 'employee_id', 'phone', 'gender', 'status', 'expertise'];
@@ -780,7 +793,7 @@ class UserController extends Controller
 
     public function destroy(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()->can('users.manage')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -926,7 +939,7 @@ class UserController extends Controller
 
     public function bulkAction(Request $request): JsonResponse
     {
-        if (! $request->user()->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()->can('users.manage')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -958,6 +971,13 @@ class UserController extends Controller
                 ->get()
                 // Existing super_admins are also protected from bulk demotion.
                 ->reject(fn (User $u) => $u->hasRole('super_admin'));
+
+            $withoutCollege = $users->filter(fn (User $u) => ! $u->college_id)->count();
+            if ($withoutCollege && $this->collegeScopedRoles([$role]) !== []) {
+                return response()->json([
+                    'message' => "{$withoutCollege} of the selected users have no college. This role works on one college, so set their college first.",
+                ], 422);
+            }
 
             $now = now();
             foreach ($users as $u) {
@@ -1105,7 +1125,7 @@ class UserController extends Controller
 
     public function updateUserRoles(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()->hasRole('super_admin')) {
+        if (! $request->user()->can('roles.manage')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -1114,6 +1134,11 @@ class UserController extends Controller
             'roles.*' => 'string|exists:roles,name',
         ]);
         $user = User::findOrFail($id);
+
+        if ($missing = $this->missingCollege($request->roles, $user->college_id)) {
+            return $missing;
+        }
+
         $oldRoles = $user->getRoleNames()->values()->toArray();
         $user->syncRoles($request->roles);
 
@@ -1246,5 +1271,32 @@ class UserController extends Controller
             'message' => 'PI proposal history retrieved.',
             'errors' => [],
         ]);
+    }
+
+    /** @param array<int, string> $roles */
+    private function missingCollege(array $roles, ?string $collegeId): ?JsonResponse
+    {
+        if ($collegeId || $this->collegeScopedRoles($roles) === []) {
+            return null;
+        }
+
+        return response()->json([
+            'data' => null,
+            'message' => 'The '.implode(', ', $this->collegeScopedRoles($roles)).' role works on one college — set the user\'s college first.',
+            'errors' => ['college_id' => ['A college is required for this role.']],
+        ], 422);
+    }
+
+    /**
+     * Labels of the given roles whose data scope is one college — they only work
+     * for a user who belongs to a college.
+     *
+     * @param  array<int, string>  $roles
+     * @return list<string>
+     */
+    private function collegeScopedRoles(array $roles): array
+    {
+        return DB::table('roles')->whereIn('name', $roles)->where('scope', 'college')
+            ->get(['name', 'label'])->map(fn ($r) => $r->label ?: $r->name)->all();
     }
 }

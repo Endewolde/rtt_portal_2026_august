@@ -308,6 +308,17 @@ class TurnaroundService
             default => collect(),
         };
 
+        // Plus anyone given the same responsibility through a custom role.
+        $permission = match ($owner) {
+            'validators' => 'proposals.validate',
+            'central' => 'evaluation.central',
+            'assigners', 'defence_schedulers' => 'reviews.manage',
+            default => null,
+        };
+        if ($permission) {
+            $users = $users->merge(User::customRoleHolders($permission, $proposal->college_id, $proposal->category));
+        }
+
         return $users->unique('id')->values();
     }
 }

@@ -67,7 +67,7 @@ return [
         'page_paths' => ['/admin/reviewer-workload'],
     ],
     [
-        'slug' => 'report-builder', 'category' => $c, 'roles' => R::OFFICERS,
+        'slug' => 'report-builder', 'category' => $c, 'roles' => [...R::OFFICERS, ...R::RTT_MANAGER],
         'title' => 'Building and exporting reports',
         'summary' => 'Ready-made reports, your own custom reports, and the annual report.',
         'keywords' => 'report builder export excel pdf custom annual report download export data spreadsheet csv save',

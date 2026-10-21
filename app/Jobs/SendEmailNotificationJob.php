@@ -92,6 +92,7 @@ class SendEmailNotificationJob implements ShouldQueue
             'budget_request_approved' => 'Budget Request Approved — '.($this->data['tracker_number'] ?? ''),
             'central_eval_approved' => 'Proposal Advanced to Central Evaluation — '.($this->data['tracker_number'] ?? ''),
             'blind_review_passed_officer' => 'Open Defence Needed — '.($this->data['tracker_number'] ?? ''),
+            'central_eval_ready_officer' => 'Ready for Central Evaluation — '.($this->data['tracker_number'] ?? ''),
             'proposal_submitted_officer' => 'New Proposal Submitted — '.($this->data['tracker_number'] ?? ''),
             'appeal_submitted' => 'Appeal Received — '.($this->data['tracker_number'] ?? ''),
             'appeal_resolved' => 'Your Appeal Has Been Resolved — '.($this->data['tracker_number'] ?? ''),
@@ -126,6 +127,9 @@ class SendEmailNotificationJob implements ShouldQueue
             'defence_deadline_extended' => 'Defence Score Deadline Extended — '.($this->data['tracker_number'] ?? ''),
             'defence_deadline_reminder' => 'Defence Score Due Today — '.($this->data['tracker_number'] ?? ''),
             'defence_deadline_passed' => 'Defence Score Deadline Passed — '.($this->data['tracker_number'] ?? ''),
+            'defence_absence_reported' => 'Team Reported Absent From Open Defence — '.($this->data['tracker_number'] ?? ''),
+            'defence_attendance_needed' => 'Confirm The Open Defence Was Held — '.($this->data['tracker_number'] ?? ''),
+            'defence_score_voided' => 'Open Defence Score Voided — '.($this->data['tracker_number'] ?? ''),
             default => 'RTT Platform Notification',
         };
     }
@@ -149,6 +153,7 @@ class SendEmailNotificationJob implements ShouldQueue
             'central_eval_approved' => 'decision_result',
             'proposal_submitted_officer' => 'decision_result',
             'blind_review_passed_officer' => 'generic',
+            'central_eval_ready_officer' => 'generic',
             'appeal_submitted' => 'generic',
             'appeal_resolved' => 'decision_result',
             'deadline_extension_requested' => 'generic',

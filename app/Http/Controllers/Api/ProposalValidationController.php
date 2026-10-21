@@ -97,7 +97,7 @@ class ProposalValidationController extends Controller
     public function anonymityCheck(string $id, Request $request, AnonymityCheckService $anonymity): JsonResponse
     {
         $user = $request->user();
-        if (! $user->can('proposals.validate') && ! $user->hasRole('college_officer')) {
+        if (! $user->can('proposals.validate') && ! $user->can('reviews.manage')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => [], 'meta' => []], 403);
         }
 

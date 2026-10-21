@@ -213,18 +213,11 @@ class ProgressReportService
             || $proposal->activeMembers()->where('user_id', $user->id)->exists();
     }
 
-    /** Who reviews this project's reports: its college officer, its category director, the central office. */
+    /** Who reviews this project's reports: its college officer or RTT manager, its category director, the central office. */
     public function canReview(Proposal $proposal, User $user): bool
     {
-        if ($user->hasAnyRole(['super_admin', 'admin', 'central_officer'])) {
-            return true;
-        }
-        if ($user->hasRole('college_officer') && $user->college_id === $proposal->college_id) {
-            return true;
-        }
-        $director = self::DIRECTOR_ROLES[$proposal->category] ?? null;
-
-        return $director !== null && $user->hasRole($director);
+        return $user->can('progress_reports.review')
+            && $user->accessScope()->covers($proposal->college_id, $proposal->category);
     }
 
     private function fundingDate(Proposal $proposal): Carbon
@@ -272,13 +265,14 @@ class ProgressReportService
     /** @return Collection<int, User> */
     private function officersFor(Proposal $proposal): Collection
     {
-        $officers = User::role('college_officer')->where('status', 'active')->where('college_id', $proposal->college_id)->get();
+        $officers = User::role(['college_officer', 'college_rtt_manager'])->where('status', 'active')->where('college_id', $proposal->college_id)->get();
         $director = self::DIRECTOR_ROLES[$proposal->category] ?? null;
         if ($director) {
             $officers = $officers->merge(User::role($director)->where('status', 'active')->get());
         }
 
-        return $officers->unique('id')->values();
+        return $officers->merge(User::customRoleHolders('progress_reports.review', $proposal->college_id, $proposal->category))
+            ->unique('id')->values();
     }
 
     private function notifyMany(Collection $users, string $event, ProgressReport $report, string $message): void

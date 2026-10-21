@@ -18,6 +18,7 @@ class ProposalApprovalReport extends Model
      */
     public const ISSUE_TYPES = [
         'not_anonymous' => 'Not anonymous — author identity revealed',
+        'already_ongoing' => 'Already ongoing — the project is already running',
         'duplicate_or_funded' => 'Duplicate or already funded proposal',
         'plagiarism' => 'Plagiarism or high similarity',
         'ineligible_team' => 'PI or team not eligible',

@@ -1199,14 +1199,12 @@ function OngoingTable({ proposals, loading, sortKey, sortDir, onSort, canArchive
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function OngoingProposals() {
-    const { hasRole, hasAnyRole } = useAuth();
+    const { hasPermission, accessScope } = useAuth();
     const toast = useToast();
-    const isCollegeOfficer = hasRole('college_officer');
-    const isCategoryOfficer = hasAnyRole(['research_officer', 'community_officer', 'technology_officer']);
-    // Matches ARCHIVE_ROLES server-side — no plain 'admin', that's intentional.
-    const canArchive = hasAnyRole(['super_admin', 'central_officer']);
-    // Matches LEGACY_GRANT_ROLES server-side.
-    const canGrantLegacy = hasAnyRole(['super_admin', 'admin', 'central_officer']);
+    const isCollegeOfficer = accessScope.type === 'college';
+    const isCategoryOfficer = accessScope.type === 'category';
+    const canArchive = hasPermission('monitoring.archive');
+    const canGrantLegacy = hasPermission('monitoring.legacy_grants');
 
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);

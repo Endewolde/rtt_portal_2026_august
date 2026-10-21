@@ -26,27 +26,16 @@ class ComplaintController extends Controller
             'resolvedBy:id,name',
         ]);
 
-        if ($user->hasAnyRole(['super_admin', 'admin', 'central_officer'])) {
-            // See all
-        } elseif ($user->hasRole('college_officer')) {
-            // Level 1 only — own college
-            $query->where('level', 'college')
-                ->whereHas('proposal', fn ($q) => $q->where('college_id', $user->college_id));
-        } elseif ($user->hasAnyRole(['research_officer', 'community_officer', 'technology_officer'])) {
-            // Level 2 only — own category
-            $categoryMap = [
-                'research_officer' => 'research',
-                'community_officer' => 'community_engagement',
-                'technology_officer' => 'technology_transfer',
-            ];
-            $category = collect($categoryMap)
-                ->first(fn ($_, $role) => $user->hasRole($role));
-
-            $query->where('level', 'officer')
-                ->whereHas('proposal', fn ($q) => $q->where('category', $category));
-        } else {
-            // PI / staff / others — own complaints only
+        // Complaint handlers see the level that matches their scope: everything,
+        // Level 1 for their college, or Level 2 for their category. Everyone else
+        // sees only the complaints they filed.
+        $scope = $user->accessScope();
+        if (! $user->can('complaints.respond') || $scope->isOwn()) {
             $query->where('complainant_id', $user->id);
+        } elseif ($scope->isCollege()) {
+            $query->where('level', 'college')->whereHas('proposal', fn ($q) => $q->where('college_id', $scope->collegeId));
+        } elseif ($scope->isCategory()) {
+            $query->where('level', 'officer')->whereHas('proposal', fn ($q) => $q->whereIn('category', $scope->categories));
         }
 
         if ($level) {
@@ -128,18 +117,15 @@ class ComplaintController extends Controller
         $query = Complaint::with(['complainant:id,name', 'resolvedBy:id,name', 'assignedTo:id,name'])
             ->where('proposal_id', $id);
 
-        $officerCategory = collect([
-            'research_officer' => 'research',
-            'community_officer' => 'community_engagement',
-            'technology_officer' => 'technology_transfer',
-        ])->first(fn ($_, $role) => $user->hasRole($role));
+        $scope = $user->accessScope();
+        $handles = $user->can('complaints.respond') && $scope->covers($proposal->college_id, $proposal->category);
 
-        if ($user->hasAnyRole(['super_admin', 'admin', 'central_officer'])) {
+        if ($handles && $scope->isAll()) {
             // See all levels
-        } elseif ($user->hasRole('college_officer') && $proposal->college_id === $user->college_id) {
+        } elseif ($handles && $scope->isCollege()) {
             // Level 1 complaints, for their own college only
             $query->where('level', 'college');
-        } elseif ($officerCategory !== null && $proposal->category === $officerCategory) {
+        } elseif ($handles && $scope->isCategory()) {
             // Level 2 complaints, for their own category only
             $query->where('level', 'officer');
         } else {
@@ -190,7 +176,7 @@ class ComplaintController extends Controller
         $user = $request->user();
         $complaint = Complaint::findOrFail($id);
 
-        if ($complaint->complainant_id !== $user->id && ! $user->hasAnyRole(['super_admin', 'central_officer'])) {
+        if ($complaint->complainant_id !== $user->id && ! $user->can('complaints.moderate')) {
             return response()->json(['data' => null, 'message' => 'Only the complainant may edit this complaint.', 'errors' => [], 'meta' => []], 403);
         }
 
@@ -212,7 +198,7 @@ class ComplaintController extends Controller
         $user = $request->user();
         $complaint = Complaint::findOrFail($id);
 
-        if ($complaint->complainant_id !== $user->id && ! $user->hasAnyRole(['super_admin', 'central_officer'])) {
+        if ($complaint->complainant_id !== $user->id && ! $user->can('complaints.moderate')) {
             return response()->json(['data' => null, 'message' => 'Only the complainant may withdraw this complaint.', 'errors' => [], 'meta' => []], 403);
         }
 
@@ -247,37 +233,16 @@ class ComplaintController extends Controller
 
     private function authorizeView(Complaint $complaint, User $user): void
     {
-        if ($user->hasAnyRole(['super_admin', 'admin', 'central_officer'])) {
+        if ($complaint->complainant_id === $user->id) {
             return;
         }
 
-        if ($user->hasRole('college_officer')) {
-            abort_unless(
-                $complaint->level === 'college'
-                && optional($complaint->proposal)->college_id === $user->college_id,
-                403
-            );
+        $scope = $user->accessScope();
+        $proposal = $complaint->proposal;
+        abort_unless($user->can('complaints.respond') && $scope->covers($proposal?->college_id, $proposal?->category), 403);
 
-            return;
-        }
-
-        $categoryMap = [
-            'research_officer' => 'research',
-            'community_officer' => 'community_engagement',
-            'technology_officer' => 'technology_transfer',
-        ];
-        if ($user->hasAnyRole(array_keys($categoryMap))) {
-            $category = collect($categoryMap)->first(fn ($_, $role) => $user->hasRole($role));
-            abort_unless(
-                $complaint->level === 'officer'
-                && optional($complaint->proposal)->category === $category,
-                403
-            );
-
-            return;
-        }
-
-        // PI / staff — own complaint only
-        abort_unless($complaint->complainant_id === $user->id, 403);
+        // College handlers see Level 1, category handlers Level 2.
+        abort_if($scope->isCollege() && $complaint->level !== 'college', 403);
+        abort_if($scope->isCategory() && $complaint->level !== 'officer', 403);
     }
 }

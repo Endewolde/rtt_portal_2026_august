@@ -12,20 +12,13 @@ class ProposalResource extends JsonResource
     {
         $user = $request->user();
         $isOwner = $user && $user->id === $this->pi_user_id;
-        $isReviewer = $user && $user->hasRole('staff');
-        $isColAdmin = $user && $user->hasRole('college_officer');
-        $hidePI = ! $isOwner && ($isReviewer || $isColAdmin);
-
-        // Reviewers only need the proposal document and budget spreadsheet to score —
-        // other uploads (PI CV, supporting docs) aren't relevant to scoring and can
-        // carry identifying info. College officers are not scope-limited here since
-        // they're not blind reviewers, just college-scoped oversight.
-        $hideDocs = ! $isOwner && $isReviewer;
-
-        // PI CVs are restricted to the PI themselves and central_officer — every other
-        // officer role (college/research/community/technology/finance/support) must
-        // never see them, even though they can see the rest of the proposal's documents.
-        $hideCv = ! $isOwner && $user && $user->hasAnyRole(ProposalDocument::CV_RESTRICTED_ROLES);
+        // Blind review: who wrote a proposal stays hidden from anyone without the
+        // "see author identities" permission (reviewers, college officers running
+        // blind review); other documents and the PI CV likewise need their own
+        // permissions. The PI always sees their own proposal in full.
+        $hidePI = ! $isOwner && ! $user?->can('proposals.view_identity');
+        $hideDocs = ! $isOwner && ! $user?->can('proposals.view_documents');
+        $hideCv = ! $isOwner && ! $user?->can('proposals.view_cv');
 
         return [
             'id' => $this->id,

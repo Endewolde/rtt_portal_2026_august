@@ -10,8 +10,6 @@ use Illuminate\Support\Str;
 
 class ApplicationController extends Controller
 {
-    private const MANAGERS = ['super_admin', 'admin', 'research_officer', 'central_officer'];
-
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -28,7 +26,7 @@ class ApplicationController extends Controller
             ->when($request->category, fn ($q, $c) => $q->where('category', $c))
             ->when($request->college_id, fn ($q, $id) => $q->where('college_id', $id))
             ->when(
-                ! $user->hasAnyRole(self::MANAGERS),
+                ! $user->can('external_funds.manage'),
                 fn ($q) => $q->where('created_by', $user->id)
             )
             ->latest();
@@ -108,7 +106,7 @@ class ApplicationController extends Controller
         ])->findOrFail($id);
 
         $user = $request->user();
-        if (! $user->hasAnyRole(self::MANAGERS) && $application->created_by !== $user->id) {
+        if (! $user->can('external_funds.manage') && $application->created_by !== $user->id) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -120,7 +118,7 @@ class ApplicationController extends Controller
         $application = ExternalFundApplication::findOrFail($id);
         $user = $request->user();
 
-        if (! $user->hasAnyRole(self::MANAGERS) && $application->created_by !== $user->id) {
+        if (! $user->can('external_funds.manage') && $application->created_by !== $user->id) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -164,7 +162,7 @@ class ApplicationController extends Controller
 
     public function updateStatus(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::MANAGERS)) {
+        if (! $request->user()?->can('external_funds.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -199,7 +197,7 @@ class ApplicationController extends Controller
 
     public function destroy(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('external_funds.delete')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 

@@ -32,6 +32,9 @@ class HelpArticleSeeder extends Seeder
 
     public const SUPER = ['super_admin'];
 
+    /** One college, every category: central evaluation, funding, progress reports, reporting. */
+    public const RTT_MANAGER = ['college_rtt_manager'];
+
     public function run(): void
     {
         foreach ($this->articles() as $i => $data) {

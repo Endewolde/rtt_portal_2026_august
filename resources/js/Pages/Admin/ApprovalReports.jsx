@@ -7,6 +7,7 @@ import { formatDate, getCategoryLabel } from '../../lib/utils';
 import { useToast } from '../../Components/Toast';
 import ResolveApprovalReportModal from '../../Components/ResolveApprovalReportModal';
 import ReportMistakenApprovalModal from '../../Components/ReportMistakenApprovalModal';
+import ConfirmDialog from '../../Components/ConfirmDialog';
 import { issueByKey } from '../../lib/approvalReportIssues';
 
 const TABS = [
@@ -34,7 +35,20 @@ export default function ApprovalReports() {
     const [reviewing, setReviewing] = useState(null);
     const [reportingAgain, setReportingAgain] = useState(null);
     const [canResolve, setCanResolve] = useState(false);
-    const { error } = useToast();
+    const [cancelling, setCancelling] = useState(null);
+    const { success, error } = useToast();
+
+    const cancelReport = async () => {
+        const report = cancelling;
+        setCancelling(null);
+        try {
+            const res = await post(`/approval-reports/${report.id}/withdraw`, {});
+            success(res.message ?? 'Report cancelled.');
+            load();
+        } catch (e) {
+            error(e.response?.data?.message ?? 'Could not cancel the report.');
+        }
+    };
 
     const load = async () => {
         setLoading(true);
@@ -115,7 +129,7 @@ export default function ApprovalReports() {
                     <div className="space-y-3">
                         {reports.map(rep => (
                             <ReportCard key={rep.id} report={rep} filter={filter} canResolve={canResolve}
-                                onReview={() => setReviewing(rep)} onReportAgain={() => setReportingAgain(rep)} />
+                                onReview={() => setReviewing(rep)} onReportAgain={() => setReportingAgain(rep)} onCancel={() => setCancelling(rep)} />
                         ))}
                     </div>
                 )}
@@ -126,6 +140,18 @@ export default function ApprovalReports() {
                     report={reviewing}
                     onSaved={() => { setReviewing(null); load(); }}
                     onClose={() => setReviewing(null)}
+                />
+            )}
+
+            {cancelling && (
+                <ConfirmDialog
+                    open
+                    title="Cancel this report?"
+                    description={`Use this if you reported ${cancelling.proposal?.tracker_number ?? 'this proposal'} by mistake. The proposal goes back to where it was and the directors are told no action is needed.`}
+                    confirmLabel="Cancel report"
+                    cancelLabel="Keep report"
+                    onConfirm={cancelReport}
+                    onCancel={() => setCancelling(null)}
                 />
             )}
 
@@ -141,7 +167,7 @@ export default function ApprovalReports() {
     );
 }
 
-function ReportCard({ report, filter, canResolve, onReview, onReportAgain }) {
+function ReportCard({ report, filter, canResolve, onReview, onReportAgain, onCancel }) {
     const [expanded, setExpanded] = useState(false);
 
     return (
@@ -202,7 +228,15 @@ function ReportCard({ report, filter, canResolve, onReview, onReportAgain }) {
                                 Review <ChevronRight size={13} />
                             </button>
                         )}
-                        {filter === 'open' && !canResolve && (
+                        {report.can_cancel && (
+                            <button
+                                onClick={onCancel}
+                                className="flex items-center gap-1.5 px-3.5 py-2 border border-gray-300 bg-white text-gray-700 text-xs font-semibold rounded-xl hover:bg-gray-50 transition-colors"
+                            >
+                                <XCircle size={13} /> Cancel report
+                            </button>
+                        )}
+                        {filter === 'open' && !canResolve && !report.can_cancel && (
                             <span className="text-xs font-medium text-amber-600 whitespace-nowrap">Awaiting response</span>
                         )}
                         {report.can_report_again && (
@@ -235,10 +269,11 @@ function ReportCard({ report, filter, canResolve, onReview, onReportAgain }) {
                         </div>
 
                         {report.resolution_notes && (
-                            <div className={`rounded-xl p-4 border ${report.outcome === 'approval_revoked' ? 'bg-red-50 border-red-100' : 'bg-emerald-50 border-emerald-100'}`}>
-                                <p className={`text-xs font-semibold uppercase tracking-wide mb-2 ${report.outcome === 'approval_revoked' ? 'text-red-600' : 'text-emerald-600'}`}>
+                            <div className={`rounded-xl p-4 border ${report.outcome === 'approval_revoked' ? 'bg-red-50 border-red-100' : report.outcome === 'moved_to_ongoing' ? 'bg-indigo-50 border-indigo-100' : 'bg-emerald-50 border-emerald-100'}`}>
+                                <p className={`text-xs font-semibold uppercase tracking-wide mb-2 ${report.outcome === 'approval_revoked' ? 'text-red-600' : report.outcome === 'moved_to_ongoing' ? 'text-indigo-600' : 'text-emerald-600'}`}>
                                     {report.outcome === 'approval_revoked'
                                         ? 'Mistaken approval confirmed — proposal rejected'
+                                        : report.outcome === 'moved_to_ongoing' ? 'Already ongoing — moved to Ongoing Proposals'
                                         : report.outcome === 'approval_stands' ? 'Approval stands' : 'Resolution Notes'}
                                 </p>
                                 <p className="text-sm text-gray-700 leading-relaxed">{report.resolution_notes}</p>

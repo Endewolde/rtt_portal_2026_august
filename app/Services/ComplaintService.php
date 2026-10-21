@@ -47,13 +47,12 @@ class ComplaintService
 
         $this->guardDuplicate($proposal->id, $stage, 'college');
 
+        // The college's officer — or someone handling that college's complaints through a custom role.
         $assignedTo = User::role('college_officer')
             ->where('college_id', $proposal->college_id)
             ->first()
-            // fall back to college_officer if no officer assigned yet
-            ?? User::role('college_officer')
-                ->where('college_id', $proposal->college_id)
-                ->first();
+            ?? User::customRoleHolders('complaints.respond', $proposal->college_id, $proposal->category)
+                ->first(fn (User $u) => $u->accessScope()->isCollege());
 
         $complaint = Complaint::create([
             'proposal_id' => $proposal->id,
@@ -168,22 +167,21 @@ class ComplaintService
 
         $proposal = $complaint->proposal ?? Proposal::find($complaint->proposal_id);
 
-        if (! $responder->hasAnyRole(['super_admin', 'admin', 'central_officer'])) {
-            // College officers resolve Level 1 complaints for their own college
-            if ($responder->hasRole('college_officer')) {
-                if ($complaint->level !== 'college' || $proposal?->college_id !== $responder->college_id) {
-                    throw new UnauthorizedResolutionException('You can only respond to college-level complaints for your own college.');
-                }
-            } elseif ($responder->hasAnyRole(array_values(self::CATEGORY_OFFICER))) {
-                // Category officers resolve Level 2 complaints in their own category
-                if ($complaint->level !== 'officer') {
-                    throw new UnauthorizedResolutionException('You can only respond to officer-level complaints.');
-                }
-                if (! $responder->hasRole(self::CATEGORY_OFFICER[$proposal?->category] ?? '')) {
-                    throw new UnauthorizedResolutionException('You can only respond to complaints about proposals in your category.');
-                }
-            } else {
-                throw new UnauthorizedResolutionException('Only the responsible officer can respond to this complaint.');
+        // Responders act within their scope: college handlers answer Level 1
+        // complaints for their college, category handlers Level 2 for their category.
+        $scope = $responder->accessScope();
+        if (! $responder->can('complaints.respond') || $scope->isOwn()) {
+            throw new UnauthorizedResolutionException('Only the responsible officer can respond to this complaint.');
+        }
+        if ($scope->isCollege() && ($complaint->level !== 'college' || $proposal?->college_id !== $scope->collegeId)) {
+            throw new UnauthorizedResolutionException('You can only respond to college-level complaints for your own college.');
+        }
+        if ($scope->isCategory()) {
+            if ($complaint->level !== 'officer') {
+                throw new UnauthorizedResolutionException('You can only respond to officer-level complaints.');
+            }
+            if (! in_array($proposal?->category, $scope->categories, true)) {
+                throw new UnauthorizedResolutionException('You can only respond to complaints about proposals in your category.');
             }
         }
 
@@ -235,7 +233,9 @@ class ComplaintService
             return User::role($role)
                 ->withCount(['assignedComplaints' => fn ($q) => $q->whereIn('status', ['open', 'under_review'])])
                 ->orderBy('assigned_complaints_count', 'asc')
-                ->first();
+                ->first()
+                ?? User::customRoleHolders('complaints.respond', $proposal->college_id, $proposal->category)
+                    ->first(fn (User $u) => $u->accessScope()->isCategory());
         }
 
         // innovation / other → central_officer

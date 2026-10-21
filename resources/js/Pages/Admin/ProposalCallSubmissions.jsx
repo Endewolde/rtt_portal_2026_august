@@ -223,7 +223,7 @@ function ReturnForCorrectionModal({ proposal, onClose, onDone }) {
 export default function ProposalCallSubmissions() {
     const { url } = usePage();
     const callId = url.split('/')[2];
-    const { hasAnyRole, hasPermission } = useAuth();
+    const { hasPermission, hasAnyPermission } = useAuth();
     const toast = useToast();
 
     const [data, setData] = useState(null);
@@ -237,11 +237,12 @@ export default function ProposalCallSubmissions() {
     const [bulkApproving, setBulkApproving] = useState(false);
 
     const canValidate = hasPermission('proposals.validate');
-    const isCentral = hasAnyRole(['super_admin', 'admin', 'central_officer']);
-    const isDirector = hasAnyRole(['research_officer', 'community_officer', 'technology_officer']);
-    const isCollegeOfficer = hasAnyRole(['college_officer']);
-    const canAssign = isCentral || isDirector || isCollegeOfficer;
-    const canRejectBlindReview = isCentral || isDirector;
+    const canAssign = hasAnyPermission(['reviews.manage', 'proposals.assign_reviewer']);
+    const canRejectBlindReview = hasPermission('review_decisions.correct');
+    const canDecideFunding = hasPermission('evaluation.central');
+    const canGenerateAward = hasPermission('awards.create') && canDecideFunding;
+    const canManageFunding = hasPermission('funding.manage');
+    const canReportMistakenApproval = hasPermission('approval_reports.file');
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -352,16 +353,16 @@ export default function ProposalCallSubmissions() {
         if (p.status === 'under_open_defence' && canAssign) {
             stage.push({ label: 'Manage open defence', icon: Presentation, onClick: () => router.visit('/admin/open-defence') });
         }
-        if (p.status === 'accepted' && (isCentral || isDirector)) {
+        if (p.status === 'accepted' && canDecideFunding) {
             stage.push({ label: 'Go to Central Evaluation', icon: ClipboardList, onClick: () => router.visit('/admin/central-evaluation') });
         }
-        if (p.status === 'accepted' && isCentral) {
+        if (p.status === 'accepted' && canGenerateAward) {
             stage.push({ label: 'Generate award', icon: Award, onClick: () => router.visit(`/proposals/${p.id}/award`) });
         }
-        if (FUNDED_ONWARD.includes(p.status) && (isCentral || isDirector)) {
+        if (FUNDED_ONWARD.includes(p.status) && canManageFunding) {
             stage.push({ label: 'Open in Funding', icon: BadgeDollarSign, onClick: () => router.visit('/admin/funding') });
         }
-        if (REPORTABLE.includes(p.status) && isCollegeOfficer) {
+        if (REPORTABLE.includes(p.status) && canReportMistakenApproval) {
             stage.push({ label: 'Report mistaken approval', icon: ShieldQuestion, danger: true, onClick: () => setModal({ type: 'report', proposal: p }) });
         }
 

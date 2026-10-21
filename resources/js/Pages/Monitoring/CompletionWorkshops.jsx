@@ -819,11 +819,10 @@ function WorkshopCard({ workshop, isOfficer, currentUserId, onRefresh }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function CompletionWorkshops() {
-    const { hasAnyRole, user } = useAuth()
+    const { hasPermission, user } = useAuth()
     const { success, error } = useToast()
 
-    const isOfficer = hasAnyRole(['super_admin', 'admin', 'central_officer', 'college_officer',
-                                   'research_officer', 'community_officer', 'technology_officer'])
+    const isOfficer = hasPermission('monitoring.ongoing')
 
     const [workshops,         setWorkshops]         = useState([])
     const [eligibleProposals, setEligibleProposals] = useState([])

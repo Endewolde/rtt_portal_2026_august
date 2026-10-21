@@ -10,8 +10,6 @@ use Illuminate\Http\Request;
 
 class MilestoneController extends Controller
 {
-    private const MANAGERS = ['super_admin', 'admin', 'research_officer', 'central_officer'];
-
     public function index(Request $request, string $awardId): JsonResponse
     {
         $award = ExternalFundAward::findOrFail($awardId);
@@ -22,7 +20,7 @@ class MilestoneController extends Controller
 
     public function store(Request $request, string $awardId): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::MANAGERS)) {
+        if (! $request->user()?->can('external_funds.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -43,7 +41,7 @@ class MilestoneController extends Controller
 
     public function update(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::MANAGERS)) {
+        if (! $request->user()?->can('external_funds.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -68,7 +66,7 @@ class MilestoneController extends Controller
 
     public function destroy(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::MANAGERS)) {
+        if (! $request->user()?->can('external_funds.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 

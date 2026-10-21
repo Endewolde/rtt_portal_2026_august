@@ -48,31 +48,15 @@ class BudgetController extends Controller
             'disbursements',
         ]);
 
-        $adminRoles = ['super_admin', 'admin', 'central_officer', 'support_officer',
-            'college_officer', 'finance_officer',
-            'research_officer', 'community_officer', 'technology_officer'];
-
-        if ($user->hasRole('college_officer') ||
-            ($user->hasRole('support_officer') && $user->college_id)) {
-            $query->whereHas('proposal', fn ($q) => $q->where('college_id', $user->college_id));
-        } elseif ($user->hasRole('research_officer')) {
-            $query->whereHas('proposal', fn ($q) => $q->where('category', 'research'));
-        } elseif ($user->hasRole('community_officer')) {
-            $query->whereHas('proposal', fn ($q) => $q->where('category', 'community_engagement'));
-        } elseif ($user->hasRole('technology_officer')) {
-            $query->whereHas('proposal', fn ($q) => $q->where('category', 'technology_transfer'));
-        } elseif (! $user->hasAnyRole($adminRoles)) {
-            // PI, staff, and any other non-admin: see requests for proposals they own
-            // OR are an active member of OR have a signature on.
-            $query->where(function ($q) use ($user) {
-                $q->whereHas('proposal', fn ($sq) => $sq->where('pi_user_id', $user->id))
-                    ->orWhereHas('proposal.members', fn ($sq) => $sq
-                        ->where('user_id', $user->id)
-                        ->where('status', 'active'))
-                    ->orWhereHas('signatures', fn ($sq) => $sq->where('user_id', $user->id));
-            });
-        }
-        // super_admin / central_office / finance → no filter (see all)
+        // Within the role's data scope; those limited to their own records see requests
+        // for proposals they lead, are an active member of, or have a signature on.
+        $user->accessScope()->constrainThrough($query, 'proposal', fn ($q) => $q->where(function ($q) use ($user) {
+            $q->whereHas('proposal', fn ($sq) => $sq->where('pi_user_id', $user->id))
+                ->orWhereHas('proposal.members', fn ($sq) => $sq
+                    ->where('user_id', $user->id)
+                    ->where('status', 'active'))
+                ->orWhereHas('signatures', fn ($sq) => $sq->where('user_id', $user->id));
+        }));
 
         return response()->json([
             'data' => $query->orderByDesc('created_at')->get(),
@@ -115,7 +99,7 @@ class BudgetController extends Controller
     private function budgetRequestVisibleTo(User $user, BudgetRequest $budgetRequest): bool
     {
         if (! $budgetRequest->proposal) {
-            return $this->hasAnyBudgetAdminRole($user);
+            return $user->accessScope()->isAll();
         }
 
         if ($this->proposalBudgetVisibleTo($user, $budgetRequest->proposal)) {
@@ -134,37 +118,14 @@ class BudgetController extends Controller
      */
     private function proposalBudgetVisibleTo(User $user, Proposal $proposal): bool
     {
-        if ($user->hasRole('college_officer') ||
-            ($user->hasRole('support_officer') && $user->college_id)) {
-            return $proposal->college_id === $user->college_id;
-        }
-
-        if ($user->hasRole('research_officer')) {
-            return $proposal->category === 'research';
-        }
-
-        if ($user->hasRole('community_officer')) {
-            return $proposal->category === 'community_engagement';
-        }
-
-        if ($user->hasRole('technology_officer')) {
-            return $proposal->category === 'technology_transfer';
-        }
-
-        if ($this->hasAnyBudgetAdminRole($user)) {
-            return true;
+        $scope = $user->accessScope();
+        if (! $scope->isOwn()) {
+            return $scope->covers($proposal->college_id, $proposal->category);
         }
 
         // PI, staff, or any other non-admin: owner or active member.
         return $proposal->pi_user_id === $user->id
             || $proposal->members()->where('user_id', $user->id)->where('status', 'active')->exists();
-    }
-
-    private function hasAnyBudgetAdminRole(User $user): bool
-    {
-        return $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'support_officer',
-            'college_officer', 'finance_officer',
-            'research_officer', 'community_officer', 'technology_officer']);
     }
 
     /** Create a budget request via flat POST /budget-requests (not nested under proposal). */
@@ -440,11 +401,14 @@ class BudgetController extends Controller
             'allocatedBy:id,name',
         ])->orderByDesc('created_at');
 
-        if ($user->hasAnyRole(['college_officer', 'finance_officer']) ||
-            ($user->hasRole('support_officer') && $user->college_id)) {
-            $query->where('college_id', $user->college_id);
-        } elseif (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'support_officer'])) {
+        $scope = $user->accessScope();
+        if ($scope->isOwn() || ! $user->can('budget_allocations.view_any')) {
             return response()->json(['data' => [], 'message' => '', 'errors' => [], 'meta' => []]);
+        }
+        if ($scope->isCollege()) {
+            $query->where('college_id', $scope->collegeId);
+        } elseif ($scope->isCategory()) {
+            $query->whereHas('proposal', fn ($q) => $q->whereIn('category', $scope->categories));
         }
 
         if ($type = $request->query('type')) {
@@ -465,11 +429,7 @@ class BudgetController extends Controller
     {
         $user = $request->user();
 
-        $collegeScope = null;
-        if ($user->hasAnyRole(['college_officer', 'finance_officer']) ||
-            ($user->hasRole('support_officer') && $user->college_id)) {
-            $collegeScope = $user->college_id;
-        }
+        $collegeScope = $user->accessScope()->isCollege() ? $user->accessScope()->collegeId : null;
 
         // Total budget per college = sum of awarded amounts for funded proposals
         $awardTotals = DB::table('awards')
@@ -515,11 +475,7 @@ class BudgetController extends Controller
     {
         $user = $request->user();
 
-        $collegeScope = null;
-        if ($user->hasAnyRole(['college_officer', 'finance_officer']) ||
-            ($user->hasRole('support_officer') && $user->college_id)) {
-            $collegeScope = $user->college_id;
-        }
+        $collegeScope = $user->accessScope()->isCollege() ? $user->accessScope()->collegeId : null;
 
         // Total budget = sum of awards for funded proposals
         $totalBudget = DB::table('awards')
@@ -573,25 +529,18 @@ class BudgetController extends Controller
             ->orderBy('tracker_number');
 
         // Role-based scoping
-        if ($user->hasAnyRole(['college_officer', 'finance_officer']) ||
-            ($user->hasRole('support_officer') && $user->college_id)) {
-            $query->where('college_id', $user->college_id);
-        } elseif ($user->hasRole('research_officer')) {
-            $query->where('category', 'research');
-        } elseif ($user->hasRole('community_officer')) {
-            $query->where('category', 'community_engagement');
-        } elseif ($user->hasRole('technology_officer')) {
-            $query->where('category', 'technology_transfer');
-        } elseif (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'support_officer'])) {
+        $scope = $user->accessScope();
+        if ($scope->isOwn()) {
             return response()->json(['data' => [], 'message' => '', 'errors' => [], 'meta' => []]);
         }
+        $scope->constrain($query, 'proposals');
 
         // Optional filters
         if ($year = $request->query('academic_year')) {
             $query->where('academic_year', $year);
         }
         if ($collegeId = $request->query('college_id')) {
-            if ($user->hasAnyRole(['super_admin', 'central_officer'])) {
+            if ($user->accessScope()->isAll()) {
                 $query->where('college_id', $collegeId);
             }
         }
@@ -711,16 +660,12 @@ class BudgetController extends Controller
      */
     private function userCanApproveCategory(mixed $user, ?string $category): bool
     {
-        if ($user->hasAnyRole(['super_admin', 'central_officer'])) {
-            return true;
+        if (! $user->can('budget_allocations.approve')) {
+            return false;
         }
+        $scope = $user->accessScope();
 
-        return match ($category) {
-            'research' => $user->hasRole('research_officer'),
-            'community_engagement' => $user->hasRole('community_officer'),
-            'technology_transfer' => $user->hasRole('technology_officer'),
-            default => false,
-        };
+        return $scope->isAll() || ($scope->isCategory() && in_array($category, $scope->categories, true));
     }
 
     /** Update amount/notes on a pending or approved allocation. */
@@ -846,9 +791,9 @@ class BudgetController extends Controller
 
         $budgetRequest = BudgetRequest::with(['proposal', 'proposal.pi', 'proposal.members.user', 'proposal.college'])->findOrFail($id);
 
-        // ── College officer: first-stage approval ──────────────────────────
-        if ($user->hasRole('college_officer')) {
-            if ($budgetRequest->proposal?->college_id !== $user->college_id) {
+        // ── College stage: first approval (only for those who can't give the finance approval) ──
+        if ($user->can('budget_requests.approve_college') && ! $user->can('budget_requests.approve_finance')) {
+            if (! $user->accessScope()->covers($budgetRequest->proposal?->college_id, $budgetRequest->proposal?->category)) {
                 return response()->json(['message' => 'You can only approve budget requests for proposals in your college.', 'errors' => []], 403);
             }
 
@@ -871,11 +816,11 @@ class BudgetController extends Controller
         }
 
         // ── Finance officer / admin: final approval ────────────────────────
-        if (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'finance_officer', 'support_officer'])) {
+        if (! $user->can('budget_requests.approve_finance')) {
             return response()->json(['message' => 'You do not have permission to approve budget requests.', 'errors' => []], 403);
         }
 
-        if ($user->hasRole('finance_officer') && $budgetRequest->proposal?->college_id !== $user->college_id) {
+        if (! $user->accessScope()->covers($budgetRequest->proposal?->college_id, $budgetRequest->proposal?->category)) {
             return response()->json(['message' => 'You can only approve budget requests for proposals in your college.', 'errors' => []], 403);
         }
 
@@ -907,7 +852,7 @@ class BudgetController extends Controller
 
         $user = $request->user();
 
-        if (! $user->hasRole('college_officer')) {
+        if (! $user->can('budget_requests.approve_college')) {
             return response()->json(['message' => 'Only a college officer can reject budget requests.', 'errors' => []], 403);
         }
 
@@ -944,13 +889,13 @@ class BudgetController extends Controller
 
         $user = $request->user();
 
-        if (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'finance_officer'])) {
+        if (! $user->can('budget_requests.approve_finance')) {
             return response()->json(['message' => 'Only a finance officer can return budget requests.', 'errors' => []], 403);
         }
 
         $budgetRequest = BudgetRequest::with(['proposal', 'proposal.pi', 'proposal.members.user'])->findOrFail($id);
 
-        if ($user->hasRole('finance_officer') && $budgetRequest->proposal?->college_id !== $user->college_id) {
+        if (! $user->accessScope()->covers($budgetRequest->proposal?->college_id, $budgetRequest->proposal?->category)) {
             return response()->json(['message' => 'You can only return budget requests for proposals in your college.', 'errors' => []], 403);
         }
 
@@ -982,7 +927,8 @@ class BudgetController extends Controller
         // Notify finance officers in this college
         $financeOfficers = User::role('finance_officer')
             ->where('college_id', $proposal->college_id)
-            ->get();
+            ->get()
+            ->merge(User::customRoleHolders('budget_requests.approve_finance', $proposal->college_id, $proposal->category))->unique('id');
 
         if ($financeOfficers->isEmpty()) {
             $financeOfficers = User::role(['super_admin', 'admin', 'central_officer'])->get();
@@ -1064,7 +1010,8 @@ class BudgetController extends Controller
 
         $collegeOfficers = User::role('college_officer')
             ->where('college_id', $proposal->college_id)
-            ->get();
+            ->get()
+            ->merge(User::customRoleHolders('budget_requests.approve_college', $proposal->college_id, $proposal->category))->unique('id');
 
         $data = [
             'tracker_number' => $proposal->tracker_number,
@@ -1141,7 +1088,7 @@ class BudgetController extends Controller
     {
         $user = $request->user();
 
-        if (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'finance_officer', 'support_officer'])) {
+        if (! $user->can('funds.disburse')) {
             return response()->json(['message' => 'You do not have permission to disburse funds.', 'errors' => []], 403);
         }
 
@@ -1226,7 +1173,8 @@ class BudgetController extends Controller
 
     private function notifyFinanceOfficers(Proposal $proposal, BudgetRequest $budgetRequest): void
     {
-        $officers = User::role('finance_officer')->where('status', 'active')->get();
+        $officers = User::role('finance_officer')->where('status', 'active')->get()
+            ->merge(User::customRoleHolders('funds.disburse', $proposal->college_id, $proposal->category))->unique('id');
         $data = [
             'tracker_number' => $proposal->tracker_number,
             'title' => $proposal->title,

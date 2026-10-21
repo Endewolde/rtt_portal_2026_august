@@ -25,10 +25,6 @@ class DefenceSessionService
      *
      * @var list<string>
      */
-    private const CROSS_COLLEGE_ROLES = [
-        'super_admin', 'admin', 'central_officer',
-        'research_officer', 'community_officer', 'technology_officer',
-    ];
 
     /**
      * Proposals from the same college (and academic year) that have not finished the
@@ -76,7 +72,8 @@ class DefenceSessionService
      */
     public function isBoundByCollegeBlindReviewGate(User $actor): bool
     {
-        return $actor->hasRole('college_officer') && ! $actor->hasAnyRole(self::CROSS_COLLEGE_ROLES);
+        // College-scoped reviewers-in-charge wait until their college finishes blind review.
+        return $actor->accessScope()->isCollege();
     }
 
     /**
@@ -219,6 +216,10 @@ class DefenceSessionService
             $session = DefenceSession::where('proposal_id', $proposal->id)->where('status', 'scheduled')->latest()->first();
             $dateChanged = ! $session || $session->scheduled_date->toDateString() !== Carbon::parse($data['scheduled_date'])->toDateString();
 
+            if ($dateChanged && $session?->attendance === DefenceAttendanceService::HELD) {
+                throw new \Exception('This defence has already been recorded as held, so its date can no longer be changed.');
+            }
+
             $attributes = [
                 'scheduled_date' => $data['scheduled_date'],
                 'scheduled_time' => $data['scheduled_time'],
@@ -229,9 +230,17 @@ class DefenceSessionService
             if ($session) {
                 // A new defence date means a new score deadline (day after it) — an
                 // extension granted for the old date no longer applies.
+                // Scores given for the old date were for a defence that didn't happen
+                // then: the panel scores again at the new one.
                 $session->update($attributes + ($dateChanged
-                    ? ['score_deadline_extended_until' => null, 'deadline_reminder_sent_at' => null, 'flagged_incomplete_at' => null]
+                    ? [
+                        'score_deadline_extended_until' => null, 'deadline_reminder_sent_at' => null, 'flagged_incomplete_at' => null,
+                        'attendance_requested_at' => null, 'absence_reported_by' => null, 'absence_reported_at' => null, 'absence_report_note' => null,
+                    ]
                     : []));
+                if ($dateChanged) {
+                    $this->defenceAssignments($proposal)->where('status', 'submitted')->update(['status' => 'pending', 'submitted_at' => null]);
+                }
             } else {
                 $session = DefenceSession::create($attributes + [
                     'proposal_id' => $proposal->id,
@@ -281,7 +290,7 @@ class DefenceSessionService
     {
         return ReviewAssignment::where('proposal_id', $proposal->id)
             ->whereHas('evaluationType', fn ($q) => $q->where('name', 'like', 'open_defence%'))
-            ->whereNotIn('status', ['declined', 'cancelled']);
+            ->whereNotIn('status', ['declined', 'cancelled', 'voided']);
     }
 
     /**
@@ -296,6 +305,10 @@ class DefenceSessionService
      */
     public function processDefenceResult(DefenceSession $session, User $decidedBy): Proposal
     {
+        if ($session->attendance !== DefenceAttendanceService::HELD) {
+            throw new \Exception('Confirm that the defence was held (or record that the team did not appear) before deciding the result.');
+        }
+
         $proposal = $session->proposal;
         $snapshot = $this->reviewScoreService->recalculateSnapshot($proposal);
 

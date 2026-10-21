@@ -97,11 +97,9 @@ class SendProposalWorkflowNotifications
     private function notifyCategoryOfficers(Proposal $proposal, array $data): void
     {
         $role = self::CATEGORY_OFFICER_ROLES[$proposal->category] ?? null;
-        if (! $role) {
-            return;
-        }
-
-        $officers = User::role($role)->where('status', 'active')->get();
+        $officers = ($role ? User::role($role)->where('status', 'active')->get() : collect())
+            ->merge(User::customRoleHolders('proposals.validate', $proposal->college_id, $proposal->category))
+            ->unique('id');
         foreach ($officers as $officer) {
             $this->notify($officer, 'proposal_submitted_officer', $data, 'proposal_submitted_officer');
         }
@@ -138,6 +136,21 @@ class SendProposalWorkflowNotifications
 
         foreach ($this->allRecipients($proposal) as $user) {
             $this->notify($user, 'central_eval_approved', $data, 'central_eval_approved');
+        }
+
+        // The college's RTT manager takes the central evaluation decision for it.
+        $officerData = [
+            'proposal_id' => $proposal->id,
+            'tracker_number' => $proposal->tracker_number,
+            'title' => $proposal->title,
+            'message' => "Proposal {$proposal->tracker_number} ({$proposal->title}) passed open defence and is ready for central evaluation.",
+        ];
+        $managers = $proposal->college_id
+            ? User::role('college_rtt_manager')->where('status', 'active')->where('college_id', $proposal->college_id)->get()
+                ->merge(User::customRoleHolders('evaluation.central', $proposal->college_id, $proposal->category))->unique('id')
+            : collect();
+        foreach ($managers as $manager) {
+            $this->notify($manager, 'central_eval_ready_officer', $officerData, 'central_eval_ready_officer');
         }
     }
 
@@ -231,6 +244,8 @@ class SendProposalWorkflowNotifications
                 User::role('college_officer')->where('status', 'active')->where('college_id', $proposal->college_id)->get()
             );
         }
+
+        $recipients = $recipients->merge(User::customRoleHolders('reviews.manage', $proposal->college_id, $proposal->category));
 
         return $recipients->unique('id')->values()->all();
     }

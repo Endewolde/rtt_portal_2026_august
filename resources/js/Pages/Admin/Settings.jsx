@@ -2106,9 +2106,10 @@ function IntegrationPanel({ values, onChange, onSave }) {
 export default function SettingsPage() {
     const { success, error, warning } = useToast()
     const { confirm, Dialog }         = useConfirm()
-    const { hasRole }                 = useAuth()
+    const { hasPermission }           = useAuth()
 
-    const isAdmin       = hasRole('admin') && !hasRole('super_admin')
+    // Without restricted settings, only the sections a platform admin may change are shown.
+    const isAdmin       = !hasPermission('settings.restricted')
     const visibleSections = SECTIONS.filter(s => !isAdmin || ADMIN_SECTIONS.has(s.key))
 
     const [activeSection, setActiveSection] = useState(

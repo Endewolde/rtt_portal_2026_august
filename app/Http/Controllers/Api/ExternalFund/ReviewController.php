@@ -10,8 +10,6 @@ use Illuminate\Http\Request;
 
 class ReviewController extends Controller
 {
-    private const MANAGERS = ['super_admin', 'admin', 'research_officer', 'central_officer'];
-
     public function index(Request $request, string $applicationId): JsonResponse
     {
         $application = ExternalFundApplication::findOrFail($applicationId);
@@ -26,7 +24,7 @@ class ReviewController extends Controller
 
     public function store(Request $request, string $applicationId): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::MANAGERS)) {
+        if (! $request->user()?->can('external_funds.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 

@@ -141,13 +141,13 @@ class SettingsController extends Controller
     {
         $user = $request->user();
 
-        if (! $user?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $user?->can('settings.manage')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
         // Admin role cannot edit these keys (shown read-only or hidden in the UI)
         $adminRestrictedKeys = ['developer_credits', 'disabled_sub_features'];
-        if ($user->hasRole('admin') && ! $user->hasRole('super_admin') && in_array($key, $adminRestrictedKeys)) {
+        if (! $user->can('settings.restricted') && in_array($key, $adminRestrictedKeys)) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -319,7 +319,7 @@ class SettingsController extends Controller
 
     public function updateBulk(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasRole('super_admin')) {
+        if (! $request->user()?->can('settings.restricted')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -370,7 +370,7 @@ class SettingsController extends Controller
 
     public function clearCache(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasRole('super_admin')) {
+        if (! $request->user()?->can('settings.restricted')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -381,7 +381,7 @@ class SettingsController extends Controller
 
     public function toggleMaintenance(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasRole('super_admin')) {
+        if (! $request->user()?->can('settings.restricted')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -406,7 +406,7 @@ class SettingsController extends Controller
 
     public function testEmail(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasRole('super_admin')) {
+        if (! $request->user()?->can('settings.restricted')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -445,7 +445,7 @@ class SettingsController extends Controller
 
     public function uploadAsset(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('settings.manage')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -481,7 +481,7 @@ class SettingsController extends Controller
 
     public function uploadEditorImage(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('settings.manage')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -502,7 +502,7 @@ class SettingsController extends Controller
 
     public function runBackup(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasRole('super_admin')) {
+        if (! $request->user()?->can('settings.restricted')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -532,7 +532,7 @@ class SettingsController extends Controller
 
     public function sendBroadcastEmail(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('settings.manage')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 

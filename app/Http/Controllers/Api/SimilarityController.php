@@ -11,6 +11,10 @@ class SimilarityController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
+        if (! $request->user()?->can('similarity.view')) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => [], 'meta' => []], 403);
+        }
+
         $query = SimilarityScore::with([
             'proposal:id,tracker_number,title,status,college_id,category,abstract',
             'proposal.college:id,name',

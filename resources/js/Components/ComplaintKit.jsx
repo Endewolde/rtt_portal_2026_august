@@ -48,16 +48,19 @@ export const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 export const topicLabel = (c) => (c.complaint_type ? (TYPE_LABELS[c.complaint_type] ?? c.complaint_type) : (STAGE_LABELS[c.stage] ?? c.stage));
 
 /**
- * What a person may do with a complaint — mirrors the server's rules.
+ * What a person may do with a complaint — mirrors the server's rules: responders
+ * answer within their scope, Level 1 for a college, Level 2 for a category.
  *
- * @param {{ userId: string, isAdmin: boolean, isCollegeOfficer: boolean, officerRole?: string }} who
+ * @param {{ userId: string, canRespond: boolean, scope: { type: string, college_id?: string, categories?: string[] } }} who
  */
-export function complaintPermissions(c, { userId, isAdmin, isCollegeOfficer, officerRole }) {
+export function complaintPermissions(c, { userId, canRespond: mayRespond, scope }) {
     const isOwner  = c.complainant_id === userId;
     const awaiting = AWAITING.includes(c.status);
-    const isResponsible = isAdmin
-        || (isCollegeOfficer && c.level === 'college')
-        || (!!officerRole && c.level === 'officer' && c.proposal?.category === CATEGORY_FOR_OFFICER[officerRole]);
+    const isResponsible = mayRespond && (
+        scope?.type === 'all'
+        || (scope?.type === 'college' && c.level === 'college')
+        || (scope?.type === 'category' && c.level === 'officer' && (scope.categories ?? []).includes(c.proposal?.category))
+    );
     return {
         canRespond:  awaiting && isResponsible && !isOwner,
         canEscalate: isOwner && c.level === 'college' && ['resolved', 'dismissed'].includes(c.status),

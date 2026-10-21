@@ -41,7 +41,7 @@ function PiFundingHistory({ data }) {
     return (
         <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-3.5 space-y-3">
             {/* Stats row */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-2 sm:gap-3">
                 <div className="bg-white rounded-lg px-3 py-2 text-center border border-indigo-100">
                     <div className="text-lg font-bold text-indigo-700">{stats.total_funded_as_pi}</div>
                     <div className="text-[10px] text-gray-500 font-medium uppercase tracking-wide">Funded as PI</div>
@@ -70,9 +70,9 @@ function PiFundingHistory({ data }) {
                         </p>
                         <div className="mt-1.5 space-y-1">
                             {active_funded.map(ap => (
-                                <div key={ap.id} className="flex items-center justify-between text-[11px] bg-amber-100 rounded px-2 py-1">
-                                    <span className="font-mono text-amber-800 font-semibold">{ap.tracker_number}</span>
-                                    <span className="text-amber-700 truncate mx-2 max-w-40">{ap.title}</span>
+                                <div key={ap.id} className="flex items-center justify-between gap-2 text-[11px] bg-amber-100 rounded px-2 py-1">
+                                    <span className="font-mono text-amber-800 font-semibold shrink-0">{ap.tracker_number}</span>
+                                    <span className="min-w-0 flex-1 text-amber-700 truncate">{ap.title}</span>
                                     <span className="text-amber-800 font-medium shrink-0">
                                         {ap.awarded_amount ? formatCurrency(ap.awarded_amount) : ap.grant_reference ?? '—'}
                                     </span>
@@ -98,8 +98,8 @@ function PiFundingHistory({ data }) {
                         {co_investigator_on.map(cp => (
                             <div key={cp.id} className="flex items-center justify-between text-[11px] bg-white border border-indigo-100 rounded px-2 py-1.5">
                                 <span className="font-mono text-indigo-700 font-semibold shrink-0">{cp.tracker_number}</span>
-                                <span className="text-gray-600 truncate mx-2">{cp.title}</span>
-                                <span className="text-gray-400 shrink-0">{cp.college}</span>
+                                <span className="min-w-0 flex-1 text-gray-600 truncate mx-2">{cp.title}</span>
+                                <span className="hidden text-gray-400 shrink-0 sm:inline">{cp.college}</span>
                             </div>
                         ))}
                     </div>
@@ -238,10 +238,10 @@ export default function CentralEvaluation() {
                     </FilterBar>
                 </div>
 
-                <div className="mb-4 inline-flex rounded-xl bg-gray-100 p-1 text-sm">
+                <div className="mb-4 flex w-full rounded-xl bg-gray-100 p-1 text-sm sm:inline-flex sm:w-auto">
                     {[['proposals', 'Proposals'], ['merit', 'Merit List & Budget']].map(([key, label]) => (
                         <button key={key} onClick={() => setMode(key)}
-                            className={`rounded-lg px-3.5 py-1.5 font-medium transition-colors ${mode === key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                            className={`flex-1 rounded-lg px-3.5 py-1.5 font-medium transition-colors sm:flex-none ${mode === key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
                             {label}
                         </button>
                     ))}
@@ -300,7 +300,7 @@ export default function CentralEvaluation() {
                                     {/* Top accent + header row */}
                                     <div className="flex items-stretch">
                                         <div className="w-0.5 bg-teal-600 shrink-0" />
-                                        <div className="flex items-start justify-between gap-4 flex-1 px-4 py-3.5">
+                                        <div className="flex flex-1 flex-col gap-2.5 px-4 py-3.5 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2 mb-1 flex-wrap">
                                                     <span className="font-mono text-xs font-bold text-teal-700 bg-teal-50 px-2.5 py-1 rounded-lg shrink-0">
@@ -308,10 +308,10 @@ export default function CentralEvaluation() {
                                                     </span>
                                                     <span className="text-xs text-gray-400">{getCategoryLabel(p.category)}</span>
                                                 </div>
-                                                <h3 className="text-sm font-semibold text-gray-900 truncate mb-0.5">{p.title}</h3>
+                                                <h3 className="text-sm font-semibold text-gray-900 line-clamp-2 sm:line-clamp-1 mb-0.5">{p.title}</h3>
                                                 <p className="text-xs text-gray-500">{p.pi?.name} · {p.college?.name}</p>
                                             </div>
-                                            <div className={`shrink-0 flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-xl ${passesThreshold ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                                            <div className={`shrink-0 self-start flex items-center gap-1.5 whitespace-nowrap text-sm font-semibold px-3 py-1.5 rounded-xl ${passesThreshold ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
                                                 {passesThreshold ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
                                                 {p.combined_score} / {totalMax}
                                                 <span className="text-xs font-normal opacity-70">({p.threshold_pct} pts min)</span>
@@ -322,7 +322,7 @@ export default function CentralEvaluation() {
                                     {/* Score breakdown panel */}
                                     <div className="mx-4 mb-3 p-3.5 bg-gray-50 border border-gray-100 rounded-xl">
                                         <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-3">Score Breakdown</p>
-                                        <div className="grid grid-cols-3 gap-4">
+                                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
                                             <ScoreBar score={p.blind_score_raw ?? p.blind_score}     max={p.blind_max ?? 0}    label="Blind Review" color="bg-indigo-500" />
                                             <ScoreBar score={p.defence_score_raw ?? p.defence_score} max={p.defence_max ?? 0}  label="Open Defence" color="bg-purple-500" />
                                             <ScoreBar score={p.combined_score}                        max={totalMax}            label="Total"        color={passesThreshold ? 'bg-green-500' : 'bg-red-500'} />
@@ -346,7 +346,7 @@ export default function CentralEvaluation() {
                                     <div className="mx-4 mb-3">
                                         <button
                                             onClick={() => toggleBudget(p.id)}
-                                            className="flex items-center gap-1.5 text-xs text-teal-600 hover:text-teal-800 font-semibold transition-colors"
+                                            className="flex flex-wrap items-center gap-1.5 text-left text-xs text-teal-600 hover:text-teal-800 font-semibold transition-colors"
                                         >
                                             {budgetExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                                             {budgetExpanded ? 'Hide' : 'Show'} Budget Details
@@ -360,9 +360,9 @@ export default function CentralEvaluation() {
                                                 ) : (
                                                     <div className="space-y-1">
                                                         {(budgetMap[p.id]?.items ?? []).map(item => (
-                                                            <div key={item.id} className="flex justify-between text-xs">
-                                                                <span className="text-gray-600 capitalize">{item.category}: {item.item_description}</span>
-                                                                <span className="font-medium text-gray-900">ETB {parseFloat(item.amount).toLocaleString()}</span>
+                                                            <div key={item.id} className="flex justify-between gap-3 text-xs">
+                                                                <span className="min-w-0 text-gray-600 capitalize">{item.category}: {item.item_description}</span>
+                                                                <span className="shrink-0 whitespace-nowrap font-medium text-gray-900">ETB {parseFloat(item.amount).toLocaleString()}</span>
                                                             </div>
                                                         ))}
                                                         <div className="border-t border-teal-200 pt-1.5 flex justify-between text-sm font-bold">
@@ -379,7 +379,7 @@ export default function CentralEvaluation() {
                                     <div className="mx-4 mb-3">
                                         <button
                                             onClick={() => togglePiHistory(p.id, p.pi?.id)}
-                                            className="flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition-colors"
+                                            className="flex flex-wrap items-center gap-1.5 text-left text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition-colors"
                                         >
                                             {expandedPi === p.id ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
                                             {expandedPi === p.id ? 'Hide' : 'View'} PI Funding History
@@ -405,18 +405,18 @@ export default function CentralEvaluation() {
                                     </div>
 
                                     {/* Action footer */}
-                                    <div className="flex items-center justify-between gap-4 px-4 py-3.5 border-t border-gray-100">
+                                    <div className="flex flex-col gap-3 px-4 py-3.5 border-t border-gray-100 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                                         <p className="text-sm text-gray-600">
                                             Requested: <span className="font-semibold text-gray-900">{formatCurrency(p.budget_total)}</span>
                                         </p>
-                                        <div className="flex gap-2">
+                                        <div className="grid grid-cols-2 gap-2 sm:flex">
                                             <button onClick={() => openReject(p)}
-                                                className="flex items-center gap-1.5 px-4 py-2 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 transition-colors">
+                                                className="flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-2 bg-red-600 text-white rounded-xl text-sm font-semibold hover:bg-red-700 transition-colors">
                                                 <XCircle size={14} /> Reject
                                             </button>
                                             <button onClick={() => openApprove(p)}
-                                                className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 transition-colors">
-                                                <CheckCircle size={14} /> Approve for Funding
+                                                className="flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-2 bg-green-600 text-white rounded-xl text-sm font-semibold hover:bg-green-700 transition-colors">
+                                                <CheckCircle size={14} /> <span className="sm:hidden">Approve</span><span className="hidden sm:inline">Approve for Funding</span>
                                             </button>
                                         </div>
                                     </div>

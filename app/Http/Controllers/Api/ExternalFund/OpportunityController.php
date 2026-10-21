@@ -9,8 +9,6 @@ use Illuminate\Http\Request;
 
 class OpportunityController extends Controller
 {
-    private const MANAGERS = ['super_admin', 'admin', 'research_officer', 'central_officer'];
-
     public function publicIndex(Request $request): JsonResponse
     {
         $query = ExternalFundOpportunity::with('agency:id,name,acronym,website,country,logo_path')
@@ -55,7 +53,7 @@ class OpportunityController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::MANAGERS)) {
+        if (! $request->user()?->can('external_funds.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -100,7 +98,7 @@ class OpportunityController extends Controller
 
     public function update(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::MANAGERS)) {
+        if (! $request->user()?->can('external_funds.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -132,7 +130,7 @@ class OpportunityController extends Controller
 
     public function destroy(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('external_funds.delete')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 

@@ -15,8 +15,6 @@ use Illuminate\Support\Facades\Log;
 
 class NoCostExtensionController extends Controller
 {
-    private const OFFICER_ROLES = ['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer', 'college_officer'];
-
     private const ELIGIBLE_STATUSES = ['funded', 'midterm_evaluation'];
 
     /** PI requests more time to complete an already-funded project, at no additional cost. */
@@ -71,7 +69,7 @@ class NoCostExtensionController extends Controller
     /** Officer lists all no-cost extension requests. */
     public function index(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::OFFICER_ROLES)) {
+        if (! $request->user()?->can('no_cost_extensions.review')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -104,7 +102,7 @@ class NoCostExtensionController extends Controller
     /** Officer approves a pending request — extends the proposal's duration_months. */
     public function approve(string $id, Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::OFFICER_ROLES)) {
+        if (! $request->user()?->can('no_cost_extensions.review')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -136,7 +134,7 @@ class NoCostExtensionController extends Controller
     /** Officer denies a pending request — the project duration is left untouched. */
     public function reject(string $id, Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::OFFICER_ROLES)) {
+        if (! $request->user()?->can('no_cost_extensions.review')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -183,7 +181,8 @@ class NoCostExtensionController extends Controller
         ];
         $roles = array_values(array_filter(['central_officer', $roleMap[$proposal->category] ?? null]));
 
-        foreach (User::role($roles)->where('status', 'active')->get() as $officer) {
+        foreach (User::role($roles)->where('status', 'active')->get()
+            ->merge(User::customRoleHolders('no_cost_extensions.review', $proposal->college_id, $proposal->category))->unique('id') as $officer) {
             try {
                 SendEmailNotificationJob::deliver($officer, 'no_cost_extension_requested', [
                     'tracker_number' => $proposal->tracker_number,

@@ -24,11 +24,6 @@ use Illuminate\Support\Str;
  */
 class AssistantService
 {
-    /** Who may look up any proposal by tracker number (others: their own, or ones they oversee). */
-    private const SEE_ALL_ROLES = ['super_admin', 'admin', 'central_officer', 'finance_officer', 'support_officer'];
-
-    private const BUDGET_ROLES = ['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer'];
-
     /** Everyday words mapped to the words the help articles use. */
     private const SYNONYMS = [
         'defense' => 'defence', 'panel' => 'defence', 'presentation' => 'defence',
@@ -82,7 +77,7 @@ class AssistantService
             $suggestions[] = 'Which reviews are due?';
         }
         $suggestions[] = 'What are my upcoming deadlines?';
-        if ($user->hasAnyRole(self::BUDGET_ROLES)) {
+        if ($user->canAny(['evaluation.central', 'funding.manage'])) {
             $suggestions[] = 'How much budget is left in each call?';
         }
 
@@ -122,7 +117,7 @@ class AssistantService
             return null;
         }
 
-        if (preg_match('/\b(budget|money|fund(s|ing)?)\b.*\b(left|remain(ing)?|available|call)/', $q) && $user->hasAnyRole(self::BUDGET_ROLES)) {
+        if (preg_match('/\b(budget|money|fund(s|ing)?)\b.*\b(left|remain(ing)?|available|call)/', $q) && $user->canAny(['evaluation.central', 'funding.manage'])) {
             return $this->callBudgets();
         }
         if (preg_match('/\b(review|reviews|score|scoring|assigned)\b.*\b(due|pending|assigned|have|to do|todo|waiting|left)\b|\bmy reviews?\b|\breviews? (due|pending)\b/', $q)) {
@@ -146,7 +141,7 @@ class AssistantService
     private function proposalByTracker(User $user, string $tracker): array
     {
         $proposal = Proposal::where('tracker_number', $tracker)->first();
-        $allowed = $proposal && ($user->hasAnyRole(self::SEE_ALL_ROLES)
+        $allowed = $proposal && ((! $user->accessScope()->isOwn() && $user->accessScope()->covers($proposal->college_id, $proposal->category))
             || $this->access->isTeamMember($proposal, $user)
             || $this->access->canReview($proposal, $user));
 

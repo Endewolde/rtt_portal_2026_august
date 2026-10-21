@@ -11,11 +11,9 @@ use Illuminate\Support\Facades\Storage;
 
 class ProposalArchiveController extends Controller
 {
-    private const ALLOWED_ROLES = ['super_admin', 'proposal_archivist'];
-
     public function index(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::ALLOWED_ROLES)) {
+        if (! $request->user()?->can('proposal_archive.view')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -109,7 +107,7 @@ class ProposalArchiveController extends Controller
 
     public function downloadDocument(Request $request, string $documentId): mixed
     {
-        if (! $request->user()?->hasAnyRole(self::ALLOWED_ROLES)) {
+        if (! $request->user()?->can('proposal_archive.view')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 

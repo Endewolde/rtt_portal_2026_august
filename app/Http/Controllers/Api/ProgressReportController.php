@@ -121,7 +121,7 @@ class ProgressReportController extends Controller
     public function overview(Request $request): JsonResponse
     {
         $user = $request->user();
-        if (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer', 'college_officer'])) {
+        if (! $user->can('progress_reports.review')) {
             return $this->respond(null, 'Unauthorized.', 403);
         }
 

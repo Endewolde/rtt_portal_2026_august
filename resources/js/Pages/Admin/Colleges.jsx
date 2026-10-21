@@ -91,7 +91,7 @@ function CollegeModal({ title, form, setForm, errors, saving, onSave, onClose })
 }
 
 export default function AdminColleges() {
-    const { hasRole, hasPermission } = useAuth();
+    const { hasPermission } = useAuth();
     const { success, error } = useToast();
     const [colleges, setColleges]         = useState([]);
     const [loading, setLoading]           = useState(true);

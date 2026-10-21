@@ -42,7 +42,7 @@ class FeedbackController extends Controller
     /** Admin — paginated list of all submissions. */
     public function index(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('content.manage')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -59,7 +59,7 @@ class FeedbackController extends Controller
     /** Admin — delete a submission. */
     public function destroy(Request $request, FeedbackSubmission $feedback): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('content.manage')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -71,7 +71,7 @@ class FeedbackController extends Controller
     /** Admin — start a new round, re-opening the popup for every user without losing past submissions. */
     public function newRound(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('content.manage')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 

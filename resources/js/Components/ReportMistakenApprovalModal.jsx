@@ -108,7 +108,9 @@ export default function ReportMistakenApprovalModal({ proposal, previousReport =
                                 onChange={(e) => setDetails(e.target.value)}
                                 placeholder={isOther
                                     ? 'Explain clearly what is wrong, so the director can verify it…'
-                                    : 'e.g. where you found it — page, section or document name…'}
+                                    : issueType === 'already_ongoing'
+                                        ? 'e.g. when and how it was funded — year, grant reference, amount — so the director can move it to Ongoing Proposals…'
+                                        : 'e.g. where you found it — page, section or document name…'}
                                 className="w-full resize-none rounded-xl border border-gray-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
                             />
                             {(detailsRequired || detailsTooShort) && details.trim().length < 10 && (

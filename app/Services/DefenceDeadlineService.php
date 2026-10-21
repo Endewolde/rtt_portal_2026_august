@@ -44,7 +44,7 @@ class DefenceDeadlineService
     {
         $proposal = $session->proposal;
 
-        if (! $actor->hasRole('college_officer') || ! $proposal || $actor->college_id !== $proposal->college_id) {
+        if (! $actor->can('defence_extensions.request') || ! $proposal || ! $actor->accessScope()->covers($proposal->college_id, $proposal->category)) {
             throw new DefenceDeadlineException('Only the college officer of this proposal\'s college can request a score deadline extension.', 403);
         }
 
@@ -231,18 +231,13 @@ class DefenceDeadlineService
     /** That proposal's category director, or the central office. */
     public function canApprove(?Proposal $proposal, User $actor): bool
     {
-        if ($actor->hasAnyRole(self::CENTRAL_ROLES)) {
-            return true;
-        }
-
-        $directorRole = self::DIRECTOR_ROLE_FOR_CATEGORY[$proposal?->category] ?? null;
-
-        return $directorRole !== null && $actor->hasRole($directorRole);
+        return $actor->can('defence_extensions.approve')
+            && $actor->accessScope()->covers($proposal?->college_id, $proposal?->category);
     }
 
     public function isApprover(User $actor): bool
     {
-        return $actor->hasAnyRole([...self::CENTRAL_ROLES, ...array_values(self::DIRECTOR_ROLE_FOR_CATEGORY)]);
+        return $actor->can('defence_extensions.approve');
     }
 
     /**
@@ -262,7 +257,7 @@ class DefenceDeadlineService
         $outstanding = $this->outstandingDefenceAssignments($session->proposal_id)->count();
         $panelSize = ReviewAssignment::where('proposal_id', $session->proposal_id)
             ->whereHas('evaluationType', fn ($q) => $q->where('name', 'like', 'open_defence%'))
-            ->whereNotIn('status', ['declined', 'cancelled'])
+            ->whereNotIn('status', ['declined', 'cancelled', 'voided'])
             ->count();
         $pending = $session->deadlineExtensions->firstWhere('status', 'pending');
 
@@ -285,9 +280,21 @@ class DefenceDeadlineService
                 && $panelSize > 0
                 && $session->status === 'scheduled'
                 && ! $pending
-                && $viewer->hasRole('college_officer')
-                && $viewer->college_id === $session->proposal?->college_id,
+                && $viewer->can('defence_extensions.request')
+                && $viewer->accessScope()->covers($session->proposal?->college_id, $session->proposal?->category),
             'pending_extension' => $pending ? $this->presentExtension($pending) : null,
+            'attendance' => $session->attendance,
+            'attendance_marked_by' => $session->attendance_marked_by ? User::find($session->attendance_marked_by)?->name : null,
+            'attendance_marked_at' => $session->attendance_marked_at?->toIso8601String(),
+            'can_mark_attendance' => $viewer !== null
+                && $session->attendance === null
+                && $phase !== 'upcoming'
+                && app(DefenceAttendanceService::class)->canMark($session, $viewer),
+            'absence_reported' => $session->absence_reported_at ? [
+                'by' => User::find($session->absence_reported_by)?->name,
+                'at' => $session->absence_reported_at->toIso8601String(),
+                'note' => $session->absence_report_note,
+            ] : null,
             'extensions' => $session->deadlineExtensions->map(fn ($e) => $this->presentExtension($e))->values(),
         ];
     }
@@ -320,7 +327,8 @@ class DefenceDeadlineService
                 ."with {$missing} score(s) still missing. You can request an extension from the Open Defence page.",
         ];
 
-        $officers = User::role('college_officer')->where('status', 'active')->where('college_id', $proposal->college_id)->get();
+        $officers = User::role('college_officer')->where('status', 'active')->where('college_id', $proposal->college_id)->get()
+            ->merge(User::customRoleHolders('defence_extensions.request', $proposal->college_id, $proposal->category))->unique('id');
         foreach ($officers as $officer) {
             $this->notify($officer, 'defence_deadline_passed', $data);
         }
@@ -331,7 +339,7 @@ class DefenceDeadlineService
     {
         return ReviewAssignment::where('proposal_id', $proposalId)
             ->whereHas('evaluationType', fn ($q) => $q->where('name', 'like', 'open_defence%'))
-            ->whereNotIn('status', ['submitted', 'declined', 'cancelled']);
+            ->whereNotIn('status', ['submitted', 'declined', 'cancelled', 'voided']);
     }
 
     /** @return Collection<int, User> */
@@ -344,7 +352,8 @@ class DefenceDeadlineService
             $approvers = $approvers->merge(User::role($directorRole)->where('status', 'active')->get());
         }
 
-        return $approvers->unique('id')->values();
+        return $approvers->merge(User::customRoleHolders('defence_extensions.approve', $proposal->college_id, $proposal->category))
+            ->unique('id')->values();
     }
 
     private function directorLabel(?Proposal $proposal): string

@@ -8,7 +8,7 @@ import AppLayout from '../../Layouts/AppLayout';
 import DataTable from '../../Components/DataTable';
 import ConfirmDialog from '../../Components/ConfirmDialog';
 import {
-    AWAITING, CATEGORY_FOR_OFFICER, DAY, daysBetween, plural, topicLabel, complaintPermissions,
+    AWAITING, DAY, daysBetween, plural, topicLabel, complaintPermissions,
     ComplaintStatusBadge as StatusBadge, LevelBadge, AgeNote, ComplaintTimeline,
     RespondModal, EscalateModal, EditModal,
 } from '../../Components/ComplaintKit';
@@ -150,13 +150,15 @@ function DetailDrawer({ complaint: initial, permissions, onClose, onAction }) {
 // ─── Main page ───────────────────────────────────────────────────────────────
 
 export default function ComplaintsIndex() {
-    const { user, hasAnyRole, hasRole } = useAuth();
+    const { user, hasPermission, accessScope } = useAuth();
     const { success, error } = useToast();
 
-    const isCollegeOfficer  = hasRole('college_officer');
-    const officerRole       = Object.keys(CATEGORY_FOR_OFFICER).find(r => hasRole(r));
-    const isCategoryOfficer = !!officerRole;
-    const isAdmin           = hasAnyRole(['super_admin', 'admin', 'central_officer']);
+    // Complaint handlers work at the level that matches their scope: everything,
+    // Level 1 for their college, Level 2 for their category.
+    const canRespond        = hasPermission('complaints.respond');
+    const isAdmin           = canRespond && accessScope.type === 'all';
+    const isCollegeOfficer  = canRespond && accessScope.type === 'college';
+    const isCategoryOfficer = canRespond && accessScope.type === 'category';
     const isUser            = !isAdmin && !isCollegeOfficer && !isCategoryOfficer;
 
     const defaultLevel = isAdmin ? '' : isCollegeOfficer ? 'college' : isCategoryOfficer ? 'officer' : '';
@@ -186,8 +188,8 @@ export default function ComplaintsIndex() {
     useEffect(() => { load(); }, [load]);
 
     const permissions = useCallback(
-        (c) => complaintPermissions(c, { userId: user?.id, isAdmin, isCollegeOfficer, officerRole }),
-        [user, isAdmin, isCollegeOfficer, officerRole],
+        (c) => complaintPermissions(c, { userId: user?.id, canRespond, scope: accessScope }),
+        [user, canRespond, accessScope],
     );
 
     const handleAction = (type, complaint) => {

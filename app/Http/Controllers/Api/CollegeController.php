@@ -121,7 +121,7 @@ class CollegeController extends Controller
     {
         // College officers can view and manage their own college's departments,
         // but creating new ones is reserved for admin-tier roles.
-        if ($request->user()?->hasRole('college_officer')) {
+        if (! $request->user()?->can('departments.create')) {
             return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
         }
 
@@ -162,7 +162,7 @@ class CollegeController extends Controller
 
     public function destroy(string $id, Request $request): JsonResponse
     {
-        if (! $request->user()?->hasRole('super_admin')) {
+        if (! $request->user()?->can('colleges.delete')) {
             return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
         }
 
@@ -179,7 +179,7 @@ class CollegeController extends Controller
 
     public function destroyDepartment(string $id, Request $request): JsonResponse
     {
-        if (! $request->user()?->hasRole('super_admin')) {
+        if (! $request->user()?->can('colleges.delete')) {
             return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
         }
 

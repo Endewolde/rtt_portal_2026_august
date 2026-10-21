@@ -27,27 +27,8 @@ class SettlementController extends Controller
             'financeVerifiedByUser:id,name',
         ])->orderByDesc('created_at');
 
-        if ($user->hasAnyRole(['college_officer', 'finance_officer']) ||
-            ($user->hasRole('support_officer') && $user->college_id)) {
-            $query->whereHas('budgetRequest.proposal', fn ($q) => $q->where('college_id', $user->college_id)
-            );
-        } elseif (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'support_officer',
-            'research_officer', 'community_officer', 'technology_officer'])) {
-            $query->whereHas('budgetRequest.proposal', fn ($q) => $q->where('pi_user_id', $user->id)
-                ->orWhereHas('members', fn ($sq) => $sq->where('user_id', $user->id)->where('status', 'active')
-                )
-            );
-        }
-
-        if ($user->hasRole('research_officer')) {
-            $query->whereHas('budgetRequest.proposal', fn ($q) => $q->where('category', 'research'));
-        }
-        if ($user->hasRole('community_officer')) {
-            $query->whereHas('budgetRequest.proposal', fn ($q) => $q->where('category', 'community_engagement'));
-        }
-        if ($user->hasRole('technology_officer')) {
-            $query->whereHas('budgetRequest.proposal', fn ($q) => $q->where('category', 'technology_transfer'));
-        }
+        $user->accessScope()->constrainThrough($query, 'budgetRequest.proposal', fn ($q) => $q->whereHas('budgetRequest.proposal', fn ($q) => $q->where('pi_user_id', $user->id)
+            ->orWhereHas('members', fn ($sq) => $sq->where('user_id', $user->id)->where('status', 'active'))));
 
         return response()->json([
             'data' => $query->get(),
@@ -119,7 +100,7 @@ class SettlementController extends Controller
     {
         $user = $request->user();
 
-        if (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'finance_officer', 'college_officer', 'support_officer'])) {
+        if (! $user->can('settlements.verify_college')) {
             return response()->json(['message' => 'You do not have permission to verify settlements.', 'errors' => []], 403);
         }
 
@@ -127,7 +108,7 @@ class SettlementController extends Controller
 
         $settlement = BudgetSettlement::with('budgetRequest.proposal')->findOrFail($id);
 
-        if ($user->hasRole('finance_officer') && $settlement->budgetRequest?->proposal?->college_id !== $user->college_id) {
+        if (! $user->accessScope()->covers($settlement->budgetRequest?->proposal?->college_id, $settlement->budgetRequest?->proposal?->category)) {
             return response()->json(['message' => 'You can only verify settlements for proposals in your college.', 'errors' => []], 403);
         }
 
@@ -158,7 +139,7 @@ class SettlementController extends Controller
     {
         $user = $request->user();
 
-        if (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'finance_officer', 'support_officer'])) {
+        if (! $user->can('settlements.verify_finance')) {
             return response()->json(['message' => 'You do not have permission to finalize settlements.', 'errors' => []], 403);
         }
 
@@ -166,7 +147,7 @@ class SettlementController extends Controller
 
         $settlement = BudgetSettlement::with('budgetRequest.proposal')->findOrFail($id);
 
-        if ($user->hasRole('finance_officer') && $settlement->budgetRequest?->proposal?->college_id !== $user->college_id) {
+        if (! $user->accessScope()->covers($settlement->budgetRequest?->proposal?->college_id, $settlement->budgetRequest?->proposal?->category)) {
             return response()->json(['message' => 'You can only finalize settlements for proposals in your college.', 'errors' => []], 403);
         }
 
@@ -207,16 +188,8 @@ class SettlementController extends Controller
             ->whereDoesntHave('settlement')
             ->orderBy('updated_at');
 
-        if ($user->hasAnyRole(['college_officer', 'finance_officer'])) {
-            $query->whereHas('proposal', fn ($q) => $q->where('college_id', $user->college_id)
-            );
-        } elseif (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'support_officer',
-            'research_officer', 'community_officer', 'technology_officer'])) {
-            $query->whereHas('proposal', fn ($q) => $q->where('pi_user_id', $user->id)
-                ->orWhereHas('members', fn ($sq) => $sq->where('user_id', $user->id)->where('status', 'active')
-                )
-            );
-        }
+        $user->accessScope()->constrainThrough($query, 'proposal', fn ($q) => $q->whereHas('proposal', fn ($q) => $q->where('pi_user_id', $user->id)
+            ->orWhereHas('members', fn ($sq) => $sq->where('user_id', $user->id)->where('status', 'active'))));
 
         $requests = $query->get()->map(function ($br) {
             $br->total_disbursed = $br->disbursements->sum('amount');

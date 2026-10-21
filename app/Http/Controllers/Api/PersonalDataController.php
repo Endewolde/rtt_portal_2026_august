@@ -12,8 +12,6 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class PersonalDataController extends Controller
 {
-    private const ADMIN_ROLES = ['super_admin', 'admin'];
-
     public function __construct(private PersonalDataService $personalData) {}
 
     /** Everything the platform holds about the signed-in user, as a JSON file. */
@@ -59,7 +57,7 @@ class PersonalDataController extends Controller
     /** Admin: requests, newest first, each with anything that blocks removal. */
     public function index(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::ADMIN_ROLES)) {
+        if (! $request->user()?->can('data_requests.manage')) {
             return $this->forbidden();
         }
 
@@ -85,7 +83,7 @@ class PersonalDataController extends Controller
 
     public function approve(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::ADMIN_ROLES)) {
+        if (! $request->user()?->can('data_requests.manage')) {
             return $this->forbidden();
         }
         $note = $request->validate(['note' => 'nullable|string|max:1000'])['note'] ?? null;
@@ -101,7 +99,7 @@ class PersonalDataController extends Controller
 
     public function reject(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::ADMIN_ROLES)) {
+        if (! $request->user()?->can('data_requests.manage')) {
             return $this->forbidden();
         }
         $note = (string) $request->validate(['note' => 'required|string|min:10|max:1000'])['note'];

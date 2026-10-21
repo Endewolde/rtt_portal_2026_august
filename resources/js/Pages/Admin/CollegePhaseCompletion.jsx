@@ -34,8 +34,8 @@ function Legend() {
     );
 }
 
-// null completion_pct only happens when the college has zero submitted
-// proposals for this phase's scope — nothing to report on, not "behind".
+// null completion_pct only happens when no proposal of the college has reached
+// this phase — nothing to report on, not "behind".
 function phaseStatusColor(pct) {
     if (pct == null) return 'text-gray-300';
     if (pct >= 100) return 'text-emerald-600';
@@ -43,11 +43,10 @@ function phaseStatusColor(pct) {
     return 'text-rose-600';
 }
 
-// Completion is against the college's FULL submitted-proposal count, not just
-// the subset a reviewer has been assigned to — a proposal still waiting on a
-// reviewer assignment counts against the phase exactly like one still awaiting
-// a decision, so it shows as its own "unassigned" segment rather than being
-// left out of the bar entirely.
+// Completion is against the proposals that reached the phase — validated ones for
+// blind review, ones that passed blind review for open defence. One still waiting
+// on a reviewer assignment counts against the phase like one awaiting a decision,
+// so it shows as its own "unassigned" segment rather than being left out.
 function PhaseBar({ phase }) {
     if (!phase || phase.total === 0) {
         return <p className="text-xs text-gray-400 italic">No proposals submitted</p>;
@@ -152,6 +151,9 @@ export default function CollegePhaseCompletion() {
                                 <h1 className="text-xl font-bold">College Phase Completion</h1>
                                 <p className="text-sm text-slate-300 mt-0.5">
                                     Blind review &amp; open defence progress per college for {data?.academic_year ?? 'the selected'} academic year
+                                </p>
+                                <p className="text-xs text-slate-400 mt-1">
+                                    Blind review counts validated proposals · Open defence counts proposals that passed blind review
                                 </p>
                             </div>
                         </div>

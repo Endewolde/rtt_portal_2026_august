@@ -249,4 +249,30 @@ return [
             ."- **Downloads** — guidelines, templates and forms.\n"
             .'- **FAQ** — common questions on the homepage.',
     ],
+    [
+        'slug' => 'guided-tours', 'category' => $c,
+        'title' => 'Guided tours and your getting-started checklist',
+        'summary' => 'Interactive tours of the pages your role uses, and a checklist that tracks your first steps.',
+        'keywords' => 'tour guided tour walkthrough onboarding checklist getting started replay restart skip resume welcome',
+        'questions' => [
+            'How do I take the tour again?', 'Where is my getting-started checklist?', 'How do I resume a tour I closed?',
+            'Can I skip the tour?', 'How do I restart onboarding?', 'Why did a checklist item tick itself?',
+            'Why doesn\'t the tour show some pages?', 'I closed the welcome message, how do I see it again?',
+        ],
+        'body' => "The first time you sign in, a short **welcome** introduces what your role can do. Guided tours then walk you through the real pages and buttons you'll use.\n\n"
+            ."## The Help button\n"
+            ."The **Help** button at the top of every page lets you:\n"
+            ."- **resume** a tour you closed, from the step you stopped at;\n"
+            ."- **skip** the tour that's running;\n"
+            ."- **start or replay** any tour for your role;\n"
+            ."- open your **getting-started checklist** and the **welcome** again.\n\n"
+            ."## During a tour\n"
+            ."Use **Next** and **Back** (or the arrow keys). Close it with **×** or **Esc** — your place is saved. When a step is on another page, the tour takes you there.\n\n"
+            ."## The checklist\n"
+            ."Your checklist shows what's done and what's left. Items tick themselves when you finish a tour or when the system sees you've done the task — for example submitting a proposal or assigning reviewers. You can also mark items done or undo them.\n\n"
+            ."## Good to know\n"
+            ."- Tours only show pages your role can open.\n"
+            ."- If you hold several roles, the checklist has a tab for each; progress is kept separately.\n"
+            ."- **Restart onboarding** at the bottom of the checklist starts your role's onboarding again.",
+    ],
 ];

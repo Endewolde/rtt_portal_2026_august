@@ -14,16 +14,15 @@ class ProposalValidationService
 
     private function checkCategoryPermission(User $validator, Proposal $proposal): void
     {
-        foreach (self::ROLE_CATEGORY_MAP as $role => $category) {
-            if ($validator->hasRole($role)) {
-                if ($proposal->category !== $category) {
-                    throw new AuthorizationException(
-                        "As {$role} you can only validate {$category} proposals."
-                    );
-                }
-
-                return;
-            }
+        // Validators act within their data scope (a category director validates their category).
+        $scope = $validator->accessScope();
+        if ($scope->isCategory() && ! in_array($proposal->category, $scope->categories, true)) {
+            throw new AuthorizationException(
+                'You can only validate '.implode(', ', $scope->categories).' proposals.'
+            );
+        }
+        if ($scope->isCollege() && $proposal->college_id !== $scope->collegeId) {
+            throw new AuthorizationException('You can only validate proposals from your college.');
         }
     }
 
@@ -112,12 +111,6 @@ class ProposalValidationService
         );
     }
 
-    private const ROLE_CATEGORY_MAP = [
-        'research_officer' => 'research',
-        'community_officer' => 'community_engagement',
-        'technology_officer' => 'technology_transfer',
-    ];
-
     /**
      * Get proposals awaiting validation, scoped by the validator's role category and optionally by college.
      */
@@ -127,11 +120,8 @@ class ProposalValidationService
             ->with(['pi', 'college', 'proposalCall'])
             ->orderBy('submitted_at', 'asc');
 
-        foreach (self::ROLE_CATEGORY_MAP as $role => $category) {
-            if ($validator->hasRole($role)) {
-                $query->where('category', $category);
-                break;
-            }
+        if ($validator->accessScope()->isCategory()) {
+            $query->whereIn('category', $validator->accessScope()->categories);
         }
 
         if ($collegeScope) {
@@ -154,11 +144,8 @@ class ProposalValidationService
             ->with(['pi', 'college', 'proposalCall'])
             ->orderBy('rejected_at', 'desc');
 
-        foreach (self::ROLE_CATEGORY_MAP as $role => $category) {
-            if ($validator->hasRole($role)) {
-                $query->where('category', $category);
-                break;
-            }
+        if ($validator->accessScope()->isCategory()) {
+            $query->whereIn('category', $validator->accessScope()->categories);
         }
 
         if ($collegeScope) {

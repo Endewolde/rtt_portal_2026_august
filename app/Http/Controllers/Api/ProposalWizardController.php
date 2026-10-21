@@ -210,7 +210,7 @@ class ProposalWizardController extends Controller
         $user = $request->user();
         $isOwner = $user && $user->id === $doc->proposal?->pi_user_id;
 
-        if ($doc->document_type === 'pi_cv' && ! $isOwner && $user?->hasAnyRole(ProposalDocument::CV_RESTRICTED_ROLES)) {
+        if ($doc->document_type === 'pi_cv' && ! $isOwner && ! $user?->can('proposals.view_cv')) {
             abort(403, 'You are not authorized to view this document.');
         }
 

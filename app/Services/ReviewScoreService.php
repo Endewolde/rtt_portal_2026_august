@@ -698,6 +698,16 @@ class ReviewScoreService
             return;
         }
 
+        // ...and until the college officer has confirmed the defence took place, so
+        // scores for a defence the team never attended can't decide the proposal.
+        $attendance = app(DefenceAttendanceService::class);
+        $session = $attendance->currentSession($proposal);
+        if ($session && $session->attendance !== DefenceAttendanceService::HELD) {
+            $attendance->requestAttendance($session);
+
+            return;
+        }
+
         $snapshot = $this->recalculateSnapshot($proposal);
         $blindRaw = $snapshot['blind']['score'] ?? 0.0;
         $blindMax = $snapshot['blind']['max'] ?? 0.0;
@@ -931,7 +941,7 @@ class ReviewScoreService
         }
         $recipients = $recipients->merge(
             User::role('college_officer')->where('status', 'active')->where('college_id', $proposal->college_id)->get()
-        )->unique('id');
+        )->merge(User::customRoleHolders('review_decisions.correct', $proposal->college_id, $proposal->category))->unique('id');
 
         $scoreList = collect($disagreement['scores'])->map(fn ($s) => "{$s['label']} {$s['score']}/{$s['max']}")->implode(', ');
         $data = [

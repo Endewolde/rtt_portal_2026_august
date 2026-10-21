@@ -154,3 +154,47 @@ test('review results endpoint falls back to raw points out of raw max when categ
     expect($data['average_score'])->toEqual(12.0)
         ->and($data['average_max'])->toEqual(20.0);
 });
+
+test('review results show the combined blind + defence score out of 100, not an average of all reviews', function () {
+    $pi = User::factory()->create();
+    $pi->assignRole('pi');
+    $admin = User::factory()->create();
+    $admin->assignRole('central_officer');
+
+    $college = College::create(['name' => 'C'.rand(), 'code' => 'RC'.rand(10000, 99999)]);
+    $dept = Department::create(['college_id' => $college->id, 'name' => 'D', 'code' => 'RCD'.rand(10000, 99999)]);
+    $call = ProposalCall::create([
+        'academic_year' => '2026', 'category' => 'research', 'title' => 'Call', 'slug' => 'rc-'.rand(10000, 99999),
+        'start_date' => now()->toDateString(), 'end_date' => now()->addMonths(3)->toDateString(),
+        'status' => 'active', 'is_open' => true, 'created_by' => $admin->id,
+    ]);
+    $proposal = Proposal::create([
+        'tracker_number' => 'RC-'.rand(100000, 999999), 'proposal_call_id' => $call->id, 'category' => 'research',
+        'title' => 'P', 'status' => 'accepted', 'pi_user_id' => $pi->id, 'college_id' => $college->id,
+        'department_id' => $dept->id, 'academic_year' => '2026', 'created_by' => $pi->id,
+    ]);
+
+    // Blind out of 80, defence out of 20 — the standard split that adds up to 100.
+    $phase = function (string $name, int $weight, array $scores) use ($proposal, $admin) {
+        $type = EvaluationType::create(['name' => $name.'_'.rand(1000, 9999), 'label' => $name, 'proposal_category' => 'research', 'is_active' => true]);
+        $category = EvaluationCategory::create(['evaluation_type_id' => $type->id, 'name' => 'All', 'order_index' => 1, 'weight' => $weight]);
+        $question = EvaluationQuestion::create(['evaluation_category_id' => $category->id, 'question_text' => 'Q', 'max_score' => $weight, 'weight' => 1, 'is_required' => true, 'order_index' => 1]);
+        foreach ($scores as $score) {
+            $reviewer = User::factory()->create();
+            $assignment = ReviewAssignment::create([
+                'proposal_id' => $proposal->id, 'reviewer_id' => $reviewer->id, 'evaluation_type_id' => $type->id,
+                'assigned_by' => $admin->id, 'status' => 'submitted', 'assigned_at' => now(), 'submitted_at' => now(),
+            ]);
+            ReviewScore::create(['review_assignment_id' => $assignment->id, 'evaluation_question_id' => $question->id, 'score' => $score]);
+        }
+    };
+    $phase('blind_review', 80, [70, 60]);   // blind average 65/80
+    $phase('open_defence', 20, [15, 17]);   // defence average 16/20
+
+    $scores = $this->actingAs($pi, 'sanctum')->getJson("/api/v1/proposals/{$proposal->id}/review-results")->assertOk()->json('data.scores');
+
+    expect($scores['blind'])->toEqual(['score' => 65, 'max' => 80])
+        ->and($scores['defence'])->toEqual(['score' => 16, 'max' => 20])
+        ->and($scores['combined'])->toEqual(81)
+        ->and($scores['combined_max'])->toEqual(100);
+});

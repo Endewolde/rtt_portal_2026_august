@@ -329,16 +329,10 @@ export default function GrantLetters() {
     // Load funded proposals
     useEffect(() => {
         setLoadingList(true);
-        api.get('/proposals', { params: { status: 'funded', per_page: 200 } })
+        api.get('/proposals', { params: { status: 'funded', per_page: 200, with_award: 1 } })
             .then(r => {
                 const items = r.data?.data?.data ?? r.data?.data ?? [];
-                Promise.all(
-                    items.map(p =>
-                        api.get(`/proposals/${p.id}/award`)
-                            .then(ar => ({ ...p, award: ar.data?.data ?? null }))
-                            .catch(() => p),
-                    ),
-                ).then(setProposals);
+                setProposals(items.map(p => ({ ...p, award: p.award ?? null })));
             })
             .catch(() => {})
             .finally(() => setLoadingList(false));

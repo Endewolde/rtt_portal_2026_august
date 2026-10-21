@@ -67,14 +67,14 @@ function cpc_assign(Proposal $proposal, User $actor, string $evalPrefix): void
     ]);
 }
 
-function cpc_logRejection(Proposal $proposal, User $actor, string $action, string $from): void
+function cpc_logRejection(Proposal $proposal, User $actor, string $action, string $from, string $to = 'rejected'): void
 {
     DB::table('workflow_logs')->insert([
         'id' => Str::uuid()->toString(),
         'proposal_id' => $proposal->id,
         'from_stage' => $from,
         'action' => $action,
-        'to_stage' => 'rejected',
+        'to_stage' => $to,
         'actor_id' => $actor->id,
         'notes' => null,
         'metadata' => null,
@@ -91,10 +91,10 @@ test('a non-admin/officer/college-officer role is forbidden', function () {
         ->assertForbidden();
 });
 
-test('a college with a submitted proposal that has no phase assigned yet counts against completion, not excluded from it', function () {
+test('a validated proposal with no reviewer yet counts against blind review completion', function () {
     $admin = cpc_admin();
     $college = cpc_college();
-    cpc_makeProposal($college, 'submitted', $admin);
+    cpc_makeProposal($college, 'validated', $admin);
 
     $res = $this->actingAs($admin, 'sanctum')
         ->getJson('/api/v1/college-phase-completion')
@@ -106,6 +106,32 @@ test('a college with a submitted proposal that has no phase assigned yet counts 
         ->and($blind['assigned'])->toBe(0)
         ->and($blind['unassigned'])->toBe(1)
         ->and($blind['completion_pct'])->toBe(0);
+});
+
+test('only validated proposals count for blind review, and only those that passed blind review count for open defence', function () {
+    $admin = cpc_admin();
+    $college = cpc_college();
+    cpc_makeProposal($college, 'submitted', $admin);                  // awaiting validation — in neither phase
+    $rejectedAtValidation = cpc_makeProposal($college, 'rejected', $admin);
+    cpc_logRejection($rejectedAtValidation, $admin, 'reject', 'submitted'); // never validated — in neither phase
+    $underBlind = cpc_makeProposal($college, 'under_blind_review', $admin);
+    cpc_assign($underBlind, $admin, 'blind_review');                  // blind only, pending
+    $failedBlind = cpc_makeProposal($college, 'rejected', $admin);
+    cpc_assign($failedBlind, $admin, 'blind_review');
+    cpc_logRejection($failedBlind, $admin, 'fail_blind_review', 'under_blind_review'); // blind only, rejected
+    cpc_makeProposal($college, 'blind_review_passed', $admin);         // passed blind (no blind assignment here) — defence, unassigned
+    $legacy = cpc_makeProposal($college, 'funded', $admin);
+    cpc_logRejection($legacy, $admin, 'grant_legacy', 'submitted', 'funded'); // legacy grant — skipped review, in neither phase
+
+    $phases = collect($this->actingAs($admin, 'sanctum')->getJson('/api/v1/college-phase-completion')->assertOk()->json('data.colleges'))
+        ->firstWhere('college_id', $college->id)['phases'];
+
+    expect($phases['blind_review']['total'])->toBe(3)
+        ->and($phases['blind_review']['pending'])->toBe(1)
+        ->and($phases['blind_review']['rejected'])->toBe(1)
+        ->and($phases['open_defence']['total'])->toBe(1)
+        ->and($phases['open_defence']['unassigned'])->toBe(1)
+        ->and($phases['open_defence']['completion_pct'])->toBe(0);
 });
 
 test('a college with zero submitted proposals reports null completion (nothing to report on)', function () {
@@ -126,7 +152,7 @@ test('a college is not 100% complete while any submitted proposal still lacks a 
     $college = cpc_college();
     $reviewed = cpc_makeProposal($college, 'blind_review_passed', $admin);
     cpc_assign($reviewed, $admin, 'blind_review');
-    cpc_makeProposal($college, 'submitted', $admin); // never assigned to any phase
+    cpc_makeProposal($college, 'validated', $admin); // validated, never assigned a reviewer
 
     $res = $this->actingAs($admin, 'sanctum')
         ->getJson('/api/v1/college-phase-completion')
@@ -205,6 +231,7 @@ test('a proposal rejected at a LATER phase (defence) does not count against blin
     $proposal = cpc_makeProposal($college, 'rejected', $admin);
     cpc_assign($proposal, $admin, 'blind_review');
     cpc_assign($proposal, $admin, 'open_defence');
+    cpc_logRejection($proposal, $admin, 'pass_blind_review', 'under_blind_review', 'blind_review_passed');
     cpc_logRejection($proposal, $admin, 'fail_defence', 'under_open_defence');
 
     $res = $this->actingAs($admin, 'sanctum')

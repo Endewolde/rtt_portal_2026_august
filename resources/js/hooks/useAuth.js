@@ -97,8 +97,19 @@ export function useAuth() {
 
     const isAuthenticated = !!token && !!user;
 
+    // Which records the user's permissions apply to: { type: 'all'|'college'|'category'|'own', college_id, categories }
+    const accessScope = user?.access_scope ?? { type: 'own', college_id: null, categories: [] };
+    const hasAnyPermission = useCallback((perms) => perms.some((p) => hasPermission(p)), [hasPermission]);
+    /** Is a record (by its college and category) within the user's data scope? */
+    const covers = useCallback((collegeId, category) => {
+        if (accessScope.type === 'all') return true;
+        if (accessScope.type === 'college') return !!collegeId && collegeId === accessScope.college_id;
+        if (accessScope.type === 'category') return (accessScope.categories ?? []).includes(category);
+        return false;
+    }, [accessScope.type, accessScope.college_id, accessScope.categories]);
+
     return {
-        user, setUser, token, login, logout, refreshUser, isAuthenticated, hasRole, hasAnyRole, hasPermission,
+        user, setUser, token, login, logout, refreshUser, isAuthenticated, hasRole, hasAnyRole, hasPermission, hasAnyPermission, accessScope, covers,
         impersonate, isImpersonating, stopImpersonating,
     };
 }

@@ -112,6 +112,33 @@ return [
         'page_paths' => ['/admin/open-defence'], 'action_label' => 'Open open defence', 'action_url' => '/admin/open-defence',
     ],
     [
+        'slug' => 'defence-attendance', 'category' => $c, 'roles' => R::COLLEGE,
+        'title' => 'Recording whether a defence took place (team absent)',
+        'summary' => 'After the defence date, record that the defence was held — or that the team did not appear, which rejects the proposal.',
+        'keywords' => 'attendance absent no show did not appear team missing defence held record attendance reject failed to defend voided score',
+        'questions' => [
+            'The team did not come to the defence', 'What if the PI is absent on the defence day?', 'How do I record that the defence was held?',
+            'Why is the defence result not decided?', 'All scores are in but the result is not decided', 'A reviewer scored but the team never defended',
+            'Can a defence be rejected for absence?', 'What happens to scores if the team was absent?',
+        ],
+        'body' => "The platform can't tell whether the team turned up, so the **college officer** records it once the defence date arrives.\n\n"
+            ."## Step by step\n"
+            ."1. On **Open Defence**, find the proposal's card and click **Record attendance**.\n"
+            ."2. Choose **Defence was held**, or **Team did not appear** and describe what happened.\n\n"
+            ."## Defence was held\n"
+            ."The panel's scores decide the result. **The result is never decided until the defence is recorded as held** — if every score is already in, it is decided at once; otherwise when the last score arrives. You'll get a reminder when all scores are in.\n\n"
+            ."## Team did not appear\n"
+            ."- The proposal is **rejected immediately** as having failed its defence; your note is part of the reason the team sees.\n"
+            ."- Any scores already submitted are **voided** — kept for the record, never counted.\n"
+            ."- Panel members still to score are stood down and notified.\n"
+            ."This can't be undone, so check before confirming. The team can still appeal.\n\n"
+            ."## Good to know\n"
+            ."- A panel member can click **Team did not appear?** on their scoring page; you're notified and the card shows it — you still confirm.\n"
+            ."- If the team has a genuine reason, **change the defence date** instead. Scores given for the old date go back to the panel to score again.\n"
+            .'- Attendance can be recorded from the defence date onwards, and only once.',
+        'page_paths' => ['/admin/open-defence'], 'action_label' => 'Open open defence', 'action_url' => '/admin/open-defence',
+    ],
+    [
         'slug' => 'defence-deadline-extension', 'category' => $c, 'roles' => [...R::COLLEGE, ...R::DIRECTORS],
         'title' => 'Extending a defence scoring deadline',
         'summary' => 'Request it on the defence card; a director or the central office approves.',
@@ -127,7 +154,7 @@ return [
             ."3. The **category director** or the **central office** approves it under **Defence Extensions**.\n"
             ."4. Once approved, the panel member can submit until the new deadline.\n\n"
             ."## Good to know\n"
-            .'The defence result waits until every panel member has scored, so act quickly.',
+            .'The defence result waits until every panel member has scored and the defence is recorded as held, so act quickly.',
         'page_paths' => ['/admin/open-defence', '/admin/defence-extensions'],
     ],
     [
@@ -151,7 +178,7 @@ return [
         'page_paths' => ['/admin/open-defence'],
     ],
     [
-        'slug' => 'college-progress', 'category' => $c, 'roles' => R::OFFICERS,
+        'slug' => 'college-progress', 'category' => $c, 'roles' => [...R::OFFICERS, ...R::RTT_MANAGER],
         'title' => 'Following your college\'s progress',
         'summary' => 'See how many proposals are at each stage, per college.',
         'keywords' => 'college phase completion progress pipeline stage counts dashboard',
@@ -181,7 +208,9 @@ return [
             ."3. The proposal is **held** while the director reviews.\n\n"
             ."## Outcomes\n"
             ."- **Approval stands** — the proposal continues.\n"
-            ."- **Revoked** — the proposal is rejected, with both officers' notes recorded.\n\n"
+            ."- **Revoked** — the proposal is rejected, with both officers' notes recorded.\n"
+            ."- **Moved to ongoing** — if you chose **Already ongoing**, the director can move the project straight to Ongoing Proposals.\n\n"
+            ."If the project is already running (funded before), choose **Already ongoing — the project is already running** and say when and how it was funded.\n\n"
             ."You can **cancel** your report while it's pending.",
     ],
 ];

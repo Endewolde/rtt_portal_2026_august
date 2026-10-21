@@ -43,21 +43,9 @@ class MidtermEvaluationController extends Controller
      */
     private function scopeToUser($query, $user): void
     {
-        if ($user->hasRole('college_officer') ||
-            ($user->hasRole('support_officer') && $user->college_id)) {
-            $query->whereHas('proposal', fn ($q) => $q->where('college_id', $user->college_id));
-        } elseif ($user->hasRole('research_officer')) {
-            $query->whereHas('proposal', fn ($q) => $q->where('category', 'research'));
-        } elseif ($user->hasRole('community_officer')) {
-            $query->whereHas('proposal', fn ($q) => $q->where('category', 'community_engagement'));
-        } elseif ($user->hasRole('technology_officer')) {
-            $query->whereHas('proposal', fn ($q) => $q->where('category', 'technology_transfer'));
-        } elseif (! $user->hasAnyRole(['super_admin', 'central_officer', 'support_officer'])) {
-            $query->whereHas('proposal', fn ($q) => $q->where('pi_user_id', $user->id)
-                ->orWhereHas('members', fn ($sq) => $sq->where('user_id', $user->id)->where('status', 'active')
-                )
-            );
-        }
+        // Within the role's data scope; PIs and team members see their own projects.
+        $user->accessScope()->constrainThrough($query, 'proposal', fn ($q) => $q->whereHas('proposal', fn ($q) => $q->where('pi_user_id', $user->id)
+            ->orWhereHas('members', fn ($sq) => $sq->where('user_id', $user->id)->where('status', 'active'))));
     }
 
     public function show(string $id): JsonResponse
@@ -93,15 +81,7 @@ class MidtermEvaluationController extends Controller
             ->with(['pi:id,name,email', 'college:id,name'])
             ->orderBy('tracker_number');
 
-        if ($user->hasRole('college_officer')) {
-            $query->where('college_id', $user->college_id);
-        } elseif ($user->hasRole('research_officer')) {
-            $query->where('category', 'research');
-        } elseif ($user->hasRole('community_officer')) {
-            $query->where('category', 'community_engagement');
-        } elseif ($user->hasRole('technology_officer')) {
-            $query->where('category', 'technology_transfer');
-        }
+        $user->accessScope()->constrain($query, 'proposals', fn ($q) => $q->where('proposals.pi_user_id', $user->id));
 
         return response()->json([
             'data' => $query->get(['id', 'tracker_number', 'title', 'pi_user_id', 'college_id', 'category']),
@@ -174,9 +154,7 @@ class MidtermEvaluationController extends Controller
                 ->whereIn('budget_settlements.status', ['submitted', 'college_verified', 'finance_verified'])
             );
 
-        if ($user->hasRole('college_officer')) {
-            $query->where('college_id', $user->college_id);
-        }
+        $user->accessScope()->constrain($query, 'proposals', fn ($q) => $q->where('proposals.pi_user_id', $user->id));
 
         $proposals = $query->get();
         $scheduled = 0;

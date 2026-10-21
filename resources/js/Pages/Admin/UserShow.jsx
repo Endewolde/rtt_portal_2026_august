@@ -22,7 +22,7 @@ import { formatDate, formatDateTime, formatCurrency, cn, getStatusLabel } from '
 const ROLE_LABELS = {
     admin: 'Admin', super_admin: 'Super Admin', central_officer: 'Central Officer',
     college_officer: 'College Officer', finance_officer: 'Finance Officer',
-    research_officer: 'Research Officer', community_officer: 'Community Officer',
+    research_officer: 'Research Officer', community_officer: 'Community Officer', college_rtt_manager: 'College RTT Manager',
     technology_officer: 'Technology Officer', support_officer: 'Support Officer',
     staff: 'Staff', guest: 'Guest',
 };

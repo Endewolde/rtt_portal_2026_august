@@ -24,26 +24,13 @@ class DisbursementController extends Controller
             'paymentProofs',
         ])->orderByDesc('disbursed_at');
 
-        $adminRoles = ['super_admin', 'central_officer', 'support_officer',
-            'research_officer', 'community_officer', 'technology_officer'];
-
-        if ($user->hasRole('college_officer')) {
-            $query->whereHas('budgetRequest.proposal', fn ($q) => $q->where('college_id', $user->college_id));
-        } elseif ($user->hasRole('research_officer')) {
-            $query->whereHas('budgetRequest.proposal', fn ($q) => $q->where('category', 'research'));
-        } elseif ($user->hasRole('community_officer')) {
-            $query->whereHas('budgetRequest.proposal', fn ($q) => $q->where('category', 'community_engagement'));
-        } elseif ($user->hasRole('technology_officer')) {
-            $query->whereHas('budgetRequest.proposal', fn ($q) => $q->where('category', 'technology_transfer'));
-        } elseif (! $user->hasAnyRole($adminRoles)) {
-            // PI / staff / co-investigator
-            $query->whereHas('budgetRequest.proposal', function ($q) use ($user) {
-                $q->where('pi_user_id', $user->id)
-                    ->orWhereHas('members', fn ($sq) => $sq
-                        ->where('user_id', $user->id)
-                        ->where('status', 'active'));
-            });
-        }
+        // Within the role's data scope; PIs and team members see their own projects'.
+        $user->accessScope()->constrainThrough($query, 'budgetRequest.proposal', fn ($q) => $q->whereHas('budgetRequest.proposal', function ($q) use ($user) {
+            $q->where('pi_user_id', $user->id)
+                ->orWhereHas('members', fn ($sq) => $sq
+                    ->where('user_id', $user->id)
+                    ->where('status', 'active'));
+        }));
 
         $paginated = $query->paginate(25);
 
@@ -118,15 +105,7 @@ class DisbursementController extends Controller
             'disbursements',
         ])->where('status', 'approved')->orderBy('approved_at');
 
-        if ($user->hasRole('college_officer')) {
-            $query->whereHas('proposal', fn ($q) => $q->where('college_id', $user->college_id));
-        } elseif ($user->hasRole('research_officer')) {
-            $query->whereHas('proposal', fn ($q) => $q->where('category', 'research'));
-        } elseif ($user->hasRole('community_officer')) {
-            $query->whereHas('proposal', fn ($q) => $q->where('category', 'community_engagement'));
-        } elseif ($user->hasRole('technology_officer')) {
-            $query->whereHas('proposal', fn ($q) => $q->where('category', 'technology_transfer'));
-        }
+        $user->accessScope()->constrainThrough($query, 'proposal', fn ($q) => $q->whereHas('proposal', fn ($q) => $q->where('pi_user_id', $user->id)));
 
         $requests = $query->get()->map(function ($br) {
             $disbursed = (float) $br->disbursements->sum('amount');
@@ -150,9 +129,7 @@ class DisbursementController extends Controller
         $user = $request->user();
         $query = Disbursement::query();
 
-        if ($user->hasRole('college_officer')) {
-            $query->whereHas('budgetRequest.proposal', fn ($q) => $q->where('college_id', $user->college_id));
-        }
+        $user->accessScope()->constrainThrough($query, 'budgetRequest.proposal', fn ($q) => $q->whereHas('budgetRequest.proposal', fn ($q) => $q->where('pi_user_id', $user->id)));
 
         $totalDisbursed = (clone $query)->sum('amount');
         $thisMonth = (clone $query)

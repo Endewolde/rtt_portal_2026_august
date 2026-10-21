@@ -55,7 +55,7 @@ class ProposalAppealController extends Controller
     /** Admin lists all pending appeals. */
     public function index(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer'])) {
+        if (! $request->user()?->can('appeals.resolve')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -80,7 +80,7 @@ class ProposalAppealController extends Controller
             'resolution_notes' => 'required|string|min:10',
         ]);
 
-        if (! $request->user()?->hasAnyRole(['super_admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer'])) {
+        if (! $request->user()?->can('appeals.resolve')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -152,7 +152,8 @@ class ProposalAppealController extends Controller
             return;
         }
 
-        $officers = User::role($role)->where('status', 'active')->get();
+        $officers = User::role($role)->where('status', 'active')->get()
+            ->merge(User::customRoleHolders('appeals.resolve', $proposal->college_id, $proposal->category))->unique('id');
         foreach ($officers as $officer) {
             try {
                 SendEmailNotificationJob::deliver($officer, 'appeal_submitted', [

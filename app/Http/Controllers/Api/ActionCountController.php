@@ -25,6 +25,7 @@ class ActionCountController extends Controller
         $isTechnology = in_array('technology_officer', $roles);
         $isOfficer = $isResearch || $isCommunity || $isTechnology;
         $isCollegeStaff = in_array('college_officer', $roles);
+        $isRttManager = in_array('college_rtt_manager', $roles);
         $isFinance = in_array('support_officer', $roles);
         $isPI = in_array('staff', $roles);
 
@@ -43,14 +44,14 @@ class ActionCountController extends Controller
         // $alias is the table name or alias used for the proposals table in the query.
         // Always qualify college_id and category with the alias to avoid ambiguity
         // in queries that join proposals with other tables.
-        $scopeProposals = function ($q, string $alias = 'proposals') use ($isCentral, $isOfficer, $officerCategories, $isCollegeStaff, $user) {
+        $scopeProposals = function ($q, string $alias = 'proposals') use ($isCentral, $isOfficer, $officerCategories, $isCollegeStaff, $isRttManager, $user) {
             if ($isCentral) {
                 return $q;
             }
             if ($isOfficer && count($officerCategories)) {
                 $q->whereIn("{$alias}.category", $officerCategories);
             }
-            if ($isCollegeStaff && $user->college_id) {
+            if (($isCollegeStaff || $isRttManager) && $user->college_id) {
                 $q->where("{$alias}.college_id", $user->college_id);
             }
 
@@ -212,7 +213,7 @@ class ActionCountController extends Controller
         // central evaluation yet (they're still awaiting defence scheduling, and
         // are already counted in open_defence_queue below).
         $centralEvalQueue = 0;
-        if ($isCentral || $isOfficer) {
+        if ($isCentral || $isOfficer || $isRttManager) {
             $centralEvalQueue = $scopeProposals(
                 DB::table('proposals as p')->whereNull('p.deleted_at')->where('p.status', 'accepted'), 'p'
             )->count();
@@ -224,7 +225,7 @@ class ActionCountController extends Controller
         // revoke funding — not a decision queue; that's central_eval_queue above,
         // which already covers "accepted, awaiting a funding decision").
         $proposalFundingQueue = 0;
-        if ($isCentral || $isOfficer) {
+        if ($isCentral || $isOfficer || $isRttManager) {
             $proposalFundingQueue = $scopeProposals(
                 DB::table('proposals as p')->whereNull('p.deleted_at')->where('p.status', 'funded'), 'p'
             )->count();

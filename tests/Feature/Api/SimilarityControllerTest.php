@@ -48,9 +48,9 @@ function sc_score(Proposal $a, Proposal $b, float $score, bool $flagged): Simila
     ]);
 }
 
-test('an authenticated user can list similarity flags', function () {
+test('a central officer can list similarity flags', function () {
     $pi = User::factory()->create();
-    $pi->assignRole('pi');
+    $pi->assignRole('central_officer');
     $a = sc_proposal($pi);
     $b = sc_proposal($pi);
     sc_score($a, $b, 0.85, true);
@@ -61,9 +61,16 @@ test('an authenticated user can list similarity flags', function () {
         ->assertJsonPath('data.data.0.score', 0.85);
 });
 
+test('a researcher cannot list similarity flags', function () {
+    $staff = User::factory()->create();
+    $staff->assignRole('staff');
+
+    $this->actingAs($staff, 'sanctum')->getJson('/api/v1/similarity-scores')->assertForbidden();
+});
+
 test('flagged_only filters out unflagged pairs', function () {
     $pi = User::factory()->create();
-    $pi->assignRole('pi');
+    $pi->assignRole('central_officer');
     $a = sc_proposal($pi);
     $b = sc_proposal($pi);
     $c = sc_proposal($pi);
@@ -79,7 +86,7 @@ test('flagged_only filters out unflagged pairs', function () {
 
 test('min_score filters by threshold', function () {
     $pi = User::factory()->create();
-    $pi->assignRole('pi');
+    $pi->assignRole('central_officer');
     $a = sc_proposal($pi);
     $b = sc_proposal($pi);
     $c = sc_proposal($pi);
@@ -95,7 +102,7 @@ test('min_score filters by threshold', function () {
 
 test('category filter scopes to the source proposal\'s category', function () {
     $pi = User::factory()->create();
-    $pi->assignRole('pi');
+    $pi->assignRole('central_officer');
     $researchA = sc_proposal($pi, 'research');
     $researchB = sc_proposal($pi, 'research');
     $communityA = sc_proposal($pi, 'community_engagement');
@@ -112,7 +119,7 @@ test('category filter scopes to the source proposal\'s category', function () {
 
 test('summary reports total, flagged, and critical counts', function () {
     $pi = User::factory()->create();
-    $pi->assignRole('pi');
+    $pi->assignRole('central_officer');
     $a = sc_proposal($pi);
     $b = sc_proposal($pi);
     $c = sc_proposal($pi);

@@ -12,17 +12,12 @@ use Illuminate\Support\Facades\DB;
 
 class TurnaroundController extends Controller
 {
-    private const VIEWER_ROLES = [
-        'super_admin', 'admin', 'central_officer',
-        'research_officer', 'community_officer', 'technology_officer', 'college_officer',
-    ];
-
     public function __construct(private TurnaroundService $turnaround) {}
 
     /** Turnaround dashboard — scoped like the rest of the app (college / category officers). */
     public function index(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::VIEWER_ROLES)) {
+        if (! $request->user()?->can('turnaround.view')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => [], 'meta' => []], 403);
         }
 
@@ -45,7 +40,7 @@ class TurnaroundController extends Controller
     /** Nudge whoever has to act next on a stuck proposal (once a day per stage). */
     public function remind(string $id, Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::VIEWER_ROLES)) {
+        if (! $request->user()?->can('turnaround.view')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => [], 'meta' => []], 403);
         }
 

@@ -622,7 +622,7 @@ function ReviewQueue({ queue, loading }) {
 // ─── Main dashboard ───────────────────────────────────────────────────────────
 
 export default function Dashboard() {
-    const { user, hasRole, hasAnyRole } = useAuth()
+    const { user, hasPermission, accessScope } = useAuth()
 
     // Settings come from Inertia shared props — always in sync with the DB
     const appSettings = usePage().props.app_settings ?? {}
@@ -648,11 +648,12 @@ export default function Dashboard() {
     }, [])
 
     const roles           = user?.roles?.map(r => typeof r === 'string' ? r : r.name) ?? []
-    const isAdmin         = hasAnyRole(['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer'])
-    const isPI            = hasRole('staff')
+    // Which dashboard to show follows what the user can do, not their role name.
+    const isAdmin         = hasPermission('proposals.validate')
+    const isPI            = accessScope.type === 'own' && hasPermission('proposals.submit')
     const isReviewer      = false
-    const isFinance       = hasRole('finance_officer')
-    const isCollegeOfficer = hasRole('college_officer')
+    const isFinance       = !isAdmin && hasPermission('funds.disburse')
+    const isCollegeOfficer = accessScope.type === 'college' && hasPermission('reviews.manage')
 
     const statusCounts  = widgets.proposals_by_status ?? {}
     const trendData     = widgets.proposal_trend_chart ?? []
@@ -979,7 +980,7 @@ export default function Dashboard() {
                         </SectionCard>
 
                         {/* System info (super_admin only) */}
-                        {hasRole('super_admin') && (
+                        {hasPermission('system_monitor.manage') && (
                             <SectionCard>
                                 <div className="px-5 py-4 space-y-3">
                                     <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">

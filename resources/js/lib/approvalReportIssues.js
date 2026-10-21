@@ -1,5 +1,5 @@
 import {
-    EyeOff, Copy, FileWarning, UserX, Target, FileX, Wallet, ShieldAlert, LayoutTemplate, Scale, PenLine,
+    EyeOff, Activity, Copy, FileWarning, UserX, Target, FileX, Wallet, ShieldAlert, LayoutTemplate, Scale, PenLine,
 } from 'lucide-react';
 
 /**
@@ -8,6 +8,7 @@ import {
  */
 export const APPROVAL_REPORT_ISSUES = [
     { key: 'not_anonymous',        label: 'Not anonymous — author identity revealed', icon: EyeOff,         description: 'Names, affiliations or other identifying details appear in the blind review documents.' },
+    { key: 'already_ongoing',      label: 'Already ongoing — the project is already running', icon: Activity, description: 'The project was funded before and is already running. The director can move it straight to Ongoing Proposals.' },
     { key: 'duplicate_or_funded',  label: 'Duplicate or already funded proposal',     icon: Copy,           description: 'Same as, or substantially similar to, another submitted or previously funded proposal.' },
     { key: 'plagiarism',           label: 'Plagiarism or high similarity',            icon: FileWarning,    description: 'Content copied from other work without proper attribution.' },
     { key: 'ineligible_team',      label: 'PI or team not eligible',                  icon: UserX,          description: "The PI or co-investigators do not meet the call's eligibility requirements." },

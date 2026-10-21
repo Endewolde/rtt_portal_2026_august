@@ -32,7 +32,7 @@ class ReportController extends Controller
     /** Whitelisted subjects/dimensions/metrics the report builder UI can offer. */
     public function builderOptions(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer', 'college_officer'])) {
+        if (! $request->user()?->can('reports.create')) {
             abort(403, 'Unauthorized.');
         }
 
@@ -43,7 +43,7 @@ class ReportController extends Controller
     {
         $user = $request->user();
 
-        if (! $user?->hasAnyRole(['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer', 'college_officer'])) {
+        if (! $user?->can('reports.create')) {
             abort(403, 'Unauthorized.');
         }
 
@@ -51,10 +51,10 @@ class ReportController extends Controller
 
         $filters = $request->input('filters', []);
 
-        // College officers can only ever generate reports scoped to their own college —
+        // College officers and RTT managers can only ever generate reports scoped to their own college —
         // override whatever the client sent rather than merely defaulting to it.
-        if ($user->hasRole('college_officer')) {
-            $filters['college_id'] = $user->college_id;
+        if ($user->accessScope()->isCollege()) {
+            $filters['college_id'] = $user->accessScope()->collegeId;
         }
 
         $snapshot = $this->service->generate($request->type, $filters, $user);
@@ -69,7 +69,7 @@ class ReportController extends Controller
         $user = $request->user();
         $snapshot = ReportSnapshot::findOrFail($id);
 
-        if ($snapshot->requested_by !== $user?->id && ! $user?->hasAnyRole(['super_admin', 'admin', 'central_officer'])) {
+        if ($snapshot->requested_by !== $user?->id && ! $user?->can('reports.view_all_snapshots')) {
             abort(403, 'Unauthorized.');
         }
 
@@ -82,7 +82,7 @@ class ReportController extends Controller
         $user = $request->user();
         $snapshot = ReportSnapshot::findOrFail($id);
 
-        if ($snapshot->requested_by !== $user?->id && ! $user?->hasAnyRole(['super_admin', 'admin', 'central_officer'])) {
+        if ($snapshot->requested_by !== $user?->id && ! $user?->can('reports.view_all_snapshots')) {
             abort(403, 'Unauthorized.');
         }
 
@@ -158,15 +158,15 @@ class ReportController extends Controller
     {
         $user = $request->user();
 
-        if (! $user?->hasAnyRole(['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer', 'college_officer'])) {
+        if (! $user?->can('reports.create')) {
             abort(403, 'Unauthorized.');
         }
 
         $query = Proposal::with(['pi:id,name,email,gender', 'college:id,name', 'department:id,name'])
             ->whereNull('deleted_at');
 
-        if ($user->hasRole('college_officer')) {
-            $query->where('college_id', $user->college_id);
+        if ($user->accessScope()->isCollege()) {
+            $query->where('college_id', $user->accessScope()->collegeId);
         }
         if ($request->_category_scope) {
             $query->where('category', $request->_category_scope);
@@ -199,7 +199,7 @@ class ReportController extends Controller
     {
         $user = $request->user();
 
-        if (! $user?->hasAnyRole(['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer', 'college_officer'])) {
+        if (! $user?->can('reports.create')) {
             abort(403, 'Unauthorized.');
         }
 
@@ -208,21 +208,7 @@ class ReportController extends Controller
             ->whereNull('proposals.deleted_at')
             ->whereNotIn('proposals.status', ['draft']);
 
-        if ($user->hasRole('college_officer')) {
-            $base->where('proposals.college_id', $user->college_id);
-        }
-
-        $categoryMap = [
-            'research_officer' => 'research',
-            'community_officer' => 'community_engagement',
-            'technology_officer' => 'technology_transfer',
-        ];
-        foreach ($categoryMap as $role => $category) {
-            if ($user->hasRole($role)) {
-                $base->where('proposals.category', $category);
-                break;
-            }
-        }
+        $user->accessScope()->constrain($base, 'proposals', fn ($q) => $q->where('proposals.pi_user_id', $user->id));
 
         if ($request->filled('college_id')) {
             $base->where('proposals.college_id', $request->college_id);

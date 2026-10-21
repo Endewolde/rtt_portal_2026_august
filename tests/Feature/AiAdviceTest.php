@@ -110,3 +110,45 @@ test('a summary is flagged as out of date when another review arrives', function
     $this->actingAs($this->central, 'sanctum')->getJson("/api/v1/proposals/{$this->proposal->id}/ai-review-summary")
         ->assertJsonPath('data.stale', true)->assertJsonPath('data.reviews', 2);
 });
+
+test('a college RTT manager gets the review summary for their own college only; directors for their own category', function () {
+    $this->proposal->update(['status' => 'accepted']);
+    $a = ReviewAssignment::create(['proposal_id' => $this->proposal->id, 'reviewer_id' => User::factory()->create()->id, 'evaluation_type_id' => $this->blind->id,
+        'assigned_by' => $this->central->id, 'status' => 'submitted', 'assigned_at' => now(), 'submitted_at' => now()]);
+    ReviewScore::create(['review_assignment_id' => $a->id, 'evaluation_question_id' => $this->question->id, 'score' => 7, 'comment' => 'Good', 'recommendation' => 'fund']);
+    ai_reply(['summary' => 'Positive.', 'strengths' => [], 'concerns' => [], 'disagreements' => []]);
+    $url = "/api/v1/proposals/{$this->proposal->id}/ai-review-summary";
+
+    $manager = User::factory()->create(['college_id' => $this->proposal->college_id]);
+    $manager->assignRole('college_rtt_manager');
+    $this->actingAs($manager, 'sanctum')->postJson($url)->assertOk();
+    $this->actingAs($manager, 'sanctum')->getJson($url)->assertOk()->assertJsonPath('data.latest.result.summary', 'Positive.');
+
+    $otherManager = User::factory()->create(['college_id' => College::factory()->create()->id]);
+    $otherManager->assignRole('college_rtt_manager');
+    $this->actingAs($otherManager, 'sanctum')->getJson($url)->assertForbidden();
+
+    $technologyDirector = User::factory()->create();
+    $technologyDirector->assignRole('technology_officer');
+    $this->actingAs($technologyDirector, 'sanctum')->getJson($url)->assertForbidden();
+});
+
+test('ordinary browsing does not use up the AI summary limit, which still applies on its own', function () {
+    $this->proposal->update(['status' => 'accepted']);
+    ReviewAssignment::create(['proposal_id' => $this->proposal->id, 'reviewer_id' => User::factory()->create()->id, 'evaluation_type_id' => $this->blind->id,
+        'assigned_by' => $this->central->id, 'status' => 'submitted', 'assigned_at' => now(), 'submitted_at' => now()]);
+    ai_reply(['summary' => 'Fine.', 'strengths' => [], 'concerns' => [], 'disagreements' => []]);
+    $url = "/api/v1/proposals/{$this->proposal->id}/ai-review-summary";
+
+    // A page load makes many requests — more than the summary's own limit of 10.
+    foreach (range(1, 15) as $i) {
+        $this->actingAs($this->central, 'sanctum')->getJson('/api/v1/auth/me')->assertOk();
+    }
+
+    $this->actingAs($this->central, 'sanctum')->postJson($url)->assertOk();
+
+    foreach (range(2, 10) as $i) {
+        $this->actingAs($this->central, 'sanctum')->postJson($url)->assertOk();
+    }
+    $this->actingAs($this->central, 'sanctum')->postJson($url)->assertStatus(429);
+});

@@ -28,7 +28,7 @@ class ThematicAreaController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasRole('super_admin')) {
+        if (! $request->user()?->can('thematic_areas.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -50,7 +50,7 @@ class ThematicAreaController extends Controller
 
     public function update(string $id, Request $request): JsonResponse
     {
-        if (! $request->user()?->hasRole('super_admin')) {
+        if (! $request->user()?->can('thematic_areas.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -73,7 +73,7 @@ class ThematicAreaController extends Controller
 
     public function destroy(string $id, Request $request): JsonResponse
     {
-        if (! $request->user()?->hasRole('super_admin')) {
+        if (! $request->user()?->can('thematic_areas.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 

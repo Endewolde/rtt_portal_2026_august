@@ -791,9 +791,9 @@ function TabBar({ active, counts, onChange }) {
 
 export default function BlindReview() {
     const { success, error } = useToast();
-    const { user, hasRole } = useAuth();
+    const { user, accessScope } = useAuth();
     const { app_settings } = usePage().props;
-    const isCollegeOfficer = hasRole('college_officer');
+    const isCollegeOfficer = accessScope?.type === 'college';
     const [view, setView] = useViewPreference('blind_review', 'card');
     const [activeTab, setActiveTab] = useState('active');
     const awaitingSectionRef = useRef(null);

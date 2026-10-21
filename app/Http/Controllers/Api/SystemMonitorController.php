@@ -195,7 +195,7 @@ class SystemMonitorController extends Controller
 
     public function retryFailedJob(Request $request, string $uuid): JsonResponse
     {
-        if (! $request->user()?->hasRole('super_admin')) {
+        if (! $request->user()?->can('system_monitor.manage')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.'], 403);
         }
 
@@ -211,7 +211,7 @@ class SystemMonitorController extends Controller
 
     public function forgetFailedJob(Request $request, string $uuid): JsonResponse
     {
-        if (! $request->user()?->hasRole('super_admin')) {
+        if (! $request->user()?->can('system_monitor.manage')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.'], 403);
         }
 
@@ -222,7 +222,7 @@ class SystemMonitorController extends Controller
 
     public function retryAllFailedJobs(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasRole('super_admin')) {
+        if (! $request->user()?->can('system_monitor.manage')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.'], 403);
         }
 
@@ -233,7 +233,7 @@ class SystemMonitorController extends Controller
 
     public function flushFailedJobs(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasRole('super_admin')) {
+        if (! $request->user()?->can('system_monitor.manage')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.'], 403);
         }
 
@@ -270,7 +270,7 @@ class SystemMonitorController extends Controller
 
     public function resolveAlert(Request $request, int $id): JsonResponse
     {
-        if (! $request->user()?->hasRole('super_admin')) {
+        if (! $request->user()?->can('system_monitor.manage')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.'], 403);
         }
 
@@ -284,7 +284,7 @@ class SystemMonitorController extends Controller
 
     public function getPreferences(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasRole('super_admin')) {
+        if (! $request->user()?->can('system_monitor.manage')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.'], 403);
         }
 
@@ -311,7 +311,7 @@ class SystemMonitorController extends Controller
 
     public function savePreferences(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasRole('super_admin')) {
+        if (! $request->user()?->can('system_monitor.manage')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.'], 403);
         }
 
@@ -335,7 +335,7 @@ class SystemMonitorController extends Controller
 
     public function testAlert(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasRole('super_admin')) {
+        if (! $request->user()?->can('system_monitor.manage')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.'], 403);
         }
 

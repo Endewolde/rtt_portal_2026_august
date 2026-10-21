@@ -14,12 +14,6 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class ProposalPipelineController extends Controller
 {
-    private const ALLOWED_ROLES = [
-        'super_admin', 'admin', 'central_officer',
-        'research_officer', 'community_officer', 'technology_officer',
-        'college_officer',
-    ];
-
     /** sort key (client-facing) => real column, qualified where a join is involved. */
     private const SORTABLE_COLUMNS = [
         'tracker' => 'proposals.tracker_number',
@@ -44,7 +38,7 @@ class ProposalPipelineController extends Controller
     {
         $user = $request->user();
 
-        if (! $user?->hasAnyRole(self::ALLOWED_ROLES)) {
+        if (! $user?->can('pipeline.view')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
         }
 
@@ -98,7 +92,7 @@ class ProposalPipelineController extends Controller
     {
         $user = $request->user();
 
-        if (! $user?->hasAnyRole(self::ALLOWED_ROLES)) {
+        if (! $user?->can('pipeline.view')) {
             abort(403, 'Unauthorized.');
         }
 

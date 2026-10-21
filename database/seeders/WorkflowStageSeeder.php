@@ -60,6 +60,7 @@ class WorkflowStageSeeder extends Seeder
             'central_approve',
             'central_reject',
             'fund',
+            'revoke_funding',
             'start_midterm',
             'complete',
             'archive',
@@ -127,9 +128,10 @@ class WorkflowStageSeeder extends Seeder
             // shouldn't have been, while it's still sitting at accepted (not yet
             // funded, so nothing downstream depends on it).
             ['from' => 'accepted',           'action' => 'fail_defence',          'to' => 'rejected',            'roles' => $adminFull],
-            ['from' => 'accepted',           'action' => 'central_approve',       'to' => 'funded',              'roles' => $adminFull],
-            ['from' => 'accepted',           'action' => 'central_reject',        'to' => 'rejected',            'roles' => $adminFull],
-            ['from' => 'accepted',           'action' => 'fund',                  'to' => 'funded',              'roles' => $adminFull],
+            ['from' => 'accepted',           'action' => 'central_approve',       'to' => 'funded',              'roles' => [...$adminFull, 'college_rtt_manager']],
+            ['from' => 'accepted',           'action' => 'central_reject',        'to' => 'rejected',            'roles' => [...$adminFull, 'college_rtt_manager']],
+            ['from' => 'accepted',           'action' => 'fund',                  'to' => 'funded',              'roles' => [...$adminFull, 'college_rtt_manager']],
+            ['from' => 'funded',             'action' => 'revoke_funding',        'to' => 'rejected',            'roles' => [...$adminCore, 'college_rtt_manager']],
             ['from' => 'funded',             'action' => 'start_midterm',         'to' => 'midterm_evaluation',  'roles' => $adminWithCol],
             ['from' => 'midterm_evaluation', 'action' => 'complete',              'to' => 'completed',           'roles' => $adminWithCol],
             ['from' => 'completed',          'action' => 'archive',               'to' => 'archived',            'roles' => $adminCore],

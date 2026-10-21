@@ -22,13 +22,6 @@ class ProposalCallController extends Controller
      * All calls for admin dashboard — includes drafts and expired, with submission counts.
      * Requires proposal_calls.view_any permission.
      */
-    /** Category directors and the proposal category each one oversees. */
-    private const DIRECTOR_CATEGORIES = [
-        'research_officer' => 'research',
-        'community_officer' => 'community_engagement',
-        'technology_officer' => 'technology_transfer',
-    ];
-
     /**
      * proposals_count = proposals actually submitted to the call (drafts excluded),
      * limited to what the viewer can see — the same set the call's Submissions page
@@ -36,11 +29,9 @@ class ProposalCallController extends Controller
      */
     private function withSubmittedCount(Builder $query, ?User $user): Builder
     {
-        $isCentral = $user?->hasAnyRole(['super_admin', 'admin', 'central_officer']);
-        $directorCategories = $isCentral || ! $user
-            ? []
-            : collect(self::DIRECTOR_CATEGORIES)->filter(fn ($category, $role) => $user->hasRole($role))->values()->all();
-        $collegeId = ! $isCentral && $user?->hasRole('college_officer') ? $user->college_id : null;
+        $scope = $user?->accessScope();
+        $directorCategories = $scope?->isCategory() ? $scope->categories : [];
+        $collegeId = $scope?->isCollege() ? $scope->collegeId : null;
 
         return $query->withCount(['proposals as proposals_count' => fn ($q) => $q
             ->where('status', '!=', 'draft')
@@ -48,12 +39,6 @@ class ProposalCallController extends Controller
             ->when($collegeId, fn ($q) => $q->where('college_id', $collegeId)),
         ]);
     }
-
-    /** Roles that can open a call's submissions page. */
-    private const SUBMISSION_VIEWER_ROLES = [
-        'super_admin', 'admin', 'central_officer',
-        'research_officer', 'community_officer', 'technology_officer', 'college_officer',
-    ];
 
     /**
      * Every proposal submitted to one call (drafts are only counted), with the
@@ -64,7 +49,7 @@ class ProposalCallController extends Controller
     {
         $user = $request->user();
 
-        if (! $user?->hasAnyRole(self::SUBMISSION_VIEWER_ROLES)) {
+        if (! $user?->can('proposal_calls.view_submissions')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => [], 'meta' => []], 403);
         }
 
@@ -131,7 +116,7 @@ class ProposalCallController extends Controller
     {
         $user = $request->user();
 
-        if ($user && ($user->hasRole(['super_admin', 'central_officer', 'college_officer']))) {
+        if ($user?->can('proposal_calls.view_drafts')) {
             // Admins see all calls including drafts/expired, with submission counts
             $calls = $this->withSubmittedCount(ProposalCall::query(), $user)
                 ->orderByDesc('created_at')

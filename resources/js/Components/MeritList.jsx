@@ -48,7 +48,7 @@ export default function MeritList({ onApprove, refreshKey }) {
                 const cutoff = proposals.findIndex((p) => !p.fits);
                 return (
                     <section key={call.id} className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
-                        <header className="space-y-3 border-b border-gray-100 px-5 py-4">
+                        <header className="space-y-3 border-b border-gray-100 px-4 py-4 sm:px-5">
                             <div className="flex flex-wrap items-start justify-between gap-3">
                                 <div className="flex items-start gap-3">
                                     <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-50 text-amber-600"><Trophy size={16} /></span>
@@ -63,7 +63,41 @@ export default function MeritList({ onApprove, refreshKey }) {
                             </div>
                             <BudgetBar call={call} fittingRequested={fittingRequested} />
                         </header>
-                        <div className="overflow-x-auto">
+                        {/* Phones: one card per proposal, the budget line between them */}
+                        <ol className="divide-y divide-gray-100 sm:hidden">
+                            {proposals.map((p, i) => (
+                                <Fragment key={p.id}>
+                                    {i === cutoff && (
+                                        <li className="bg-rose-50 px-4 py-1.5 text-center text-[11px] font-semibold uppercase tracking-wide text-rose-700">
+                                            <AlertTriangle size={11} className="mr-1 inline" /> Remaining budget runs out here
+                                        </li>
+                                    )}
+                                    <li className={`px-4 py-3.5 ${p.fits ? '' : 'bg-gray-50/60'}`}>
+                                        <div className="flex items-start gap-3">
+                                            <span className="mt-0.5 shrink-0 text-sm font-bold tabular-nums text-gray-900">#{p.rank}</span>
+                                            <div className="min-w-0 flex-1">
+                                                <p className="font-mono text-[11px] text-gray-500">{p.tracker_number}</p>
+                                                <p className="line-clamp-2 text-sm font-medium text-gray-900">{p.title}</p>
+                                                <p className="truncate text-xs text-gray-500">{[p.pi, p.college].filter(Boolean).join(' · ')}</p>
+                                            </div>
+                                            <span className="shrink-0 text-sm tabular-nums"><span className="font-semibold text-gray-900">{p.combined_score ?? '—'}</span><span className="text-gray-400">/{p.combined_max}</span></span>
+                                        </div>
+                                        <dl className="mt-2.5 grid grid-cols-2 gap-2 pl-8 text-xs">
+                                            <div><dt className="text-gray-400">Requested</dt><dd className="font-medium tabular-nums text-gray-800">{formatCurrency(p.requested)}</dd></div>
+                                            <div><dt className="text-gray-400">Running total</dt><dd className="font-medium tabular-nums text-gray-800">{formatCurrency(p.cumulative)}</dd></div>
+                                        </dl>
+                                        <div className="mt-2.5 flex items-center justify-between gap-2 pl-8">
+                                            {p.fits
+                                                ? <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700"><CheckCircle2 size={12} /> Fits the budget</span>
+                                                : <span className="text-[11px] font-semibold text-rose-600">Over budget</span>}
+                                            <button onClick={() => onApprove(p.id)} className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100">Approve…</button>
+                                        </div>
+                                    </li>
+                                </Fragment>
+                            ))}
+                        </ol>
+
+                        <div className="hidden overflow-x-auto sm:block">
                             <table className="w-full min-w-170 text-sm">
                                 <thead className="bg-gray-50 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
                                     <tr>

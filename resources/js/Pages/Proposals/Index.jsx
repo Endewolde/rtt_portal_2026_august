@@ -131,12 +131,8 @@ export default function ProposalIndex() {
     const currentAcademicYear = app_settings?.current_academic_year || ''
 
     const { error } = useToast()
-    const { hasAnyRole, user } = useAuth()
-    const isAdmin = hasAnyRole([
-        'super_admin', 'admin', 'central_officer',
-        'research_officer', 'community_officer', 'technology_officer',
-        'college_officer',
-    ])
+    const { hasPermission, accessScope, user } = useAuth()
+    const isAdmin = hasPermission('proposals.view_any') && accessScope?.type !== 'own'
 
     const [view, setView] = useViewPreference('proposals_index', 'table')
     const [stats, setStats] = useState(null)

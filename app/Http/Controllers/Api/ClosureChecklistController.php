@@ -10,13 +10,10 @@ use Illuminate\Http\Request;
 
 class ClosureChecklistController extends Controller
 {
-    private const OFFICER_ROLES = ['super_admin', 'admin', 'central_officer', 'college_officer',
-        'research_officer', 'community_officer', 'technology_officer', 'support_officer'];
-
     /** Get (or lazily create) the closure checklist for a proposal. */
     public function show(string $proposalId, Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::OFFICER_ROLES)) {
+        if (! $request->user()?->can('closure.view')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -33,7 +30,7 @@ class ClosureChecklistController extends Controller
     /** Toggle one checklist item. */
     public function update(string $proposalId, Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::OFFICER_ROLES)) {
+        if (! $request->user()?->can('closure.view')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 

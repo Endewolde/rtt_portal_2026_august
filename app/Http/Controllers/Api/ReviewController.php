@@ -4,10 +4,12 @@ namespace App\Http\Controllers\Api;
 
 use App\Exceptions\BlindReviewPhaseIncompleteException;
 use App\Exceptions\UnauthorizedTransitionException;
+use App\Exports\ReviewerPaymentExport;
 use App\Http\Controllers\Controller;
 use App\Jobs\SendEmailNotificationJob;
 use App\Jobs\SendRawMailJob;
 use App\Jobs\StoreInAppNotificationJob;
+use App\Models\College;
 use App\Models\ConferenceAbstractReview;
 use App\Models\DefenceSession;
 use App\Models\EvaluationCategory;
@@ -33,23 +35,11 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class ReviewController extends Controller
 {
-    /** Officers who manage reviews and may open any assignment. */
-    private const ASSIGNMENT_VIEWER_ROLES = ['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer', 'college_officer'];
-
-    private const WORKLOAD_ROLES = [
-        'super_admin', 'admin', 'central_officer', 'research_officer',
-        'community_officer', 'technology_officer', 'college_officer',
-    ];
-
-    /** Roles allowed to run the pass/fail review transitions (see WorkflowStageSeeder's $adminFull). */
-    private const DECISION_CORRECTION_ROLES = [
-        'super_admin', 'admin', 'central_officer', 'research_officer',
-        'community_officer', 'technology_officer',
-    ];
-
     public function __construct(
         private ReviewAssignmentService $assignmentService,
         private ReviewScoreService $scoreService,
@@ -132,7 +122,7 @@ class ReviewController extends Controller
     /** Decide a proposal held for reviewer disagreement using the scores it has, with a moderation note. */
     public function decideDespiteDisagreement(string $id, Request $request): JsonResponse
     {
-        if (! $request->user()->hasAnyRole(['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer'])) {
+        if (! $request->user()->can('review_decisions.correct')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => [], 'meta' => []], 403);
         }
 
@@ -184,8 +174,6 @@ class ReviewController extends Controller
         }
     }
 
-    private const REOPEN_ROLES = ['super_admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer'];
-
     /**
      * Reopen a rejected proposal for reconsideration — e.g. it was auto-rejected
      * under thresholds/decision-mode settings that have since changed. Sends it back
@@ -196,7 +184,7 @@ class ReviewController extends Controller
     {
         $request->validate(['reason' => 'required|string|min:10|max:2000']);
 
-        if (! $request->user()?->hasAnyRole(self::REOPEN_ROLES)) {
+        if (! $request->user()?->can('proposals.reopen')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
         }
 
@@ -308,7 +296,7 @@ class ReviewController extends Controller
             'override_workload_cap' => 'sometimes|boolean',
         ]);
 
-        if (! $request->user()->hasAnyRole(self::WORKLOAD_ROLES)) {
+        if (! $request->user()->can('open_defence.manage')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => [], 'meta' => []], 403);
         }
 
@@ -598,8 +586,7 @@ class ReviewController extends Controller
 
         $isOwner = $user->id === $proposal->pi_user_id
             || $proposal->members()->where('user_id', $user->id)->where('status', 'active')->exists();
-        $isStaff = $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'research_officer',
-            'community_officer', 'technology_officer', 'college_officer']);
+        $isStaff = $user->can('review_results.view');
 
         if (! $isOwner && ! $isStaff) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
@@ -628,10 +615,20 @@ class ReviewController extends Controller
 
         $scored = $reviews->whereNotNull('overall_score');
 
+        // The phase scores the decisions are made on: blind (out of its weight sum),
+        // defence, and combined (blind + defence, out of 100 with the standard weights).
+        $snapshot = $this->scoreService->recalculateSnapshot($proposal);
+
         return response()->json([
             'data' => [
                 'total_reviews' => $proposal->reviewAssignments->count(),
                 'submitted_reviews' => $submitted->count(),
+                'scores' => [
+                    'blind' => $snapshot['blind'],
+                    'defence' => $snapshot['defence'],
+                    'combined' => $snapshot['defence'] !== null ? round((float) $snapshot['combined'], 2) : null,
+                    'combined_max' => $snapshot['defence'] !== null ? round((float) $snapshot['combined_max'], 2) : null,
+                ],
                 'average_score' => $scored->isNotEmpty() ? min(round($scored->avg('overall_score'), 2), (float) $scored->first()['overall_max']) : null,
                 'average_max' => $scored->isNotEmpty() ? $scored->first()['overall_max'] : null,
                 'reviews' => $reviews,
@@ -654,8 +651,7 @@ class ReviewController extends Controller
         $user = $request->user();
         $proposal = Proposal::findOrFail($id);
 
-        if (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'research_officer',
-            'community_officer', 'technology_officer', 'college_officer'])) {
+        if (! $user->can('review_results.view')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
         }
 
@@ -668,7 +664,7 @@ class ReviewController extends Controller
                 'proposal_status' => $proposal->status,
                 'recalculated_at' => now()->toIso8601String(),
                 'corrections' => $this->scoreService->previewDecisionCorrections($proposal, $request->phase),
-                'can_apply_corrections' => $user->hasAnyRole(self::DECISION_CORRECTION_ROLES),
+                'can_apply_corrections' => $user->can('review_decisions.correct'),
             ]),
             'message' => '',
             'errors' => [],
@@ -684,7 +680,7 @@ class ReviewController extends Controller
     {
         $user = $request->user();
 
-        if (! $user->hasAnyRole(self::DECISION_CORRECTION_ROLES)) {
+        if (! $user->can('review_decisions.correct')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => [], 'meta' => []], 403);
         }
 
@@ -775,21 +771,21 @@ class ReviewController extends Controller
     /** College officers can only ever see their own college — overrides whatever the client sends. */
     private function resolveCollegeScope(Request $request): ?string
     {
-        return $request->user()->hasRole('college_officer')
-            ? $request->user()->college_id
-            : $request->college_id;
+        $scope = $request->user()->accessScope();
+
+        return $scope->isCollege() ? $scope->collegeId : $request->college_id;
     }
 
     public function reviewerWorkload(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::WORKLOAD_ROLES)) {
+        if (! $request->user()?->can('reviewer_workload.view')) {
             return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
         }
 
         $collegeId = $this->resolveCollegeScope($request);
 
         $assignments = ReviewAssignment::with([
-            'proposal:id,title,tracker_number,college_id',
+            'proposal:id,title,tracker_number,college_id,academic_year',
             'proposal.college:id,name',
             'reviewer:id,name,email',
             'reviewer.roles:id,name',
@@ -805,9 +801,67 @@ class ReviewController extends Controller
         return response()->json(['data' => $assignments, 'message' => '', 'errors' => [], 'meta' => []]);
     }
 
+    /**
+     * Reviewer payment report (Excel): every review assignment with the reviewer's
+     * completed / not-completed totals, plus a per-reviewer payment summary. Uses the
+     * Reviewer Workload filters; college officers only ever get their own college.
+     */
+    public function reviewerPaymentReport(Request $request): BinaryFileResponse|JsonResponse
+    {
+        if (! $request->user()?->can('reviewer_workload.view')) {
+            return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
+        }
+
+        $request->validate([
+            'college_id' => 'nullable|uuid',
+            'academic_year' => 'nullable|string|max:20',
+            'review_type' => 'nullable|in:all,blind,open',
+            'reviewer_type' => 'nullable|in:all,internal,external',
+        ]);
+
+        $collegeId = $this->resolveCollegeScope($request);
+        $reviewType = $request->input('review_type', 'all');
+        $reviewerType = $request->input('reviewer_type', 'all');
+        $year = $request->input('academic_year');
+
+        $assignments = ReviewAssignment::with([
+            'proposal:id,title,tracker_number,college_id,academic_year',
+            'proposal.college:id,name',
+            'reviewer:id,name,email',
+            'reviewer.roles:id,name',
+            'evaluationType:id,name,label',
+        ])
+            ->when($collegeId, fn ($q) => $q->whereHas('proposal', fn ($p) => $p->where('college_id', $collegeId)))
+            ->when($year, fn ($q) => $q->whereHas('proposal', fn ($p) => $p->where('academic_year', $year)))
+            ->when($reviewType !== 'all', fn ($q) => $q->whereHas(
+                'evaluationType',
+                fn ($t) => $t->where('name', 'like', ($reviewType === 'blind' ? 'blind_review' : 'open_defence').'%')
+            ))
+            ->when($reviewerType !== 'all', fn ($q) => $reviewerType === 'external'
+                ? $q->whereHas('reviewer.roles', fn ($r) => $r->where('name', 'external_reviewer'))
+                : $q->whereDoesntHave('reviewer.roles', fn ($r) => $r->where('name', 'external_reviewer')))
+            ->get();
+
+        $scope = collect([
+            $collegeId ? (College::find($collegeId)?->name ?? 'College') : 'All colleges',
+            $year ? "Academic year {$year}" : 'All years',
+            ['all' => 'All review types', 'blind' => 'Blind review', 'open' => 'Open defence'][$reviewType],
+            ['all' => 'All reviewers', 'internal' => 'Internal reviewers', 'external' => 'External reviewers'][$reviewerType],
+        ])->implode(' · ');
+
+        AuditLogger::log('report.reviewer_payment_exported', User::class, $request->user()->id, $request->user()->id, null, [
+            'scope' => $scope, 'rows' => $assignments->count(),
+        ]);
+
+        return Excel::download(
+            new ReviewerPaymentExport($assignments, $scope),
+            'reviewer_payment_report_'.now()->format('Ymd_His').'.xlsx'
+        );
+    }
+
     public function reviewerAnalytics(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::WORKLOAD_ROLES)) {
+        if (! $request->user()?->can('reviewer_workload.view')) {
             return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
         }
 
@@ -1380,7 +1434,7 @@ class ReviewController extends Controller
         $isOwnReview = ReviewAssignment::whereKey($id)->where('reviewer_id', $user->id)->exists();
 
         // Only the assigned reviewer, or the officers who manage reviews, may open an assignment.
-        if (! $isOwnReview && ! $user->hasAnyRole(self::ASSIGNMENT_VIEWER_ROLES)) {
+        if (! $isOwnReview && ! $user->can('review_results.view')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => [], 'meta' => []], 403);
         }
         if ($isOwnReview && ($blocked = $this->agreementRequired($user))) {
@@ -1431,6 +1485,9 @@ class ReviewController extends Controller
                 'deadline_extended' => $session->score_deadline_extended_until !== null,
                 'deadline_passed' => now()->gt($session->scoreDeadline()),
                 'deadline_passed_message' => ReviewScoreService::DEFENCE_DEADLINE_PASSED_MESSAGE,
+                'attendance' => $session->attendance,
+                'absence_reported' => $session->absence_reported_at !== null,
+                'absence_reported_by_me' => $session->absence_reported_by === $request->user()?->id,
             ] : null;
         }
 
@@ -1496,8 +1553,7 @@ class ReviewController extends Controller
      */
     public function coiConflicts(Request $request): JsonResponse
     {
-        if (! $request->user()->hasAnyRole(['super_admin', 'admin', 'central_officer', 'research_officer',
-            'community_officer', 'technology_officer', 'college_officer'])) {
+        if (! $request->user()->can('conflicts.manage')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
         }
 

@@ -51,14 +51,11 @@ class WorkflowService
             );
         }
 
-        // Step 3: Check actor role
-        $allowedRoles = is_array($transition->allowed_roles)
-            ? $transition->allowed_roles
-            : json_decode($transition->allowed_roles, true);
-
+        // Step 3: Check the actor may take this step
+        $allowedRoles = $this->allowedRoles($transition);
         $actorRoles = $actor->getRoleNames()->toArray();
 
-        if (empty(array_intersect($actorRoles, $allowedRoles))) {
+        if (! $this->mayTake($transition, $action, $actor, $proposal)) {
             throw new UnauthorizedTransitionException(
                 'User role(s) ['.implode(',', $actorRoles)."] not authorized for action '{$action}'. Allowed: [".implode(',', $allowedRoles).'].'
             );
@@ -247,18 +244,10 @@ class WorkflowService
      */
     public function availableActions(Proposal $proposal, User $actor): Collection
     {
-        $actorRoles = $actor->getRoleNames()->toArray();
-
         return WorkflowTransition::with(['action', 'toStage'])
             ->whereHas('fromStage', fn ($q) => $q->where('name', $proposal->status))
             ->get()
-            ->filter(function ($transition) use ($actorRoles) {
-                $allowed = is_array($transition->allowed_roles)
-                    ? $transition->allowed_roles
-                    : json_decode($transition->allowed_roles, true);
-
-                return count(array_intersect($actorRoles, $allowed)) > 0;
-            })
+            ->filter(fn ($transition) => $this->mayTake($transition, $transition->action?->name, $actor, $proposal))
             ->values();
     }
 
@@ -276,16 +265,67 @@ class WorkflowService
                 return false;
             }
 
-            $allowed = is_array($transition->allowed_roles)
-                ? $transition->allowed_roles
-                : json_decode($transition->allowed_roles, true);
-
-            return count(array_intersect(
-                $actor->getRoleNames()->toArray(),
-                $allowed
-            )) > 0;
+            return $this->mayTake($transition, $action, $actor, $proposal);
         } catch (\Exception) {
             return false;
         }
+    }
+
+    /**
+     * The permission that lets a role take each workflow step, besides the roles
+     * listed on the transition itself. Ticking it on a role (built-in or custom)
+     * on the Roles page is enough.
+     */
+    public const ACTION_PERMISSIONS = [
+        'submit' => 'proposals.submit',
+        'validate' => 'proposals.validate',
+        'return_for_correction' => 'proposals.validate',
+        'reject' => 'proposals.validate',
+        'assign_for_review' => 'reviews.manage',
+        'unassign_reviewers' => 'reviews.manage',
+        'schedule_defence' => 'reviews.manage',
+        'return_for_investigation' => 'approval_reports.file',
+        'withdraw_report_resume_review' => 'approval_reports.file',
+        'withdraw_report_restore_passed' => 'approval_reports.file',
+        'reopen' => 'proposals.reopen',
+        'pass_blind_review' => 'review_decisions.correct',
+        'fail_blind_review' => 'review_decisions.correct',
+        'pass_defence' => 'review_decisions.correct',
+        'fail_defence' => 'review_decisions.correct',
+        'accept' => 'evaluation.central',
+        'central_approve' => 'evaluation.central',
+        'central_reject' => 'evaluation.central',
+        'fund' => 'evaluation.central',
+        'revoke_funding' => 'funding.revoke',
+        'start_midterm' => 'midterm_evaluations.create',
+        'complete' => 'completion_workshops.create',
+        'archive' => 'monitoring.archive',
+    ];
+
+    /** @return list<string> */
+    private function allowedRoles(WorkflowTransition $transition): array
+    {
+        return is_array($transition->allowed_roles)
+            ? $transition->allowed_roles
+            : (json_decode($transition->allowed_roles ?? '[]', true) ?: []);
+    }
+
+    /**
+     * A user may take a step if one of their roles is listed on the transition, or
+     * they hold the step's permission and the proposal is within their data scope
+     * (submitting needs no scope — only the proposal's own team can reach it).
+     */
+    private function mayTake(WorkflowTransition $transition, ?string $action, User $actor, Proposal $proposal): bool
+    {
+        if (array_intersect($actor->getRoleNames()->toArray(), $this->allowedRoles($transition)) !== []) {
+            return true;
+        }
+
+        $permission = self::ACTION_PERMISSIONS[$action] ?? null;
+        if (! $permission || ! $actor->can($permission)) {
+            return false;
+        }
+
+        return $action === 'submit' || $actor->accessScope()->covers($proposal->college_id, $proposal->category);
     }
 }

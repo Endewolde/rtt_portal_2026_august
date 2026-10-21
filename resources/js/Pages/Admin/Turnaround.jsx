@@ -97,14 +97,14 @@ function CollegeMatrix({ colleges, stages }) {
 }
 
 export default function Turnaround() {
-    const { hasAnyRole } = useAuth();
+    const { accessScope } = useAuth();
     const toast = useToast();
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const [filters, setFilters] = useState({ academic_year: '', college_id: '', category: '' });
     const [reminding, setReminding] = useState(null);
 
-    const isCentral = hasAnyRole(['super_admin', 'admin', 'central_officer']);
+    const isCentral = accessScope.type === 'all';
 
     const load = useCallback(async () => {
         setLoading(true);

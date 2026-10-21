@@ -189,17 +189,9 @@ export default function ProposalFunding() {
     const load = async () => {
         setLoading(true);
         try {
-            const res = await api.get('/proposals', { params: { status: 'funded', per_page: 50 } });
+            const res = await api.get('/proposals', { params: { status: 'funded', per_page: 200, with_award: 1 } });
             const items = res.data?.data?.data ?? res.data?.data ?? [];
-            const withAwards = await Promise.all(
-                items.map(async p => {
-                    try {
-                        const aRes = await api.get(`/proposals/${p.id}/award`);
-                        return { ...p, award: aRes.data?.data ?? null };
-                    } catch { return { ...p, award: null }; }
-                })
-            );
-            setProposals(withAwards);
+            setProposals(items.map(p => ({ ...p, award: p.award ?? null })));
         } catch { error('Failed to load funded proposals.'); }
         setLoading(false);
     };

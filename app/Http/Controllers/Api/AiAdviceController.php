@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AiInsight;
 use App\Models\Proposal;
-use App\Models\User;
 use App\Services\AiClient;
 use App\Services\ProgressReportService;
 use App\Services\ProposalAiCoachService;
@@ -19,8 +18,6 @@ use Illuminate\Support\Facades\Log;
 /** The AI writing coach (research team, before submission) and the AI review summary (central committee). */
 class AiAdviceController extends Controller
 {
-    private const SUMMARY_ROLES = ['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer'];
-
     public function __construct(private AiClient $ai) {}
 
     public function coach(string $id, Request $request, ProposalAiCoachService $coach, ProgressReportService $access): JsonResponse
@@ -58,10 +55,11 @@ class AiAdviceController extends Controller
 
     public function summary(string $id, Request $request, ReviewSummaryService $summaries): JsonResponse
     {
-        if (! $this->canSeeSummary($request->user())) {
+        $proposal = Proposal::findOrFail($id);
+        if (! $this->canSeeSummary($request, $proposal)) {
             return $this->fail('Unauthorized.', 403);
         }
-        $latest = $summaries->latest(Proposal::findOrFail($id));
+        $latest = $summaries->latest($proposal);
 
         return $this->ok([
             'enabled' => $this->enabled('ai_review_summary_enabled'),
@@ -74,13 +72,13 @@ class AiAdviceController extends Controller
 
     public function runSummary(string $id, Request $request, ReviewSummaryService $summaries): JsonResponse
     {
-        if (! $this->canSeeSummary($request->user())) {
+        $proposal = Proposal::findOrFail($id);
+        if (! $this->canSeeSummary($request, $proposal)) {
             return $this->fail('Unauthorized.', 403);
         }
         if (! $this->enabled('ai_review_summary_enabled')) {
             return $this->fail('The AI review summary is switched off.', 422);
         }
-        $proposal = Proposal::findOrFail($id);
 
         return $this->attempt(fn () => $summaries->run($proposal, $request->user()), $proposal);
     }
@@ -108,9 +106,12 @@ class AiAdviceController extends Controller
         }
     }
 
-    private function canSeeSummary(User $user): bool
+    /** Decision-makers only, and only within their own college (RTT managers) or category (directors). */
+    private function canSeeSummary(Request $request, Proposal $proposal): bool
     {
-        return $user->hasAnyRole(self::SUMMARY_ROLES);
+        return $request->user()->can('ai.review_summary')
+            && (! $request->_college_scope || $proposal->college_id === $request->_college_scope)
+            && (! $request->_category_scope || $proposal->category === $request->_category_scope);
     }
 
     private function enabled(string $key): bool

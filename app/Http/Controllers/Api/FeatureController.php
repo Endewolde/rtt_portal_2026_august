@@ -37,6 +37,10 @@ class FeatureController extends Controller
     /** Toggle individual feature on or off (super_admin only). */
     public function toggle(Request $request): JsonResponse
     {
+        if (! $request->user()?->can('features.manage')) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => [], 'meta' => []], 403);
+        }
+
         $validated = $request->validate([
             'slug' => ['required', 'string', 'in:'.implode(',', array_column(Feature::cases(), 'value'))],
             'enabled' => ['required', 'boolean'],
@@ -63,6 +67,10 @@ class FeatureController extends Controller
     /** Replace entire set of enabled features at once (super_admin only). */
     public function update(Request $request): JsonResponse
     {
+        if (! $request->user()?->can('features.manage')) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => [], 'meta' => []], 403);
+        }
+
         $validated = $request->validate([
             'features' => ['present', 'array'],
             'features.*' => ['string', 'in:'.implode(',', array_column(Feature::cases(), 'value'))],
@@ -113,6 +121,10 @@ class FeatureController extends Controller
     /** Replace the full list of disabled sub-features. */
     public function updateDisabledSubFeatures(Request $request): JsonResponse
     {
+        if (! $request->user()?->can('features.manage')) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => [], 'meta' => []], 403);
+        }
+
         $request->validate([
             'disabled' => ['present', 'array'],
             'disabled.*' => ['string'],

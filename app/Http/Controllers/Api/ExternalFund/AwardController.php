@@ -11,8 +11,6 @@ use Illuminate\Support\Str;
 
 class AwardController extends Controller
 {
-    private const MANAGERS = ['super_admin', 'admin', 'research_officer', 'central_officer'];
-
     public function index(Request $request): JsonResponse
     {
         $query = ExternalFundAward::with([
@@ -39,7 +37,7 @@ class AwardController extends Controller
 
     public function store(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::MANAGERS)) {
+        if (! $request->user()?->can('external_funds.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -89,7 +87,7 @@ class AwardController extends Controller
 
     public function update(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::MANAGERS)) {
+        if (! $request->user()?->can('external_funds.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -114,7 +112,7 @@ class AwardController extends Controller
 
     public function destroy(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
+        if (! $request->user()?->can('external_funds.delete')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 

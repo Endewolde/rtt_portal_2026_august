@@ -52,7 +52,7 @@ class RepositoryController extends Controller
     public function adminIndex(Request $request): JsonResponse
     {
         $user = $request->user();
-        if (! $user->hasAnyRole(['super_admin', 'central_officer'])) {
+        if (! $user->can('repository.manage')) {
             abort(403);
         }
 
@@ -61,9 +61,8 @@ class RepositoryController extends Controller
 
         if ($request->filled('q')) {
             $term = '%'.$request->q.'%';
-            $query->where(fn ($q) =>
-                $q->where('title', 'LIKE', $term)
-                  ->orWhere('pi_name', 'LIKE', $term)
+            $query->where(fn ($q) => $q->where('title', 'LIKE', $term)
+                ->orWhere('pi_name', 'LIKE', $term)
             );
         }
 
@@ -85,7 +84,7 @@ class RepositoryController extends Controller
     public function publishableProposals(Request $request): JsonResponse
     {
         $user = $request->user();
-        if (! $user->hasAnyRole(['super_admin', 'central_officer'])) {
+        if (! $user->can('repository.manage')) {
             abort(403);
         }
 
@@ -104,16 +103,16 @@ class RepositoryController extends Controller
     public function publish(Request $request, string $proposalId): JsonResponse
     {
         $user = $request->user();
-        if (! $user->hasAnyRole(['super_admin', 'central_officer'])) {
+        if (! $user->can('repository.manage')) {
             abort(403);
         }
 
         $proposal = Proposal::with(['college', 'pi'])->findOrFail($proposalId);
 
         $validated = $request->validate([
-            'abstract'   => ['nullable', 'string'],
-            'keywords'   => ['nullable', 'string', 'max:500'],
-            'is_featured'=> ['nullable', 'boolean'],
+            'abstract' => ['nullable', 'string'],
+            'keywords' => ['nullable', 'string', 'max:500'],
+            'is_featured' => ['nullable', 'boolean'],
         ]);
 
         $counts = ResearchOutput::where('proposal_id', $proposalId)
@@ -127,18 +126,18 @@ class RepositoryController extends Controller
         $record = RepositoryRecord::updateOrCreate(
             ['proposal_id' => $proposalId],
             [
-                'title'              => $proposal->title,
-                'abstract'           => $validated['abstract'] ?? $proposal->abstract ?? null,
-                'keywords'           => $validated['keywords'] ?? null,
-                'category'           => $proposal->category,
-                'college_id'         => $proposal->college_id,
-                'pi_name'            => $proposal->pi?->name ?? 'Unknown',
-                'academic_year'      => $proposal->academic_year,
-                'status'             => 'published',
-                'total_outputs'      => (int) ($counts->total   ?? 0),
-                'publications_count' => (int) ($counts->pubs    ?? 0),
-                'patents_count'      => (int) ($counts->patents ?? 0),
-                'is_featured'        => $validated['is_featured'] ?? false,
+                'title' => $proposal->title,
+                'abstract' => $validated['abstract'] ?? $proposal->abstract ?? null,
+                'keywords' => $validated['keywords'] ?? null,
+                'category' => $proposal->category,
+                'college_id' => $proposal->college_id,
+                'pi_name' => $proposal->pi?->name ?? 'Unknown',
+                'academic_year' => $proposal->academic_year,
+                'status' => 'published',
+                'total_outputs' => (int) ($counts->total ?? 0),
+                'publications_count' => (int) ($counts->pubs ?? 0),
+                'patents_count' => (int) ($counts->patents ?? 0),
+                'is_featured' => $validated['is_featured'] ?? false,
             ]
         );
 
@@ -150,16 +149,16 @@ class RepositoryController extends Controller
     public function update(Request $request, string $id): JsonResponse
     {
         $user = $request->user();
-        if (! $user->hasAnyRole(['super_admin', 'central_officer'])) {
+        if (! $user->can('repository.manage')) {
             abort(403);
         }
 
-        $record    = RepositoryRecord::findOrFail($id);
+        $record = RepositoryRecord::findOrFail($id);
         $validated = $request->validate([
-            'abstract'   => ['nullable', 'string'],
-            'keywords'   => ['nullable', 'string', 'max:500'],
-            'is_featured'=> ['nullable', 'boolean'],
-            'status'     => ['nullable', 'in:published,archived'],
+            'abstract' => ['nullable', 'string'],
+            'keywords' => ['nullable', 'string', 'max:500'],
+            'is_featured' => ['nullable', 'boolean'],
+            'status' => ['nullable', 'in:published,archived'],
         ]);
 
         $record->update(array_filter($validated, fn ($v) => $v !== null));
@@ -170,7 +169,7 @@ class RepositoryController extends Controller
     public function unpublish(Request $request, string $id): JsonResponse
     {
         $user = $request->user();
-        if (! $user->hasAnyRole(['super_admin', 'central_officer'])) {
+        if (! $user->can('repository.manage')) {
             abort(403);
         }
 
@@ -183,19 +182,19 @@ class RepositoryController extends Controller
     public function adminStats(Request $request): JsonResponse
     {
         $user = $request->user();
-        if (! $user->hasAnyRole(['super_admin', 'central_officer'])) {
+        if (! $user->can('repository.manage')) {
             abort(403);
         }
 
         $stats = [
-            'total_published'  => RepositoryRecord::where('status', 'published')->count(),
-            'total_archived'   => RepositoryRecord::where('status', 'archived')->count(),
-            'featured_count'   => RepositoryRecord::where('is_featured', true)->count(),
-            'publishable'      => Proposal::where('status', 'completed')
+            'total_published' => RepositoryRecord::where('status', 'published')->count(),
+            'total_archived' => RepositoryRecord::where('status', 'archived')->count(),
+            'featured_count' => RepositoryRecord::where('is_featured', true)->count(),
+            'publishable' => Proposal::where('status', 'completed')
                 ->whereNotIn('id', RepositoryRecord::pluck('proposal_id'))
                 ->count(),
-            'total_outputs'    => ResearchOutput::count(),
-            'colleges'         => College::withCount(['repositoryRecords' => fn ($q) => $q->where('status', 'published')])
+            'total_outputs' => ResearchOutput::count(),
+            'colleges' => College::withCount(['repositoryRecords' => fn ($q) => $q->where('status', 'published')])
                 ->having('repository_records_count', '>', 0)
                 ->orderByDesc('repository_records_count')
                 ->get(['id', 'name']),

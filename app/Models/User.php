@@ -3,6 +3,7 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Support\Access\AccessScope;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
@@ -12,7 +13,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Collection;
 use Laravel\Sanctum\HasApiTokens;
+use Spatie\Permission\Exceptions\PermissionDoesNotExist;
 use Spatie\Permission\Traits\HasRoles;
 
 #[Fillable(['name', 'email', 'password'])]
@@ -99,5 +102,67 @@ class User extends Authenticatable
     public function department(): BelongsTo
     {
         return $this->belongsTo(Department::class);
+    }
+
+    /** @var array{key: string, scope: AccessScope}|null */
+    private ?array $accessScopeMemo = null;
+
+    /** Which records this user's permissions apply to (from their roles' data scopes). */
+    public function accessScope(): AccessScope
+    {
+        $key = $this->getRoleNames()->sort()->implode(',').'|'.$this->college_id;
+        if ($this->accessScopeMemo === null || $this->accessScopeMemo['key'] !== $key) {
+            $this->accessScopeMemo = ['key' => $key, 'scope' => AccessScope::for($this)];
+        }
+
+        return $this->accessScopeMemo['scope'];
+    }
+
+    /**
+     * Active users who hold a permission and whose data scope covers the given
+     * college and category — the people a notification about that record is for.
+     * Without a college or category, every active holder of the permission.
+     *
+     * @return Collection<int, User>
+     */
+    public static function whoCan(string $permission, ?string $collegeId = null, ?string $category = null): Collection
+    {
+        try {
+            $holders = static::permission($permission)->where('status', 'active')->get();
+        } catch (PermissionDoesNotExist) {
+            return collect();
+        }
+
+        if ($collegeId === null && $category === null) {
+            return $holders->values();
+        }
+
+        return $holders->filter(fn (User $u) => $u->accessScope()->covers($collegeId, $category))->values();
+    }
+
+    /**
+     * Active users of custom (non built-in) roles that grant a permission and whose
+     * scope covers the record. Notifications keep going to the built-in roles they
+     * always went to, and also reach anyone given that responsibility through a
+     * custom role.
+     *
+     * @return Collection<int, User>
+     */
+    public static function customRoleHolders(string $permission, ?string $collegeId = null, ?string $category = null): Collection
+    {
+        $builtIn = array_keys(config('access.roles'));
+
+        try {
+            $holders = static::permission($permission)
+                ->where('status', 'active')
+                ->whereHas('roles', fn ($q) => $q->whereNotIn('name', $builtIn))
+                ->get();
+        } catch (PermissionDoesNotExist) {
+            return collect();
+        }
+
+        return $holders
+            ->filter(fn (User $u) => ($collegeId === null && $category === null) || $u->accessScope()->covers($collegeId, $category))
+            ->values();
     }
 }

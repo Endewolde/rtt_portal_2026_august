@@ -46,8 +46,8 @@ export default function Permissions() {
     const handleRefresh = async () => {
         setRefreshing(true);
         try {
-            await api.post('/permissions/refresh');
-            success('Permissions refreshed from seeder.');
+            const res = await api.post('/permissions/refresh');
+            success(res.data?.message ?? 'Permissions are up to date.');
             await load();
         } catch (e) {
             error(e.response?.data?.message || 'Failed to refresh permissions.');

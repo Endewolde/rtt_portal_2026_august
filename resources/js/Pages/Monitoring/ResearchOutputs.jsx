@@ -674,7 +674,7 @@ function OutputFormModal({ editing, proposals, onClose, onSuccess }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function ResearchOutputs() {
-    const { hasAnyRole }     = useAuth()
+    const { hasPermission, hasAnyPermission } = useAuth()
     const { success, error } = useToast()
 
     const [outputs,    setOutputs]    = useState([])
@@ -685,14 +685,11 @@ export default function ResearchOutputs() {
     const [typeFilter, setTypeFilter] = useState('')
     const [search,     setSearch]     = useState('')
 
-    const canAdd    = hasAnyRole(['super_admin', 'admin', 'central_officer', 'college_officer',
-        'research_officer', 'community_officer', 'technology_officer', 'pi', 'staff'])
-    const canEdit   = hasAnyRole(['super_admin', 'admin', 'central_officer', 'college_officer',
-        'research_officer', 'community_officer', 'technology_officer', 'pi', 'staff'])
-    const canDelete = hasAnyRole(['super_admin', 'admin', 'central_officer'])
-    const canVerify = hasAnyRole(['super_admin', 'admin', 'central_officer', 'college_officer'])
-    const canApprove = hasAnyRole(['super_admin', 'admin', 'central_officer', 'research_officer',
-        'community_officer', 'technology_officer'])
+    const canAdd    = hasAnyPermission(['research_outputs.create', 'research_outputs.record_any'])
+    const canEdit   = canAdd
+    const canDelete = hasPermission('research_outputs.delete')
+    const canVerify = hasPermission('research_outputs.verify')
+    const canApprove = hasPermission('research_outputs.approve')
 
     const load = useCallback(async () => {
         setLoading(true)

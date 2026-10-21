@@ -170,6 +170,7 @@ class AuthController extends Controller
         return array_merge($user->toArray(), [
             'roles' => $user->getRoleNames()->values()->toArray(),
             'permissions' => $user->getAllPermissions()->pluck('name')->values()->toArray(),
+            'access_scope' => $user->accessScope()->toArray(),
             'subscription' => $subscription,
             'feedback_submitted' => FeedbackSubmission::hasSubmittedCurrentRound($user->id),
         ]);
@@ -200,7 +201,7 @@ class AuthController extends Controller
         // spreads silently. Only admin/super_admin may change their own via this
         // endpoint too; everyone else has these two fields dropped from the update
         // regardless of what the request contains.
-        if (! $user->hasAnyRole(['admin', 'super_admin'])) {
+        if (! $user->can('users.update')) {
             unset($validated['college_id'], $validated['department_id']);
         }
 

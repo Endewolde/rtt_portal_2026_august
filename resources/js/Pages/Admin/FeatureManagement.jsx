@@ -257,7 +257,7 @@ function ModuleCard({ module, enabledFeatures, disabledSubs, readOnly, onToggleM
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function FeatureManagement() {
-    const { hasRole }        = useAuth();
+    const { hasPermission }  = useAuth();
     const { success, error } = useToast();
 
     const [enabledFeatures, setEnabledFeatures] = useState([]);
@@ -266,7 +266,7 @@ export default function FeatureManagement() {
     const [saving, setSaving]                   = useState(false);
     const [dirty, setDirty]                     = useState(false);
 
-    const isSuperAdmin = hasRole('super_admin');
+    const isSuperAdmin = hasPermission('features.manage');
 
     useEffect(() => {
         Promise.all([get('/features'), get('/features/sub')])

@@ -25,15 +25,15 @@ class DashboardService
             $widgets['pending_tasks'] = $this->pendingTasks($user);
             $widgets['recent_notifications'] = $this->recentNotifications($user);
 
-            if ($user->hasAnyRole(['super_admin', 'central_officer', 'support_officer', 'finance_officer'])) {
+            if ($user->can('funds.disburse')) {
                 $widgets['budget_utilization_summary'] = $this->budgetUtilizationSummary();
             }
 
-            if ($user->hasRole('staff')) {
+            if ($user->can('proposals.submit')) {
                 $widgets['my_proposals'] = $this->myProposals($user);
             }
 
-            if ($user->hasAnyRole(['super_admin', 'central_officer'])) {
+            if ($user->accessScope()->isAll() && $user->can('analytics.view')) {
                 $widgets['proposal_trend_chart'] = $this->proposalTrendChart();
             }
 
@@ -53,13 +53,7 @@ class DashboardService
     {
         $query = DB::table('proposals')->whereNull('deleted_at');
 
-        if ($user->hasRole('college_officer')) {
-            $query->where('college_id', $user->college_id);
-        } elseif ($user->hasRole('staff')) {
-            $query->where('pi_user_id', $user->id);
-        } elseif ($user->hasRole('college_officer')) {
-            $query->where('department_id', $user->department_id);
-        }
+        $user->accessScope()->constrain($query, 'proposals', fn ($q) => $q->where('proposals.pi_user_id', $user->id));
 
         return $query->select('status', DB::raw('COUNT(*) as count'))
             ->groupBy('status')
@@ -71,7 +65,7 @@ class DashboardService
     {
         $tasks = [];
 
-        if ($user->hasAnyRole(['super_admin', 'central_officer'])) {
+        if ($user->can('proposals.validate') && $user->accessScope()->isAll()) {
             $tasks['awaiting_validation'] = DB::table('proposals')
                 ->where('status', 'submitted')
                 ->whereNull('deleted_at')
@@ -98,7 +92,7 @@ class DashboardService
                 ->count();
         }
 
-        if ($user->hasRole('college_officer')) {
+        if ($user->can('budget_requests.approve_college') && $user->accessScope()->isCollege()) {
             $tasks['budget_requests_pending'] = DB::table('budget_requests as br')
                 ->join('proposals as p', 'br.proposal_id', '=', 'p.id')
                 ->where('p.college_id', $user->college_id)
@@ -112,7 +106,7 @@ class DashboardService
                 ->count();
         }
 
-        if ($user->hasRole('staff')) {
+        if ($user->can('review_assignments.view_any')) {
             $tasks['reviews_pending'] = DB::table('review_assignments')
                 ->where('reviewer_id', $user->id)
                 ->whereIn('status', ['pending', 'in_progress'])
@@ -125,7 +119,7 @@ class DashboardService
                 ->count();
         }
 
-        if ($user->hasRole('support_officer')) {
+        if ($user->can('funds.disburse')) {
             $tasks['disbursements_pending'] = DB::table('budget_requests')
                 ->where('status', 'approved')
                 ->count();
@@ -135,7 +129,7 @@ class DashboardService
                 ->count();
         }
 
-        if ($user->hasRole('staff')) {
+        if ($user->can('proposals.submit')) {
             $tasks['signatures_required'] = DB::table('form_signatures as fs')
                 ->join('budget_requests as br', 'fs.budget_request_id', '=', 'br.id')
                 ->join('proposals as p', 'br.proposal_id', '=', 'p.id')

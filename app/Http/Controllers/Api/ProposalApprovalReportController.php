@@ -9,10 +9,12 @@ use App\Models\Proposal;
 use App\Models\ProposalApprovalReport;
 use App\Models\User;
 use App\Services\ApprovalReportService;
+use App\Services\LegacyGrantService;
 use App\Services\WorkflowService;
 use App\Support\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
@@ -33,6 +35,7 @@ class ProposalApprovalReportController extends Controller
     public function __construct(
         private WorkflowService $workflowService,
         private ApprovalReportService $approvalReports,
+        private LegacyGrantService $legacyGrants,
     ) {}
 
     private const CATEGORY_ROLE_MAP = [
@@ -43,18 +46,25 @@ class ProposalApprovalReportController extends Controller
 
     private const REPORTABLE_STATUSES = ['validated', 'under_blind_review', 'blind_review_passed'];
 
-    private const REVIEWER_ROLES = ['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer'];
+    /**
+     * Stages from open defence onward. A report whose proposal has reached one of
+     * them is settled history and leaves the Approval Reports page (it stays on the
+     * proposal's own page).
+     */
+    private const MOVED_ON_STATUSES = ['under_open_defence', 'accepted', 'funded', 'midterm_evaluation', 'completed', 'archived'];
 
     private const OUTCOME_APPROVAL_STANDS = 'approval_stands';
 
     private const OUTCOME_APPROVAL_REVOKED = 'approval_revoked';
+
+    private const OUTCOME_MOVED_TO_ONGOING = 'moved_to_ongoing';
 
     /** College officer flags a proposal in blind review as possibly mistakenly approved. */
     public function store(string $proposalId, Request $request): JsonResponse
     {
         $user = $request->user();
 
-        if (! $user?->hasRole('college_officer')) {
+        if (! $user?->can('approval_reports.file')) {
             return response()->json(['data' => null, 'message' => 'Only college officers can report a mistaken approval.', 'errors' => []], 403);
         }
 
@@ -146,7 +156,7 @@ class ProposalApprovalReportController extends Controller
     /** Reports filed against a proposal — for the banner on the proposal detail page. */
     public function index(string $proposalId, Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole([...self::REVIEWER_ROLES, 'college_officer'])) {
+        if (! $request->user()?->canAny(['approval_reports.resolve', 'approval_reports.file'])) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
         }
 
@@ -168,8 +178,8 @@ class ProposalApprovalReportController extends Controller
     public function indexAll(Request $request): JsonResponse
     {
         $user = $request->user();
-        $isReviewer = $user?->hasAnyRole(self::REVIEWER_ROLES);
-        $isReportingOfficer = $user?->hasRole('college_officer');
+        $isReviewer = $user?->can('approval_reports.resolve');
+        $isReportingOfficer = $user?->can('approval_reports.file');
 
         if (! $isReviewer && ! $isReportingOfficer) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
@@ -181,6 +191,7 @@ class ProposalApprovalReportController extends Controller
             'reportedBy:id,name',
             'reviewedBy:id,name',
         ])
+            ->whereHas('proposal', fn ($pq) => $pq->whereNotIn('status', self::MOVED_ON_STATUSES))
             ->when(! $isReviewer, fn ($q) => $q->where('reported_by', $user->id))
             ->when($isReviewer, function ($q) use ($request) {
                 $q->whereHas('proposal', function ($pq) use ($request) {
@@ -201,9 +212,9 @@ class ProposalApprovalReportController extends Controller
             ->orderByDesc('created_at')
             ->paginate(20);
 
-        $reports->getCollection()->each(
-            fn (ProposalApprovalReport $report) => $report->setAttribute('can_report_again', $this->canReportAgain($report, $user))
-        );
+        $reports->getCollection()->each(fn (ProposalApprovalReport $report) => $report
+            ->setAttribute('can_report_again', $this->canReportAgain($report, $user))
+            ->setAttribute('can_cancel', $this->canCancel($report, $user)));
 
         return response()->json(['data' => $reports, 'message' => '', 'errors' => [], 'meta' => ['can_resolve' => (bool) $isReviewer]]);
     }
@@ -290,18 +301,26 @@ class ProposalApprovalReportController extends Controller
      *  - approval_revoked: the proposal is rejected, with both officers' notes as the
      *    reason the PI and co-investigators are told; outstanding reviewer assignments
      *    are cancelled by CancelReviewAssignmentsOnRejection.
+     *  - moved_to_ongoing: the project is already running, so it goes straight to
+     *    Ongoing Proposals as funded, with its award (the legacy-grant path);
+     *    outstanding reviewer assignments are cancelled.
      */
     public function resolve(string $id, Request $request): JsonResponse
     {
         $user = $request->user();
 
-        if (! $user?->hasAnyRole(self::REVIEWER_ROLES)) {
+        if (! $user?->can('approval_reports.resolve')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
         }
 
         $validated = $request->validate([
-            'outcome' => 'required|in:'.self::OUTCOME_APPROVAL_STANDS.','.self::OUTCOME_APPROVAL_REVOKED,
+            'outcome' => 'required|in:'.self::OUTCOME_APPROVAL_STANDS.','.self::OUTCOME_APPROVAL_REVOKED.','.self::OUTCOME_MOVED_TO_ONGOING,
             'resolution_notes' => 'required|string|min:10|max:2000',
+            'awarded_amount' => 'required_if:outcome,'.self::OUTCOME_MOVED_TO_ONGOING.'|nullable|numeric|min:0',
+            'grant_reference' => 'nullable|string|max:50|unique:awards,grant_reference',
+            'approved_at' => 'nullable|date|before_or_equal:today',
+        ], [
+            'awarded_amount.required_if' => 'Enter the amount awarded to this project.',
         ]);
 
         $report = ProposalApprovalReport::with(['proposal', 'reportedBy'])->findOrFail($id);
@@ -332,8 +351,12 @@ class ProposalApprovalReportController extends Controller
         $outcome = $validated['outcome'];
         $notes = $validated['resolution_notes'];
 
+        if ($outcome === self::OUTCOME_MOVED_TO_ONGOING && ($error = $this->legacyGrants->eligibilityError($proposal))) {
+            return response()->json(['data' => null, 'message' => $error, 'errors' => []], 422);
+        }
+
         try {
-            $restoredTo = DB::transaction(function () use ($report, $proposal, $user, $outcome, $notes) {
+            $restoredTo = DB::transaction(function () use ($report, $proposal, $user, $outcome, $notes, $validated) {
                 $report->update([
                     'status' => 'reviewed',
                     'outcome' => $outcome,
@@ -346,6 +369,20 @@ class ProposalApprovalReportController extends Controller
                     return $proposal->status === 'validated'
                         ? $this->approvalReports->restoreProposal($report, $proposal, $user, "Mistaken-approval report reviewed — approval stands. {$notes}")
                         : null;
+                }
+
+                if ($outcome === self::OUTCOME_MOVED_TO_ONGOING) {
+                    $this->legacyGrants->grant(
+                        $proposal,
+                        $user,
+                        "Already ongoing — moved to Ongoing Proposals after a mistaken-approval report. {$notes}",
+                        (float) $validated['awarded_amount'],
+                        $validated['grant_reference'] ?? null,
+                        isset($validated['approved_at']) ? Carbon::parse($validated['approved_at']) : null,
+                        ['source' => 'approval_report', 'approval_report_id' => $report->id],
+                    );
+
+                    return null;
                 }
 
                 $rejectionReason = $this->rejectionReason($report, $user, $notes);
@@ -386,12 +423,17 @@ class ProposalApprovalReportController extends Controller
         ]);
 
         $this->notifyReporterOfOutcome($report, $proposal, $user, $outcome, $notes, $finalStatus);
+        if ($outcome === self::OUTCOME_MOVED_TO_ONGOING) {
+            $this->notifyTeamMovedToOngoing($proposal, $user);
+        }
 
         return response()->json([
             'data' => $report->fresh(['reportedBy:id,name', 'reviewedBy:id,name']),
-            'message' => $outcome === self::OUTCOME_APPROVAL_STANDS
-                ? 'Approval stands. The proposal is now at '.Proposal::statusLabel($finalStatus).'.'
-                : 'Mistaken approval confirmed. The proposal has been rejected and the proposal team notified.',
+            'message' => match ($outcome) {
+                self::OUTCOME_APPROVAL_STANDS => 'Approval stands. The proposal is now at '.Proposal::statusLabel($finalStatus).'.',
+                self::OUTCOME_MOVED_TO_ONGOING => 'Moved to Ongoing Proposals. The project is now tracked as funded.',
+                default => 'Mistaken approval confirmed. The proposal has been rejected and the proposal team notified.',
+            },
             'errors' => [],
             'meta' => [],
         ]);
@@ -419,9 +461,11 @@ class ProposalApprovalReportController extends Controller
             'tracker_number' => $proposal->tracker_number,
             'title' => $proposal->title,
             'outcome' => $outcome,
-            'message' => $outcome === self::OUTCOME_APPROVAL_STANDS
-                ? "{$decidedBy->name} reviewed your report on {$proposal->tracker_number}: the approval stands and the proposal continues at ".Proposal::statusLabel($finalStatus).". Note: {$notes}"
-                : "{$decidedBy->name} confirmed your report on {$proposal->tracker_number}: the proposal has been rejected and the proposal team notified. Note: {$notes}",
+            'message' => match ($outcome) {
+                self::OUTCOME_APPROVAL_STANDS => "{$decidedBy->name} reviewed your report on {$proposal->tracker_number}: the approval stands and the proposal continues at ".Proposal::statusLabel($finalStatus).". Note: {$notes}",
+                self::OUTCOME_MOVED_TO_ONGOING => "{$decidedBy->name} confirmed your report on {$proposal->tracker_number}: the project is already running and has been moved to Ongoing Proposals. Note: {$notes}",
+                default => "{$decidedBy->name} confirmed your report on {$proposal->tracker_number}: the proposal has been rejected and the proposal team notified. Note: {$notes}",
+            },
         ];
 
         try {
@@ -437,10 +481,31 @@ class ProposalApprovalReportController extends Controller
         }
     }
 
+    /** Tell the PI and co-investigators their project is now tracked as ongoing. */
+    private function notifyTeamMovedToOngoing(Proposal $proposal, User $decidedBy): void
+    {
+        $data = [
+            'proposal_id' => $proposal->id,
+            'tracker_number' => $proposal->tracker_number,
+            'title' => $proposal->title,
+            'message' => "{$proposal->tracker_number} — \"{$proposal->title}\" is already running, so {$decidedBy->name} has moved it to Ongoing Proposals. It no longer goes through review; progress reports and monitoring apply from now on.",
+        ];
+
+        $teamIds = $proposal->activeMembers()->pluck('user_id')->push($proposal->pi_user_id)->filter()->unique();
+        foreach ($teamIds as $userId) {
+            try {
+                StoreInAppNotificationJob::dispatchSync($userId, 'project_moved_to_ongoing', $data);
+            } catch (\Exception $e) {
+                Log::error("Moved-to-ongoing notify failed for user {$userId}: {$e->getMessage()}");
+            }
+        }
+    }
+
     private function notifyWithdrawn(Proposal $proposal, User $reporter): void
     {
         $role = self::CATEGORY_ROLE_MAP[$proposal->category] ?? null;
-        $officers = User::role(array_values(array_filter(['central_officer', $role])))->where('status', 'active')->get();
+        $officers = User::role(array_values(array_filter(['central_officer', $role])))->where('status', 'active')->get()
+            ->merge(User::customRoleHolders('approval_reports.resolve', $proposal->college_id, $proposal->category))->unique('id');
 
         $data = [
             'proposal_id' => $proposal->id,
@@ -463,7 +528,8 @@ class ProposalApprovalReportController extends Controller
         $role = self::CATEGORY_ROLE_MAP[$proposal->category] ?? null;
         $roles = array_values(array_filter(['central_officer', $role]));
 
-        $officers = User::role($roles)->where('status', 'active')->get();
+        $officers = User::role($roles)->where('status', 'active')->get()
+            ->merge(User::customRoleHolders('approval_reports.resolve', $proposal->college_id, $proposal->category))->unique('id');
 
         $data = [
             'tracker_number' => $proposal->tracker_number,
@@ -490,6 +556,14 @@ class ProposalApprovalReportController extends Controller
         }
     }
 
+    /** Mirrors withdraw(): the officer's own open report, while nobody has acted on the proposal. */
+    private function canCancel(ProposalApprovalReport $report, User $user): bool
+    {
+        return $report->status === 'open'
+            && $report->reported_by === $user->id
+            && $report->proposal?->status === 'validated';
+    }
+
     /**
      * The reporting college officer may raise a proposal again after the approval was
      * upheld — while it is still at a reportable stage, in their college, and nothing
@@ -501,7 +575,7 @@ class ProposalApprovalReportController extends Controller
 
         if ($report->status !== 'reviewed'
             || $report->outcome !== self::OUTCOME_APPROVAL_STANDS
-            || ! $user->hasRole('college_officer')
+            || ! $user->can('approval_reports.file')
             || ! $proposal
             || $proposal->college_id !== $user->college_id
             || ! in_array($proposal->status, self::REPORTABLE_STATUSES, true)) {

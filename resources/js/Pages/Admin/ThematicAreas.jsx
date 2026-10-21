@@ -352,7 +352,7 @@ function AreaRow({ area, idx, isSuperAdmin, onEdit, onDelete, onToggle }) {
 const EMPTY_FORM = { name: '', description: '', sub_topics: [], icon: '🔬', color: '#6366f1', is_active: true, sort_order: 0 };
 
 export default function AdminThematicAreas() {
-    const { hasRole } = useAuth();
+    const { hasPermission } = useAuth();
     const { success, error } = useToast();
 
     const [areas, setAreas]               = useState([]);
@@ -441,7 +441,7 @@ export default function AdminThematicAreas() {
 
     const filtered    = areas.filter(a => !search || a.name.toLowerCase().includes(search.toLowerCase()));
     const activeCount = areas.filter(a => a.is_active).length;
-    const isSuperAdmin = hasRole('super_admin');
+    const isSuperAdmin = hasPermission('thematic_areas.manage');
 
     return (
         <AppLayout breadcrumb="Thematic Areas">

@@ -18,7 +18,7 @@ class AnnualReportController extends Controller
     {
         $user = $request->user();
 
-        if (! $user?->hasAnyRole(['super_admin', 'admin', 'central_officer', 'college_officer'])) {
+        if (! $user?->can('annual_report.view')) {
             return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
         }
 
@@ -35,7 +35,7 @@ class AnnualReportController extends Controller
     {
         $user = $request->user();
 
-        if (! $user?->hasAnyRole(['super_admin', 'admin', 'central_officer', 'college_officer'])) {
+        if (! $user?->can('annual_report.view')) {
             return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
         }
 

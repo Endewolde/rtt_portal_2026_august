@@ -141,7 +141,7 @@ function RefuseModal({ requestId, onClose, onDone }) {
 export default function BudgetRequestDetail() {
     const { url }          = usePage();
     const id               = url.split('/').pop();
-    const { user, hasAnyRole } = useAuth();
+    const { user, hasPermission } = useAuth();
     const { success, error }   = useToast();
 
     const [request,    setRequest]    = useState(null);
@@ -159,8 +159,8 @@ export default function BudgetRequestDetail() {
 
     useEffect(() => { load(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const isCollegeOfficer = hasAnyRole(['super_admin', 'admin', 'central_officer', 'college_officer']);
-    const isFinanceOfficer = hasAnyRole(['super_admin', 'admin', 'central_officer', 'finance_officer', 'support_officer']);
+    const isFinanceOfficer = hasPermission('budget_requests.approve_finance');
+    const isCollegeOfficer = hasPermission('budget_requests.approve_college') && !isFinanceOfficer;
 
     const act = async (apiCall, successMsg) => {
         if (acting) return;
@@ -202,7 +202,7 @@ export default function BudgetRequestDetail() {
     const canSubmit         = allSigned && ['draft', 'pending_signatures'].includes(request.status);
     const canCollegeApprove = isCollegeOfficer && ['submitted', 'finance_returned'].includes(request.status);
     const canFinanceApprove = isFinanceOfficer && request.status === 'college_approved';
-    const canDisburse       = isFinanceOfficer && request.status === 'approved';
+    const canDisburse       = hasPermission('funds.disburse') && request.status === 'approved';
 
     return (
         <AppLayout breadcrumb={`Budget Requests / ${request.proposal?.tracker_number ?? id}`}>

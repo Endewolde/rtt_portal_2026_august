@@ -23,7 +23,7 @@ import DefenceRecordButton from '../../Components/DefenceRecordButton';
 import { issueByKey } from '../../lib/approvalReportIssues';
 import { downloadFile } from '../../lib/download';
 import {
-    AWAITING, CATEGORY_FOR_OFFICER, STAGE_LABELS, topicLabel, complaintPermissions,
+    AWAITING, STAGE_LABELS, topicLabel, complaintPermissions,
     ComplaintStatusBadge, LevelBadge, AgeNote, ComplaintTimeline,
     FileComplaintModal, RespondModal, EscalateModal, EditModal,
 } from '../../Components/ComplaintKit';
@@ -157,7 +157,7 @@ function ComplaintCard({ complaint: c, permissions, expanded, onToggle, onAction
 }
 
 function ComplaintsTab({ proposal, userId, isProposalMember, rejectedVia }) {
-    const { hasRole, hasAnyRole } = useAuth();
+    const { hasPermission, accessScope } = useAuth();
     const [complaints,  setComplaints]  = useState([]);
     const [loading,     setLoading]     = useState(true);
     const [filing,      setFiling]      = useState(null); // 'college' | 'officer'
@@ -176,12 +176,7 @@ function ComplaintsTab({ proposal, userId, isProposalMember, rejectedVia }) {
     const canFileCollege = isProposalMember && (COLLEGE_COMPLAINT_STATUSES.includes(proposal.status) || rejectedOnReviewScore);
     const canFileOfficer = isProposalMember && FUNDED_STATUSES.includes(proposal.status);
 
-    const who = {
-        userId,
-        isAdmin: hasAnyRole(['super_admin', 'admin', 'central_officer']),
-        isCollegeOfficer: hasRole('college_officer'),
-        officerRole: Object.keys(CATEGORY_FOR_OFFICER).find(r => hasRole(r)),
-    };
+    const who = { userId, canRespond: hasPermission('complaints.respond'), scope: accessScope };
     const permissions = (c) => complaintPermissions(c, who);
 
     const load = () => {
@@ -317,11 +312,11 @@ function ComplaintsTab({ proposal, userId, isProposalMember, rejectedVia }) {
     );
 }
 
-function ActionButtons({ proposal, onAction, onProcessDefenceResult, isAdmin, canRejectBlindReview, canReportMistakenApproval, hasOpenReport }) {
-    if (!isAdmin && !canRejectBlindReview && !canReportMistakenApproval) return null;
+function ActionButtons({ proposal, onAction, onProcessDefenceResult, can, canRejectBlindReview, canReportMistakenApproval, hasOpenReport }) {
+    if (!Object.values(can).some(Boolean) && !canRejectBlindReview && !canReportMistakenApproval) return null;
     const { status, id } = proposal;
 
-    if (isAdmin && status === 'submitted') return (
+    if (can.validate && status === 'submitted') return (
         <div className="flex flex-wrap gap-2">
             <button onClick={() => onAction('approve')}
                 className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700">
@@ -338,9 +333,9 @@ function ActionButtons({ proposal, onAction, onProcessDefenceResult, isAdmin, ca
         </div>
     );
 
-    if (status === 'validated' && (isAdmin || canRejectBlindReview || canReportMistakenApproval)) return (
+    if (status === 'validated' && (can.assignReviewers || canRejectBlindReview || canReportMistakenApproval)) return (
         <div className="flex flex-wrap gap-2">
-            {isAdmin && (
+            {can.assignReviewers && (
                 <Link href={`/proposals/${id}/assign-reviewers`}
                     className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-blue-700 text-white rounded-lg hover:bg-blue-800">
                     <UserCheck size={15} /> Assign Reviewers
@@ -378,9 +373,9 @@ function ActionButtons({ proposal, onAction, onProcessDefenceResult, isAdmin, ca
         </div>
     );
 
-    if (status === 'blind_review_passed' && (isAdmin || canRejectBlindReview || canReportMistakenApproval)) return (
+    if (status === 'blind_review_passed' && (can.manageReviews || canRejectBlindReview || canReportMistakenApproval)) return (
         <div className="flex flex-wrap gap-2">
-            {isAdmin && (
+            {can.manageReviews && (
                 <Link href={`/proposals/${id}/defence`}
                     className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-purple-700 text-white rounded-lg hover:bg-purple-800">
                     <Calendar size={15} /> Schedule Open Defence
@@ -401,7 +396,7 @@ function ActionButtons({ proposal, onAction, onProcessDefenceResult, isAdmin, ca
         </div>
     );
 
-    if (isAdmin && status === 'under_open_defence') return (
+    if (can.decideReview && status === 'under_open_defence') return (
         <button
             onClick={onProcessDefenceResult}
             className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
@@ -410,7 +405,7 @@ function ActionButtons({ proposal, onAction, onProcessDefenceResult, isAdmin, ca
         </button>
     );
 
-    if (isAdmin && status === 'accepted') return (
+    if (can.decideFunding && status === 'accepted') return (
         <Link href={`/proposals/${id}/award`}
             className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-emerald-700 text-white rounded-lg hover:bg-emerald-800">
             <Award size={15} /> Generate Award
@@ -1429,7 +1424,10 @@ function ReviewResultsTab({ proposalId, isVisible, isStaff, proposalStatus, onDe
         return <p className="text-sm text-gray-400">No review results available yet.</p>;
     }
 
-    const { total_reviews, submitted_reviews, average_score, average_max, reviews } = results;
+    const { total_reviews, submitted_reviews, scores, reviews } = results;
+    // Combined (blind + defence) out of 100 — scaled only if the criteria weights don't add up to 100.
+    const outOf100 = (score, max) => (max && Math.abs(max - 100) > 0.001 ? Math.round((score / max) * 10000) / 100 : score);
+    const fmt = n => (n == null ? '—' : Number(n).toLocaleString(undefined, { maximumFractionDigits: 2 }));
 
     return (
         <div className="space-y-5">
@@ -1443,10 +1441,19 @@ function ReviewResultsTab({ proposalId, isVisible, isStaff, proposalStatus, onDe
                     <p className="text-2xl font-bold text-gray-800 tabular-nums">{total_reviews}</p>
                     <p className="text-xs text-gray-500 mt-0.5">Total Assigned</p>
                 </div>
-                {average_score != null && (
+                {scores?.combined != null ? (
                     <div className="bg-indigo-50 rounded-xl px-4 py-3 text-center">
-                        <p className="text-2xl font-bold text-indigo-700 tabular-nums">{average_score}{average_max != null ? `/${average_max}` : ''}</p>
-                        <p className="text-xs text-indigo-500 mt-0.5">Avg. Score</p>
+                        <p className="text-2xl font-bold text-indigo-700 tabular-nums">{fmt(outOf100(scores.combined, scores.combined_max))}<span className="text-base font-semibold text-indigo-400">/100</span></p>
+                        <p className="text-xs text-indigo-500 mt-0.5">Combined (Blind + Defence)</p>
+                        <p className="text-[11px] text-indigo-400 mt-0.5 tabular-nums">
+                            Blind {fmt(scores.blind?.score)}/{fmt(scores.blind?.max)} + Defence {fmt(scores.defence?.score)}/{fmt(scores.defence?.max)}
+                        </p>
+                    </div>
+                ) : scores?.blind != null && (
+                    <div className="bg-indigo-50 rounded-xl px-4 py-3 text-center">
+                        <p className="text-2xl font-bold text-indigo-700 tabular-nums">{fmt(scores.blind.score)}<span className="text-base font-semibold text-indigo-400">/{fmt(scores.blind.max)}</span></p>
+                        <p className="text-xs text-indigo-500 mt-0.5">Blind Review Score</p>
+                        <p className="text-[11px] text-indigo-400 mt-0.5">Combined score after the open defence</p>
                     </div>
                 )}
             </div>
@@ -1648,7 +1655,7 @@ function ContractUploadSection({ proposal, onUploaded }) {
 export default function ProposalShow() {
     const { url } = usePage();
     const id = url.split('/')[2];
-    const { user, hasAnyRole, hasPermission } = useAuth();
+    const { user, hasPermission, covers } = useAuth();
     const { hasSubFeature } = useFeature();
     const toast = useToast();
 
@@ -1663,6 +1670,7 @@ export default function ProposalShow() {
     const [appeal, setAppeal] = useState(null);
     const [showAppealModal, setShowAppealModal] = useState(false);
     const [approvalReports, setApprovalReports] = useState([]);
+    const [approvalReportsLoaded, setApprovalReportsLoaded] = useState(false);
     const [resolvingReport, setResolvingReport] = useState(null);
     const [showReportModal, setShowReportModal] = useState(false);
     const [rejectDialog, setRejectDialog] = useState(null); // 'reject' | 'reject_blind_review'
@@ -1677,14 +1685,22 @@ export default function ProposalShow() {
     const [noCostExtension, setNoCostExtension] = useState(null);
     const [showNoCostExtensionModal, setShowNoCostExtensionModal] = useState(false);
 
-    const isAdmin    = hasAnyRole(['super_admin', 'admin', 'central_officer']);
-    const isOfficer  = hasAnyRole(['college_officer', 'research_officer', 'community_officer', 'technology_officer']);
-    // Matches ReviewController::rejectFromBlindReview / WorkflowStageSeeder's fail_blind_review
-    // roles — wider than isAdmin, since category officers are also authorized server-side.
-    const canRejectBlindReview = hasAnyRole(['super_admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer']);
-    const canReportMistakenApproval = hasAnyRole(['college_officer']);
-    const canReviewApprovalReports = canRejectBlindReview;
-    const hasOpenReport = approvalReports.some(r => r.status === 'open');
+    // Every action follows the permissions the server checks, within the user's scope.
+    const inScope = !!proposal && covers(proposal.college_id, proposal.category);
+    const can = {
+        validate: hasPermission('proposals.validate') && inScope,
+        assignReviewers: hasPermission('proposals.assign_reviewer') && inScope,
+        manageReviews: hasPermission('reviews.manage') && inScope,
+        decideReview: hasPermission('review_decisions.correct') && inScope,
+        decideFunding: hasPermission('evaluation.central') && inScope,
+    };
+    const isAdmin = can.validate || can.assignReviewers || can.manageReviews || can.decideReview;
+    const isOfficer = hasPermission('review_results.view');
+    const canRejectBlindReview = can.decideReview;
+    const canReportMistakenApproval = hasPermission('approval_reports.file') && inScope;
+    const canReviewApprovalReports = hasPermission('approval_reports.resolve');
+    // Until the reports have loaded, assume one may be open so "Report" isn't offered twice.
+    const hasOpenReport = !approvalReportsLoaded || approvalReports.some(r => r.status === 'open');
 
     const load = () => {
         setLoading(true);
@@ -1710,9 +1726,12 @@ export default function ProposalShow() {
         get(`/proposals/${id}/no-cost-extension`).then(r => setNoCostExtension(r.data)).catch(() => {});
     };
 
+    // Runs before the proposal has loaded, so it can't depend on scope (inScope).
     const loadApprovalReports = () => {
-        if (!canReportMistakenApproval && !canReviewApprovalReports) return;
-        get(`/proposals/${id}/approval-reports`).then(r => setApprovalReports(r.data ?? [])).catch(() => {});
+        if (!hasPermission('approval_reports.file') && !canReviewApprovalReports) return;
+        get(`/proposals/${id}/approval-reports`)
+            .then(r => { setApprovalReports(r.data ?? []); setApprovalReportsLoaded(true); })
+            .catch(e => toast.error(e.response?.data?.message ?? 'Could not load the approval reports for this proposal. Refresh the page to try again.'));
     };
 
     useEffect(() => { load(); loadAppeal(); loadExtension(); loadBudgetRevision(); loadNoCostExtension(); loadApprovalReports(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -2100,7 +2119,7 @@ export default function ProposalShow() {
                         && (isAdmin || isOfficer || canRejectBlindReview) && (
                         <AnonymityCheckPanel
                             proposal={proposal}
-                            canRecheck={hasPermission('proposals.validate') || hasAnyRole(['college_officer'])}
+                            canRecheck={hasPermission('proposals.validate') || hasPermission('reviews.manage')}
                             canReject={
                                 (proposal.status === 'submitted' && hasPermission('proposals.validate'))
                                 || (proposal.status === 'under_blind_review' && canRejectBlindReview)
@@ -2133,6 +2152,7 @@ export default function ProposalShow() {
                                                             ? 'Approval report cancelled'
                                                             : r.outcome === 'approval_revoked'
                                                                 ? 'Mistaken approval confirmed — proposal rejected'
+                                                                : r.outcome === 'moved_to_ongoing' ? 'Already ongoing — moved to Ongoing Proposals'
                                                                 : r.outcome === 'approval_stands' ? 'Approval report reviewed — approval stands' : 'Approval report reviewed'}
                                                 </p>
                                                 <p className="text-xs text-gray-500 mt-0.5">
@@ -2152,6 +2172,11 @@ export default function ProposalShow() {
                                                     <p className="text-xs text-gray-500 mt-1.5">
                                                         Reviewed by {r.reviewed_by?.name ?? '—'} · {formatDate(r.reviewed_at)}
                                                         {r.resolution_notes && <> — {r.resolution_notes}</>}
+                                                    </p>
+                                                )}
+                                                {r.status === 'open' && r.reported_by?.id === user?.id && proposal.status !== 'validated' && (
+                                                    <p className="text-xs text-gray-500 mt-1.5">
+                                                        This report can no longer be cancelled — the proposal has already been acted on and is now {getStatusLabel(proposal.status)}.
                                                     </p>
                                                 )}
                                                 {r.status === 'withdrawn' && (
@@ -2237,13 +2262,13 @@ export default function ProposalShow() {
                     />
 
                     {/* Workflow actions */}
-                    {(isAdmin || canRejectBlindReview || canReportMistakenApproval) && (
+                    {(isAdmin || can.decideFunding || canRejectBlindReview || canReportMistakenApproval) && (
                         <div className="mt-4 pt-4 border-t border-gray-100">
                             <ActionButtons
                                 proposal={proposal}
                                 onAction={handleAction}
                                 onProcessDefenceResult={handleProcessDefenceResult}
-                                isAdmin={isAdmin}
+                                can={can}
                                 canRejectBlindReview={canRejectBlindReview}
                                 canReportMistakenApproval={canReportMistakenApproval}
                                 hasOpenReport={hasOpenReport}

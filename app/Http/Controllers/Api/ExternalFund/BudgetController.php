@@ -10,8 +10,6 @@ use Illuminate\Http\Request;
 
 class BudgetController extends Controller
 {
-    private const MANAGERS = ['super_admin', 'admin', 'research_officer', 'central_officer'];
-
     public function index(Request $request, string $applicationId): JsonResponse
     {
         $application = ExternalFundApplication::findOrFail($applicationId);
@@ -25,7 +23,7 @@ class BudgetController extends Controller
 
     public function store(Request $request, string $applicationId): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::MANAGERS)) {
+        if (! $request->user()?->can('external_funds.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -49,7 +47,7 @@ class BudgetController extends Controller
 
     public function update(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::MANAGERS)) {
+        if (! $request->user()?->can('external_funds.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -70,7 +68,7 @@ class BudgetController extends Controller
 
     public function destroy(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::MANAGERS)) {
+        if (! $request->user()?->can('external_funds.manage')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 

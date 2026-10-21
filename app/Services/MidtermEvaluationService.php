@@ -93,7 +93,8 @@ class MidtermEvaluationService
         if (! $alreadySubmitted) {
             $collegeOfficer = User::role('college_officer')
                 ->where('college_id', $evaluation->proposal->college_id)
-                ->first();
+                ->first()
+                ?? User::customRoleHolders('midterm_evaluations.create', $evaluation->proposal->college_id, $evaluation->proposal->category)->first();
 
             if ($collegeOfficer) {
                 $this->notificationService->send('midterm_report_submitted', $collegeOfficer, [

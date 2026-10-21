@@ -125,6 +125,23 @@ export default function ReviewScore() {
             .finally(() => setLoading(false));
     }, [assignmentId, reloadKey]);
 
+    const reportAbsence = async () => {
+        const ok = await confirm({
+            title: 'Team did not appear?',
+            description: 'Tell the college officer that the proposal team did not come to the defence. They will confirm it — if so, the proposal is rejected. You don\'t need to submit a score meanwhile.',
+            confirmLabel: 'Report absence',
+            cancelLabel: 'Go back',
+        });
+        if (!ok) return;
+        try {
+            const res = await api.post(`/review-assignments/${assignmentId}/report-absence`, {});
+            toast.success(res.data?.message ?? 'Reported to the college officer.');
+            setReloadKey(k => k + 1);
+        } catch (e) {
+            toast.error(e.response?.data?.message ?? 'Could not send the report.');
+        }
+    };
+
     const updateAnswer = (qid, field, value) =>
         setAnswers(prev => ({ ...prev, [qid]: { ...prev[qid], [field]: value } }));
 
@@ -381,10 +398,19 @@ export default function ReviewScore() {
                     </div>
 
                     {isOpenDefence && !submitted && defenceDeadlineLabel && (
-                        <p className="flex items-center gap-1.5 px-1 pb-2 text-xs text-purple-700">
-                            <Clock size={12} /> Submit your score by <strong>{defenceDeadlineLabel}</strong>
-                            {defenceSession?.deadline_extended && <span className="rounded-full bg-purple-100 px-1.5 py-0.5 text-[10px] font-semibold">Extended</span>}
-                        </p>
+                        <div className="flex flex-wrap items-center justify-between gap-2 px-1 pb-2">
+                            <p className="flex items-center gap-1.5 text-xs text-purple-700">
+                                <Clock size={12} /> Submit your score by <strong>{defenceDeadlineLabel}</strong>
+                                {defenceSession?.deadline_extended && <span className="rounded-full bg-purple-100 px-1.5 py-0.5 text-[10px] font-semibold">Extended</span>}
+                            </p>
+                            {!defenceSession?.attendance && (defenceSession?.absence_reported
+                                ? <span className="text-xs font-medium text-amber-700">
+                                    {defenceSession.absence_reported_by_me ? 'You reported' : 'A panel member reported'} that the team did not appear — awaiting the college officer.
+                                  </span>
+                                : <button type="button" onClick={reportAbsence} className="text-xs font-semibold text-red-600 hover:text-red-700 hover:underline">
+                                    Team did not appear?
+                                  </button>)}
+                        </div>
                     )}
 
                     {/* Progress bar */}

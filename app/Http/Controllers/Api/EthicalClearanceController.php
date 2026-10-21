@@ -15,8 +15,6 @@ use Illuminate\Support\Facades\Log;
 
 class EthicalClearanceController extends Controller
 {
-    private const OFFICER_ROLES = ['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer', 'college_officer'];
-
     /** PI submits their uploaded certificate's details for officer verification. */
     public function submit(string $id, Request $request): JsonResponse
     {
@@ -74,7 +72,7 @@ class EthicalClearanceController extends Controller
     /** Officer dashboard: proposals that require ethical clearance, scoped like the rest of the app. */
     public function index(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::OFFICER_ROLES)) {
+        if (! $request->user()?->can('ethical_clearance.review')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -112,7 +110,7 @@ class EthicalClearanceController extends Controller
     /** Officer approves a submitted certificate. */
     public function approve(string $id, Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::OFFICER_ROLES)) {
+        if (! $request->user()?->can('ethical_clearance.review')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -137,7 +135,7 @@ class EthicalClearanceController extends Controller
     /** Officer rejects a submitted certificate, returning it to the PI for correction. */
     public function reject(string $id, Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::OFFICER_ROLES)) {
+        if (! $request->user()?->can('ethical_clearance.review')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -175,7 +173,8 @@ class EthicalClearanceController extends Controller
             return;
         }
 
-        $officers = User::role($role)->where('status', 'active')->get();
+        $officers = User::role($role)->where('status', 'active')->get()
+            ->merge(User::customRoleHolders('ethical_clearance.review', $proposal->college_id, $proposal->category))->unique('id');
         foreach ($officers as $officer) {
             try {
                 SendEmailNotificationJob::deliver($officer, 'ethical_clearance_submitted', [

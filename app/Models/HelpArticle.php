@@ -35,10 +35,10 @@ class HelpArticle extends Model
         return array_values(array_filter(array_map('trim', preg_split('/\R/', (string) $this->questions))));
     }
 
-    /** Published articles meant for this user's roles (or for everyone). Admins see all — they support every role. */
+    /** Published articles meant for this user's roles (or for everyone). Help editors see all — they support every role. */
     public function scopeVisibleTo(Builder $query, User $user): Builder
     {
-        if ($user->hasAnyRole(['super_admin', 'admin'])) {
+        if ($user->can('help.manage')) {
             return $query->where('is_published', true);
         }
 

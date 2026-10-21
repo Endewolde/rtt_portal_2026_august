@@ -20,6 +20,7 @@ import { getCategoryLabel } from '../../lib/utils';
 import OpenDefenceHoldModal from '../../Components/OpenDefenceHoldModal';
 import DefenceRecordButton from '../../Components/DefenceRecordButton';
 import DefenceDeadlineStrip, { RequestDeadlineExtensionModal } from '../../Components/DefenceDeadlineStrip';
+import { DefenceAttendanceModal, DefenceAttendanceStrip } from '../../Components/DefenceAttendance';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -513,7 +514,7 @@ function AwaitingRow({ proposal }) {
 
 // ─── Defence Card ─────────────────────────────────────────────────────────────
 
-function DefenceCard({ proposal, onReassign, onExtend, onRemove, onRequestDeadlineExtension }) {
+function DefenceCard({ proposal, onReassign, onExtend, onRemove, onRequestDeadlineExtension, onRecordAttendance }) {
     const assignments  = (proposal.review_assignments ?? []).filter(a => (a.evaluation_type?.name ?? '').startsWith('open_defence'));
     const submitted    = assignments.filter(a => a.status === 'submitted').length;
     const overdue      = assignments.filter(a => a.due_date && daysUntil(a.due_date) < 0 && a.status !== 'submitted').length;
@@ -586,6 +587,13 @@ function DefenceCard({ proposal, onReassign, onExtend, onRemove, onRequestDeadli
                 onRequestExtension={() => onRequestDeadlineExtension(proposal)}
             />
 
+            <DefenceAttendanceStrip
+                proposal={proposal}
+                defence={proposal.defence_deadline}
+                allSubmitted={allSubmitted}
+                onRecord={onRecordAttendance}
+            />
+
             {/* ── Footer ── */}
             <div className={`px-5 py-3 border-t flex items-center justify-between ${allSubmitted ? 'border-green-200 bg-green-50/50' : 'border-gray-100 bg-gray-50/50'}`}>
                 <div className="flex items-center gap-4">
@@ -598,7 +606,11 @@ function DefenceCard({ proposal, onReassign, onExtend, onRemove, onRequestDeadli
                     {assignments.length > 0 && <DefenceRecordButton proposalId={proposal.id} trackerNumber={proposal.tracker_number} />}
                 </div>
 
-                {allSubmitted ? (
+                {allSubmitted && proposal.defence_deadline?.attendance !== 'held' ? (
+                    <span className="text-xs font-semibold text-purple-600 flex items-center gap-1.5">
+                        <Clock size={13} /> Waiting for attendance to be recorded
+                    </span>
+                ) : allSubmitted ? (
                     <span className="text-xs font-semibold text-green-600 flex items-center gap-1.5">
                         <CheckCircle2 size={13} /> Result processed automatically
                     </span>
@@ -621,7 +633,7 @@ function DefenceCard({ proposal, onReassign, onExtend, onRemove, onRequestDeadli
 const TABS = [
     { key: 'active',   label: 'Active',           color: 'purple' },
     { key: 'overdue',  label: 'Due Date Passed',   color: 'red'    },
-    { key: 'complete', label: 'Completed',          color: 'green'  },
+    { key: 'complete', label: 'All Scores In',      color: 'green'  },
 ];
 
 function TabBar({ active, counts, onChange }) {
@@ -665,9 +677,9 @@ function TabBar({ active, counts, onChange }) {
 
 export default function OpenDefence() {
     const { success, error } = useToast();
-    const { user, hasRole } = useAuth();
+    const { user, accessScope } = useAuth();
     const { app_settings } = usePage().props;
-    const isCollegeOfficer = hasRole('college_officer');
+    const isCollegeOfficer = accessScope?.type === 'college';
     const [view, setView] = useViewPreference('open_defence', 'card');
     const [activeTab, setActiveTab] = useState('active');
 
@@ -681,6 +693,7 @@ export default function OpenDefence() {
     const [removing, setRemoving]                 = useState(false);
     const [defenceHold, setDefenceHold]           = useState(null);
     const [deadlineExtensionFor, setDeadlineExtensionFor] = useState(null);
+    const [attendanceFor, setAttendanceFor] = useState(null);
 
     // Defence score deadlines move only through an approved college-officer request,
     // so the per-reviewer "Extend" action routes here too.
@@ -954,10 +967,18 @@ export default function OpenDefence() {
                                             proposals={tabProposals}
                                             showColumns={['tracker', 'title', 'category', 'college', 'status']}
                                             actions={(p) => (
-                                                <Link href={`/proposals/${p.id}`}
-                                                    className="px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors">
-                                                    View
-                                                </Link>
+                                                <div className="flex items-center gap-2">
+                                                    {p.defence_deadline?.can_mark_attendance && (
+                                                        <button onClick={() => setAttendanceFor(p)}
+                                                            className="px-3 py-1.5 border border-purple-200 bg-purple-50 text-purple-700 rounded-lg text-xs font-semibold hover:bg-purple-100 transition-colors whitespace-nowrap">
+                                                            Record attendance
+                                                        </button>
+                                                    )}
+                                                    <Link href={`/proposals/${p.id}`}
+                                                        className="px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors">
+                                                        View
+                                                    </Link>
+                                                </div>
                                             )}
                                             emptyMessage="No proposals in this tab."
                                         />
@@ -971,6 +992,7 @@ export default function OpenDefence() {
                                                     onExtend={() => openDeadlineExtension(p)}
                                                     onRemove={confirmRemove}
                                                     onRequestDeadlineExtension={openDeadlineExtension}
+                                                    onRecordAttendance={setAttendanceFor}
                                                 />
                                             ))}
                                         </div>
@@ -992,6 +1014,15 @@ export default function OpenDefence() {
                     onClose={() => setReassignModal(null)}
                 />
             )}
+            {attendanceFor && (
+                <DefenceAttendanceModal
+                    proposal={attendanceFor}
+                    defence={attendanceFor.defence_deadline}
+                    onClose={() => setAttendanceFor(null)}
+                    onSaved={() => { setAttendanceFor(null); load(); }}
+                />
+            )}
+
             {deadlineExtensionFor && (
                 <RequestDeadlineExtensionModal
                     proposal={deadlineExtensionFor}

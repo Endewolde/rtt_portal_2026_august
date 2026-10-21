@@ -87,8 +87,7 @@ class ContractController extends Controller
     {
         $user = $request->user();
 
-        if (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'college_officer',
-            'research_officer', 'community_officer', 'technology_officer', 'support_officer'])) {
+        if (! $user->can('contracts.review')) {
             return response()->json(['message' => 'Unauthorized.', 'errors' => []], 403);
         }
 
@@ -128,8 +127,7 @@ class ContractController extends Controller
     {
         $user = $request->user();
 
-        if (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'college_officer',
-            'research_officer', 'community_officer', 'technology_officer', 'support_officer'])) {
+        if (! $user->can('contracts.review')) {
             return response()->json(['message' => 'Unauthorized.', 'errors' => []], 403);
         }
 
@@ -247,7 +245,8 @@ class ContractController extends Controller
         $officers = User::role([
             'super_admin', 'admin', 'central_officer',
             'research_officer', 'community_officer', 'technology_officer',
-        ])->where('status', 'active')->get();
+        ])->where('status', 'active')->get()
+            ->merge(User::customRoleHolders('contracts.review', $proposal->college_id, $proposal->category))->unique('id');
 
         $data = [
             'tracker_number' => $proposal->tracker_number,

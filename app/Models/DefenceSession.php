@@ -31,6 +31,14 @@ class DefenceSession extends Model
         'deadline_reminder_sent_at',
         'flagged_incomplete_at',
         'notes',
+        'attendance',
+        'attendance_note',
+        'attendance_marked_by',
+        'attendance_marked_at',
+        'attendance_requested_at',
+        'absence_reported_by',
+        'absence_reported_at',
+        'absence_report_note',
     ];
 
     protected $casts = [
@@ -39,6 +47,9 @@ class DefenceSession extends Model
         'score_deadline_extended_until' => 'datetime',
         'deadline_reminder_sent_at' => 'datetime',
         'flagged_incomplete_at' => 'datetime',
+        'attendance_marked_at' => 'datetime',
+        'attendance_requested_at' => 'datetime',
+        'absence_reported_at' => 'datetime',
     ];
 
     public function proposal(): BelongsTo

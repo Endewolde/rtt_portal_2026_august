@@ -87,7 +87,7 @@ class PersonalDataService
 
         $request = DataDeletionRequest::create(['user_id' => $user->id, 'reason' => $reason, 'status' => DataDeletionRequest::STATUS_PENDING]);
 
-        foreach (User::role(self::ADMIN_ROLES)->where('status', 'active')->get() as $admin) {
+        foreach (User::role(self::ADMIN_ROLES)->where('status', 'active')->get()->merge(User::customRoleHolders('data_requests.manage'))->unique('id') as $admin) {
             $this->notify($admin, 'data_deletion_requested', "{$user->name} asked for their personal data to be deleted.");
         }
 

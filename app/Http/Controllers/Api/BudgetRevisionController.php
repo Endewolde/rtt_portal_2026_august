@@ -17,8 +17,6 @@ use Illuminate\Support\Facades\Log;
 
 class BudgetRevisionController extends Controller
 {
-    private const OFFICER_ROLES = ['super_admin', 'admin', 'central_officer', 'college_officer', 'finance_officer', 'support_officer'];
-
     private const ELIGIBLE_STATUSES = ['funded', 'midterm_evaluation'];
 
     /** PI requests a change to their already-funded proposal's budget breakdown. */
@@ -77,7 +75,7 @@ class BudgetRevisionController extends Controller
     /** Officer lists all budget revision requests. */
     public function index(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::OFFICER_ROLES)) {
+        if (! $request->user()?->can('budget_revisions.review')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -110,7 +108,7 @@ class BudgetRevisionController extends Controller
     /** Officer approves a budget revision — replaces the proposal's budget line items with the requested ones. */
     public function approve(string $id, Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::OFFICER_ROLES)) {
+        if (! $request->user()?->can('budget_revisions.review')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -154,7 +152,7 @@ class BudgetRevisionController extends Controller
     /** Officer denies a budget revision — the current budget is left untouched. */
     public function reject(string $id, Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::OFFICER_ROLES)) {
+        if (! $request->user()?->can('budget_revisions.review')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
@@ -201,7 +199,8 @@ class BudgetRevisionController extends Controller
         ];
         $roles = array_values(array_filter(['central_officer', $roleMap[$proposal->category] ?? null]));
 
-        foreach (User::role($roles)->where('status', 'active')->get() as $officer) {
+        foreach (User::role($roles)->where('status', 'active')->get()
+            ->merge(User::customRoleHolders('budget_revisions.review', $proposal->college_id, $proposal->category))->unique('id') as $officer) {
             try {
                 SendEmailNotificationJob::deliver($officer, 'budget_revision_requested', [
                     'tracker_number' => $proposal->tracker_number,

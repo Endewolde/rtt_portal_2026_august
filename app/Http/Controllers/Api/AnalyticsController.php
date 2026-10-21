@@ -10,11 +10,6 @@ use Illuminate\Support\Facades\DB;
 
 class AnalyticsController extends Controller
 {
-    private const ANALYTICS_ROLES = [
-        'super_admin', 'admin', 'central_officer', 'research_officer',
-        'community_officer', 'technology_officer', 'college_officer',
-    ];
-
     private const CATEGORIES = ['research', 'community_engagement', 'technology_transfer'];
 
     /** Sent as academic_year to see every year; leaving it out means the current year. */
@@ -30,7 +25,7 @@ class AnalyticsController extends Controller
     {
         $user = $request->user();
 
-        if (! $user?->hasAnyRole(self::ANALYTICS_ROLES)) {
+        if (! $user?->can('analytics.view')) {
             return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
         }
 
@@ -42,7 +37,7 @@ class AnalyticsController extends Controller
 
         $filters = [
             'academic_year' => $academicYear,
-            'college_id' => $user->hasRole('college_officer') ? $user->college_id : ($request->input('college_id') ?: null),
+            'college_id' => $user->accessScope()->isCollege() ? $user->accessScope()->collegeId : ($request->input('college_id') ?: null),
             'category' => $category,
         ];
 
@@ -50,7 +45,7 @@ class AnalyticsController extends Controller
             'data' => [
                 'filters' => $filters + [
                     'current_academic_year' => $currentYear,
-                    'college_locked' => $user->hasRole('college_officer'),
+                    'college_locked' => $user->accessScope()->isCollege(),
                     'category_locked' => (bool) $request->_category_scope,
                 ],
                 'academicYears' => DB::table('proposals')->whereNull('deleted_at')->whereNotNull('academic_year')

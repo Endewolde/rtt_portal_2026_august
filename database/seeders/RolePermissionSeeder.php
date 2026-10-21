@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Support\Access\PermissionCatalog;
 use Illuminate\Database\Seeder;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
@@ -22,6 +23,11 @@ class RolePermissionSeeder extends Seeder
         $this->createPermissions();
         $this->createRoles();
         $this->assignPermissions();
+
+        // The permission catalogue (config/access.php): every permission the
+        // platform checks, granted to the built-in roles' defaults.
+        PermissionCatalog::sync(resetDefaults: true);
+        PermissionCatalog::alignBuiltInRoles(['reports.create', 'colleges.delete', 'features.manage', 'external_funds.delete', 'departments.create']);
 
         app()[PermissionRegistrar::class]->forgetCachedPermissions();
     }
@@ -109,6 +115,7 @@ class RolePermissionSeeder extends Seeder
             'community_officer',
             'technology_officer',
             'college_officer',
+            'college_rtt_manager',
             'finance_officer',
             'support_officer',
             'staff',
@@ -369,6 +376,28 @@ class RolePermissionSeeder extends Seeder
             'disbursements.create', 'disbursements.update',
             'settlements.view_any', 'settlements.view',
             'settlements.create', 'settlements.update',
+            'contracts.download',
+        ]);
+
+        // ── college_rtt_manager: one college, every category — central evaluation,
+        //    funding, progress reports, reporting and the pipeline ──────────────
+        Role::findByName('college_rtt_manager', 'web')->syncPermissions([
+            'proposals.view_any', 'proposals.view', 'proposals.export',
+            'proposal_calls.view_any', 'proposal_calls.view',
+            'reviews.view_any', 'reviews.view',
+            'review_assignments.view_any', 'review_assignments.view',
+            'defence_sessions.view_any', 'defence_sessions.view',
+            'awards.view_any', 'awards.view', 'awards.create', 'awards.update',
+            'budget_allocations.view_any', 'budget_allocations.view',
+            'budget_requests.view_any', 'budget_requests.view',
+            'reports.view_any', 'reports.view', 'reports.create', 'reports.export',
+            'research_impacts.view_any', 'research_impacts.view',
+            'budget_milestones.view_any', 'budget_milestones.view',
+            'midterm_evaluations.view_any', 'midterm_evaluations.view',
+            'completion_workshops.view_any', 'completion_workshops.view',
+            'research_outputs.view_any', 'research_outputs.view',
+            'proposal_ai_scores.view',
+            'lookup_options.view_any', 'lookup_options.view',
             'contracts.download',
         ]);
 

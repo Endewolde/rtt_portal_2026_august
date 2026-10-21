@@ -12,44 +12,48 @@ use Illuminate\Support\Facades\DB;
 
 class CollegePhaseCompletionController extends Controller
 {
-    private const ALLOWED_ROLES = [
-        'super_admin', 'admin', 'central_officer',
-        'research_officer', 'community_officer', 'technology_officer',
-        'college_officer',
-    ];
-
     /**
-     * Per-phase config: which evaluation-type name prefix a proposal must have a
-     * review assignment against to count as "assigned" to the phase, which status
-     * means "still awaiting a decision", and which workflow_logs action means the
-     * rejection happened AT this phase (rather than a later one).
+     * Per-phase config: which proposals belong to the phase at all (`entered` — the
+     * stage a proposal must have reached: validated for blind review, passed blind
+     * review for open defence — and `passed`, the stage after the phase), which
+     * evaluation-type name prefix a proposal must have a review assignment against
+     * to count as "assigned", which status means "still awaiting a decision", and
+     * which workflow_logs action means the rejection happened AT this phase.
      *
-     * @var array<string, array{label: string, eval_prefix: string, undecided_status: string, reject_action: string}>
+     * @var array<string, array{label: string, entered: string, passed: string, eval_prefix: string, undecided_status: string, reject_action: string}>
      */
     private const PHASES = [
         'blind_review' => [
             'label' => 'Blind Review',
+            'entered' => 'validated',
+            'passed' => 'blind_review_passed',
             'eval_prefix' => 'blind_review',
             'undecided_status' => 'under_blind_review',
             'reject_action' => 'fail_blind_review',
         ],
         'open_defence' => [
             'label' => 'Open Defence',
+            'entered' => 'blind_review_passed',
+            'passed' => 'accepted',
             'eval_prefix' => 'open_defence',
             'undecided_status' => 'under_open_defence',
             'reject_action' => 'fail_defence',
         ],
     ];
 
+    /** Workflow order of the stages a proposal moves through after validation. */
+    private const STAGE_ORDER = [
+        'validated', 'under_blind_review', 'blind_review_passed', 'under_open_defence',
+        'accepted', 'funded', 'midterm_evaluation', 'completed', 'archived',
+    ];
+
     /**
-     * Per-college, per-phase completion: what share of ALL the college's submitted
-     * proposals have a decision (passed or rejected) at that phase vs. are still
-     * outstanding — either because a reviewer hasn't even been assigned yet, or
-     * because they have but haven't decided. A college only reaches 100% for a
-     * phase once every one of its submitted proposals has been reviewed or
-     * rejected there — a proposal sitting unassigned does NOT get excluded from
-     * the count, it counts against completion exactly like one still awaiting a
-     * reviewer's decision.
+     * Per-college, per-phase completion: of the proposals that reached a phase
+     * (validated ones for blind review, ones that passed blind review for open
+     * defence), what share have a decision there (passed or rejected) vs. are
+     * still outstanding — either no reviewer assigned yet, or assigned but not
+     * decided. Proposals still awaiting validation, rejected before the phase, or
+     * granted as legacy projects without review are not part of the phase.
      * College and category officers are scoped via the college.scope / category.scope
      * middleware (_college_scope / _category_scope) exactly like ProposalPipelineController
      * — client-supplied college_id/category filters can only narrow further.
@@ -58,7 +62,7 @@ class CollegePhaseCompletionController extends Controller
     {
         $user = $request->user();
 
-        if (! $user?->hasAnyRole(self::ALLOWED_ROLES)) {
+        if (! $user?->can('phase_completion.view')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
         }
 
@@ -78,7 +82,8 @@ class CollegePhaseCompletionController extends Controller
 
             $phases = [];
             foreach (self::PHASES as $key => $config) {
-                $phases[$key] = $this->phaseBreakdown((clone $base), $total, $config);
+                $inPhase = $this->reachedPhase((clone $base), $config);
+                $phases[$key] = $this->phaseBreakdown($inPhase, (clone $inPhase)->count(), $config);
             }
 
             return [
@@ -137,7 +142,37 @@ class CollegePhaseCompletionController extends Controller
     }
 
     /**
-     * @param  array{label: string, eval_prefix: string, undecided_status: string, reject_action: string}  $config
+     * Proposals that took part in this phase: currently at or beyond the stage that
+     * opens it, or rejected after reaching it — either at this phase or after
+     * passing it. Rejections before the phase (validation, a confirmed mistaken
+     * approval, failing blind review for open defence) and legacy grants are left out.
+     *
+     * @param  array{label: string, entered: string, passed: string, eval_prefix: string, undecided_status: string, reject_action: string}  $config
+     */
+    private function reachedPhase(Builder $proposals, array $config): Builder
+    {
+        $atOrBeyond = array_slice(self::STAGE_ORDER, array_search($config['entered'], self::STAGE_ORDER, true));
+
+        return $proposals
+            ->where(function (Builder $q) use ($atOrBeyond, $config) {
+                $q->whereIn('proposals.status', $atOrBeyond)
+                    ->orWhere(fn (Builder $rejected) => $rejected->where('proposals.status', 'rejected')
+                        ->where(fn (Builder $why) => $why
+                            ->whereExists(fn ($log) => $log->from('workflow_logs')
+                                ->whereColumn('workflow_logs.proposal_id', 'proposals.id')
+                                ->where('workflow_logs.to_stage', $config['passed']))
+                            ->orWhereRaw(
+                                '(select wl.action from workflow_logs wl where wl.proposal_id = proposals.id and wl.to_stage = ? order by wl.created_at desc limit 1) = ?',
+                                ['rejected', $config['reject_action']]
+                            )));
+            })
+            ->whereNotExists(fn ($log) => $log->from('workflow_logs')
+                ->whereColumn('workflow_logs.proposal_id', 'proposals.id')
+                ->where('workflow_logs.action', 'grant_legacy'));
+    }
+
+    /**
+     * @param  array{label: string, entered: string, passed: string, eval_prefix: string, undecided_status: string, reject_action: string}  $config
      * @return array{total: int, assigned: int, unassigned: int, reviewed: int, rejected: int, pending: int, completion_pct: float|null}
      */
     private function phaseBreakdown(Builder $scopedProposals, int $total, array $config): array

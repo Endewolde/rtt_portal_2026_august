@@ -131,7 +131,7 @@ export default function AssistantPanel() {
     return (
         <>
             {!open && (
-                <button onClick={() => setOpen(true)} aria-label="Ask for help"
+                <button onClick={() => setOpen(true)} aria-label="Ask for help" data-tour="assistant"
                     className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full bg-indigo-600 py-3 pl-4 pr-5 text-sm font-semibold text-white shadow-lg shadow-indigo-600/30 transition hover:bg-indigo-700 print:hidden">
                     <MessageCircleQuestion size={18} /> Ask
                 </button>

@@ -26,8 +26,6 @@ class ProposalController extends Controller
      * Category and college officers are scoped below; everyone else sees only the
      * proposals they lead.
      */
-    private const SEE_ALL_PROPOSALS_ROLES = ['super_admin', 'admin', 'central_officer', 'finance_officer', 'support_officer'];
-
     /** Public, unauthenticated listing — only shows non-draft proposals. */
     public function publicIndex(Request $request): JsonResponse
     {
@@ -95,16 +93,13 @@ class ProposalController extends Controller
         $query = Proposal::with(['pi', 'college', 'proposalCall'])
             ->whereNull('deleted_at');
 
-        if ($user->hasAnyRole(self::SEE_ALL_PROPOSALS_ROLES)) {
-            // See all — apply optional filters
-        } elseif ($user->hasAnyRole(['research_officer', 'community_officer', 'technology_officer'])) {
-            // Category-scoped: middleware already sets _category_scope
-        } elseif ($user->hasRole('college_officer')) {
-            $query->where('college_id', $user->college_id);
-        } else {
-            // Everyone else (staff, pi, reviewers, any role not listed above) sees only
-            // their own proposals — never the whole system by default.
+        // Within the role's data scope; anyone limited to their own records (or without
+        // the proposals list permission) sees only the proposals they lead.
+        $scope = $user->accessScope();
+        if ($scope->isOwn() || ! $user->can('proposals.view_any')) {
             $query->where('pi_user_id', $user->id);
+        } else {
+            $scope->constrain($query, 'proposals');
         }
 
         // Category scope injected by EnsureCategoryScope middleware
@@ -144,7 +139,14 @@ class ProposalController extends Controller
             );
         }
 
-        return response()->json(['data' => $query->orderByDesc('created_at')->paginate(20)]);
+        // Pages that show award amounts ask for them here, instead of one request per proposal.
+        if ($request->boolean('with_award')) {
+            $query->with('award.approvedBy:id,name');
+        }
+
+        $perPage = min(max($request->integer('per_page', 20), 1), 200);
+
+        return response()->json(['data' => $query->orderByDesc('created_at')->paginate($perPage)]);
     }
 
     public function involved(Request $request): JsonResponse
@@ -328,21 +330,7 @@ class ProposalController extends Controller
         // Full base — used for KPI totals (includes drafts so the draft card is accurate)
         $baseQuery = Proposal::query();
 
-        if ($user->hasRole('college_officer')) {
-            $baseQuery->where('proposals.college_id', $user->college_id);
-        }
-
-        $officerCategoryMap = [
-            'research_officer' => 'research',
-            'community_officer' => 'community_engagement',
-            'technology_officer' => 'technology_transfer',
-        ];
-        foreach ($officerCategoryMap as $role => $category) {
-            if ($user->hasRole($role)) {
-                $baseQuery->where('proposals.category', $category);
-                break;
-            }
-        }
+        $user->accessScope()->constrain($baseQuery, 'proposals', fn ($q) => $q->where('proposals.pi_user_id', $user->id));
 
         if ($request->_college_scope) {
             $baseQuery->where('proposals.college_id', $request->_college_scope);
@@ -451,12 +439,15 @@ class ProposalController extends Controller
         $proposal = Proposal::findOrFail($id);
         $user = request()->user();
 
-        // College officers cannot see submission history — actor names reveal PI identity
-        if ($user?->hasRole('college_officer')) {
+        // Actor names reveal who wrote it — hidden from anyone who must not see author
+        // identities (college officers running blind review), except the PI.
+        $canSeeIdentity = $user?->can('proposals.view_identity') || $user?->id === $proposal->pi_user_id;
+        if (! $canSeeIdentity) {
             return response()->json(['data' => [], 'hidden' => true]);
         }
 
-        $isAdmin = $user?->hasAnyRole(['super_admin', 'central_officer']);
+        // Names in the history are for the central office; scoped officers see "PI".
+        $isAdmin = $user?->can('proposals.view_identity') && $user->accessScope()->isAll();
 
         $history = WorkflowLog::where('proposal_id', $proposal->id)
             ->with('actor')
@@ -502,7 +493,7 @@ class ProposalController extends Controller
         }
 
         // Only the PI or admins can clone
-        if ($proposal->pi_user_id !== $user->id && ! $user->hasAnyRole(['super_admin', 'admin', 'central_officer'])) {
+        if ($proposal->pi_user_id !== $user->id && ! $user->can('proposals.clone')) {
             return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
         }
 

@@ -10,8 +10,6 @@ use Illuminate\Http\Request;
 
 class TeamMemberController extends Controller
 {
-    private const MANAGERS = ['super_admin', 'admin', 'research_officer', 'central_officer', 'college_officer'];
-
     public function index(string $applicationId): JsonResponse
     {
         $application = ExternalFundApplication::findOrFail($applicationId);
@@ -26,7 +24,7 @@ class TeamMemberController extends Controller
 
     public function store(Request $request, string $applicationId): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::MANAGERS)) {
+        if (! $request->user()?->can('external_funds.team')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
@@ -54,7 +52,7 @@ class TeamMemberController extends Controller
 
     public function destroy(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::MANAGERS)) {
+        if (! $request->user()?->can('external_funds.team')) {
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 

@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\ConferenceController;
 use App\Http\Controllers\Api\ContractController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DeadlineExtensionController;
+use App\Http\Controllers\Api\DefenceAttendanceController;
 use App\Http\Controllers\Api\DefenceDeadlineController;
 use App\Http\Controllers\Api\DisbursementController;
 use App\Http\Controllers\Api\EthicalClearanceController;
@@ -47,6 +48,7 @@ use App\Http\Controllers\Api\LookupOptionController;
 use App\Http\Controllers\Api\MidtermEvaluationController;
 use App\Http\Controllers\Api\NoCostExtensionController;
 use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\OnboardingController;
 use App\Http\Controllers\Api\OngoingProposalsController;
 use App\Http\Controllers\Api\PersonalDataController;
 use App\Http\Controllers\Api\ProgressReportController;
@@ -150,6 +152,9 @@ Route::prefix('v1')->group(function () {
     Route::get('/external-funds/opportunities/public', [EFOpportunityController::class, 'publicIndex']);
 
     // ── Authenticated — 300 requests per minute per user ─────────────────────
+    // Tighter per-action limits inside this group carry their own key prefix
+    // (throttle:N,1,name:) — a plain throttle is keyed by user alone, so it would
+    // share this group's counter and refuse the action after ordinary browsing.
     Route::middleware(['auth:sanctum', 'user.active', 'throttle:300,1', 'college.scope', 'category.scope', AuditCrudMiddleware::class])->group(function () {
         Route::post('/auth/logout', [AuthController::class, 'logout']);
         Route::get('/auth/me', [AuthController::class, 'me']);
@@ -192,6 +197,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/roles/{id}/permissions', [RoleController::class, 'permissions']);
         Route::put('/roles/{id}/permissions', [RoleController::class, 'updatePermissions']);
         Route::get('/permissions', [RoleController::class, 'allPermissions']);
+        Route::get('/permissions/catalog', [RoleController::class, 'catalog']);
         Route::post('/permissions/refresh', [RoleController::class, 'refreshPermissions']);
 
         // Thematic Areas
@@ -348,13 +354,13 @@ Route::prefix('v1')->group(function () {
         Route::get('/proposals/{id}/versions', [ProposalController::class, 'versions']);
         Route::get('/proposals/{id}/defence-record', [ProposalController::class, 'defenceRecord']);
         Route::get('/proposals/{id}/ai-coach', [AiAdviceController::class, 'coach']);
-        Route::middleware('throttle:10,1')->post('/proposals/{id}/ai-coach', [AiAdviceController::class, 'runCoach']);
+        Route::middleware('throttle:10,1,ai-coach:')->post('/proposals/{id}/ai-coach', [AiAdviceController::class, 'runCoach']);
         Route::get('/proposals/{id}/ai-review-summary', [AiAdviceController::class, 'summary']);
-        Route::middleware('throttle:10,1')->post('/proposals/{id}/ai-review-summary', [AiAdviceController::class, 'runSummary']);
+        Route::middleware('throttle:10,1,ai-summary:')->post('/proposals/{id}/ai-review-summary', [AiAdviceController::class, 'runSummary']);
         Route::get('/submission-eligibility', [ProposalController::class, 'submissionEligibility']);
 
         // Assistant and help centre
-        Route::middleware('throttle:30,1')->post('/assistant/ask', [AssistantController::class, 'ask']);
+        Route::middleware('throttle:30,1,assistant:')->post('/assistant/ask', [AssistantController::class, 'ask']);
         Route::get('/assistant/suggestions', [AssistantController::class, 'suggestions']);
         Route::post('/assistant/queries/{id}/feedback', [AssistantController::class, 'feedback']);
         Route::get('/help/articles', [AssistantController::class, 'articles']);
@@ -386,6 +392,11 @@ Route::prefix('v1')->group(function () {
         Route::get('/proposals/{id}/available-reviewers', [ReviewController::class, 'availableReviewers']);
         Route::post('/proposals/{id}/review/assign', [ReviewController::class, 'assign']);
         // /my and /coi-conflicts must be before /{id} so the static segment wins the route match
+        // Onboarding — welcome, guided tours and checklist, per user and role
+        Route::get('/onboarding', [OnboardingController::class, 'show']);
+        Route::patch('/onboarding', [OnboardingController::class, 'update']);
+        Route::post('/onboarding/reset', [OnboardingController::class, 'reset']);
+
         Route::get('/reviewer-agreement', [ReviewerAgreementController::class, 'show']);
         Route::post('/reviewer-agreement', [ReviewerAgreementController::class, 'accept']);
         Route::get('/review-assignments/my', [ReviewController::class, 'myAssignments']);
@@ -422,6 +433,8 @@ Route::prefix('v1')->group(function () {
         Route::put('/proposals/{id}/defence/session', [ReviewController::class, 'updateDefence']);
         Route::post('/proposals/{id}/defence/process-result', [ReviewController::class, 'processDefenceResultByProposal']);
         Route::post('/defence-sessions/{id}/process-result', [ReviewController::class, 'processDefenceResult']);
+        Route::post('/defence-sessions/{id}/attendance', [DefenceAttendanceController::class, 'mark']);
+        Route::post('/review-assignments/{id}/report-absence', [DefenceAttendanceController::class, 'reportAbsence']);
         Route::get('/evaluation-types', [ReviewController::class, 'evaluationTypes']);
         Route::post('/evaluation-types', [ReviewController::class, 'storeEvaluationType']);
         Route::put('/evaluation-types/{id}', [ReviewController::class, 'updateEvaluationType']);
@@ -443,6 +456,7 @@ Route::prefix('v1')->group(function () {
 
         Route::get('/admin/review-management', [ReviewController::class, 'proposalReviewList']);
         Route::get('/admin/reviewer-workload', [ReviewController::class, 'reviewerWorkload']);
+        Route::get('/admin/reviewer-workload/payment-report', [ReviewController::class, 'reviewerPaymentReport']);
         Route::get('/admin/reviewer-analytics', [ReviewController::class, 'reviewerAnalytics']);
         Route::post('/proposals/{id}/review/add-reviewer', [ReviewController::class, 'addReviewer']);
         Route::delete('/review-assignments/{id}/remove', [ReviewController::class, 'removeReviewer']);
@@ -455,12 +469,12 @@ Route::prefix('v1')->group(function () {
         // Overdue reviews dashboard — reminder history is shared with the daily
         // rtt:review-deadline-reminders scheduled command via ReviewReminderService.
         Route::get('/admin/review-deadlines', [ReviewDeadlineController::class, 'index']);
-        Route::middleware('throttle:20,1')->post('/review-assignments/{id}/remind', [ReviewDeadlineController::class, 'remind']);
+        Route::middleware('throttle:20,1,remind:')->post('/review-assignments/{id}/remind', [ReviewDeadlineController::class, 'remind']);
         // One click can remind up to MAX_BULK_IDS (100) reviewers in a single request,
         // so this needs a much higher per-minute ceiling than the single-remind route —
         // the real anti-spam guard is the per-assignment cooldown inside
         // ReviewReminderService::sendReminder(), not this request-rate limit.
-        Route::middleware('throttle:30,1')->post('/review-assignments/bulk-remind', [ReviewDeadlineController::class, 'bulkRemind']);
+        Route::middleware('throttle:30,1,bulk-remind:')->post('/review-assignments/bulk-remind', [ReviewDeadlineController::class, 'bulkRemind']);
 
         // Appeals
         Route::post('/proposals/{id}/appeal', [ProposalAppealController::class, 'store']);
@@ -771,7 +785,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/proposal-archive/documents/{documentId}/download', [ProposalArchiveController::class, 'downloadDocument']);
 
         // ── File uploads — 60 per minute per user ─────────────────────────────
-        Route::middleware('throttle:60,1')->group(function () {
+        Route::middleware('throttle:60,1,uploads:')->group(function () {
             Route::post('/proposals/{id}/documents', [ProposalWizardController::class, 'uploadDocument']);
         });
     });

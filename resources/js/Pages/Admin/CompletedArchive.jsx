@@ -148,22 +148,12 @@ export default function CompletedArchive() {
             try {
                 const results = await Promise.all(
                     ARCHIVE_STATUSES.map(s =>
-                        api.get('/proposals', { params: { status: s, per_page: 200 } })
+                        api.get('/proposals', { params: { status: s, per_page: 200, with_award: 1 } })
                             .then(r => r.data?.data?.data ?? r.data?.data ?? [])
                             .catch(() => [])
                     )
                 );
-                const all = results.flat();
-
-                // Load awards best-effort
-                const withAwards = await Promise.all(
-                    all.map(async p => {
-                        try {
-                            const r = await api.get(`/proposals/${p.id}/award`);
-                            return { ...p, award: r.data?.data ?? null };
-                        } catch { return { ...p, award: null }; }
-                    })
-                );
+                const withAwards = results.flat();
 
                 // Build year summaries
                 const byYear = {};
@@ -192,6 +182,7 @@ export default function CompletedArchive() {
                 academic_year: year,
                 per_page: 20,
                 page: pg,
+                with_award: 1,
             };
             if (f.search)        params.search        = f.search;
             if (f.pi_search)     params.pi_search     = f.pi_search;
@@ -206,15 +197,7 @@ export default function CompletedArchive() {
             setLastPage(meta?.last_page ?? 1);
             setPage(pg);
 
-            const withAwards = await Promise.all(
-                raw.map(async p => {
-                    try {
-                        const r = await api.get(`/proposals/${p.id}/award`);
-                        return { ...p, award: r.data?.data ?? null };
-                    } catch { return { ...p, award: null }; }
-                })
-            );
-            setProposals(withAwards);
+            setProposals(raw.map(p => ({ ...p, award: p.award ?? null })));
         } catch { error('Failed to load proposals.'); }
         setLoadingProps(false);
     }, []);

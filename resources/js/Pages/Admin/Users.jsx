@@ -31,6 +31,7 @@ const ROLE_LABELS = {
     guest:              'Guest',
     staff:              'Staff',
     college_officer:    'College Officer',
+    college_rtt_manager: 'College RTT Manager',
     research_officer:   'Research Officer',
     community_officer:  'Community Officer',
     technology_officer: 'Technology Officer',
@@ -49,6 +50,7 @@ const ROLE_COLORS = {
     finance:            'bg-amber-50 text-amber-700 border border-amber-200',
     staff:              'bg-cyan-50 text-cyan-700 border border-cyan-200',
     college_officer:    'bg-teal-50 text-teal-700 border border-teal-200',
+    college_rtt_manager: 'bg-blue-50 text-blue-700 border border-blue-200',
     research_officer:   'bg-indigo-50 text-indigo-700 border border-indigo-200',
     community_officer:  'bg-pink-50 text-pink-700 border border-pink-200',
     technology_officer: 'bg-violet-50 text-violet-700 border border-violet-200',
@@ -65,7 +67,7 @@ const STATUS_CONFIG = {
 
 const ROLE_GROUPS = [
     { label: 'Administration', roles: ['admin', 'central_officer', 'super_admin'] },
-    { label: 'Research',       roles: ['staff', 'research_officer', 'community_officer', 'technology_officer', 'college_officer'] },
+    { label: 'Research',       roles: ['staff', 'research_officer', 'community_officer', 'technology_officer', 'college_officer', 'college_rtt_manager'] },
     { label: 'Operations',     roles: ['finance_officer', 'support_officer'] },
 ];
 
@@ -729,7 +731,7 @@ function BulkAssignRoleModal({ count, allRoles, onSave, onClose }) {
 
 // ─── Row action menu (three-dots dropdown) ────────────────────────────────────
 
-function RowMenu({ user, canEditUser, isSuperAdmin, canImpersonate, canManageUsers, currentUser, onEdit, onAssign, onImpersonate, onStatusChange, onDelete }) {
+function RowMenu({ user, canEditUser, isSuperAdmin, canEditRoles, canImpersonate, canManageUsers, currentUser, onEdit, onAssign, onImpersonate, onStatusChange, onDelete }) {
     const [open, setOpen] = useState(false);
     const [pos,  setPos]  = useState({ top: 0, right: 0 });
     const btnRef          = useRef(null);
@@ -757,7 +759,7 @@ function RowMenu({ user, canEditUser, isSuperAdmin, canImpersonate, canManageUse
     const items = [
         { label: 'View Profile',   icon: Eye,         show: true,               href: `/admin/users/${user.id}`,                                                       color: 'text-gray-600 hover:text-indigo-600 hover:bg-indigo-50' },
         { label: 'Edit',           icon: Pencil,      show: canEditUser,         onClick: () => { onEdit(user); close(); },                                              color: 'text-gray-600 hover:text-blue-600 hover:bg-blue-50' },
-        { label: 'Assign Roles',   icon: ShieldCheck, show: isSuperAdmin,        onClick: () => { onAssign(user); close(); },                                            color: 'text-gray-600 hover:text-indigo-600 hover:bg-indigo-50' },
+        { label: 'Assign Roles',   icon: ShieldCheck, show: canEditRoles,        onClick: () => { onAssign(user); close(); },                                            color: 'text-gray-600 hover:text-indigo-600 hover:bg-indigo-50' },
         { label: 'Login as User',  icon: LogIn,       show: canImpersonateThis,  onClick: () => { onImpersonate(user); close(); },                                       color: 'text-gray-600 hover:text-emerald-600 hover:bg-emerald-50' },
         { label: isActive ? 'Deactivate' : 'Activate', icon: isActive ? UserX : UserCheck, show: canManageThis,
           onClick: () => { onStatusChange({ user, newStatus: isActive ? 'inactive' : 'active' }); close(); },
@@ -1246,10 +1248,12 @@ function ImportModal({ onClose, onDone }) {
 export default function AdminUsers() {
     const { user: currentUser, hasRole, hasPermission, impersonate } = useAuth();
     const { success, error } = useToast();
+    const { accessScope } = useAuth();
+    // Super admin identity still guards super-admin accounts; everything else is permission-based.
     const isSuperAdmin      = hasRole('super_admin');
-    const isAdminRole       = hasRole('admin');
-    const isCollegeOfficer  = hasRole('college_officer');
-    const canManageUsers    = isSuperAdmin || isAdminRole;
+    const canEditRoles      = hasPermission('roles.manage');
+    const isCollegeOfficer  = accessScope.type === 'college';
+    const canManageUsers    = hasPermission('users.manage');
     const canCreateUser     = hasPermission('users.create');
     const canEditUser       = hasPermission('users.update');
     const canImportUsers    = hasPermission('users.import');
@@ -1280,7 +1284,7 @@ export default function AdminUsers() {
     // College officers are already scoped to their own college server-side —
     // pre-select it so the department-filter cascade below works for them too,
     // and there's no "All Colleges" picker implying they could see anyone else's.
-    const [collegeFilter, setCollegeFilter]       = useState(() => (hasRole('college_officer') ? currentUser?.college_id ?? '' : ''));
+    const [collegeFilter, setCollegeFilter]       = useState(() => (isCollegeOfficer ? currentUser?.college_id ?? '' : ''));
     const [departmentFilter, setDepartmentFilter] = useState('');
     const [genderFilter, setGenderFilter]         = useState('');
     const [regMethodFilter, setRegMethodFilter]   = useState('');
@@ -1847,6 +1851,7 @@ export default function AdminUsers() {
                                                     user={u}
                                                     canEditUser={canEditUser}
                                                     isSuperAdmin={isSuperAdmin}
+                                                    canEditRoles={canEditRoles}
                                                     canImpersonate={canImpersonate}
                                                     canManageUsers={canManageUsers}
                                                     currentUser={currentUser}
@@ -1887,6 +1892,7 @@ export default function AdminUsers() {
                                                             user={u}
                                                             canEditUser={canEditUser}
                                                             isSuperAdmin={isSuperAdmin}
+                                                            canEditRoles={canEditRoles}
                                                             canImpersonate={canImpersonate}
                                                             canManageUsers={canManageUsers}
                                                             currentUser={currentUser}

@@ -141,8 +141,8 @@ function DeptModal({ dept, colleges, lockedCollegeId, onSave, onClose }) {
 
 export default function Departments() {
     const { error, success } = useToast();
-    const { user: currentUser, hasRole } = useAuth();
-    const isCollegeOfficer = hasRole('college_officer');
+    const { user: currentUser, hasPermission, accessScope } = useAuth();
+    const isCollegeOfficer = accessScope.type === 'college';
     const [departments, setDepartments] = useState([]);
     const [colleges, setColleges]       = useState([]);
     const [loading, setLoading]         = useState(true);
@@ -347,7 +347,7 @@ export default function Departments() {
                                                         >
                                                             <Pencil size={13} />
                                                         </button>
-                                                        {hasRole('super_admin') && (
+                                                        {hasPermission('colleges.delete') && (
                                                             <button
                                                                 onClick={() => setDeleteConfirm(d)}
                                                                 className="p-1.5 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition"

@@ -11,9 +11,6 @@ use Illuminate\Http\Response;
 
 class ReviewCertificateController extends Controller
 {
-    /** Who releases a year's certificates and revokes them. */
-    private const MANAGER_ROLES = ['super_admin', 'admin', 'central_officer'];
-
     public function __construct(private ReviewCertificateService $certificates) {}
 
     /** The signed-in reviewer's years: completed reviews, release status, eligibility. */
@@ -39,7 +36,7 @@ class ReviewCertificateController extends Controller
     /** Central office: one academic year's reviewers, eligibility, and issued certificates. */
     public function overview(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::MANAGER_ROLES)) {
+        if (! $request->user()?->can('review_certificates.manage')) {
             return $this->forbidden();
         }
 
@@ -50,7 +47,7 @@ class ReviewCertificateController extends Controller
 
     public function release(Request $request): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::MANAGER_ROLES)) {
+        if (! $request->user()?->can('review_certificates.manage')) {
             return $this->forbidden();
         }
 
@@ -70,7 +67,7 @@ class ReviewCertificateController extends Controller
 
     public function revoke(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::MANAGER_ROLES)) {
+        if (! $request->user()?->can('review_certificates.manage')) {
             return $this->forbidden();
         }
 
@@ -88,7 +85,7 @@ class ReviewCertificateController extends Controller
 
     public function reinstate(Request $request, string $id): JsonResponse
     {
-        if (! $request->user()?->hasAnyRole(self::MANAGER_ROLES)) {
+        if (! $request->user()?->can('review_certificates.manage')) {
             return $this->forbidden();
         }
 

@@ -320,8 +320,8 @@ function ProposalMilestonePanel({ proposal, canEdit }) {
 }
 
 export default function BudgetMilestones() {
-    const { hasAnyRole } = useAuth()
-    const canEdit = hasAnyRole(['super_admin', 'admin', 'central_officer', 'finance_officer'])
+    const { hasPermission } = useAuth()
+    const canEdit = hasPermission('budget_milestones.update')
     const { error } = useToast()
 
     const [proposals, setProposals] = useState([])

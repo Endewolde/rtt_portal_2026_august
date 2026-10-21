@@ -38,22 +38,33 @@ return [
     [
         'slug' => 'roles-permissions', 'category' => $c, 'roles' => R::SUPER,
         'title' => 'Roles, permissions and features',
-        'summary' => 'Control what each role can do, and switch whole features on or off.',
-        'keywords' => 'roles permissions access control features modules enable disable feature management hide menu',
+        'summary' => 'Create roles, choose exactly what each can do and which records it covers, and switch whole features on or off.',
+        'keywords' => 'roles permissions access control scope data scope college category custom role create role copy role clone features modules enable disable feature management hide menu',
         'questions' => [
-            'How do I change what a role can do?', 'How do I create a new role?', 'How do I turn a feature off?',
+            'How do I change what a role can do?', 'How do I create a new role?', 'How do I copy a role?', 'How do I turn a feature off?',
             'Why can\'t a user see a menu item?', 'Which roles exist?', 'What is the difference between a role and a permission?',
+            'What is a data scope?', 'How do I limit a role to one college?', 'How do I limit a role to one category?',
+            'Does Refresh undo my changes?',
         ],
         'body' => "## The pieces\n"
-            ."- A **permission** is one action (e.g. view reports).\n"
-            ."- A **role** is a bundle of permissions given to users (e.g. college officer).\n"
+            ."- A **permission** is one thing a person may do, such as *Decide funding (central evaluation)* or *Review progress reports*. Every page, menu item and action in the platform checks one.\n"
+            ."- A **data scope** decides which records a role's permissions apply to: **all colleges and categories**, **own college** (every category), **one category** (every college), or **own records only**.\n"
+            ."- A **role** is a set of permissions plus a data scope, given to users.\n"
             ."- **Feature Management** switches whole modules or individual features on or off for everyone.\n\n"
-            ."## Main roles\n"
-            ."staff (researchers and internal reviewers), external reviewer, college officer, the category directors (research, community, technology), central officer, finance officer, proposal archivist, admin and super admin.\n\n"
+            ."## Create a role\n"
+            ."1. Open **Roles & Permissions** and choose **New role**.\n"
+            ."2. Name it, pick its data scope (and category, for a category scope) and optionally start from an existing role's permissions.\n"
+            ."3. Tick the permissions it needs — they are grouped (Proposals, Review & evaluation, Decisions & funding, Monitoring, Finance, Reports, Events, Administration) with a short explanation each. Use **Select all** on a group, search, or **Granted only** to check your work.\n"
+            ."4. Choose **Save changes**, then assign the role on the **Users** page. For a college scope, make sure the user's profile has their college.\n\n"
+            ."**Copy** on any role creates a new role with the same permissions and scope — the quickest way to make a variation of a built-in role.\n\n"
+            ."## Built-in roles\n"
+            ."Built-in roles (staff, external reviewer, college officer, College RTT Manager, the category directors, central officer, finance and support officers, proposal archivist, admin and super admin) can be edited but not deleted. Super Admin always holds every permission.\n\n"
             ."## If someone can't see a page\n"
-            ."Check their **roles**, that the role has the **permission**, and that the **feature** is switched on.\n\n"
+            ."Check their **roles**, that a role has the **permission**, that its **scope** covers the record, and that the **feature** is switched on.\n\n"
             ."## Good to know\n"
-            .'Changes apply immediately — removing a permission hides the related screens at once.',
+            ."- Changes apply immediately — removing a permission hides the related screens and blocks the action at once.\n"
+            ."- With several roles, a user gets every permission from all of them and the widest scope.\n"
+            .'- **Check for new permissions** only adds permissions introduced by updates. It never removes a permission or undoes your changes.',
         'page_paths' => ['/admin/roles', '/admin/permissions', '/admin/features'],
     ],
     [

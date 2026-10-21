@@ -445,15 +445,12 @@ function ProposalCallModal({ initial, defaultAcademicYear, onClose, onSaved }) {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function ProposalCallsAdmin() {
-    const { hasAnyRole, hasPermission } = useAuth();
+    const { hasPermission, accessScope } = useAuth();
     const toast                  = useToast();
     const { confirm, Dialog }    = useConfirm();
 
     // Roles that should see ALL calls (admin endpoint), not just public active ones
-    const canSeeAll = hasAnyRole([
-        'super_admin', 'admin', 'central_officer',
-        'research_officer', 'community_officer', 'technology_officer', 'college_officer',
-    ]);
+    const canSeeAll = accessScope.type !== 'own' && hasPermission('proposal_calls.view_any');
     // Roles that can create, edit, activate, close, delete calls
     const canCreate = hasPermission('proposal_calls.create');
     const canManage = canCreate;

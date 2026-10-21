@@ -126,8 +126,8 @@ function FilterControl({ subject, filterKey, value, onChange, colleges, lockedCo
 
 export default function ReportBuilder() {
     const { error: toastError } = useToast();
-    const { user: currentUser, hasRole } = useAuth();
-    const isCollegeOfficer = hasRole('college_officer');
+    const { user: currentUser, accessScope } = useAuth();
+    const isCollegeOfficer = accessScope?.type === 'college';
     const [options,      setOptions]      = useState(null);
     const [optionsError, setOptionsError] = useState(null);
     const [subject,      setSubject]      = useState('');

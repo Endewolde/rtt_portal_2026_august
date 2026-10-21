@@ -655,13 +655,126 @@ test('after a report is resolved as approval stands, the officer can report the 
         ->and(ProposalApprovalReport::where('proposal_id', $proposal->id)->where('status', 'open')->count())->toBe(1);
 });
 
-test('report again is not offered once the proposal has moved past blind review', function () {
+test('a report leaves the Approval Reports page once its proposal reaches open defence or later', function () {
     [$proposal, $college] = par_makeProposal('blind_review_passed');
     [$officer, $report] = par_report($proposal, $college);
     par_resolve($report, 'approval_stands')->assertOk();
+    $central = User::role('central_officer')->first();
 
-    DB::table('proposals')->where('id', $proposal->id)->update(['status' => 'under_open_defence']);
+    $this->actingAs($officer, 'sanctum')->getJson('/api/v1/approval-reports?status=reviewed')->assertJsonCount(1, 'data.data');
 
-    $this->actingAs($officer, 'sanctum')->getJson('/api/v1/approval-reports?status=reviewed')
-        ->assertJsonPath('data.data.0.can_report_again', false);
+    foreach (['under_open_defence', 'accepted', 'funded'] as $status) {
+        DB::table('proposals')->where('id', $proposal->id)->update(['status' => $status]);
+
+        $this->actingAs($officer, 'sanctum')->getJson('/api/v1/approval-reports?status=reviewed')->assertJsonCount(0, 'data.data');
+        $this->actingAs($central, 'sanctum')->getJson('/api/v1/approval-reports?status=reviewed')->assertJsonCount(0, 'data.data');
+    }
+
+    // Still on the proposal's own page as history.
+    $this->actingAs($central, 'sanctum')->getJson("/api/v1/proposals/{$proposal->id}/approval-reports")->assertJsonCount(1, 'data');
+});
+
+// ─── Already ongoing: moved straight to Ongoing Proposals ─────────────────────
+
+test('a college officer can report a proposal as already ongoing', function () {
+    [$proposal, $college] = par_makeProposal('under_blind_review');
+    $officer = User::factory()->create(['college_id' => $college->id]);
+    $officer->assignRole('college_officer');
+
+    $this->actingAs($officer, 'sanctum')
+        ->postJson("/api/v1/proposals/{$proposal->id}/approval-reports", ['issue_type' => 'already_ongoing'])
+        ->assertCreated()
+        ->assertJsonPath('data.issue_type', 'already_ongoing');
+});
+
+test('the director moves an already-ongoing proposal to Ongoing Proposals with its award', function () {
+    [$proposal, $college] = par_makeProposal('under_blind_review');
+    $outstanding = par_blindAssignment($proposal, 0, 'pending');
+    [$officer, $report] = par_report($proposal, $college);
+    $director = User::factory()->create();
+    $director->assignRole('research_officer');
+
+    $this->actingAs($director, 'sanctum')
+        ->postJson("/api/v1/approval-reports/{$report->id}/resolve", [
+            'outcome' => 'moved_to_ongoing',
+            'resolution_notes' => 'Funded in 2025 and still running.',
+            'awarded_amount' => 120000,
+            'grant_reference' => 'RTT-2025-014',
+            'approved_at' => '2025-03-01',
+        ])
+        ->assertOk()
+        ->assertJsonPath('message', 'Moved to Ongoing Proposals. The project is now tracked as funded.');
+
+    $proposal->refresh();
+    expect($proposal->status)->toBe('funded')
+        ->and($proposal->award->grant_reference)->toBe('RTT-2025-014')
+        ->and((float) $proposal->award->awarded_amount)->toBe(120000.0)
+        ->and($outstanding->fresh()->status)->toBe('cancelled')
+        ->and($report->fresh()->outcome)->toBe('moved_to_ongoing')
+        ->and($report->fresh()->status)->toBe('reviewed');
+
+    // Recorded as a legacy grant, so it stays out of review-phase statistics.
+    $log = DB::table('workflow_logs')->where('proposal_id', $proposal->id)->where('to_stage', 'funded')->first();
+    expect($log->action)->toBe('grant_legacy')
+        ->and(json_decode($log->metadata, true)['approval_report_id'])->toBe($report->id);
+
+    expect(DB::table('notifications')->where('notifiable_id', $officer->id)->where('type', 'approval_report_resolved')->exists())->toBeTrue()
+        ->and(DB::table('notifications')->where('notifiable_id', $proposal->pi_user_id)->where('type', 'project_moved_to_ongoing')->exists())->toBeTrue();
+
+    // It now shows on Ongoing Proposals and has left the Approval Reports page.
+    $ongoingIds = collect($this->actingAs($director, 'sanctum')->getJson('/api/v1/ongoing-proposals')->assertOk()->json('data.proposals.data'))->pluck('id');
+    expect($ongoingIds)->toContain($proposal->id);
+    expect($this->actingAs($director, 'sanctum')->getJson('/api/v1/approval-reports')->json('data.data'))->toBeEmpty();
+});
+
+test('moving to ongoing needs the awarded amount', function () {
+    [$proposal, $college] = par_makeProposal('under_blind_review');
+    [, $report] = par_report($proposal, $college);
+
+    par_resolve($report, 'moved_to_ongoing')
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('awarded_amount');
+
+    expect($proposal->fresh()->status)->toBe('validated');
+});
+
+test('a college officer cannot move a proposal to ongoing', function () {
+    [$proposal, $college] = par_makeProposal('under_blind_review');
+    [$officer, $report] = par_report($proposal, $college);
+
+    $this->actingAs($officer, 'sanctum')
+        ->postJson("/api/v1/approval-reports/{$report->id}/resolve", [
+            'outcome' => 'moved_to_ongoing', 'resolution_notes' => 'It is already running.', 'awarded_amount' => 1000,
+        ])
+        ->assertForbidden();
+});
+
+test('the reporting officer sees which of their reports they can still cancel', function () {
+    [$proposal, $college] = par_makeProposal('under_blind_review');
+    [$officer, $report] = par_report($proposal, $college);
+
+    $this->actingAs($officer, 'sanctum')->getJson('/api/v1/approval-reports?status=open')
+        ->assertOk()
+        ->assertJsonPath('data.data.0.id', $report->id)
+        ->assertJsonPath('data.data.0.can_cancel', true);
+
+    // Another officer of the same college can't cancel it, and once a director acts it can't be cancelled.
+    $central = User::role('central_officer')->first();
+    expect($this->actingAs($central, 'sanctum')->getJson('/api/v1/approval-reports?status=open')->json('data.data.0.can_cancel'))->toBeFalse();
+
+    DB::table('proposals')->where('id', $proposal->id)->update(['status' => 'under_blind_review']);
+    expect($this->actingAs($officer, 'sanctum')->getJson('/api/v1/approval-reports?status=open')->json('data.data.0.can_cancel'))->toBeFalse();
+});
+
+test('the reporting officer loads the open report on the proposal page, with themselves as reporter', function () {
+    [$proposal, $college] = par_makeProposal('under_blind_review');
+    [$officer, $report] = par_report($proposal, $college);
+
+    $this->actingAs($officer, 'sanctum')->getJson("/api/v1/proposals/{$proposal->id}/approval-reports")
+        ->assertOk()
+        ->assertJsonPath('data.0.id', $report->id)
+        ->assertJsonPath('data.0.status', 'open')
+        ->assertJsonPath('data.0.reported_by.id', $officer->id);
+
+    expect($proposal->fresh()->status)->toBe('validated');
 });

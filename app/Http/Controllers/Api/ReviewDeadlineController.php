@@ -21,8 +21,6 @@ use Illuminate\Support\Facades\DB;
  */
 class ReviewDeadlineController extends Controller
 {
-    private const ALLOWED_ROLES = ['super_admin', 'admin', 'central_officer', 'college_officer'];
-
     private const MAX_BULK_IDS = 100;
 
     private const SORTABLE_COLUMNS = [
@@ -37,7 +35,7 @@ class ReviewDeadlineController extends Controller
     {
         $user = $request->user();
 
-        if (! $user?->hasAnyRole(self::ALLOWED_ROLES)) {
+        if (! $user?->can('review_deadlines.manage')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
         }
 
@@ -96,7 +94,7 @@ class ReviewDeadlineController extends Controller
     {
         $user = $request->user();
 
-        if (! $user?->hasAnyRole(self::ALLOWED_ROLES)) {
+        if (! $user?->can('review_deadlines.manage')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
         }
 
@@ -128,7 +126,7 @@ class ReviewDeadlineController extends Controller
     {
         $user = $request->user();
 
-        if (! $user?->hasAnyRole(self::ALLOWED_ROLES)) {
+        if (! $user?->can('review_deadlines.manage')) {
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
         }
 

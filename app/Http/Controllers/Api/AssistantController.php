@@ -14,8 +14,6 @@ use Illuminate\Support\Str;
 /** The "Ask" assistant and the help centre, for everyone signed in; article editing for admins. */
 class AssistantController extends Controller
 {
-    private const ADMIN_ROLES = ['super_admin', 'admin'];
-
     public function __construct(private AssistantService $assistant) {}
 
     public function ask(Request $request): JsonResponse
@@ -66,21 +64,21 @@ class AssistantController extends Controller
 
     public function adminIndex(Request $request): JsonResponse
     {
-        abort_unless($request->user()->hasAnyRole(self::ADMIN_ROLES), 403);
+        abort_unless($request->user()->can('help.manage'), 403);
 
         return $this->ok(HelpArticle::orderBy('category')->orderBy('sort_order')->get());
     }
 
     public function store(Request $request): JsonResponse
     {
-        abort_unless($request->user()->hasAnyRole(self::ADMIN_ROLES), 403);
+        abort_unless($request->user()->can('help.manage'), 403);
 
         return $this->ok(HelpArticle::create($this->validated($request)), 'Article created.');
     }
 
     public function update(Request $request, string $id): JsonResponse
     {
-        abort_unless($request->user()->hasAnyRole(self::ADMIN_ROLES), 403);
+        abort_unless($request->user()->can('help.manage'), 403);
         $article = HelpArticle::findOrFail($id);
         $article->update($this->validated($request, $article));
 
@@ -89,7 +87,7 @@ class AssistantController extends Controller
 
     public function destroy(Request $request, string $id): JsonResponse
     {
-        abort_unless($request->user()->hasAnyRole(self::ADMIN_ROLES), 403);
+        abort_unless($request->user()->can('help.manage'), 403);
         HelpArticle::findOrFail($id)->delete();
 
         return $this->ok(null, 'Article deleted.');
@@ -98,7 +96,7 @@ class AssistantController extends Controller
     /** What people ask: most common questions, ones with no answer, and article usefulness. */
     public function insights(Request $request): JsonResponse
     {
-        abort_unless($request->user()->hasAnyRole(self::ADMIN_ROLES), 403);
+        abort_unless($request->user()->can('help.manage'), 403);
         $since = now()->subDays(90);
 
         $base = AssistantQuery::where('created_at', '>=', $since);

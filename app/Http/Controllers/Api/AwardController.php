@@ -32,6 +32,11 @@ class AwardController extends Controller
 
         $proposal = Proposal::findOrFail($id);
 
+        if (($request->_college_scope && $proposal->college_id !== $request->_college_scope)
+            || ($request->_category_scope && $proposal->category !== $request->_category_scope)) {
+            return response()->json(['data' => null, 'message' => 'This proposal is outside your college or category.'], 403);
+        }
+
         // If award already exists, update it instead of failing
         $existing = Award::where('proposal_id', $id)->first();
         if ($existing) {
@@ -114,7 +119,12 @@ class AwardController extends Controller
             'approval_notes' => 'nullable|string',
         ]);
 
-        $award = Award::where('proposal_id', $id)->firstOrFail();
+        $award = Award::with('proposal:id,college_id,category')->where('proposal_id', $id)->firstOrFail();
+
+        if (($request->_college_scope && $award->proposal?->college_id !== $request->_college_scope)
+            || ($request->_category_scope && $award->proposal?->category !== $request->_category_scope)) {
+            return response()->json(['data' => null, 'message' => 'This proposal is outside your college or category.'], 403);
+        }
 
         $updates = [];
         if ($request->has('awarded_amount')) {
@@ -153,25 +163,13 @@ class AwardController extends Controller
         // category-officer roles below, so $allowedCategories stayed null ("all")
         // and they could bulk-export every awarded proposal's PI/co-PI names,
         // emails, and amounts. Same officer set approveLetters() already uses.
-        if (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'college_officer',
-            'research_officer', 'community_officer', 'technology_officer', 'support_officer'])) {
+        if (! $user->can('awards.export')) {
             abort(403, 'Unauthorized.');
         }
 
-        $roleCategories = [
-            'research_officer' => 'research',
-            'community_officer' => 'community_engagement',
-            'technology_officer' => 'technology_transfer',
-        ];
-
-        // Determine which categories this user may export
-        $allowedCategories = null; // null = all
-        foreach ($roleCategories as $role => $cat) {
-            if ($user->hasRole($role)) {
-                $allowedCategories = [$cat];
-                break;
-            }
-        }
+        // Category-scoped roles export their own categories only
+        $scope = $user->accessScope();
+        $allowedCategories = $scope->isCategory() ? $scope->categories : null; // null = all
 
         // Admin/super_admin/central_officer can optionally filter by a specific category
         $requestedCategory = $request->query('category');
@@ -197,6 +195,11 @@ class AwardController extends Controller
             $query->whereIn('category', $allowedCategories);
         } elseif ($requestedCategory) {
             $query->where('category', $requestedCategory);
+        }
+
+        // College officers and RTT managers export their own college only
+        if ($request->_college_scope) {
+            $query->where('college_id', $request->_college_scope);
         }
 
         if ($year = $request->query('year')) {
@@ -280,8 +283,7 @@ class AwardController extends Controller
     {
         $user = $request->user();
 
-        if (! $user->hasAnyRole(['super_admin', 'admin', 'central_officer', 'college_officer',
-            'research_officer', 'community_officer', 'technology_officer', 'support_officer'])) {
+        if (! $user->can('awards.letters')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 

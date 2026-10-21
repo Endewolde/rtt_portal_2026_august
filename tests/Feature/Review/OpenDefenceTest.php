@@ -174,7 +174,7 @@ test('combined score equals blind_score plus defence_score', function () {
     $session = DefenceSession::create([
         'proposal_id' => $proposal->id, 'scheduled_date' => now()->toDateString(),
         'scheduled_time' => '10:00:00', 'venue' => 'Hall', 'status' => 'scheduled',
-        'scheduled_by' => $central->id,
+        'scheduled_by' => $central->id, 'attendance' => 'held',
     ]);
 
     $service = app(DefenceSessionService::class);
@@ -206,7 +206,7 @@ test('proposal accepted when combined score >= combined_threshold', function () 
     $session = DefenceSession::create([
         'proposal_id' => $proposal->id, 'scheduled_date' => now()->toDateString(),
         'scheduled_time' => '10:00:00', 'venue' => 'Hall', 'status' => 'scheduled',
-        'scheduled_by' => $central->id,
+        'scheduled_by' => $central->id, 'attendance' => 'held',
     ]);
 
     $result = app(DefenceSessionService::class)->processDefenceResult($session, $central);
@@ -235,7 +235,7 @@ test('proposal rejected when combined score < combined_threshold', function () {
     $session = DefenceSession::create([
         'proposal_id' => $proposal->id, 'scheduled_date' => now()->toDateString(),
         'scheduled_time' => '10:00:00', 'venue' => 'Hall', 'status' => 'scheduled',
-        'scheduled_by' => $central->id,
+        'scheduled_by' => $central->id, 'attendance' => 'held',
     ]);
 
     $result = app(DefenceSessionService::class)->processDefenceResult($session, $central);

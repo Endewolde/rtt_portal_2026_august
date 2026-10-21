@@ -709,8 +709,8 @@ function ActiveSessionsSection() {
 
 function AcademicInfoForm({ user, onUpdated }) {
     const { success, error } = useToast()
-    const { hasAnyRole } = useAuth()
-    const canEditCollegeDept = hasAnyRole(['admin', 'super_admin'])
+    const { hasPermission } = useAuth()
+    const canEditCollegeDept = hasPermission('users.update')
     const [collegeId, setCollegeId]       = useState(user?.college_id ?? '')
     const [departmentId, setDepartmentId] = useState(user?.department_id ?? '')
     const [expertiseTags, setExpertiseTags] = useState(user?.expertise ?? [])
