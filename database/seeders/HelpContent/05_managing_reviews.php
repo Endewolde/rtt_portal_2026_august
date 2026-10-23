@@ -75,16 +75,38 @@ return [
         'questions' => [
             'Why is this proposal held after blind review?', 'What does reviewer disagreement mean?', 'How do I resolve a disagreement?',
             'How big a difference counts as disagreement?', 'Should I add another reviewer?',
+            'How do I get a second opinion?', 'What happens when the third reviewer submits?', 'Why was a score set aside?',
         ],
         'body' => "Normally the system passes or rejects a proposal automatically once all blind reviews are in. If the reviewers **disagree strongly**, it's **held** instead.\n\n"
             ."## When it's held\n"
             ."- reviewers' scores differ by more than the set share of the maximum (by default **25%**), or\n"
             ."- some reviewers score it above the pass mark and others below.\n\n"
-            ."## What to do\n"
-            ."1. Open the proposal and read every review and comment.\n"
-            ."2. Decide: **pass**, **fail**, or **add another reviewer** for a further opinion.\n"
-            ."3. Add a note explaining your decision — it's recorded.",
+            ."## Option 1 — get a second opinion\n"
+            ."1. On the proposal, click **Get a second opinion**.\n"
+            ."2. The system lists reviewers whose expertise matches the proposal, best first — leaving out everyone already reviewing it, and flagging possible conflicts and full workloads. External reviewers are marked with where they work.\n"
+            ."3. Choose one, set the due date and click **Invite**.\n\n"
+            ."When the second opinion is in, the system decides automatically using **the two closest scores**; the score furthest from them is **set aside** — kept on record and shown on the Reviews tab, but not counted in the blind review score or the combined score later. Only one second opinion can be pending at a time.\n\n"
+            ."## Option 2 — decide with the current scores\n"
+            ."Read every review, then choose **Decide with current scores** and add a note explaining why — it's recorded.",
         'page_paths' => ['/admin/blind-review'],
+    ],
+    [
+        'slug' => 'reviewer-recruitment', 'category' => $c, 'roles' => [...R::DIRECTORS, ...R::ADMIN],
+        'title' => 'Recruiting outside reviewers',
+        'summary' => 'Experts from other universities and institutions apply online; you approve them into the reviewer pool.',
+        'keywords' => 'recruit external reviewer outside expert apply application approve reviewer pool other university ministry cv',
+        'questions' => [
+            'How do outside experts become reviewers?', 'Where are reviewer applications?', 'How do I approve a reviewer application?',
+            'How does an external reviewer sign in?', 'Can I share the reviewer application form?',
+        ],
+        'body' => "External reviewers widen the pool beyond university staff and reduce conflicts of interest.\n\n"
+            ."## How it works\n"
+            ."1. Experts apply on the public site at **/reviewers/apply** (linked as **Become a Reviewer** in the site footer) with their organization, qualification, expertise and a PDF CV. Share the link with partner institutions.\n"
+            ."2. You're notified. Open **Reviewer Applications**, read the details and download the CV.\n"
+            ."3. **Approve** — you can tidy the expertise list used for matching — or **decline** with a reason the applicant is told.\n\n"
+            ."## After approval\n"
+            .'An external reviewer account is created and the applicant is emailed a link to set their password (valid 7 days; afterwards they use *Forgot password*). They appear in reviewer search and suggestions, marked **External** with their organization, and accept the confidentiality agreement before their first review.',
+        'page_paths' => ['/admin/reviewer-applications'], 'action_label' => 'Open reviewer applications', 'action_url' => '/admin/reviewer-applications',
     ],
     [
         'slug' => 'schedule-defence', 'category' => $c, 'roles' => R::COLLEGE,

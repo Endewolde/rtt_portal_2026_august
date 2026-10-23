@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { translate as tr } from '../lib/i18n'
 import { Award, Download, ShieldCheck, ShieldX, Clock, CheckCircle2 } from 'lucide-react';
 import { get } from '../lib/api';
 import { downloadFile } from '../lib/download';
@@ -6,6 +7,13 @@ import { useToast } from './Toast';
 
 /** Right-hand side of a year row: download, or why it isn't available yet. */
 function YearStatus({ y, downloading, onDownload }) {
+    if (y.withdrawn) {
+        return (
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
+                <ShieldX size={13} /> {tr('Withdrawn by the central office for now')}
+            </span>
+        );
+    }
     if (y.released && y.revoked) {
         return (
             <span className="inline-flex max-w-xs items-start gap-1.5 text-xs text-red-600" title={y.revocation_reason ?? ''}>
@@ -17,7 +25,7 @@ function YearStatus({ y, downloading, onDownload }) {
     if (y.released && y.code) {
         return (
             <>
-                <span className="inline-flex items-center gap-1 font-mono text-[11px] text-gray-400" title="Certificate number — anyone can verify it">
+                <span className="inline-flex items-center gap-1 font-mono text-[11px] text-gray-400" title={tr("Certificate number — anyone can verify it")}>
                     <ShieldCheck size={12} /> {y.code}
                 </span>
                 <button
@@ -31,12 +39,12 @@ function YearStatus({ y, downloading, onDownload }) {
         );
     }
     if (y.released) {
-        return <span className="text-xs text-gray-400">Not issued — {y.min_reviews} qualifying reviews were required</span>;
+        return <span className="text-xs text-gray-400">{tr("Not issued — :min_reviews qualifying reviews were required", { min_reviews: y.min_reviews })}</span>;
     }
     if (y.eligible) {
         return (
             <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-                <CheckCircle2 size={13} /> You qualify · released after the year's reviews close
+                <CheckCircle2 size={13} /> {tr("You qualify · released after the year's reviews close")}
             </span>
         );
     }
@@ -78,15 +86,15 @@ export default function ReviewCertificatesCard() {
             <div className="flex items-center gap-3 px-5 py-4">
                 <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-700"><Award size={20} /></span>
                 <div>
-                    <p className="text-sm font-semibold text-gray-900">Certificates of review service</p>
-                    <p className="text-xs text-gray-500">Thank you for reviewing. The central office releases a signed, verifiable certificate for each academic year once its reviews are finished.</p>
+                    <p className="text-sm font-semibold text-gray-900">{tr("Certificates of review service")}</p>
+                    <p className="text-xs text-gray-500">{tr("Thank you for reviewing. The central office releases a signed, verifiable certificate for each academic year once its reviews are finished.")}</p>
                 </div>
             </div>
             <ul className="divide-y divide-amber-100 border-t border-amber-100 bg-white/60">
                 {years.map((y) => (
                     <li key={y.academic_year} className="flex flex-wrap items-center gap-3 px-5 py-3">
                         <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-gray-900">{y.academic_year} academic year</p>
+                            <p className="text-sm font-medium text-gray-900">{tr(":academic_year academic year", { academic_year: y.academic_year })}</p>
                             <p className="text-xs text-gray-500">
                                 {y.total} review{y.total === 1 ? '' : 's'} completed
                                 {y.blind_reviews > 0 && ` · ${y.blind_reviews} blind`}

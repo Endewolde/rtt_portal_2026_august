@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { createElement, Fragment, useCallback, useEffect, useState } from 'react';
 import am from './translations/am';
 
 /**
@@ -50,6 +50,18 @@ export function translate(text, vars = {}, lang = current) {
     if (typeof text !== 'string') return text;
     const found = DICTIONARIES[lang]?.[text] ?? text;
     return Object.entries(vars).reduce((s, [k, v]) => s.replaceAll(`:${k}`, String(v)), found);
+}
+
+/**
+ * A translated sentence with bold parts kept: the text marks them as <b>…</b>, so a
+ * translation can move them with the words. `<Trans text="Switch to the <b>As Co-PI</b> tab." />`
+ */
+export function Trans({ text, vars = {}, boldClassName }) {
+    const parts = translate(text, vars).split(/(<b>.*?<\/b>)/g).filter(Boolean);
+    return createElement(Fragment, null, ...parts.map((part, i) => {
+        const bold = part.match(/^<b>(.*)<\/b>$/);
+        return bold ? createElement('strong', { key: i, className: boldClassName }, bold[1]) : part;
+    }));
 }
 
 export function useT() {

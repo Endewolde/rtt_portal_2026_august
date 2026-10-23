@@ -471,7 +471,7 @@ export default function AdminThematicAreas() {
                 </div>
 
                 {/* Stats */}
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                     {[
                         { label: 'Total Areas',  value: areas.length,           color: 'bg-indigo-500' },
                         { label: 'Active',        value: activeCount,            color: 'bg-emerald-500' },
@@ -524,28 +524,30 @@ export default function AdminThematicAreas() {
                             )}
                         </div>
                     ) : (
-                        <table className="min-w-full">
-                            <thead>
-                                <tr className="bg-linear-to-r from-indigo-600 to-indigo-700">
-                                    {['Area', 'Description', 'Sub-topics', 'Sort', 'Status', ''].map(h => (
-                                        <th key={h} className="px-5 py-3.5 text-left text-xs font-semibold text-indigo-100 uppercase tracking-wide">{h}</th>
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full">
+                                <thead>
+                                    <tr className="bg-linear-to-r from-indigo-600 to-indigo-700">
+                                        {['Area', 'Description', 'Sub-topics', 'Sort', 'Status', ''].map(h => (
+                                            <th key={h} className="px-5 py-3.5 text-left text-xs font-semibold text-indigo-100 uppercase tracking-wide">{h}</th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-50">
+                                    {filtered.map((area, idx) => (
+                                        <AreaRow
+                                            key={area.id}
+                                            area={area}
+                                            idx={idx}
+                                            isSuperAdmin={isSuperAdmin}
+                                            onEdit={openEdit}
+                                            onDelete={setDeleteConfirm}
+                                            onToggle={handleToggleActive}
+                                        />
                                     ))}
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-50">
-                                {filtered.map((area, idx) => (
-                                    <AreaRow
-                                        key={area.id}
-                                        area={area}
-                                        idx={idx}
-                                        isSuperAdmin={isSuperAdmin}
-                                        onEdit={openEdit}
-                                        onDelete={setDeleteConfirm}
-                                        onToggle={handleToggleActive}
-                                    />
-                                ))}
-                            </tbody>
-                        </table>
+                                </tbody>
+                            </table>
+                        </div>
                     )}
                 </div>
 

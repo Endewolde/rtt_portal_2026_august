@@ -166,3 +166,106 @@ test('deciding is refused when nothing is on hold', function () {
         ->postJson("/api/v1/proposals/{$this->proposal->id}/blind-review/decide-disagreement", ['notes' => 'Nothing to decide here at all.'])
         ->assertStatus(422);
 });
+
+// ─── Second opinion ──────────────────────────────────────────────────────────
+
+/** A reviewer with expertise, optionally external, for the suggestions list. */
+function rd_expert(array $expertise, bool $external = false, array $attrs = []): User
+{
+    $user = User::factory()->create(['expertise' => $expertise, 'status' => 'active'] + $attrs);
+    $user->assignRole($external ? 'external_reviewer' : 'staff');
+
+    return $user;
+}
+
+test('suggested second-opinion reviewers match the proposal and leave out the current reviewers', function () {
+    $this->proposal->update(['keywords' => 'soil fertility, maize', 'title' => 'Soil fertility for maize']);
+    $first = rd_review($this, 70);
+    rd_review($this, 30);
+    rd_process($this);
+    $first->reviewer->update(['expertise' => ['Soil fertility']]);
+    $first->reviewer->assignRole('staff');
+
+    $expert = rd_expert(['Soil fertility', 'Agronomy'], external: true, attrs: ['affiliation' => 'Addis Ababa University']);
+    rd_expert(['Medieval history']);
+
+    $ids = collect($this->actingAs($this->central, 'sanctum')->getJson("/api/v1/proposals/{$this->proposal->id}/second-opinion/suggestions")
+        ->assertOk()->json('data'));
+
+    expect($ids->pluck('id')->all())->toBe([$expert->id])
+        ->and($ids->first())->toMatchArray(['is_external' => true, 'affiliation' => 'Addis Ababa University']);
+});
+
+test('a reviewer added while reviewers disagree becomes the second opinion, and the two closest scores decide', function () {
+    rd_review($this, 70);           // A
+    $low = rd_review($this, 20);    // B — the outlier
+    rd_process($this);
+
+    $expert = rd_expert(['Soil']);
+    $this->actingAs($this->central, 'sanctum')->postJson("/api/v1/proposals/{$this->proposal->id}/review/add-reviewer", [
+        'reviewer_id' => $expert->id, 'due_date' => now()->addWeek()->toDateString(),
+    ])->assertSuccessful();
+
+    $second = ReviewAssignment::where('reviewer_id', $expert->id)->first();
+    expect($second->is_second_opinion)->toBeTrue()
+        ->and($this->proposal->fresh()->review_disagreement['second_opinion']['reviewer'])->toBe($expert->name);
+
+    // The second opinion agrees with A: A and C count, B is set aside.
+    ReviewScore::create(['review_assignment_id' => $second->id, 'evaluation_question_id' => $this->question->id, 'score' => 64]);
+    $second->update(['status' => 'submitted', 'submitted_at' => now()]);
+    $proposal = rd_process($this);
+
+    expect($proposal->status)->toBe('blind_review_passed')
+        ->and($low->fresh()->set_aside_at)->not->toBeNull()
+        ->and($second->fresh()->set_aside_at)->toBeNull()
+        ->and($proposal->review_disagreement_resolved_at)->not->toBeNull()
+        ->and($proposal->review_disagreement['settlement']['set_aside'][0]['label'])->toBe('Reviewer B');
+
+    $log = DB::table('workflow_logs')->where('proposal_id', $proposal->id)->where('action', 'pass_blind_review')->first();
+    expect($log->notes)->toContain('Average score: 67/80')
+        ->and($log->notes)->toContain('Decided with a second opinion')
+        ->and(json_decode($log->metadata, true)['second_opinion'])->toBeTrue();
+
+    // The blind score everywhere else (combined score, results) leaves B out too.
+    expect(app(ReviewScoreService::class)->recalculateSnapshot($proposal)['blind']['score'])->toEqual(67);
+});
+
+test('a second opinion that sides with the low score fails the proposal', function () {
+    $high = rd_review($this, 70);
+    rd_review($this, 20);
+    rd_process($this);
+
+    $second = rd_review($this, 25);
+    $second->update(['is_second_opinion' => true]);
+    $proposal = rd_process($this);
+
+    expect($proposal->status)->toBe('rejected')
+        ->and($high->fresh()->set_aside_at)->not->toBeNull();
+});
+
+test('only one second opinion can be pending at a time', function () {
+    rd_review($this, 70);
+    rd_review($this, 20);
+    rd_process($this);
+
+    $first = rd_expert(['Soil']);
+    $this->actingAs($this->central, 'sanctum')->postJson("/api/v1/proposals/{$this->proposal->id}/review/add-reviewer", [
+        'reviewer_id' => $first->id, 'due_date' => now()->addWeek()->toDateString(),
+    ])->assertSuccessful();
+
+    $this->actingAs($this->central, 'sanctum')->postJson("/api/v1/proposals/{$this->proposal->id}/review/add-reviewer", [
+        'reviewer_id' => rd_expert(['Soil'])->id, 'due_date' => now()->addWeek()->toDateString(),
+    ])->assertUnprocessable()->assertJsonPath('message', fn ($m) => str_contains($m, $first->name));
+});
+
+test('researchers cannot add reviewers or see second-opinion suggestions', function () {
+    rd_review($this, 70);
+    rd_review($this, 20);
+    rd_process($this);
+    $researcher = rd_expert(['Soil']);
+
+    $this->actingAs($researcher, 'sanctum')->postJson("/api/v1/proposals/{$this->proposal->id}/review/add-reviewer", [
+        'reviewer_id' => rd_expert(['Soil'])->id, 'due_date' => now()->addWeek()->toDateString(),
+    ])->assertForbidden();
+    $this->actingAs($researcher, 'sanctum')->getJson("/api/v1/proposals/{$this->proposal->id}/second-opinion/suggestions")->assertForbidden();
+});

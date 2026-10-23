@@ -383,7 +383,7 @@ export default function PublicSite() {
             <div className="max-w-3xl mx-auto px-4 py-8">
 
                 {/* Page header */}
-                <div className="flex items-start justify-between mb-8">
+                <div className="flex items-start flex-wrap justify-between mb-8 gap-3">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center">
                             <Globe size={20} className="text-blue-600" />

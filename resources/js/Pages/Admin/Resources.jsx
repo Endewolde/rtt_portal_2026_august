@@ -310,7 +310,7 @@ export default function AdminResources() {
             <div className="max-w-6xl mx-auto space-y-6">
 
                 {/* Header */}
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start flex-wrap justify-between gap-4">
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2.5">
                             <FolderOpen size={24} className="text-indigo-600" /> Resources

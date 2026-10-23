@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ app()->getLocale() }}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Complaint Response</title>
+<title>{{ __('Complaint Response') }}</title>
 <style>
   body{margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
   .wrap{max-width:600px;margin:40px auto;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 4px 32px rgba(0,0,0,.10);}
@@ -38,7 +38,7 @@
   $isUnresolved = $res === 'unresolved' || $res === 'rejected';
   $heroClass    = $isResolved ? 'hero-resolved' : ($isUnresolved ? 'hero-unresolved' : 'hero-default');
   $heroBg       = $isResolved ? '#065f46' : ($isUnresolved ? '#7f1d1d' : '#334155');
-  $badgeText    = $isResolved ? '✓ Resolved' : ($isUnresolved ? '✗ Not Resolved' : ucfirst($res ?: 'Responded'));
+  $badgeText    = $isResolved ? __('✓ Resolved') : ($isUnresolved ? __('✗ Not Resolved') : __(ucfirst($res ?: 'Responded')));
 @endphp
 <div class="wrap">
   @include('emails.partials.logo_header')
@@ -54,27 +54,27 @@
       </svg>
       @endif
     </div>
-    <h1>Complaint Response</h1>
-    <p>A response has been provided to your complaint</p>
+    <h1>{{ __('Complaint Response') }}</h1>
+    <p>{{ __('A response has been provided to your complaint') }}</p>
     <span class="badge">{{ $badgeText }}</span>
   </div>
 
   <div class="body">
-    <p style="font-size:15px;color:#374151;margin:0 0 16px;">Dear <strong>{{ $recipient->name ?? 'Researcher' }}</strong>,</p>
+    <p style="font-size:15px;color:#374151;margin:0 0 16px;">{!! __('Dear :name,', ['name' => '<strong>'.e($recipient->name ?? __('Researcher')).'</strong>']) !!}</p>
     <p style="font-size:14px;color:#4b5563;line-height:1.75;margin:0 0 20px;">
-      Your complaint regarding the following proposal has been reviewed and a response has been provided.
+      {{ __('Your complaint regarding the following proposal has been reviewed and a response has been provided.') }}
     </p>
 
     @if(!empty($tracker_number))
     <div class="tracker-row">
-      <span class="tracker-label">Proposal Tracker</span>
+      <span class="tracker-label">{{ __('Proposal Tracker') }}</span>
       <span class="tracker-val">{{ $tracker_number }}</span>
     </div>
     @endif
 
     @if(!empty($response))
     <div class="response-box">
-      <p class="response-from">Response from {{ $resolved_by ?? 'Research Officer' }}</p>
+      <p class="response-from">{!! __('Response from :name', ['name' => e($resolved_by ?? __('Research Officer'))]) !!}</p>
       <p class="response-text">{{ $response }}</p>
     </div>
     @endif
@@ -82,18 +82,18 @@
     @if($isResolved)
     <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:14px 18px;margin:20px 0;display:flex;gap:10px;align-items:flex-start;">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5" style="flex-shrink:0;margin-top:1px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-      <p style="font-size:13px;color:#166534;margin:0;line-height:1.6;">Your complaint has been <strong>resolved</strong>. No further action is needed on your part.</p>
+      <p style="font-size:13px;color:#166534;margin:0;line-height:1.6;">{!! __('Your complaint has been <strong>resolved</strong>. No further action is needed on your part.') !!}</p>
     </div>
     @endif
 
     <hr class="divider">
     <p style="font-size:13px;color:#9ca3af;margin:0;">
-      Sent via <strong>{{ $platformName }}</strong>. If you have further questions, contact the {{ $orgName }} Research Office directly.
+      {!! __('Sent via <strong>:platform</strong>. If you have further questions, contact the :org Research Office directly.', ['platform' => e($platformName), 'org' => e($orgName)]) !!}
     </p>
   </div>
 
   <div class="footer">
-    &copy; {{ date('Y') }} <strong>{{ $platformName }}</strong> &middot; {{ $orgName }} Research &amp; Technology Transfer
+    &copy; {{ date('Y') }} <strong>{{ $platformName }}</strong> &middot; {{ __(':org Research & Technology Transfer', ['org' => $orgName]) }}
   </div>
 </div>
 </body>

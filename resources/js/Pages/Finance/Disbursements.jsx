@@ -217,7 +217,7 @@ function DisburseModal({ request, onClose, onSuccess }) {
 
                 <div className="p-6 space-y-5">
                     {/* Summary */}
-                    <div className="grid grid-cols-3 gap-4 bg-gray-50 border border-gray-100 rounded-2xl p-4 text-center">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 bg-gray-50 border border-gray-100 rounded-2xl p-4 text-center">
                         {[
                             { label: 'Total Approved', value: formatCurrency(total),     cls: 'text-gray-900' },
                             { label: 'Disbursed',      value: formatCurrency(disbursed), cls: 'text-blue-600' },

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { translate as tr } from '../lib/i18n'
 import { createPortal } from 'react-dom';
 import { router } from '@inertiajs/react';
 import { CheckCircle2, XCircle, X, ChevronRight } from 'lucide-react';
@@ -47,7 +48,7 @@ export default function InvitationResponsePopup({ userId }) {
                 <div className="bg-linear-to-r from-blue-600 to-indigo-600 px-6 py-5">
                     <div className="flex items-center justify-between">
                         <div>
-                            <h2 className="text-base font-bold text-white">Co-Investigator Response</h2>
+                            <h2 className="text-base font-bold text-white">{tr("Co-Investigator Response")}</h2>
                             <p className="text-xs text-white/80 mt-0.5">
                                 {responses.length === 1 ? '1 update while you were away' : `${responses.length} updates while you were away`}
                             </p>

@@ -164,7 +164,7 @@ export default function Appeals() {
             <div className="max-w-4xl mx-auto space-y-6">
 
                 {/* Page header */}
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start flex-wrap justify-between gap-4">
                     <div className="flex items-center gap-3">
                         <div className="h-11 w-11 bg-slate-900 rounded-2xl flex items-center justify-center shrink-0">
                             <Scale size={20} className="text-white" />

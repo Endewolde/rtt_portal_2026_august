@@ -5,6 +5,7 @@ import {
     FlaskConical, Layers, Search, Pencil, Trash2,
     Calendar, Building2, BarChart3, TrendingUp,
     CheckCircle2, AlertCircle, Sparkles, Clock, XCircle, ShieldCheck, ThumbsUp,
+    Wand2, Link2, AlertTriangle as AlertTriangleIcon,
 } from 'lucide-react'
 import AppLayout from '../../Layouts/AppLayout'
 import { useAuth } from '../../hooks/useAuth'
@@ -413,6 +414,31 @@ function OutputFormModal({ editing, proposals, onClose, onSuccess }) {
     const set = (k, v)     => setForm(p => ({ ...p, [k]: v }))
     const t = form.output_type
 
+    // ── DOI lookup (new outputs only) ──
+    const [doiInput, setDoiInput]   = useState('')
+    const [looking, setLooking]     = useState(false)
+    const [lookup, setLookup]       = useState(null)
+
+    const lookUpDoi = async () => {
+        if (!doiInput.trim()) return
+        setLooking(true)
+        try {
+            const res = await api.get('/research-outputs/doi-lookup', { params: { doi: doiInput.trim() }, skipErrorToast: true })
+            const d = res.data?.data
+            const canLink = d.suggestion && proposals.some(p => p.id === d.suggestion.proposal_id)
+            setForm(prev => ({
+                ...prev,
+                ...Object.fromEntries(Object.entries(d.fields).map(([k, v]) => [k, typeof v === 'number' ? String(v) : v])),
+                proposal_id: canLink ? d.suggestion.proposal_id : prev.proposal_id,
+            }))
+            setLookup({ ...d, linked: canLink })
+        } catch (e) {
+            setLookup(null)
+            error(e.response?.data?.message ?? 'Could not look up this DOI.')
+        }
+        setLooking(false)
+    }
+
     const inputCls = 'w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white'
     const labelCls = 'block text-xs font-semibold text-gray-500 mb-1.5'
 
@@ -457,6 +483,45 @@ function OutputFormModal({ editing, proposals, onClose, onSuccess }) {
 
                 {/* Body */}
                 <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+                    {/* DOI lookup */}
+                    {!isEdit && (
+                        <div className="rounded-2xl border border-indigo-100 bg-indigo-50/50 p-4">
+                            <label className="flex items-center gap-1.5 text-xs font-semibold text-indigo-900 mb-2">
+                                <Wand2 size={13} /> Published with a DOI? Fill everything in from it
+                            </label>
+                            <div className="flex gap-2">
+                                <input value={doiInput} onChange={e => setDoiInput(e.target.value)}
+                                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); lookUpDoi() } }}
+                                    placeholder="10.xxxx/xxxxx or https://doi.org/…" className={inputCls} />
+                                <button type="button" onClick={lookUpDoi} disabled={looking || !doiInput.trim()}
+                                    className="shrink-0 px-4 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50">
+                                    {looking ? 'Looking up…' : 'Look up'}
+                                </button>
+                            </div>
+                            {lookup && (
+                                <div className="mt-3 space-y-2 text-xs">
+                                    <p className="text-gray-600">
+                                        Filled in from Crossref{lookup.authors?.length ? <> · {lookup.authors.slice(0, 4).join(', ')}{lookup.authors.length > 4 ? ` +${lookup.authors.length - 4}` : ''}</> : null}. Check the details below.
+                                    </p>
+                                    {lookup.existing && (
+                                        <p className="flex items-start gap-1.5 rounded-lg bg-amber-50 border border-amber-200 px-2.5 py-2 text-amber-800">
+                                            <AlertTriangleIcon size={13} className="mt-px shrink-0" />
+                                            Already recorded as “{lookup.existing.title}”{lookup.existing.tracker_number ? ` on ${lookup.existing.tracker_number}` : ''}. Saving it again will be refused.
+                                        </p>
+                                    )}
+                                    {lookup.linked ? (
+                                        <p className="flex items-start gap-1.5 text-emerald-700">
+                                            <Link2 size={13} className="mt-px shrink-0" />
+                                            Linked to {proposals.find(p => p.id === lookup.suggestion.proposal_id)?.tracker_number}. {lookup.suggestion.reason}
+                                        </p>
+                                    ) : (
+                                        <p className="text-gray-500">Choose the project this output belongs to below.</p>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {/* Proposal — hidden when editing */}
                     {!isEdit && (
                         <div>

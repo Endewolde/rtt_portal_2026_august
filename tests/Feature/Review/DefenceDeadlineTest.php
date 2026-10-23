@@ -318,3 +318,48 @@ test('the Open Defence list carries each proposal\'s deadline and extension stat
         ->assertJsonPath('data.0.defence_deadline.outstanding_scores', 1)
         ->assertJsonPath('data.0.defence_deadline.can_request_extension', true);
 });
+
+// ─── Repeat requests ─────────────────────────────────────────────────────────
+
+test('a second request for the same defence is marked as a repeat, with the earlier request and how far the deadline already moved', function () {
+    $proposal = dd_proposal($this);
+    dd_assignment($proposal, $this->central);
+    $session = dd_session($this, $proposal, now()->subDays(5)->toDateString());
+    $original = $session->defaultScoreDeadline();
+    $grantedUntil = $original->copy()->addDays(4);
+
+    dd_extension($this, $session, [
+        'status' => 'approved', 'granted_until' => $grantedUntil, 'requested_until' => $grantedUntil,
+        'decided_by' => $this->central->id, 'decided_at' => now()->subDays(2), 'decision_notes' => 'One week only.',
+        'created_at' => now()->subDays(3),
+    ]);
+    $session->update(['score_deadline_extended_until' => $grantedUntil]);
+
+    $this->actingAs($this->collegeOfficer, 'sanctum')
+        ->postJson("/api/v1/defence-sessions/{$session->id}/deadline-extensions", [
+            'requested_until' => $grantedUntil->copy()->addDays(3)->toDateTimeString(),
+            'reason' => 'The external panel member is still travelling.',
+        ])->assertCreated();
+
+    $message = json_decode(DB::table('notifications')->where('notifiable_id', $this->central->id)
+        ->where('type', 'defence_extension_requested')->latest('created_at')->value('data'), true)['message'];
+    expect($message)->toContain('This is request number 2 for this defence');
+
+    $response = $this->actingAs($this->central, 'sanctum')->getJson('/api/v1/defence-deadline-extensions?status=pending')->assertOk();
+    $row = $response->json('data.0');
+
+    expect($row)->toMatchArray(['sequence' => 2, 'total_requests' => 2, 'days_already_extended' => 4, 'days_requested' => 3, 'outstanding_scores' => 1, 'panel_size' => 1])
+        ->and($row['earlier_requests'][0])->toMatchArray(['status' => 'approved', 'decision_notes' => 'One week only.'])
+        ->and($response->json('meta.counts.repeat_pending'))->toBe(1);
+});
+
+test('a first request is not a repeat', function () {
+    $proposal = dd_proposal($this);
+    $session = dd_session($this, $proposal, now()->subDays(3)->toDateString());
+    dd_extension($this, $session);
+
+    $response = $this->actingAs($this->central, 'sanctum')->getJson('/api/v1/defence-deadline-extensions?status=pending')->assertOk();
+
+    expect($response->json('data.0'))->toMatchArray(['sequence' => 1, 'days_already_extended' => 0, 'earlier_requests' => []])
+        ->and($response->json('meta.counts.repeat_pending'))->toBe(0);
+});

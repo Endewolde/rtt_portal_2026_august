@@ -104,6 +104,7 @@ return [
             'proposal_ai_scores.generate' => ['label' => 'Run AI pre-screening', 'description' => 'Generate an AI quality score for a proposal.'],
             'review_decisions.correct' => ['label' => 'Correct review decisions', 'description' => 'Apply recalculated blind or defence decisions.', 'roles' => [...$A, ...$D]],
             'review_deadlines.manage' => ['label' => 'Manage review deadlines', 'description' => 'Remind reviewers and extend due dates.', 'roles' => [...$A, $CO]],
+            'reviewers.recruit' => ['label' => 'Approve reviewer applications', 'description' => 'Review applications from outside experts and approve them into the reviewer pool.', 'roles' => [...$A, ...$D]],
             'reviewer_workload.view' => ['label' => 'See reviewer workload', 'description' => 'Reviewer Workload, analytics and the payment report.', 'roles' => [...$A, ...$D, $CO]],
             'conflicts.manage' => ['label' => 'Handle conflicts of interest', 'description' => 'Reassign reviews where a reviewer declared a conflict.', 'roles' => [...$A, ...$D, $CO]],
             'defence_extensions.request' => ['label' => 'Request defence score extensions', 'description' => 'Ask for more time for panel scores.', 'roles' => [$CO]],

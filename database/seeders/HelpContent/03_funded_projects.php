@@ -202,18 +202,21 @@ return [
         'slug' => 'research-outputs', 'category' => $c, 'roles' => R::RESEARCHER,
         'title' => 'Recording publications and other outputs',
         'summary' => 'Record articles, books, patents, software and impact from your funded research.',
-        'keywords' => 'outputs publications journal article paper patent book software prototype impact record',
+        'keywords' => 'outputs publications journal article paper patent book software prototype impact record doi crossref look up',
         'questions' => [
             'How do I record a publication?', 'Where do I add my research outputs?', 'What counts as a research output?',
             'Why do outputs matter?', 'Who verifies my outputs?', 'Can I add outputs after my project ends?',
+            'Can I add a paper using its DOI?', 'Why does it say the DOI is already recorded?',
         ],
         'body' => "Record what your funded research produced in **Research Outputs**.\n\n"
             ."## Types of output\n"
             ."journal article, conference paper, book, patent, software, prototype, community impact and technology transfer.\n\n"
             ."## Step by step\n"
             ."1. Open **Research Outputs** and add an output.\n"
-            ."2. Choose the project, the type, and give the title and details (journal, publisher, licence, etc.).\n"
-            ."3. Officers **verify** and **approve** it.\n\n"
+            ."2. **Published with a DOI?** Paste it (e.g. 10.1016/… or the doi.org link) and click **Look up** — the title, type, journal, volume, pages, year and abstract are filled in for you, and the project it belongs to is chosen: the one whose grant reference the paper acknowledges, or your project with the closest title. Check both.\n"
+            ."3. Otherwise choose the project and type and enter the details yourself.\n"
+            ."4. Officers **verify** and **approve** it.\n\n"
+            ."A DOI can only be recorded once — if a co-author already recorded the paper, you'll be told.\n\n"
             ."## Why it matters\n"
             ."- At least one output is needed before a completed project can be **archived**.\n"
             .'- Outputs appear in the **annual report** and university research statistics.',

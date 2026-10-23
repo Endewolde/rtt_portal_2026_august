@@ -6,12 +6,15 @@ import {
 import {
     BarChart3, RefreshCw, Filter, TrendingUp, Wallet, Timer, Users, Layers,
     GitBranch, Building2, CalendarRange, FlaskConical, LineChart as LineIcon, Info,
-    CheckCircle2, XCircle, Hourglass, Send, Percent,
+    CheckCircle2, XCircle, Hourglass, Send, Percent, Megaphone, Download, Tags, RotateCcw,
 } from 'lucide-react'
 import AppLayout from '../../Layouts/AppLayout'
+import InsightsNav from '../../Components/InsightsNav'
+import { PageHeader, Select, RefreshButton, StatCard, Panel, StatSkeletons, Skeleton as Block } from '../../Components/Insights/Kit'
 import { get } from '../../lib/api'
 import { useToast } from '../../Components/Toast'
 import { getCategoryLabel } from '../../lib/utils'
+import { downloadFile } from '../../lib/download'
 
 // One meaning per colour across the page: outcomes use status colours, single series use the primary.
 const C = {
@@ -23,9 +26,9 @@ const C = {
 }
 
 const TOOLTIP = {
-    contentStyle: { borderRadius: 10, border: '1px solid #e5e7eb', fontSize: 12, boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.08)' },
+    contentStyle: { borderRadius: 12, border: '1px solid #e5e7eb', fontSize: 12, boxShadow: '0 10px 25px -10px rgba(15,23,42,0.25)', padding: '8px 12px' },
     labelStyle: { fontWeight: 600, color: '#111827', marginBottom: 4 },
-    cursor: { fill: '#f8fafc' },
+    cursor: { fill: 'rgba(99,102,241,0.06)' },
 }
 
 const pct = (v) => (v === null || v === undefined ? '—' : `${v}%`)
@@ -39,38 +42,35 @@ const money = (v) => {
 }
 const titleCase = (s) => (s ? s.replace(/\b\w/g, (c) => c.toUpperCase()) : '—')
 
-function Skeleton({ height = 240 }) {
-    return <div className="animate-pulse rounded-xl bg-gray-100" style={{ height }} />
-}
-
 function Empty({ text = 'No proposals match these filters yet.' }) {
     return <div className="flex h-40 items-center justify-center text-sm text-gray-400">{text}</div>
 }
 
-function Card({ title, desc, icon: Icon, children, action, className = '' }) {
+function Card({ title, desc, icon, children, action, className = '', id }) {
     return (
-        <section className={`overflow-hidden rounded-2xl border border-gray-200 bg-white ${className}`}>
-            <header className="flex items-start justify-between gap-3 border-b border-gray-100 px-5 py-4">
-                <div className="flex items-start gap-3">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600"><Icon size={15} /></span>
-                    <div>
-                        <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
-                        {desc && <p className="text-xs text-gray-500">{desc}</p>}
-                    </div>
-                </div>
-                {action}
-            </header>
-            <div className="p-5">{children}</div>
-        </section>
+        <Panel id={id} title={title} subtitle={desc} icon={icon} actions={action} className={`scroll-mt-24 ${className}`}>
+            {children}
+        </Panel>
     )
 }
 
-function Kpi({ icon: Icon, label, value, hint, tone = 'text-gray-900' }) {
+/** Jump links for this long page; stays at the top while scrolling. */
+const SECTIONS = [
+    ['funnel', 'Funnel'], ['funding', 'Funding'], ['breakdowns', 'Breakdowns'], ['calls', 'Calls'],
+    ['years', 'Years'], ['review', 'Review'], ['forecast', 'Forecast'],
+]
+
+function SectionNav({ hidden = [] }) {
     return (
-        <div className="rounded-2xl border border-gray-200 bg-white p-4">
-            <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500"><Icon size={13} /> {label}</div>
-            <p className={`mt-1.5 text-2xl font-bold tabular-nums ${tone}`}>{value}</p>
-            {hint && <p className="mt-0.5 text-[11px] leading-snug text-gray-400">{hint}</p>}
+        <div className="sticky top-0 z-20 -mx-1 bg-gray-50/90 px-1 py-2 backdrop-blur">
+            <div className="flex gap-1 overflow-x-auto [scrollbar-width:none]">
+                {SECTIONS.filter(([id]) => !hidden.includes(id)).map(([id, label]) => (
+                    <a key={id} href={`#${id}`}
+                        className="shrink-0 rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-600 transition hover:border-indigo-200 hover:text-indigo-700">
+                        {label}
+                    </a>
+                ))}
+            </div>
         </div>
     )
 }
@@ -100,7 +100,7 @@ function OutcomeLegend() {
 }
 
 /** Category / research type / gender / college rows: name, outcome bar, counts, pass rate. */
-function BreakdownTable({ rows, nameKey, format = (v) => v, emptyText }) {
+function BreakdownTable({ rows, nameKey, format = (v) => v, emptyText, showAwarded = false }) {
     if (!rows?.length) return <Empty text={emptyText} />
     return (
         <div className="overflow-x-auto">
@@ -113,6 +113,7 @@ function BreakdownTable({ rows, nameKey, format = (v) => v, emptyText }) {
                         <th className="pb-2 pr-3 text-right">Funded</th>
                         <th className="pb-2 pr-3 text-right">Not selected</th>
                         <th className="pb-2 text-right">Pass rate</th>
+                        {showAwarded && <th className="pb-2 pl-3 text-right">Awarded</th>}
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -124,8 +125,76 @@ function BreakdownTable({ rows, nameKey, format = (v) => v, emptyText }) {
                             <td className="py-2.5 pr-3 text-right tabular-nums text-gray-700">{r.funded}</td>
                             <td className="py-2.5 pr-3 text-right tabular-nums text-gray-700">{r.rejected}</td>
                             <td className="py-2.5 text-right font-semibold tabular-nums text-gray-900" title={`${r.funded} of ${r.decided} decided`}>{pct(r.pass_rate)}</td>
+                            {showAwarded && <td className="py-2.5 pl-3 text-right tabular-nums text-gray-700" title={r.awarded ? `ETB ${Number(r.awarded).toLocaleString()}` : undefined}>{r.awarded ? money(r.awarded) : '—'}</td>}
                         </tr>
                     ))}
+                </tbody>
+            </table>
+        </div>
+    )
+}
+
+/** One row per call: stage counts with share of applications, money against budget, and PI gender. */
+function CallComparison({ calls, onPick }) {
+    if (!calls?.length) return <Empty text="No calls have proposals in these filters." />
+    const stageKeys = ['validated', 'blind_passed', 'defence_passed', 'funded']
+    const stageLabels = { validated: 'Validated', blind_passed: 'Blind passed', defence_passed: 'Defence passed', funded: 'Funded' }
+
+    return (
+        <div className="-mx-5 overflow-x-auto px-5">
+            <table className="w-full min-w-215 text-sm">
+                <thead className="text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                    <tr>
+                        <th className="pb-2 pr-3">Call</th>
+                        <th className="pb-2 pr-3 text-right">Applications</th>
+                        {stageKeys.map((k) => <th key={k} className="pb-2 pr-3 text-right">{stageLabels[k]}</th>)}
+                        <th className="pb-2 pr-3 text-right">Success</th>
+                        <th className="w-44 pb-2 pr-3">Awarded / budget</th>
+                        <th className="pb-2 text-right">PI gender (F / M)</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                    {calls.map((c) => {
+                        const stage = Object.fromEntries(c.stages.map((st) => [st.key, st.count]))
+                        const used = c.budget_used_pct
+                        return (
+                            <tr key={c.id} className="align-top">
+                                <td className="py-2.5 pr-3">
+                                    <button onClick={() => onPick(c.id)} className="text-left font-medium text-gray-900 hover:text-indigo-700 hover:underline" title="Show this call across the dashboard">
+                                        {c.title}
+                                    </button>
+                                    <p className="mt-0.5 text-xs text-gray-500">
+                                        {c.academic_year} · {getCategoryLabel(c.category)}
+                                        {c.is_legacy && <span className="ml-1.5 rounded bg-gray-100 px-1.5 py-px text-[10px] font-semibold text-gray-600">Legacy grants</span>}
+                                    </p>
+                                </td>
+                                <td className="py-2.5 pr-3 text-right font-semibold tabular-nums text-gray-900">{c.submitted}</td>
+                                {stageKeys.map((k) => (
+                                    <td key={k} className="py-2.5 pr-3 text-right tabular-nums text-gray-700">
+                                        {stage[k] ?? 0}
+                                        <span className="block text-[11px] text-gray-400">{c.submitted ? `${Math.round(((stage[k] ?? 0) / c.submitted) * 100)}%` : '—'}</span>
+                                    </td>
+                                ))}
+                                <td className="py-2.5 pr-3 text-right font-semibold tabular-nums text-gray-900" title={`${c.funded} of ${c.decided} decided`}>{pct(c.pass_rate)}</td>
+                                <td className="py-2.5 pr-3">
+                                    <p className="tabular-nums text-gray-800">{c.awarded ? money(c.awarded) : '—'}<span className="text-gray-400"> / {c.budget ? money(c.budget) : 'no budget'}</span></p>
+                                    {used !== null && (
+                                        <div className="mt-1.5 flex items-center gap-2">
+                                            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-gray-100">
+                                                <div className="h-full rounded-full" style={{ width: `${Math.min(used, 100)}%`, background: used > 100 ? C.rejected : C.primary }} />
+                                            </div>
+                                            <span className={`text-[11px] tabular-nums ${used > 100 ? 'font-semibold text-rose-700' : 'text-gray-500'}`}>{used}%</span>
+                                        </div>
+                                    )}
+                                </td>
+                                <td className="py-2.5 text-right tabular-nums text-gray-700">
+                                    {c.gender.female} / {c.gender.male}
+                                    <span className="block text-[11px] text-gray-400" title="Funded female / male PIs">funded {c.gender.female_funded} / {c.gender.male_funded}</span>
+                                    {c.gender.not_specified > 0 && <span className="block text-[11px] text-gray-400">{c.gender.not_specified} not specified</span>}
+                                </td>
+                            </tr>
+                        )
+                    })}
                 </tbody>
             </table>
         </div>
@@ -190,7 +259,8 @@ export default function Analytics() {
     const { error } = useToast()
     const [data, setData] = useState(null)
     const [loading, setLoading] = useState(true)
-    const [filters, setFilters] = useState({ academic_year: '', category: '', college_id: '' })
+    const [filters, setFilters] = useState({ academic_year: '', category: '', college_id: '', proposal_call_id: '' })
+    const [exporting, setExporting] = useState(false)
     const [showAllColleges, setShowAllColleges] = useState(false)
 
     const load = useCallback((next) => {
@@ -199,6 +269,7 @@ export default function Analytics() {
         if (next?.academic_year) params.academic_year = next.academic_year
         if (next?.category) params.category = next.category
         if (next?.college_id) params.college_id = next.college_id
+        if (next?.proposal_call_id) params.proposal_call_id = next.proposal_call_id
 
         get('/admin/analytics', params)
             .then((r) => {
@@ -208,6 +279,7 @@ export default function Analytics() {
                     academic_year: d.filters?.academic_year ?? 'all',
                     category: d.filters?.category ?? '',
                     college_id: d.filters?.college_id ?? '',
+                    proposal_call_id: d.filters?.proposal_call_id ?? '',
                 })
             })
             .catch(() => error('Failed to load analytics.'))
@@ -217,9 +289,22 @@ export default function Analytics() {
     useEffect(() => { load() }, [load])
 
     const change = (key, value) => {
-        const next = { ...filters, [key]: value }
+        // A different year or category lists different calls.
+        const next = { ...filters, [key]: value, ...(key === 'academic_year' || key === 'category' ? { proposal_call_id: '' } : {}) }
         setFilters(next)
         load(next)
+    }
+
+    const exportCalls = async () => {
+        setExporting(true)
+        const params = new URLSearchParams()
+        Object.entries(filters).forEach(([k, v]) => { if (v && k !== 'proposal_call_id') params.set(k, v) })
+        try {
+            await downloadFile(`/admin/analytics/calls/export?${params}`, `call_outcomes_${filters.academic_year || 'all'}.xlsx`)
+        } catch {
+            error('Could not prepare the call outcomes file.')
+        }
+        setExporting(false)
     }
 
     const f = data?.filters ?? {}
@@ -230,64 +315,73 @@ export default function Analytics() {
         f.academic_year ? `${f.academic_year} academic year` : 'All academic years',
         f.category ? getCategoryLabel(f.category) : 'All categories',
         f.college_id ? (data?.college_options?.find((c) => c.id === f.college_id)?.name ?? 'One college') : 'All colleges',
-    ].join(' · ')
+        f.proposal_call_id && (data?.call_options?.find((c) => c.id === f.proposal_call_id)?.title ?? 'One call'),
+    ].filter(Boolean).join(' · ')
 
-    const select = 'h-9 rounded-lg border border-gray-200 bg-white px-3 text-sm text-gray-700 focus:border-indigo-400 focus:outline-none disabled:bg-gray-50 disabled:text-gray-400'
 
     return (
         <AppLayout breadcrumb="Analytics Dashboard">
+            <InsightsNav />
             <div className="mx-auto max-w-7xl">
-                {/* Header + filters */}
-                <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                    <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-100"><BarChart3 size={20} className="text-indigo-600" /></div>
-                        <div>
-                            <h1 className="text-xl font-bold text-gray-900">Analytics Dashboard</h1>
-                            <p className="mt-0.5 text-sm text-gray-500">{scopeText}</p>
-                        </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                        <Filter size={14} className="hidden text-gray-400 sm:block" />
-                        <select aria-label="Academic year" value={filters.academic_year || 'all'} onChange={(e) => change('academic_year', e.target.value)} className={select}>
-                            <option value="all">All years</option>
+                <PageHeader icon={BarChart3} color="indigo" title="Analytics" description={scopeText}>
+                    <RefreshButton onClick={() => load(filters)} loading={loading} />
+                </PageHeader>
+
+                <div className="mt-5 flex flex-col gap-2 rounded-2xl border border-gray-200 bg-white p-3 sm:flex-row sm:items-center">
+                    <Filter size={15} className="ml-1 hidden shrink-0 text-gray-400 sm:block" />
+                    <div className="grid flex-1 grid-cols-2 gap-2 lg:grid-cols-4">
+                        <Select label="Academic year" value={filters.academic_year === 'all' ? '' : filters.academic_year} onChange={(v) => change('academic_year', v || 'all')}>
+                            <option value="">All years</option>
                             {(data?.academicYears ?? []).map((y) => (
                                 <option key={y} value={y}>{y}{y === f.current_academic_year ? ' (current)' : ''}</option>
                             ))}
-                        </select>
-                        <select aria-label="Category" value={filters.category} onChange={(e) => change('category', e.target.value)} disabled={f.category_locked} className={select}>
-                            <option value="">All categories</option>
-                            {['research', 'community_engagement', 'technology_transfer'].map((c) => <option key={c} value={c}>{getCategoryLabel(c)}</option>)}
-                        </select>
-                        <select aria-label="College" value={filters.college_id} onChange={(e) => change('college_id', e.target.value)} disabled={f.college_locked} className={`${select} max-w-56`}>
-                            <option value="">All colleges</option>
-                            {(data?.college_options ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                        </select>
-                        <button onClick={() => load(filters)} disabled={loading} aria-label="Refresh"
-                            className="flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-60">
-                            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
-                        </button>
+                        </Select>
+                        {!f.category_locked && (
+                            <Select label="Category" value={filters.category} onChange={(v) => change('category', v)}>
+                                <option value="">All categories</option>
+                                {['research', 'community_engagement', 'technology_transfer'].map((c) => <option key={c} value={c}>{getCategoryLabel(c)}</option>)}
+                            </Select>
+                        )}
+                        {!f.college_locked && (
+                            <Select label="College" value={filters.college_id} onChange={(v) => change('college_id', v)}>
+                                <option value="">All colleges</option>
+                                {(data?.college_options ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </Select>
+                        )}
+                        <Select label="Call" value={filters.proposal_call_id} onChange={(v) => change('proposal_call_id', v)}>
+                            <option value="">All calls</option>
+                            {(data?.call_options ?? []).map((c) => <option key={c.id} value={c.id}>{c.title}{filters.academic_year === 'all' ? ` (${c.academic_year})` : ''}</option>)}
+                        </Select>
                     </div>
+                    {(filters.category && !f.category_locked || filters.college_id && !f.college_locked || filters.proposal_call_id) && (
+                        <button onClick={() => { const next = { ...filters, proposal_call_id: '', ...(f.category_locked ? {} : { category: '' }), ...(f.college_locked ? {} : { college_id: '' }) }; setFilters(next); load(next) }}
+                            className="inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-gray-500 hover:bg-gray-50 hover:text-gray-800">
+                            <RotateCcw size={13} /> Reset
+                        </button>
+                    )}
                 </div>
 
                 {!data ? (
-                    <div className="space-y-4">
-                        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">{[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} height={96} />)}</div>
-                        <Skeleton height={280} />
+                    <div className="mt-5 space-y-4">
+                        <StatSkeletons />
+                        <Block className="h-72" />
                     </div>
                 ) : (
-                    <div className={`space-y-5 transition-opacity ${loading ? 'opacity-60' : ''}`}>
+                    <div className={`mt-5 space-y-5 transition-opacity ${loading ? 'opacity-60' : ''}`}>
                         {/* KPIs */}
-                        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-                            <Kpi icon={Send} label="Submitted" value={num(s.submitted)} hint="All proposals except drafts" />
-                            <Kpi icon={CheckCircle2} label="Funded" value={num(s.funded)} hint="Funded, at mid-term or completed" tone="text-emerald-700" />
-                            <Kpi icon={XCircle} label="Not selected" value={num(s.rejected)} hint="Rejected at any stage" tone="text-rose-700" />
-                            <Kpi icon={Hourglass} label="In progress" value={num(s.in_progress)} hint="Still in review or awaiting a decision" />
-                            <Kpi icon={Percent} label="Pass rate" value={pct(s.pass_rate)} hint={s.decided ? `Funded ÷ decided (${s.funded} of ${s.decided})` : 'No decisions yet'} tone="text-indigo-700" />
+                        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+                            <StatCard icon={Send} color="indigo" label="Submitted" value={num(s.submitted)} hint="All proposals except drafts" />
+                            <StatCard icon={CheckCircle2} color="emerald" label="Funded" value={num(s.funded)} hint="Funded, at mid-term or completed" />
+                            <StatCard icon={XCircle} color="red" label="Not selected" value={num(s.rejected)} hint="Rejected at any stage" />
+                            <StatCard icon={Hourglass} color="amber" label="In progress" value={num(s.in_progress)} hint="Still in review or awaiting a decision" />
+                            <StatCard icon={Percent} color="violet" label="Pass rate" value={pct(s.pass_rate)} hint={s.decided ? `Funded ÷ decided (${s.funded} of ${s.decided})` : 'No decisions yet'} />
                         </div>
+
+                        <SectionNav hidden={f.proposal_call_id ? ['calls'] : []} />
 
                         {/* Funnel + current pipeline */}
                         <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
-                            <Card className="lg:col-span-3" icon={GitBranch} title="Proposal Funnel" desc="How far proposals got. Rejected proposals count up to the stage they stopped at.">
+                            <Card id="funnel" className="lg:col-span-3" icon={GitBranch} title="Proposal Funnel" desc="How far proposals got. Rejected proposals count up to the stage they stopped at.">
                                 {s.submitted ? <Funnel steps={data.funnel} /> : <Empty />}
                             </Card>
                             <Card className="lg:col-span-2" icon={Layers} title="Where Proposals Are Now" desc="Current stage of every submitted proposal">
@@ -311,7 +405,7 @@ export default function Analytics() {
                         </div>
 
                         {/* Money */}
-                        <Card icon={Wallet} title="Funding" desc="Funded proposals in the current filters">
+                        <Card id="funding" icon={Wallet} title="Funding" desc="Funded proposals in the current filters">
                             <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
                                 {[
                                     ['Requested', money(data.money.requested), 'Itemised budgets of funded proposals'],
@@ -320,7 +414,7 @@ export default function Analytics() {
                                     ['Awarded vs requested', pct(data.money.award_ratio), 'Where both a budget and an award exist'],
                                     ['Average award', money(data.money.average_award), 'Per funded proposal'],
                                 ].map(([label, value, hint]) => (
-                                    <div key={label} className="rounded-xl bg-gray-50 px-4 py-3">
+                                    <div key={label} className="rounded-xl border border-gray-100 bg-linear-to-br from-gray-50 to-white px-4 py-3">
                                         <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">{label}</p>
                                         <p className="mt-1 text-lg font-bold tabular-nums text-gray-900">{value}</p>
                                         <p className="text-[11px] text-gray-400">{hint}</p>
@@ -329,6 +423,7 @@ export default function Analytics() {
                             </div>
                         </Card>
 
+                        <div id="breakdowns" className="scroll-mt-24" />
                         {/* Categories */}
                         {!f.category && (
                             <Card icon={Layers} title="By Category" desc="Outcomes for each proposal category" action={<OutcomeLegend />}>
@@ -352,7 +447,7 @@ export default function Analytics() {
                                             <XAxis type="number" allowDecimals={false} tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} axisLine={false} />
                                             <YAxis type="category" dataKey="code" width={64} tick={{ fontSize: 11, fill: '#334155' }} tickLine={false} axisLine={false} />
                                             <Tooltip {...TOOLTIP} labelFormatter={(code) => collegeChart.find((c) => c.code === code)?.college ?? code} />
-                                            <Legend wrapperStyle={{ fontSize: 12 }} />
+                                            <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
                                             <Bar dataKey="funded" name="Funded" stackId="o" fill={C.funded} stroke="#fff" strokeWidth={2} />
                                             <Bar dataKey="in_progress" name="In progress" stackId="o" fill={C.inProgress} stroke="#fff" strokeWidth={2} />
                                             <Bar dataKey="rejected" name="Not selected" stackId="o" fill={C.rejected} stroke="#fff" strokeWidth={2} radius={[0, 4, 4, 0]} />
@@ -360,14 +455,32 @@ export default function Analytics() {
                                     </ResponsiveContainer>
                                 )}
                                 <div className={collegeChart.length ? 'mt-5' : ''}>
-                                    <BreakdownTable rows={collegeRows} nameKey="college" emptyText="No college has submitted proposals in these filters." />
+                                    <BreakdownTable rows={collegeRows} nameKey="college" showAwarded emptyText="No college has submitted proposals in these filters." />
                                 </div>
+                            </Card>
+                        )}
+
+                        {/* Themes */}
+                        <Card icon={Tags} title="By Theme" desc="Outcomes and money awarded per focus area, largest first" action={<OutcomeLegend />}>
+                            <BreakdownTable rows={data.themes} nameKey="theme" showAwarded emptyText="No proposals in these filters." />
+                        </Card>
+
+                        {/* Calls */}
+                        {!f.proposal_call_id && (
+                            <Card id="calls" icon={Megaphone} title="Call Comparison" desc="Each call's applications, how far they got, money and PI gender — for year-end reporting"
+                                action={
+                                    <button onClick={exportCalls} disabled={exporting || !data.calls?.length}
+                                        className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                                        <Download size={13} className={exporting ? 'animate-pulse' : ''} /> {exporting ? 'Preparing…' : 'Download Excel'}
+                                    </button>
+                                }>
+                                <CallComparison calls={data.calls} onPick={(id) => change('proposal_call_id', id)} />
                             </Card>
                         )}
 
                         {/* Years */}
                         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-                            <Card icon={CalendarRange} title="Outcomes by Academic Year" desc="Every year, regardless of the year filter">
+                            <Card id="years" icon={CalendarRange} title="Outcomes by Academic Year" desc="Every year, regardless of the year filter">
                                 {data.years.length ? (
                                     <ResponsiveContainer width="100%" height={240}>
                                         <BarChart data={data.years} margin={{ top: 4, right: 8, left: -12, bottom: 0 }}>
@@ -375,7 +488,7 @@ export default function Analytics() {
                                             <XAxis dataKey="academic_year" tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} axisLine={false} />
                                             <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} axisLine={false} />
                                             <Tooltip {...TOOLTIP} />
-                                            <Legend wrapperStyle={{ fontSize: 12 }} />
+                                            <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
                                             <Bar dataKey="funded" name="Funded" stackId="y" fill={C.funded} stroke="#fff" strokeWidth={2} />
                                             <Bar dataKey="in_progress" name="In progress" stackId="y" fill={C.inProgress} stroke="#fff" strokeWidth={2} />
                                             <Bar dataKey="rejected" name="Not selected" stackId="y" fill={C.rejected} stroke="#fff" strokeWidth={2} radius={[4, 4, 0, 0]} />
@@ -421,7 +534,7 @@ export default function Analytics() {
 
                         {/* Review process */}
                         <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
-                            <Card className="lg:col-span-3" icon={Timer} title="Time per Stage" desc="Median days a proposal spends in each stage, against its target">
+                            <Card id="review" className="lg:col-span-3" icon={Timer} title="Time per Stage" desc="Median days a proposal spends in each stage, against its target">
                                 <StageTimes stages={data.review.stages} />
                             </Card>
                             <Card className="lg:col-span-2" icon={Users} title="Review Quality" desc="Reviewer workload, speed and agreement">
@@ -434,7 +547,7 @@ export default function Analytics() {
                                         ['Reviews overdue now', num(data.review.overdue_reviews)],
                                         ['Blind reviewer disagreement', pct(data.review.disagreement_rate)],
                                     ].map(([label, value]) => (
-                                        <div key={label} className="rounded-xl bg-gray-50 px-3 py-2.5">
+                                        <div key={label} className="rounded-xl border border-gray-100 bg-linear-to-br from-gray-50 to-white px-3 py-2.5">
                                             <dt className="text-[11px] text-gray-500">{label}</dt>
                                             <dd className="text-base font-bold tabular-nums text-gray-900">{value}</dd>
                                         </div>
@@ -454,7 +567,7 @@ export default function Analytics() {
                         </div>
 
                         {/* Forecast */}
-                        <Card icon={TrendingUp} title="Submissions Forecast" desc="Trend from completed academic years only">
+                        <Card id="forecast" icon={TrendingUp} title="Submissions Forecast" desc="Trend from completed academic years only">
                             {data.forecast.available ? (
                                 <>
                                     <ResponsiveContainer width="100%" height={240}>
@@ -469,7 +582,7 @@ export default function Analytics() {
                                             <XAxis dataKey="year" tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} axisLine={false} />
                                             <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} axisLine={false} />
                                             <Tooltip {...TOOLTIP} />
-                                            <Legend wrapperStyle={{ fontSize: 12 }} />
+                                            <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
                                             <Bar dataKey="actual" name="Submitted" fill={C.primary} radius={[4, 4, 0, 0]} />
                                             <Bar dataKey="predicted" name="Forecast" fill="#c7d2fe" stroke={C.primary} strokeDasharray="4 3" radius={[4, 4, 0, 0]} />
                                         </BarChart>

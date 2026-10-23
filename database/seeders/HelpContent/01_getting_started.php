@@ -92,6 +92,7 @@ return [
             'How do I change my name or title?', 'How do I update my department?', 'How do I add my research expertise?',
             'Why should I fill in expertise areas?', 'How do I change my photo?', 'How do I update my phone number?',
             'My college is wrong, how do I fix it?', 'Why am I not being assigned reviews?',
+            'How do I get a public profile page?', 'Is my profile public?', 'How do I add my ORCID iD?',
         ],
         'body' => "Open **My Profile** from the menu under your name.\n\n"
             ."## What you can update\n"
@@ -102,7 +103,9 @@ return [
             ."Your expertise areas are used to **suggest you as a reviewer** for proposals in your field. Be specific — *soil fertility management* is more useful than *agriculture*. If you're never assigned reviews, adding expertise areas usually helps.\n\n"
             ."## Good to know\n"
             ."- Your title appears on certificates and documents, so keep it accurate.\n"
-            ."- If you can't change your college or department, ask your college officer or an administrator.",
+            ."- If you can't change your college or department, ask your college officer or an administrator.\n\n"
+            ."## Public researcher profile\n"
+            ."Under **Public Researcher Profile** you can switch on a page about you on the university's public site, listed under **Researchers**. It's **off** until you turn it on. It shows your name, title, college, photo, expertise, a short biography and ORCID iD if you add them, your funded projects and your checked research outputs — never your email or phone. Turn it off any time.",
         'page_paths' => ['/profile'], 'action_label' => 'Open my profile', 'action_url' => '/profile',
     ],
     [
@@ -196,14 +199,18 @@ return [
         'keywords' => 'amharic english language translate አማርኛ switch',
         'questions' => [
             'Can I use the system in Amharic?', 'How do I change the language?', 'Why is some text still in English?',
-            'Will my choice be remembered?', 'Can I write my proposal in Amharic?',
+            'Will my choice be remembered?', 'Can I write my proposal in Amharic?', 'Can I get emails in Amharic?',
         ],
-        'body' => "Use the **EN / አማ** switch in the public site's top bar (or in the menu on a phone). Your choice is remembered on that device.\n\n"
+        'body' => "Use the **EN / አማ** switch — in the top bar of the public site and of the platform once you're signed in (on a phone, it's in the menu under your name). The page reloads in the language you chose.\n\n"
             ."## What is translated\n"
-            ."- The public website's menus, headings and pages.\n"
-            ."- Your proposal's **status guide** on the proposal page.\n\n"
+            ."- The public website.\n"
+            ."- The menu and the screens researchers and reviewers use: dashboard, My Proposals, the application form, proposal pages, reviews, budget requests, complaints, notifications and your profile.\n"
+            ."- **Emails** the platform sends you.\n"
+            ."- Your **certificate of review service**.\n\n"
+            ."## Your choice is remembered\n"
+            ."On your account, not just the device — so emails and certificates come in the same language.\n\n"
             ."## What stays as written\n"
-            ."Text entered by staff — call descriptions, FAQs, thematic areas — appears in the language it was written in. More screens are being translated over time.\n\n"
+            ."Text entered by people — proposal titles, call descriptions, FAQs, officers' notes — appears in the language it was written in. Officer and administration screens are in English. The official grant letter uses the wording set by the research office.\n\n"
             .'For the language your proposal must be written in, follow the call guidelines.',
     ],
     [

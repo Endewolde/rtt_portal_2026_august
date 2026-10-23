@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { translate as tr } from '../lib/i18n'
 import { createPortal }  from 'react-dom'
 import { Link }          from '@inertiajs/react'
 import { router }        from '@inertiajs/react'
@@ -187,6 +188,11 @@ const TYPE_CFG = {
         template: d => d.message || 'Your certificate of review service was revoked',
         actionLabel: 'Open My Reviews', actionUrl: () => '/reviews',
     },
+    review_certificate_withdrawn: {
+        icon: AlertTriangle, color: 'amber', label: 'Certificates Withdrawn', category: 'activity',
+        template: d => d.message || 'Certificates of review service were withdrawn',
+        actionLabel: 'Open My Reviews', actionUrl: () => '/reviews',
+    },
     stage_reminder: {
         icon: AlertTriangle, color: 'amber', label: 'Action Needed', category: 'action',
         template: d => d.message || `${d.tracker_number || 'A proposal'} is waiting on you`,
@@ -331,7 +337,7 @@ function Toast({ toast, onDismiss }) {
                     {cfg.category === 'action' && (
                         <div className="flex items-center gap-1 mb-0.5">
                             <Zap size={10} className="text-amber-500" />
-                            <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wide">Action required</span>
+                            <span className="text-[10px] font-bold text-amber-600 uppercase tracking-wide">{tr("Action required")}</span>
                         </div>
                     )}
                     <p className={`text-[11px] font-bold uppercase tracking-wide ${colors.badge.split(' ')[0]}`}>{cfg.label}</p>
@@ -395,7 +401,7 @@ function DrawerItem({ n, onMarkRead, onClose }) {
                     </span>
                     {cfg.category === 'action' && (
                         <span className="text-[10px] font-bold text-amber-600 flex items-center gap-0.5">
-                            <Zap size={9} /> Pending
+                            <Zap size={9} /> {tr("Pending")}
                         </span>
                     )}
                 </div>
@@ -408,7 +414,7 @@ function DrawerItem({ n, onMarkRead, onClose }) {
                         <div className="h-2 w-2 rounded-full bg-blue-500 shrink-0" />
                         <button
                             onClick={e => { e.stopPropagation(); onMarkRead([n.id]) }}
-                            title="Mark as read"
+                            title={tr("Mark as read")}
                             className="p-1 rounded-lg hover:bg-blue-100 text-blue-400 hover:text-blue-600 transition-colors opacity-0 group-hover:opacity-100"
                         >
                             <Check size={11} />
@@ -460,7 +466,7 @@ function DrawerPanel({ open, onClose, notifications, loading, unreadCount, onMar
                                 <Bell size={17} className="text-white" />
                             </div>
                             <div>
-                                <h2 className="text-white font-bold text-base leading-none">Notifications</h2>
+                                <h2 className="text-white font-bold text-base leading-none">{tr("Notifications")}</h2>
                                 <p className="text-blue-200 text-xs mt-0.5">
                                     {unreadCount > 0 ? `${unreadCount} unread` : '✓ All caught up'}
                                 </p>
@@ -472,7 +478,7 @@ function DrawerPanel({ open, onClose, notifications, loading, unreadCount, onMar
                                     onClick={onMarkAllRead}
                                     className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-semibold rounded-xl transition-colors"
                                 >
-                                    <CheckCheck size={12} /> Mark all read
+                                    <CheckCheck size={12} /> {tr("Mark all read")}
                                 </button>
                             )}
                             <button
@@ -515,8 +521,8 @@ function DrawerPanel({ open, onClose, notifications, loading, unreadCount, onMar
                             <div className="h-16 w-16 bg-blue-50 rounded-2xl flex items-center justify-center mb-4">
                                 <Inbox size={28} className="text-blue-300" />
                             </div>
-                            <p className="text-sm font-semibold text-gray-700">All caught up!</p>
-                            <p className="text-xs text-gray-400 mt-1">No notifications yet. We'll let you know when something happens.</p>
+                            <p className="text-sm font-semibold text-gray-700">{tr("All caught up!")}</p>
+                            <p className="text-xs text-gray-400 mt-1">{tr("No notifications yet. We'll let you know when something happens.")}</p>
                         </div>
                     ) : (
                         Object.entries(groups).map(([label, items]) => {
@@ -548,7 +554,7 @@ function DrawerPanel({ open, onClose, notifications, loading, unreadCount, onMar
 
                 {/* ── Footer ── */}
                 <div className="border-t border-gray-100 px-4 py-3 bg-gray-50 flex items-center justify-between shrink-0">
-                    <p className="text-xs text-gray-400">{notifications.length} loaded</p>
+                    <p className="text-xs text-gray-400">{tr(":notifications_count loaded", { notifications_count: notifications.length })}</p>
                     <Link
                         href="/notifications"
                         onClick={onClose}
@@ -678,7 +684,7 @@ export default function NotificationBell({ onCountChange }) {
             <button
                 onClick={openDrawer}
                 className="relative p-2 rounded-xl hover:bg-gray-100 transition-colors group"
-                title="Notifications"
+                title={tr("Notifications")}
             >
                 <Bell
                     size={20}

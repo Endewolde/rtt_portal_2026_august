@@ -778,3 +778,60 @@ test('the reporting officer loads the open report on the proposal page, with the
 
     expect($proposal->fresh()->status)->toBe('validated');
 });
+
+// ─── Approval Reports page: counts, search, filters and paging ───────────────
+
+test('the list carries per-tab counts, review outcomes and how long reports wait', function () {
+    [$first, $collegeA] = par_makeProposal('under_blind_review');
+    [$second, $collegeB] = par_makeProposal('under_blind_review');
+    [, $reportA] = par_report($first, $collegeA);
+    par_report($second, $collegeB);
+    $reportA->forceFill(['created_at' => now()->subDays(5)])->save();
+
+    $central = User::factory()->create();
+    $central->assignRole('central_officer');
+    par_resolve($reportA->fresh(), 'approval_stands', as: $central);
+
+    $stats = $this->actingAs($central, 'sanctum')->getJson('/api/v1/approval-reports?status=open')->assertOk()->json('meta.stats');
+
+    expect($stats['open'])->toBe(1)
+        ->and($stats['reviewed'])->toBe(1)
+        ->and($stats['withdrawn'])->toBe(0)
+        ->and($stats['outcomes']['approval_stands'])->toBe(1)
+        ->and($stats['avg_review_days'])->toBeGreaterThanOrEqual(4.9)
+        ->and($stats['oldest_open_days'])->toBe(0);
+});
+
+test('reports can be searched by tracker number and filtered by issue', function () {
+    [$first, $collegeA] = par_makeProposal('under_blind_review');
+    [$second, $collegeB] = par_makeProposal('under_blind_review');
+    par_report($first, $collegeA);
+    $officer = User::factory()->create(['college_id' => $collegeB->id]);
+    $officer->assignRole('college_officer');
+    $this->actingAs($officer, 'sanctum')->postJson("/api/v1/proposals/{$second->id}/approval-reports", ['issue_type' => 'plagiarism'])->assertCreated();
+
+    $central = User::factory()->create();
+    $central->assignRole('central_officer');
+    $this->actingAs($central, 'sanctum');
+
+    expect(collect($this->getJson("/api/v1/approval-reports?status=open&search={$first->tracker_number}")->json('data.data'))->pluck('proposal_id')->all())
+        ->toBe([$first->id])
+        ->and(collect($this->getJson('/api/v1/approval-reports?status=open&issue_type=plagiarism')->json('data.data'))->pluck('proposal_id')->all())
+        ->toBe([$second->id]);
+    $this->getJson('/api/v1/approval-reports?issue_type=made_up')->assertUnprocessable();
+});
+
+test('the list pages through reports instead of stopping at the first twenty', function () {
+    $central = User::factory()->create();
+    $central->assignRole('central_officer');
+    foreach (range(1, 3) as $i) {
+        [$proposal, $college] = par_makeProposal('under_blind_review');
+        par_report($proposal, $college);
+    }
+
+    $page = $this->actingAs($central, 'sanctum')->getJson('/api/v1/approval-reports?status=open&per_page=2&page=2&sort=oldest')->assertOk();
+
+    expect($page->json('data.total'))->toBe(3)
+        ->and($page->json('data.last_page'))->toBe(2)
+        ->and($page->json('data.data'))->toHaveCount(1);
+});

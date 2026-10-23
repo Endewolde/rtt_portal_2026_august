@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { translate as tr, Trans } from '../../lib/i18n'
 import { Link, usePage, router } from '@inertiajs/react';
 import {
     ClipboardCheck, Clock, AlertCircle, Download,
@@ -67,17 +68,17 @@ function DueBadge({ dueDate }) {
     if (days === null) return null;
     if (days < 0) return (
         <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-50 border border-red-200 px-2.5 py-1 rounded-full">
-            <AlertCircle size={11} className="animate-pulse" /> Overdue {Math.abs(days)}d
+            <AlertCircle size={11} className="animate-pulse" /> {tr("Overdue :daysd", { days: Math.abs(days) })}
         </span>
     );
     if (days === 0) return (
         <span className="inline-flex items-center gap-1 text-xs font-semibold text-orange-600 bg-orange-50 border border-orange-200 px-2.5 py-1 rounded-full">
-            <Clock size={11} className="animate-pulse" /> Due today
+            <Clock size={11} className="animate-pulse" /> {tr("Due today")}
         </span>
     );
     if (days <= 3) return (
         <span className="inline-flex items-center gap-1 text-xs font-semibold text-orange-500 bg-orange-50 border border-orange-200 px-2.5 py-1 rounded-full">
-            <Clock size={11} /> {days}d left
+            <Clock size={11} /> {tr(":daysd left", { days: days })}
         </span>
     );
     return (
@@ -227,7 +228,7 @@ function CompletedCard({ assignment }) {
                         {pct !== null && (
                             <div className="text-right">
                                 <div className="text-xl font-extrabold text-emerald-600 tabular-nums leading-none">{pct}%</div>
-                                <div className="text-[10px] text-gray-400 mt-0.5">{totalScore}/{maxScore} pts</div>
+                                <div className="text-[10px] text-gray-400 mt-0.5">{tr(":totalScore/:maxScore pts", { totalScore: totalScore, maxScore: maxScore })}</div>
                             </div>
                         )}
                         <button
@@ -260,7 +261,7 @@ function CompletedCard({ assignment }) {
                             </div>
                         ))}
                         {comments.length === 0 && (
-                            <p className="text-xs text-gray-400 italic">No written comments provided.</p>
+                            <p className="text-xs text-gray-400 italic">{tr("No written comments provided.")}</p>
                         )}
                     </div>
                 )}
@@ -320,22 +321,22 @@ function CoiDeclarationModal({ assignment, onDeclared, onConflictReported, onClo
                             <ShieldAlert size={20} className="text-white" />
                         </div>
                         <div>
-                            <h2 className="text-base font-bold text-white">Conflict of Interest Declaration</h2>
-                            <p className="text-xs text-white/80 mt-0.5">Required before accessing this review</p>
+                            <h2 className="text-base font-bold text-white">{tr("Conflict of Interest Declaration")}</h2>
+                            <p className="text-xs text-white/80 mt-0.5">{tr("Required before accessing this review")}</p>
                         </div>
                     </div>
                 </div>
 
                 <div className="p-6 space-y-4">
                     <div className="bg-violet-50 border border-violet-200 rounded-xl p-4">
-                        <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide mb-1">Proposal</p>
+                        <p className="text-xs font-semibold text-violet-700 uppercase tracking-wide mb-1">{tr("Proposal")}</p>
                         <p className="text-sm font-semibold text-gray-900">
                             {assignment.proposal?.tracker_number} — {assignment.proposal?.title || 'Untitled'}
                         </p>
                     </div>
 
                     <p className="text-sm text-gray-600 leading-relaxed">
-                        Before proceeding, you must declare whether you have any conflict of interest with this proposal or its investigators — e.g. you're in the same department, have collaborated with the PI before, or have a personal relationship with them.
+                        {tr("Before proceeding, you must declare whether you have any conflict of interest with this proposal or its investigators — e.g. you're in the same department, have collaborated with the PI before, or have a personal relationship with them.")}
                     </p>
 
                     {!showConflictForm ? (
@@ -348,7 +349,7 @@ function CoiDeclarationModal({ assignment, onDeclared, onConflictReported, onClo
                                     className="mt-0.5 h-4 w-4 rounded border-gray-300 text-violet-600 cursor-pointer"
                                 />
                                 <span className="text-sm text-gray-700 group-hover:text-gray-900 leading-relaxed">
-                                    I confirm that I have <strong>no conflict of interest</strong> with this proposal and that I can review it fairly and objectively.
+                                    <Trans text="I confirm that I have <b>no conflict of interest</b> with this proposal and that I can review it fairly and objectively." />
                                 </span>
                             </label>
 
@@ -373,24 +374,24 @@ function CoiDeclarationModal({ assignment, onDeclared, onConflictReported, onClo
                                 onClick={() => setShowConflictForm(true)}
                                 className="flex items-center gap-1.5 text-xs font-medium text-red-500 hover:text-red-700 transition-colors"
                             >
-                                <AlertCircle size={12} /> I actually have a conflict — report it instead
+                                <AlertCircle size={12} /> {tr("I actually have a conflict — report it instead")}
                             </button>
                         </>
                     ) : (
                         <>
                             <div className="bg-red-50 border border-red-200 rounded-xl p-4">
                                 <label className="block text-xs font-semibold text-red-700 mb-1.5">
-                                    Briefly describe the conflict
+                                    {tr("Briefly describe the conflict")}
                                 </label>
                                 <textarea
                                     value={reason}
                                     onChange={e => setReason(e.target.value)}
                                     rows={3}
-                                    placeholder="e.g. The PI is my former PhD supervisor."
+                                    placeholder={tr("e.g. The PI is my former PhD supervisor.")}
                                     className="w-full border border-red-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 bg-white"
                                 />
                                 <p className="text-xs text-red-600 mt-1.5">
-                                    You will not be able to score this proposal. The officer who assigned you will be notified to reassign it.
+                                    {tr("You will not be able to score this proposal. The officer who assigned you will be notified to reassign it.")}
                                 </p>
                             </div>
 
@@ -455,7 +456,7 @@ function AssignmentCard({ assignment, tabKey, onCoiDeclared, onConflictReported 
             {isNew && (
                 <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-700 text-[11px] font-bold px-2 py-0.5 rounded-full z-10">
                     <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                    NEW
+                    {tr("NEW")}
                 </div>
             )}
             <div className="p-5">
@@ -504,11 +505,11 @@ function AssignmentCard({ assignment, tabKey, onCoiDeclared, onConflictReported 
                         <DueBadge dueDate={assignment.due_date} />
                         {isDone ? (
                             <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl">
-                                <CheckCircle2 size={13} /> Submitted
+                                <CheckCircle2 size={13} /> {tr("Submitted")}
                             </span>
                         ) : hasReportedConflict ? (
                             <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-700 bg-red-50 border border-red-200 px-3 py-1.5 rounded-xl">
-                                <AlertCircle size={13} /> Conflict Reported
+                                <AlertCircle size={13} /> {tr("Conflict Reported")}
                             </span>
                         ) : (
                             <Link
@@ -521,7 +522,7 @@ function AssignmentCard({ assignment, tabKey, onCoiDeclared, onConflictReported 
                                 }`}
                             >
                                 <ClipboardCheck size={13} />
-                                Score Review
+                                {tr("Score Review")}
                                 <ChevronRight size={13} />
                             </Link>
                         )}
@@ -612,7 +613,7 @@ function AbstractReviewCard({ item, onSubmitted, index, total }) {
                     'px-6 py-2 flex items-center justify-between text-[11px] font-semibold border-b',
                     hasReview ? 'bg-gray-50 text-gray-400 border-gray-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100',
                 )}>
-                    <span>Abstract {index} of {total}</span>
+                    <span>{tr("Abstract :index of :total", { index: index, total: total })}</span>
                     <span>{hasReview ? '✓ Reviewed' : '⏳ Pending review'}</span>
                 </div>
             )}
@@ -632,7 +633,7 @@ function AbstractReviewCard({ item, onSubmitted, index, total }) {
                     </div>
                     {hasReview && (
                         <span className="shrink-0 flex items-center gap-1.5 bg-emerald-100 text-emerald-700 text-xs font-bold px-3 py-1.5 rounded-full">
-                            <CheckCircle2 size={12} /> Submitted
+                            <CheckCircle2 size={12} /> {tr("Submitted")}
                         </span>
                     )}
                 </div>
@@ -650,7 +651,7 @@ function AbstractReviewCard({ item, onSubmitted, index, total }) {
                 )}
 
                 <div className="mb-5">
-                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">Abstract</p>
+                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">{tr("Abstract")}</p>
                     <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{item.body ?? item.abstract_body ?? '—'}</p>
                 </div>
 
@@ -670,14 +671,14 @@ function AbstractReviewCard({ item, onSubmitted, index, total }) {
                             <ClipboardCheck size={15} className="text-white" />
                         </div>
                         <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold text-blue-900">Submitted Document</p>
+                            <p className="text-xs font-semibold text-blue-900">{tr("Submitted Document")}</p>
                             <p className="text-[10px] text-blue-500 truncate">{item.file_path.split('/').pop()}</p>
                         </div>
                         <a href={item.file_path} target="_blank" rel="noreferrer"
                             className="shrink-0 flex items-center gap-1.5 text-xs font-bold text-blue-700
                                        bg-white border border-blue-200 px-3 py-1.5 rounded-lg
                                        hover:bg-blue-700 hover:text-white hover:border-blue-700 transition-colors">
-                            <ExternalLink size={11} /> Open
+                            <ExternalLink size={11} /> {tr("Open")}
                         </a>
                     </div>
                 )}
@@ -697,19 +698,19 @@ function AbstractReviewCard({ item, onSubmitted, index, total }) {
                                             myReview.recommendation === 'reject' ? 'Reject' : 'Revise'}
                                     </p>
                                     <p className={cn(`text-xs text-${recColor}-600 mt-0.5`)}>
-                                        {formatDate(myReview.submitted_at ?? myReview.created_at)} · No further action needed
+                                        {tr(":created_at · No further action needed", { created_at: formatDate(myReview.submitted_at ?? myReview.created_at) })}
                                     </p>
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-3">
                                 <div className="bg-gray-50 rounded-xl p-4 text-center border border-gray-100">
-                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Score</p>
+                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">{tr("Score")}</p>
                                     <p className="text-3xl font-black text-indigo-600 leading-none">{myReview.score}</p>
                                     <p className="text-[10px] text-gray-400 mt-1">/ 10</p>
                                 </div>
                                 <div className="bg-gray-50 rounded-xl p-4 text-center border border-gray-100">
-                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Recommendation</p>
+                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">{tr("Recommendation")}</p>
                                     <span className={cn(
                                         'inline-block mt-2 text-sm font-bold px-3 py-1.5 rounded-full capitalize',
                                         myReview.recommendation === 'accept' ? 'bg-emerald-100 text-emerald-700' :
@@ -724,7 +725,7 @@ function AbstractReviewCard({ item, onSubmitted, index, total }) {
 
                             {myReview.comments && (
                                 <div>
-                                    <p className="text-xs font-semibold text-gray-500 mb-2">Your Comments</p>
+                                    <p className="text-xs font-semibold text-gray-500 mb-2">{tr("Your Comments")}</p>
                                     <p className="text-sm text-gray-600 leading-relaxed bg-gray-50 rounded-xl p-4 border border-gray-100 whitespace-pre-line">
                                         {myReview.comments}
                                     </p>
@@ -733,16 +734,16 @@ function AbstractReviewCard({ item, onSubmitted, index, total }) {
 
                             <div className="flex items-center gap-2 text-xs text-gray-400 bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
                                 <ShieldAlert size={12} className="shrink-0" />
-                                This review is locked. Contact an admin if a correction is needed.
+                                {tr("This review is locked. Contact an admin if a correction is needed.")}
                             </div>
                         </div>
                     ) : (
                         <div className="space-y-5">
-                            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">Submit Your Review</p>
+                            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">{tr("Submit Your Review")}</p>
 
                             <div>
                                 <div className="flex items-center justify-between mb-2">
-                                    <label className="text-xs font-semibold text-gray-600">Score</label>
+                                    <label className="text-xs font-semibold text-gray-600">{tr("Score")}</label>
                                     <span className="text-lg font-bold text-indigo-600">
                                         {score}<span className="text-xs text-gray-400 font-normal">/10</span>
                                     </span>
@@ -751,13 +752,13 @@ function AbstractReviewCard({ item, onSubmitted, index, total }) {
                                     onChange={e => setScore(Number(e.target.value))}
                                     className="w-full accent-indigo-600 h-2 rounded-full cursor-pointer" />
                                 <div className="flex justify-between mt-1">
-                                    <span className="text-[10px] text-gray-400">Poor (1)</span>
-                                    <span className="text-[10px] text-gray-400">Excellent (10)</span>
+                                    <span className="text-[10px] text-gray-400">{tr("Poor (1)")}</span>
+                                    <span className="text-[10px] text-gray-400">{tr("Excellent (10)")}</span>
                                 </div>
                             </div>
 
                             <div>
-                                <label className="block text-xs font-semibold text-gray-600 mb-2">Recommendation *</label>
+                                <label className="block text-xs font-semibold text-gray-600 mb-2">{tr("Recommendation *")}</label>
                                 <div className="flex gap-2.5">
                                     {RECOMMENDATION_OPTIONS.map(opt => (
                                         <button key={opt.value} onClick={() => setRecommendation(opt.value)}
@@ -772,9 +773,9 @@ function AbstractReviewCard({ item, onSubmitted, index, total }) {
                             </div>
 
                             <div>
-                                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Comments</label>
+                                <label className="block text-xs font-semibold text-gray-600 mb-1.5">{tr("Comments")}</label>
                                 <textarea value={comments} onChange={e => setComments(e.target.value)}
-                                    rows={4} placeholder="Provide detailed feedback for the author…"
+                                    rows={4} placeholder={tr("Provide detailed feedback for the author…")}
                                     className="w-full border border-gray-200 bg-gray-50 rounded-xl px-3.5 py-2.5 text-sm
                                                focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:bg-white transition-colors resize-none" />
                             </div>
@@ -812,8 +813,8 @@ function AbstractReviewsPanel({ items, loading, onReload }) {
         return (
             <div className="bg-white border border-dashed border-gray-300 rounded-2xl p-12 text-center">
                 <BookOpen size={28} className="text-gray-300 mx-auto mb-3" />
-                <p className="text-sm font-medium text-gray-500">No Abstract Review assignments</p>
-                <p className="text-xs text-gray-400 mt-1">Abstracts assigned to you for review will appear here.</p>
+                <p className="text-sm font-medium text-gray-500">{tr("No Abstract Review assignments")}</p>
+                <p className="text-xs text-gray-400 mt-1">{tr("Abstracts assigned to you for review will appear here.")}</p>
             </div>
         );
     }
@@ -827,7 +828,7 @@ function AbstractReviewsPanel({ items, loading, onReload }) {
             <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
                 <div className="flex items-center justify-between mb-3">
                     <div>
-                        <h3 className="text-sm font-bold text-gray-900">Your Review Progress</h3>
+                        <h3 className="text-sm font-bold text-gray-900">{tr("Your Review Progress")}</h3>
                         <p className="text-xs text-gray-400 mt-0.5">
                             {reviewed} of {items.length} abstract{items.length !== 1 ? 's' : ''} reviewed
                         </p>
@@ -836,7 +837,7 @@ function AbstractReviewsPanel({ items, loading, onReload }) {
                         {pending > 0 && (
                             <span className="flex items-center gap-1.5 text-xs font-semibold text-amber-700
                                              bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-full">
-                                <Clock size={11} /> {pending} pending
+                                <Clock size={11} /> {tr(":pending pending", { pending: pending })}
                             </span>
                         )}
                         <span className={cn('text-2xl font-black', pct === 100 ? 'text-emerald-600' : 'text-indigo-600')}>
@@ -924,7 +925,7 @@ export default function ReviewIndex() {
                 <div className="p-8 flex items-center justify-center min-h-64">
                     <div className="flex flex-col items-center gap-3">
                         <div className="w-9 h-9 border-[3px] border-blue-600 border-t-transparent rounded-full animate-spin" />
-                        <p className="text-sm text-gray-400">Loading assignments…</p>
+                        <p className="text-sm text-gray-400">{tr("Loading assignments…")}</p>
                     </div>
                 </div>
             </AppLayout>
@@ -939,8 +940,8 @@ export default function ReviewIndex() {
                         <div className="flex items-start gap-3">
                             <Lock size={18} className="mt-0.5 shrink-0 text-indigo-600" />
                             <div>
-                                <p className="text-sm font-semibold text-indigo-900">Accept the {agreement.academic_year} confidentiality agreement</p>
-                                <p className="text-xs text-indigo-700">You'll need to accept it once this year before opening any proposal to review.</p>
+                                <p className="text-sm font-semibold text-indigo-900">{tr("Accept the :academic_year confidentiality agreement", { academic_year: agreement.academic_year })}</p>
+                                <p className="text-xs text-indigo-700">{tr("You'll need to accept it once this year before opening any proposal to review.")}</p>
                             </div>
                         </div>
                         <button onClick={() => setShowAgreement(true)} className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Read &amp; accept</button>
@@ -961,7 +962,7 @@ export default function ReviewIndex() {
                             <Shield size={20} className="text-white" />
                         </div>
                         <div>
-                            <h1 className="text-xl font-bold text-gray-900">My Review Assignments</h1>
+                            <h1 className="text-xl font-bold text-gray-900">{tr("My Review Assignments")}</h1>
                             <p className="text-sm text-gray-400 mt-0.5">
                                 {allTotal} total assignment{allTotal !== 1 ? 's' : ''} across all phases
                             </p>
@@ -974,7 +975,7 @@ export default function ReviewIndex() {
                                 onChange={e => { setYearFilter(e.target.value); setActiveTab('blind'); }}
                                 className="flex-1 sm:flex-none text-sm border border-gray-200 rounded-xl px-3 py-2.5 sm:py-2 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
                             >
-                                <option value="">All Years</option>
+                                <option value="">{tr("All Years")}</option>
                                 {availableYears.map(y => (
                                     <option key={y} value={y}>{y}</option>
                                 ))}
@@ -984,7 +985,7 @@ export default function ReviewIndex() {
                             href={`/api/v1/calendar/export?token=${localStorage.getItem('rtt_token') ?? ''}`}
                             className="flex items-center justify-center gap-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-3.5 py-2.5 sm:py-2 rounded-xl transition-colors shrink-0"
                         >
-                            <Download size={13} /> Export iCal
+                            <Download size={13} /> {tr("Export iCal")}
                         </a>
                     </div>
                 </div>
@@ -995,10 +996,9 @@ export default function ReviewIndex() {
                         <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                             <ClipboardCheck size={28} className="text-gray-300" />
                         </div>
-                        <h3 className="text-gray-700 font-semibold mb-1.5">No assignments yet</h3>
+                        <h3 className="text-gray-700 font-semibold mb-1.5">{tr("No assignments yet")}</h3>
                         <p className="text-sm text-gray-400 max-w-xs mx-auto leading-relaxed">
-                            You have no review assignments at the moment.
-                            Check back after proposals are assigned for review.
+                            {tr("You have no review assignments at the moment. Check back after proposals are assigned for review.")}
                         </p>
                     </div>
                 )}
@@ -1106,8 +1106,8 @@ export default function ReviewIndex() {
                         {activeTab !== 'abstracts' && tabItems.length === 0 && (
                             <div className="bg-white border border-dashed border-gray-300 rounded-2xl p-12 text-center">
                                 <currentTab.icon size={28} className="text-gray-300 mx-auto mb-3" />
-                                <p className="text-sm font-medium text-gray-500">No {currentTab.label} assignments</p>
-                                <p className="text-xs text-gray-400 mt-1">Assignments for this phase will appear here.</p>
+                                <p className="text-sm font-medium text-gray-500">{tr("No :label assignments", { label: currentTab.label })}</p>
+                                <p className="text-xs text-gray-400 mt-1">{tr("Assignments for this phase will appear here.")}</p>
                             </div>
                         )}
 

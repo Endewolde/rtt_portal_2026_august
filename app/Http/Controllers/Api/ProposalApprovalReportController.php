@@ -12,6 +12,7 @@ use App\Services\ApprovalReportService;
 use App\Services\LegacyGrantService;
 use App\Services\WorkflowService;
 use App\Support\AuditLogger;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -185,12 +186,16 @@ class ProposalApprovalReportController extends Controller
             return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
         }
 
-        $reports = ProposalApprovalReport::with([
-            'proposal:id,tracker_number,title,category,college_id,status',
-            'proposal.college:id,name',
-            'reportedBy:id,name',
-            'reviewedBy:id,name',
-        ])
+        $filters = $request->validate([
+            'status' => 'nullable|in:open,reviewed,withdrawn',
+            'search' => 'nullable|string|max:200',
+            'issue_type' => ['nullable', Rule::in(array_keys(ProposalApprovalReport::ISSUE_TYPES))],
+            'sort' => 'nullable|in:newest,oldest',
+            'per_page' => 'nullable|integer|min:1|max:100',
+        ]);
+
+        // Everything the user may see, before the tab, search and issue filters.
+        $scoped = fn () => ProposalApprovalReport::query()
             ->whereHas('proposal', fn ($pq) => $pq->whereNotIn('status', self::MOVED_ON_STATUSES))
             ->when(! $isReviewer, fn ($q) => $q->where('reported_by', $user->id))
             ->when($isReviewer, function ($q) use ($request) {
@@ -207,16 +212,65 @@ class ProposalApprovalReportController extends Controller
                         $pq->where('college_id', $request->college_id);
                     }
                 });
-            })
-            ->when($request->status, fn ($q, $s) => $q->where('status', $s))
-            ->orderByDesc('created_at')
-            ->paginate(20);
+            });
+
+        $term = trim((string) ($filters['search'] ?? ''));
+
+        $reports = $scoped()
+            ->with([
+                'proposal:id,tracker_number,title,category,college_id,status',
+                'proposal.college:id,name',
+                'reportedBy:id,name',
+                'reviewedBy:id,name',
+            ])
+            ->when($filters['status'] ?? null, fn ($q, $s) => $q->where('status', $s))
+            ->when($filters['issue_type'] ?? null, fn ($q, $t) => $q->where('issue_type', $t))
+            ->when($term !== '', fn ($q) => $q->where(fn ($w) => $w
+                ->whereHas('proposal', fn ($pq) => $pq->where('tracker_number', 'like', "%{$term}%")->orWhere('title', 'like', "%{$term}%"))
+                ->orWhereHas('reportedBy', fn ($uq) => $uq->where('name', 'like', "%{$term}%"))))
+            ->orderBy('created_at', ($filters['sort'] ?? 'newest') === 'oldest' ? 'asc' : 'desc')
+            ->paginate($filters['per_page'] ?? 20);
 
         $reports->getCollection()->each(fn (ProposalApprovalReport $report) => $report
             ->setAttribute('can_report_again', $this->canReportAgain($report, $user))
             ->setAttribute('can_cancel', $this->canCancel($report, $user)));
 
-        return response()->json(['data' => $reports, 'message' => '', 'errors' => [], 'meta' => ['can_resolve' => (bool) $isReviewer]]);
+        return response()->json(['data' => $reports, 'message' => '', 'errors' => [], 'meta' => [
+            'can_resolve' => (bool) $isReviewer,
+            'stats' => $this->reportStats($scoped),
+            'colleges' => $isReviewer && ! $request->_college_scope
+                ? DB::table('colleges')->where('status', 'active')->orderBy('name')->get(['id', 'name'])
+                : [],
+        ]]);
+    }
+
+    /**
+     * Headline numbers for the reports the user may see: per tab, how reviewed
+     * reports ended, how long open ones have waited and reviews took.
+     *
+     * @param  callable(): Builder<ProposalApprovalReport>  $scoped
+     * @return array<string, mixed>
+     */
+    private function reportStats(callable $scoped): array
+    {
+        $counts = $scoped()->selectRaw('status, COUNT(*) as total')->groupBy('status')->pluck('total', 'status');
+        $outcomes = $scoped()->where('status', 'reviewed')->selectRaw('outcome, COUNT(*) as total')->groupBy('outcome')->pluck('total', 'outcome');
+        $oldestOpen = $scoped()->where('status', 'open')->min('created_at');
+        $reviewDays = $scoped()->where('status', 'reviewed')->whereNotNull('reviewed_at')->get(['created_at', 'reviewed_at'])
+            ->map(fn ($r) => $r->created_at->diffInHours($r->reviewed_at) / 24);
+
+        return [
+            'open' => (int) ($counts['open'] ?? 0),
+            'reviewed' => (int) ($counts['reviewed'] ?? 0),
+            'withdrawn' => (int) ($counts['withdrawn'] ?? 0),
+            'outcomes' => [
+                self::OUTCOME_APPROVAL_REVOKED => (int) ($outcomes[self::OUTCOME_APPROVAL_REVOKED] ?? 0),
+                self::OUTCOME_APPROVAL_STANDS => (int) ($outcomes[self::OUTCOME_APPROVAL_STANDS] ?? 0),
+                self::OUTCOME_MOVED_TO_ONGOING => (int) ($outcomes[self::OUTCOME_MOVED_TO_ONGOING] ?? 0),
+            ],
+            'oldest_open_days' => $oldestOpen ? (int) Carbon::parse($oldestOpen)->diffInDays(now()) : null,
+            'avg_review_days' => $reviewDays->isEmpty() ? null : round($reviewDays->avg(), 1),
+        ];
     }
 
     /**

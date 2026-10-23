@@ -7,14 +7,19 @@ use App\Models\Proposal;
 use App\Models\RepositoryRecord;
 use App\Models\ResearchOutput;
 use App\Models\User;
+use App\Services\DoiLookupService;
 use App\Services\ResearchOutputService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 class ResearchOutputController extends Controller
 {
-    public function __construct(private ResearchOutputService $outputService) {}
+    public function __construct(
+        private ResearchOutputService $outputService,
+        private DoiLookupService $doiLookup,
+    ) {}
 
     public function stats(Request $request): JsonResponse
     {
@@ -40,15 +45,78 @@ class ResearchOutputController extends Controller
 
     public function eligibleProposals(Request $request): JsonResponse
     {
+        return response()->json(['data' => $this->eligibleQuery($request->user())->orderBy('title')->get(), 'message' => '', 'errors' => [], 'meta' => []]);
+    }
+
+    /**
+     * Fill in an output from its DOI (Crossref), suggest the project it belongs to and
+     * say if it is already recorded.
+     */
+    public function lookupDoi(Request $request): JsonResponse
+    {
+        $request->validate(['doi' => ['required', 'string', 'max:300']]);
         $user = $request->user();
-        $query = Proposal::whereIn('status', ['funded', 'completed'])
+
+        $result = $this->doiLookup->lookup($request->string('doi')->toString());
+        if (! $result['found']) {
+            return response()->json(['data' => null, 'message' => $result['message'], 'errors' => [], 'meta' => []], 422);
+        }
+
+        $existing = ($id = $this->doiLookup->existingOutputId($result['doi']))
+            ? ResearchOutput::with('proposal:id,tracker_number,title')->find($id, ['id', 'title', 'proposal_id'])
+            : null;
+
+        return response()->json([
+            'data' => $result + [
+                'suggestion' => $this->doiLookup->suggestProject(
+                    $this->eligibleQuery($user)->get(['id', 'title']),
+                    $result['fields']['title'] ?? null,
+                    $result['funding'],
+                ),
+                'existing' => $existing ? [
+                    'id' => $existing->id,
+                    'title' => $existing->title,
+                    'tracker_number' => $existing->proposal?->tracker_number,
+                ] : null,
+            ],
+            'message' => '',
+            'errors' => [],
+            'meta' => [],
+        ]);
+    }
+
+    /** Projects this user may record outputs for. */
+    private function eligibleQuery(User $user): Builder
+    {
+        $query = Proposal::whereIn('status', ResearchOutputService::RECORDABLE_STATUSES)
             ->with(['college:id,name'])
             ->select('id', 'tracker_number', 'title', 'college_id', 'status', 'academic_year', 'category');
 
         $user->accessScope()->constrain($query, 'proposals', fn ($q) => $q->where(fn ($q) => $q->where('pi_user_id', $user->id)
             ->orWhereHas('members', fn ($sq) => $sq->where('user_id', $user->id)->where('status', 'active'))));
 
-        return response()->json(['data' => $query->orderBy('title')->get(), 'message' => '', 'errors' => [], 'meta' => []]);
+        return $query;
+    }
+
+    /** A clean DOI, or a validation error when it is malformed or already recorded on another output. */
+    private function checkDoi(array &$validated, ?string $exceptOutputId = null): void
+    {
+        if (empty($validated['doi'])) {
+            return;
+        }
+
+        $doi = DoiLookupService::normalize($validated['doi']);
+        if (! $doi) {
+            throw ValidationException::withMessages(['doi' => 'That doesn\'t look like a DOI. It starts with 10. — for example 10.1016/j.jenvman.2024.120345.']);
+        }
+
+        $existing = $this->doiLookup->existingOutputId($doi);
+        if ($existing && $existing !== $exceptOutputId) {
+            $title = ResearchOutput::whereKey($existing)->value('title');
+            throw ValidationException::withMessages(['doi' => "This DOI is already recorded as \"{$title}\"."]);
+        }
+
+        $validated['doi'] = $doi;
     }
 
     public function index(Request $request): JsonResponse
@@ -123,6 +191,7 @@ class ResearchOutputController extends Controller
         $proposal = Proposal::findOrFail($validated['proposal_id']);
 
         $this->authorizeProposalAccess($user, $validated['proposal_id']);
+        $this->checkDoi($validated);
 
         try {
             $output = $this->outputService->record($proposal, $validated['output_type'], $validated, $user);
@@ -191,11 +260,14 @@ class ResearchOutputController extends Controller
             'impact_category' => ['nullable', 'string', 'max:100'],
         ]);
 
+        $this->checkDoi($validated, $output->id);
+
         if (isset($validated['title'])) {
             $output->title = $validated['title'];
         }
         $output->description = $validated['description'] ?? $output->description;
         $output->save();
+        $this->outputService->updateDetails($output, $validated);
 
         $output->load(['publication', 'patent', 'conferencePresentation', 'technology', 'communityImpact']);
 

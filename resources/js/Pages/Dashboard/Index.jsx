@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { translate as tr } from '../../lib/i18n'
 import { Link } from '@inertiajs/react'
 import {
     AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -144,7 +145,7 @@ function TrendChart({ data, loading, primaryColor }) {
     if (!hasData) return (
         <div className="flex flex-col items-center justify-center py-12 text-gray-400">
             <BarChart2 size={32} className="mb-2 opacity-30" />
-            <p className="text-sm">No submission data yet</p>
+            <p className="text-sm">{tr("No submission data yet")}</p>
         </div>
     )
 
@@ -196,7 +197,7 @@ function PipelineDonut({ statusCounts, loading }) {
     )
 
     if (!total) return (
-        <div className="py-8 text-center text-gray-400 text-sm">No proposals yet</div>
+        <div className="py-8 text-center text-gray-400 text-sm">{tr("No proposals yet")}</div>
     )
 
     return (
@@ -217,7 +218,7 @@ function PipelineDonut({ statusCounts, loading }) {
                     </ResponsiveContainer>
                     <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                         <span className="text-2xl font-bold text-gray-800 leading-none">{total}</span>
-                        <span className="text-[10px] text-gray-400 mt-0.5 uppercase tracking-wide">Total</span>
+                        <span className="text-[10px] text-gray-400 mt-0.5 uppercase tracking-wide">{tr("Total")}</span>
                     </div>
                 </div>
             </div>
@@ -273,7 +274,7 @@ function BudgetSummary({ data, loading }) {
             ))}
             {allocated > 0 && (
                 <div className="flex items-center justify-between pt-1 border-t border-gray-50">
-                    <span className="text-xs text-gray-400">Disbursement rate</span>
+                    <span className="text-xs text-gray-400">{tr("Disbursement rate")}</span>
                     <span className={cn(
                         'text-xs font-bold px-2 py-0.5 rounded-full',
                         pct >= 80 ? 'bg-green-50 text-green-700' : pct >= 50 ? 'bg-amber-50 text-amber-700' : 'bg-gray-50 text-gray-600'
@@ -323,8 +324,8 @@ function PendingTasks({ tasks, loading }) {
     if (!items.length) return (
         <div className="flex flex-col items-center justify-center py-10 text-gray-400">
             <CheckCircle2 size={32} className="mb-2 opacity-30 text-green-400" />
-            <p className="text-sm font-medium text-gray-500">All caught up!</p>
-            <p className="text-xs text-gray-400 mt-0.5">No pending actions</p>
+            <p className="text-sm font-medium text-gray-500">{tr("All caught up!")}</p>
+            <p className="text-xs text-gray-400 mt-0.5">{tr("No pending actions")}</p>
         </div>
     )
 
@@ -383,7 +384,7 @@ function NotificationsPanel({ notifications, loading }) {
     if (!notifications?.length) return (
         <div className="flex flex-col items-center justify-center py-8 text-gray-400">
             <Bell size={28} className="mb-2 opacity-30" />
-            <p className="text-sm">No new notifications</p>
+            <p className="text-sm">{tr("No new notifications")}</p>
         </div>
     )
 
@@ -525,10 +526,10 @@ function MyProposalsList({ proposals, loading }) {
     if (!proposals?.length) return (
         <div className="flex flex-col items-center justify-center py-10 text-gray-400">
             <FileText size={28} className="mb-2 opacity-30" />
-            <p className="text-sm">No proposals yet</p>
+            <p className="text-sm">{tr("No proposals yet")}</p>
             <Link href="/proposals/create"
                 className="mt-2 text-xs font-semibold text-indigo-600 hover:text-indigo-800">
-                Submit your first proposal →
+                {tr("Submit your first proposal →")}
             </Link>
         </div>
     )
@@ -576,7 +577,7 @@ function ReviewQueue({ queue, loading }) {
     if (!queue?.length) return (
         <div className="flex flex-col items-center justify-center py-10 text-gray-400">
             <CheckCircle2 size={28} className="mb-2 opacity-30 text-green-400" />
-            <p className="text-sm">No reviews assigned</p>
+            <p className="text-sm">{tr("No reviews assigned")}</p>
         </div>
     )
 
@@ -610,7 +611,7 @@ function ReviewQueue({ queue, loading }) {
                         <Link href={`/reviews/${a.assignment_id}/score`}
                             className="shrink-0 px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold
                                        rounded-xl hover:bg-indigo-700 transition-colors">
-                            Score
+                            {tr("Score")}
                         </Link>
                     </div>
                 )
@@ -797,7 +798,7 @@ export default function Dashboard() {
                                     <Calendar size={12} />
                                     <span>{new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
                                     <span className="opacity-40">·</span>
-                                    <span>AY {settings.current_academic_year}</span>
+                                    <span>{tr("AY :current_academic_year", { current_academic_year: settings.current_academic_year })}</span>
                                 </div>
                                 <h1 className="text-xl sm:text-2xl font-bold text-white mb-3">
                                     {greeting()}, {user?.name?.split(' ')[0] ?? 'User'}! 👋
@@ -851,7 +852,7 @@ export default function Dashboard() {
                 )}
 
                 {/* ── Quick Actions card ──────────────────────────────────── */}
-                <SectionCard title="Quick Actions">
+                <SectionCard title={tr("Quick Actions")}>
                     <QuickActions isAdmin={isAdmin} isPI={isPI} isReviewer={isReviewer} isFinance={isFinance} isCollegeOfficer={isCollegeOfficer} />
                 </SectionCard>
 
@@ -864,8 +865,8 @@ export default function Dashboard() {
                         {/* Trend chart (admin / central_officer) */}
                         {isAdmin && (
                             <SectionCard
-                                title="Proposal Submissions"
-                                action={<span className="text-xs text-gray-400 font-medium">Last 6 months</span>}
+                                title={tr("Proposal Submissions")}
+                                action={<span className="text-xs text-gray-400 font-medium">{tr("Last 6 months")}</span>}
                             >
                                 <TrendChart data={trendData} loading={loading} primaryColor={settings.primary_color} />
                             </SectionCard>
@@ -874,11 +875,11 @@ export default function Dashboard() {
                         {/* My Proposals list (PI / staff) */}
                         {isPI && (
                             <SectionCard
-                                title="My Proposals"
+                                title={tr("My Proposals")}
                                 action={
                                     <Link href="/my-proposals"
                                         className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1">
-                                        View all <ChevronRight size={11} />
+                                        {tr("View all")} <ChevronRight size={11} />
                                     </Link>
                                 }
                             >
@@ -889,11 +890,11 @@ export default function Dashboard() {
                         {/* College proposals summary (college_officer) */}
                         {isCollegeOfficer && !isAdmin && (
                             <SectionCard
-                                title="College Proposals"
+                                title={tr("College Proposals")}
                                 action={
                                     <Link href="/proposals"
                                         className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1">
-                                        View all <ChevronRight size={11} />
+                                        {tr("View all")} <ChevronRight size={11} />
                                     </Link>
                                 }
                             >
@@ -904,11 +905,11 @@ export default function Dashboard() {
                         {/* Review queue (reviewer) */}
                         {isReviewer && (
                             <SectionCard
-                                title="Review Queue"
+                                title={tr("Review Queue")}
                                 action={
                                     <Link href="/reviews"
                                         className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1">
-                                        View all <ChevronRight size={11} />
+                                        {tr("View all")} <ChevronRight size={11} />
                                     </Link>
                                 }
                             >
@@ -919,10 +920,10 @@ export default function Dashboard() {
                         {/* Budget utilization (finance) */}
                         {isFinance && !isAdmin && (
                             <SectionCard
-                                title="Budget Utilization"
+                                title={tr("Budget Utilization")}
                                 action={
                                     <span className="text-xs text-gray-400 font-medium">
-                                        FY {budgetSummary.fiscal_year ?? settings.current_academic_year}
+                                        {tr("FY :current_academic_year", { current_academic_year: budgetSummary.fiscal_year ?? settings.current_academic_year })}
                                     </span>
                                 }
                             >
@@ -932,7 +933,7 @@ export default function Dashboard() {
 
                         {/* Pending tasks */}
                         <SectionCard
-                            title="Action Center"
+                            title={tr("Action Center")}
                             action={
                                 <span className="text-xs text-gray-400 font-medium flex items-center gap-1">
                                     <Clock size={11} />
@@ -948,17 +949,17 @@ export default function Dashboard() {
                     <div className="space-y-5">
 
                         {/* Pipeline distribution */}
-                        <SectionCard title="Proposal Pipeline">
+                        <SectionCard title={tr("Proposal Pipeline")}>
                             <PipelineDonut statusCounts={statusCounts} loading={loading} />
                         </SectionCard>
 
                         {/* Budget summary (admin / finance) */}
                         {(isAdmin || isFinance) && (
                             <SectionCard
-                                title="Budget Summary"
+                                title={tr("Budget Summary")}
                                 action={
                                     <span className="text-xs text-gray-400 font-medium">
-                                        FY {budgetSummary.fiscal_year ?? settings.current_academic_year}
+                                        {tr("FY :current_academic_year", { current_academic_year: budgetSummary.fiscal_year ?? settings.current_academic_year })}
                                     </span>
                                 }
                             >
@@ -968,11 +969,11 @@ export default function Dashboard() {
 
                         {/* Notifications */}
                         <SectionCard
-                            title="Notifications"
+                            title={tr("Notifications")}
                             action={
                                 <Link href="/notifications"
                                     className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1">
-                                    View all <ChevronRight size={11} />
+                                    {tr("View all")} <ChevronRight size={11} />
                                 </Link>
                             }
                         >

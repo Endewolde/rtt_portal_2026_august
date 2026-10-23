@@ -129,8 +129,7 @@ test('reviews progress reports, the pipeline and reports for their own college o
         ->assertJsonPath('data.colleges.0.id', $this->college->id);
 
     $this->actingAs($this->manager, 'sanctum')->getJson('/api/v1/reports/builder-options')->assertOk();
-    $exported = $this->actingAs($this->manager, 'sanctum')->getJson('/api/v1/reports/proposals/export?format=json');
-    expect($exported->status())->not->toBe(403);
+    $this->actingAs($this->manager, 'sanctum')->get('/api/v1/reports/proposals/export')->assertOk();
 });
 
 test('the role needs a college: it can\'t be given to someone without one', function () {

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ app()->getLocale() }}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Review Assignment</title>
+<title>{{ __('Review Assignment') }}</title>
 <style>
   body{margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
   .wrap{max-width:600px;margin:40px auto;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 4px 32px rgba(0,0,0,.10);}
@@ -61,7 +61,8 @@
   $themeCard  = $isDefence ? 'card-purple' : 'card-blue';
   $themeNum   = $isDefence ? 'step-num-purple' : 'step-num-blue';
   $themeBtn   = $isDefence ? 'btn-purple' : 'btn-blue';
-  $badgeText  = $isReassign ? ($review_type ?? 'Review').' — Reassigned' : ($review_type ?? 'Review').' Assignment';
+  $reviewTypeLabel = __($review_type ?? 'Review');
+  $badgeText  = $isReassign ? __(':type — Reassigned', ['type' => $reviewTypeLabel]) : __(':type Assignment', ['type' => $reviewTypeLabel]);
 @endphp
 <div class="wrap">
   @include('emails.partials.logo_header')
@@ -72,16 +73,17 @@
         <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
       </svg>
     </div>
-    <h1>{{ $isReassign ? 'Review Reassignment' : 'New Review Assignment' }}</h1>
-    <p>{{ $isReassign ? 'You have been reassigned to review a proposal' : 'You have been assigned a proposal to evaluate' }}</p>
+    <h1>{{ $isReassign ? __('Review Reassignment') : __('New Review Assignment') }}</h1>
+    <p>{{ $isReassign ? __('You have been reassigned to review a proposal') : __('You have been assigned a proposal to evaluate') }}</p>
     <span class="badge">{{ $badgeText }}</span>
   </div>
 
   <div class="body">
-    <p style="font-size:15px;color:#374151;margin:0 0 16px;">Dear <strong>{{ $recipient->name ?? 'Reviewer' }}</strong>,</p>
+    <p style="font-size:15px;color:#374151;margin:0 0 16px;">{!! __('Dear :name,', ['name' => '<strong>'.e($recipient->name ?? __('Reviewer')).'</strong>']) !!}</p>
     <p style="font-size:14px;color:#4b5563;line-height:1.75;margin:0 0 20px;">
-      You have been {{ $isReassign ? 'reassigned' : 'assigned' }} to evaluate a proposal as part of the
-      <strong>{{ $review_type ?? 'review' }}</strong> phase. Please complete your evaluation before the due date.
+      {!! $isReassign
+          ? __('You have been reassigned to evaluate a proposal as part of the <strong>:review_type</strong> phase. Please complete your evaluation before the due date.', ['review_type' => e($reviewTypeLabel)])
+          : __('You have been assigned to evaluate a proposal as part of the <strong>:review_type</strong> phase. Please complete your evaluation before the due date.', ['review_type' => e($reviewTypeLabel)]) !!}
     </p>
 
     <div class="proposal-card {{ $themeCard }}">
@@ -90,13 +92,13 @@
       @endif
       @if(!empty($tracker_number))
       <div class="meta-row">
-        <span class="meta-label">Tracker No.</span>
+        <span class="meta-label">{{ __('Tracker No.') }}</span>
         <span class="meta-val"><code style="background:#e2e8f0;padding:2px 8px;border-radius:4px;font-size:12px;">{{ $tracker_number }}</code></span>
       </div>
       @endif
       @if(!empty($due_date))
       <div class="meta-row">
-        <span class="meta-label">Your Due Date</span>
+        <span class="meta-label">{{ __('Your Due Date') }}</span>
         <span class="meta-val due-date">{{ \Carbon\Carbon::parse($due_date)->format('d M Y') }}</span>
       </div>
       @endif
@@ -104,56 +106,55 @@
 
     @if($isDefence && (!empty($scheduled_date) || !empty($venue)))
     <div class="defence-box">
-      <p class="defence-title">Defence Schedule</p>
+      <p class="defence-title">{{ __('Defence Schedule') }}</p>
       @if(!empty($scheduled_date))
       <p style="font-size:14px;color:#4b5563;margin:0 0 6px;">
-        <strong style="color:#6b21a8;">Date:</strong>
-        {{ \Carbon\Carbon::parse($scheduled_date)->format('l, d F Y') }}
-        @if(!empty($scheduled_time)) at {{ \Carbon\Carbon::parse($scheduled_time)->format('H:i') }} @endif
+        <strong style="color:#6b21a8;">{{ __('Date:') }}</strong>
+        {{ \Carbon\Carbon::parse($scheduled_date)->translatedFormat('l, d F Y') }}
+        @if(!empty($scheduled_time)) {{ __('at :time', ['time' => \Carbon\Carbon::parse($scheduled_time)->format('H:i')]) }} @endif
       </p>
       @endif
       @if(!empty($venue))
       <p style="font-size:14px;color:#4b5563;margin:0;">
-        <strong style="color:#6b21a8;">Venue:</strong> {{ $venue }}
+        <strong style="color:#6b21a8;">{{ __('Venue:') }}</strong> {{ $venue }}
       </p>
       @endif
     </div>
     @endif
 
     <div class="steps">
-      <p class="steps-title">How to Submit Your Evaluation</p>
+      <p class="steps-title">{{ __('How to Submit Your Evaluation') }}</p>
       <div class="step">
         <div class="step-num {{ $themeNum }}">1</div>
-        <div class="step-text">Click <strong>"Go to My Assignments"</strong> below and log in if prompted.</div>
+        <div class="step-text">{!! __('Click <strong>"Go to My Assignments"</strong> below and log in if prompted.') !!}</div>
       </div>
       <div class="step">
         <div class="step-num {{ $themeNum }}">2</div>
-        <div class="step-text">Find this proposal under <strong>My Review Assignments</strong> — it will appear in your list.</div>
+        <div class="step-text">{!! __('Find this proposal under <strong>My Review Assignments</strong> — it will appear in your list.') !!}</div>
       </div>
       <div class="step">
         <div class="step-num {{ $themeNum }}">3</div>
-        <div class="step-text">Read the full proposal, then fill in your <strong>score</strong>, <strong>recommendation</strong>, and <strong>written comments</strong>.</div>
+        <div class="step-text">{!! __('Read the full proposal, then fill in your <strong>score</strong>, <strong>recommendation</strong>, and <strong>written comments</strong>.') !!}</div>
       </div>
       <div class="step">
         <div class="step-num {{ $themeNum }}">4</div>
-        <div class="step-text">Click <strong>"Submit Review"</strong>. The admin team will be notified once submitted.</div>
+        <div class="step-text">{!! __('Click <strong>"Submit Review"</strong>. The admin team will be notified once submitted.') !!}</div>
       </div>
     </div>
 
     <div class="cta">
-      <a href="{{ config('app.url') }}" class="btn {{ $themeBtn }}">Go to My Assignments →</a>
-      <p class="cta-sub">Navigate to "My Review Assignments" to find your assigned proposal.</p>
+      <a href="{{ config('app.url') }}" class="btn {{ $themeBtn }}">{{ __('Go to My Assignments →') }}</a>
+      <p class="cta-sub">{{ __('Navigate to "My Review Assignments" to find your assigned proposal.') }}</p>
     </div>
 
     <hr class="divider">
     <p style="font-size:13px;color:#9ca3af;margin:0;">
-      You received this because you have been assigned as a reviewer on <strong>{{ $platformName }}</strong>.
-      If you believe this was sent in error, please contact the {{ $orgName }} Research Office.
+      {!! __('You received this because you have been assigned as a reviewer on <strong>:platform</strong>. If you believe this was sent in error, please contact the :org Research Office.', ['platform' => e($platformName), 'org' => e($orgName)]) !!}
     </p>
   </div>
 
   <div class="footer">
-    &copy; {{ date('Y') }} <strong>{{ $platformName }}</strong> &middot; {{ $orgName }} Research &amp; Technology Transfer
+    &copy; {{ date('Y') }} <strong>{{ $platformName }}</strong> &middot; {{ __(':org Research & Technology Transfer', ['org' => $orgName]) }}
   </div>
 </div>
 </body>

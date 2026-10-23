@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Award;
 use App\Models\College;
 use App\Models\Department;
 use App\Models\Proposal;
@@ -197,4 +198,90 @@ test('no forecast without three completed years; a steady trend gives one', func
     expect($forecast['available'])->toBeTrue()
         ->and(collect($forecast['history'])->pluck('actual', 'year')->all())->toBe(['2023-2024' => 2, '2024-2025' => 3, '2025-2026' => 5])
         ->and($forecast['predictions'][0]['year'])->toBe('2026-2027');
+});
+
+function an_award(Proposal $proposal, User $by, float $amount): void
+{
+    Award::create([
+        'proposal_id' => $proposal->id, 'grant_reference' => 'AN-G-'.rand(100000, 999999),
+        'awarded_amount' => $amount, 'approved_by' => $by->id, 'approved_at' => now(),
+    ]);
+}
+
+test('the call comparison shows each call\'s applications, stages, money, budget and gender', function () {
+    [$college, $dept, $central, $call] = an_makeBase();
+    $call->update(['funding_budget' => 200000]);
+    $other = ProposalCall::create([
+        'academic_year' => '2026', 'category' => 'research', 'title' => 'Second call', 'slug' => 'an2-'.rand(10000, 99999),
+        'start_date' => now()->toDateString(), 'end_date' => now()->addMonths(3)->toDateString(),
+        'status' => 'active', 'is_open' => true, 'created_by' => $central->id,
+    ]);
+
+    $funded = an_proposal($college, $dept, $call, 'funded');
+    $funded->pi->update(['gender' => 'Female']);
+    an_award($funded, $central, 50000);
+    an_proposal($college, $dept, $call, 'under_blind_review')->pi->update(['gender' => 'male']);
+    an_proposal($college, $dept, $other, 'submitted');
+
+    $calls = collect($this->actingAs($central, 'sanctum')->getJson('/api/v1/admin/analytics?academic_year=2026')->assertOk()->json('data.calls'));
+    $row = $calls->firstWhere('id', $call->id);
+
+    expect($calls)->toHaveCount(2)
+        ->and($row['submitted'])->toBe(2)
+        ->and($row['funded'])->toBe(1)
+        ->and($row['awarded'])->toEqual(50000)
+        ->and($row['budget_used_pct'])->toEqual(25)
+        ->and($row['gender'])->toMatchArray(['female' => 1, 'male' => 1, 'female_funded' => 1, 'male_funded' => 0])
+        ->and(collect($row['stages'])->pluck('count', 'key')->all())->toMatchArray(['submitted' => 2, 'validated' => 2, 'funded' => 1]);
+});
+
+test('the call filter narrows the whole dashboard to one call', function () {
+    [$college, $dept, $central, $call] = an_makeBase();
+    $other = ProposalCall::create([
+        'academic_year' => '2026', 'category' => 'research', 'title' => 'Second call', 'slug' => 'an2-'.rand(10000, 99999),
+        'start_date' => now()->toDateString(), 'end_date' => now()->addMonths(3)->toDateString(),
+        'status' => 'active', 'is_open' => true, 'created_by' => $central->id,
+    ]);
+    an_proposal($college, $dept, $call);
+    an_proposal($college, $dept, $other);
+    an_proposal($college, $dept, $other);
+
+    $data = $this->actingAs($central, 'sanctum')->getJson("/api/v1/admin/analytics?academic_year=2026&proposal_call_id={$other->id}")->assertOk()->json('data');
+
+    expect($data['summary']['submitted'])->toBe(2)
+        ->and($data['filters']['proposal_call_id'])->toBe($other->id)
+        ->and(collect($data['call_options'])->pluck('id')->all())->toContain($call->id, $other->id)
+        // The comparison table always lists every call.
+        ->and($data['calls'])->toHaveCount(2);
+});
+
+test('money awarded is broken down by college and by theme', function () {
+    [$college, $dept, $central, $call] = an_makeBase();
+    $a = an_proposal($college, $dept, $call, 'funded');
+    $a->update(['focus_area' => 'Water and sanitation']);
+    an_award($a, $central, 30000);
+    $b = an_proposal($college, $dept, $call, 'completed');
+    $b->update(['focus_area' => 'Water and sanitation']);
+    an_award($b, $central, 20000);
+    an_proposal($college, $dept, $call, 'rejected');
+
+    $data = $this->actingAs($central, 'sanctum')->getJson('/api/v1/admin/analytics?academic_year=2026')->assertOk()->json('data');
+
+    expect(collect($data['colleges'])->firstWhere('id', $college->id)['awarded'])->toEqual(50000);
+    $themes = collect($data['themes'])->keyBy('theme');
+    expect($themes['Water and sanitation'])->toMatchArray(['submitted' => 2, 'funded' => 2, 'awarded' => 50000])
+        ->and($themes['Not specified']['submitted'])->toBe(1);
+});
+
+test('the call comparison downloads as Excel for analytics users only', function () {
+    [$college, $dept, $central, $call] = an_makeBase();
+    an_proposal($college, $dept, $call);
+
+    $this->actingAs($central, 'sanctum')->get('/api/v1/admin/analytics/calls/export?academic_year=2026')
+        ->assertOk()
+        ->assertHeader('content-disposition');
+
+    $staff = User::factory()->create();
+    $staff->assignRole('staff');
+    $this->actingAs($staff, 'sanctum')->getJson('/api/v1/admin/analytics/calls/export')->assertForbidden();
 });

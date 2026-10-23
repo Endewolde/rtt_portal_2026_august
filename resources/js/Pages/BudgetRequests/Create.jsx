@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { translate as tr } from '../../lib/i18n'
 import { router } from '@inertiajs/react';
 import { DollarSign, Plus, Trash2, AlertTriangle } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
@@ -84,7 +85,7 @@ export default function BudgetRequestCreate() {
         <AppLayout breadcrumb="New Budget Request">
             <div className="flex items-center gap-3 mb-6">
                 <DollarSign size={24} className="text-emerald-600" />
-                <h1 className="text-xl font-bold text-gray-900">New Budget Request</h1>
+                <h1 className="text-xl font-bold text-gray-900">{tr("New Budget Request")}</h1>
             </div>
 
             <form onSubmit={handleSubmit} className="max-w-4xl space-y-6">
@@ -94,14 +95,14 @@ export default function BudgetRequestCreate() {
                     <div className="grid sm:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Proposal <span className="text-red-500">*</span>
+                                {tr("Proposal")} <span className="text-red-500">*</span>
                             </label>
                             <select
                                 value={proposalId}
                                 onChange={(e) => setProposalId(e.target.value)}
                                 className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                             >
-                                <option value="">Select funded proposal…</option>
+                                <option value="">{tr("Select funded proposal…")}</option>
                                 {proposals.map((p) => (
                                     <option key={p.id} value={p.id}>
                                         {p.tracker_number} — {p.title}
@@ -125,7 +126,7 @@ export default function BudgetRequestCreate() {
                             )}
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Funding Round</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">{tr("Funding Round")}</label>
                             <input
                                 type="number"
                                 min="1"
@@ -144,7 +145,7 @@ export default function BudgetRequestCreate() {
                     <div className="flex items-start justify-between gap-4 mb-1">
                         <div>
                             <div className="flex items-center gap-3">
-                                <h2 className="font-semibold text-gray-900">Budget Items</h2>
+                                <h2 className="font-semibold text-gray-900">{tr("Budget Items")}</h2>
                                 {remaining !== null && !summaryLoading && (
                                     <span className={`text-sm font-bold px-3 py-1 rounded-full ${
                                         overBudget
@@ -153,11 +154,11 @@ export default function BudgetRequestCreate() {
                                                 ? 'bg-amber-100 text-amber-700'
                                                 : 'bg-emerald-100 text-emerald-700'
                                     }`}>
-                                        {formatCurrency(Math.max(0, remaining - total))} available
+                                        {tr(":total available", { total: formatCurrency(Math.max(0, remaining - total)) })}
                                     </span>
                                 )}
                                 {summaryLoading && proposalId && (
-                                    <span className="text-xs text-gray-400">Loading budget…</span>
+                                    <span className="text-xs text-gray-400">{tr("Loading budget…")}</span>
                                 )}
                             </div>
                             {/* Context line */}
@@ -175,7 +176,7 @@ export default function BudgetRequestCreate() {
                             onClick={addItem}
                             className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 font-medium shrink-0"
                         >
-                            <Plus size={16} /> Add Item
+                            <Plus size={16} /> {tr("Add Item")}
                         </button>
                     </div>
 
@@ -196,13 +197,13 @@ export default function BudgetRequestCreate() {
                                 <div key={idx} className="grid grid-cols-12 gap-3 items-start p-4 bg-gray-50 rounded-lg">
                                     {/* Category — 2 cols */}
                                     <div className="col-span-2">
-                                        <label className="block text-xs text-gray-500 mb-1">Category</label>
+                                        <label className="block text-xs text-gray-500 mb-1">{tr("Category")}</label>
                                         <select
                                             value={item.category}
                                             onChange={(e) => updateItem(idx, 'category', e.target.value)}
                                             className="w-full rounded-md border border-gray-300 px-2 py-2 text-sm"
                                         >
-                                            <option value="">Select…</option>
+                                            <option value="">{tr("Select…")}</option>
                                             {BUDGET_CATEGORIES.map((c) => (
                                                 <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>
                                             ))}
@@ -210,7 +211,7 @@ export default function BudgetRequestCreate() {
                                     </div>
                                     {/* Description — 3 cols */}
                                     <div className="col-span-3">
-                                        <label className="block text-xs text-gray-500 mb-1">Description</label>
+                                        <label className="block text-xs text-gray-500 mb-1">{tr("Description")}</label>
                                         <input
                                             value={item.description}
                                             onChange={(e) => updateItem(idx, 'description', e.target.value)}
@@ -220,10 +221,10 @@ export default function BudgetRequestCreate() {
                                     {/* Amount — 3 cols (wider so the max label fits) */}
                                     <div className="col-span-3">
                                         <label className="flex items-center justify-between text-xs mb-1">
-                                            <span className="text-gray-500">Amount (ETB)</span>
+                                            <span className="text-gray-500">{tr("Amount (ETB)")}</span>
                                             {itemMax !== null && (
                                                 <span className={`font-semibold ${itemOver ? 'text-red-500' : 'text-emerald-600'}`}>
-                                                    max {formatCurrency(itemMax)}
+                                                    {tr("max :itemMax", { itemMax: formatCurrency(itemMax) })}
                                                 </span>
                                             )}
                                         </label>
@@ -243,7 +244,7 @@ export default function BudgetRequestCreate() {
                                     </div>
                                     {/* Justification — 3 cols */}
                                     <div className="col-span-3">
-                                        <label className="block text-xs text-gray-500 mb-1">Justification</label>
+                                        <label className="block text-xs text-gray-500 mb-1">{tr("Justification")}</label>
                                         <input
                                             value={item.justification}
                                             onChange={(e) => updateItem(idx, 'justification', e.target.value)}
@@ -271,14 +272,14 @@ export default function BudgetRequestCreate() {
                     <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between">
                         <div className="text-xs text-gray-400">
                             {remaining !== null && !overBudget && (
-                                <span>After this request: <span className="font-semibold text-gray-600">{formatCurrency(remaining - total)}</span> will remain</span>
+                                <span>{tr("After this request:")} <span className="font-semibold text-gray-600">{formatCurrency(remaining - total)}</span> {tr("will remain")}</span>
                             )}
                             {overBudget && (
-                                <span className="text-red-600 font-medium">⚠️ Over limit by {formatCurrency(total - remaining)}</span>
+                                <span className="text-red-600 font-medium">{tr("⚠️ Over limit by :remaining", { remaining: formatCurrency(total - remaining) })}</span>
                             )}
                         </div>
                         <div>
-                            <span className="text-sm text-gray-500">Request total: </span>
+                            <span className="text-sm text-gray-500">{tr("Request total:")} </span>
                             <span className={`font-bold ${overBudget ? 'text-red-700' : 'text-gray-900'}`}>
                                 {formatCurrency(total)}
                             </span>
@@ -293,12 +294,12 @@ export default function BudgetRequestCreate() {
 
                 {/* Notes */}
                 <div className="bg-white rounded-xl border border-gray-200 p-6">
-                    <h2 className="font-semibold text-gray-900 mb-4">Notes</h2>
+                    <h2 className="font-semibold text-gray-900 mb-4">{tr("Notes")}</h2>
                     <textarea
                         value={notes}
                         onChange={(e) => setNotes(e.target.value)}
                         rows={4}
-                        placeholder="Additional notes or justification for this budget request…"
+                        placeholder={tr("Additional notes or justification for this budget request…")}
                         className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                     />
                 </div>

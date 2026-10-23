@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { translate as tr } from '../lib/i18n'
 import { FileText, Clock, CheckCircle2, AlertCircle, RotateCcw, Send, X, Paperclip, Flag, ChevronDown, ChevronUp } from 'lucide-react';
 import api, { get, post } from '../lib/api';
 import { formatDate } from '../lib/utils';
@@ -74,15 +75,15 @@ function SubmitModal({ report, milestones, onClose, onDone }) {
                 <div className="flex items-start justify-between gap-3 border-b border-gray-100 px-6 py-4">
                     <div>
                         <h2 className="text-base font-bold text-gray-900">{report.is_final ? 'Final Report' : `Progress Report #${report.period_number}`}</h2>
-                        <p className="text-xs text-gray-500">Period {formatDate(report.period_start)} – {formatDate(report.period_end)} · due {formatDate(report.due_date)}</p>
+                        <p className="text-xs text-gray-500">{tr("Period :period_start – :period_end · due :due_date", { period_start: formatDate(report.period_start), period_end: formatDate(report.period_end), due_date: formatDate(report.due_date) })}</p>
                     </div>
-                    <button onClick={onClose} aria-label="Close" className="rounded-lg p-1 text-gray-400 hover:bg-gray-100"><X size={16} /></button>
+                    <button onClick={onClose} aria-label={tr("Close")} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100"><X size={16} /></button>
                 </div>
 
                 <div className="space-y-4 overflow-y-auto px-6 py-5">
                     {report.status === 'revision_requested' && report.review_notes && (
                         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                            <strong>Revision requested:</strong> {report.review_notes}
+                            <strong>{tr("Revision requested:")}</strong> {report.review_notes}
                         </div>
                     )}
                     {field('summary', report.is_final ? 'What the project achieved overall' : 'Work done this period', 'Activities carried out, data collected, analyses run…', 4, true)}
@@ -92,12 +93,12 @@ function SubmitModal({ report, milestones, onClose, onDone }) {
 
                     <div className="grid gap-4 sm:grid-cols-2">
                         <div>
-                            <label className="mb-1 block text-xs font-semibold text-gray-700">Overall progress (% complete) <span className="text-red-500">*</span></label>
+                            <label className="mb-1 block text-xs font-semibold text-gray-700">{tr("Overall progress (% complete)")} <span className="text-red-500">*</span></label>
                             <input type="number" min="0" max="100" value={form.percent_complete} onChange={(e) => set('percent_complete', e.target.value)}
                                 className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                         </div>
                         <div>
-                            <label className="mb-1 block text-xs font-semibold text-gray-700">Budget spent so far (ETB)</label>
+                            <label className="mb-1 block text-xs font-semibold text-gray-700">{tr("Budget spent so far (ETB)")}</label>
                             <input type="number" min="0" step="0.01" value={form.budget_spent} onChange={(e) => set('budget_spent', e.target.value)}
                                 className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                         </div>
@@ -105,7 +106,7 @@ function SubmitModal({ report, milestones, onClose, onDone }) {
 
                     {milestones.length > 0 && (
                         <div>
-                            <p className="mb-2 text-xs font-semibold text-gray-700">Milestones</p>
+                            <p className="mb-2 text-xs font-semibold text-gray-700">{tr("Milestones")}</p>
                             <div className="space-y-2">
                                 {milestones.map((m) => (
                                     <div key={m.id} className="rounded-xl border border-gray-200 p-3">
@@ -117,7 +118,7 @@ function SubmitModal({ report, milestones, onClose, onDone }) {
                                                 {MILESTONE_STATUSES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                                             </select>
                                         </div>
-                                        <input value={milestoneState[m.id].note} placeholder="Note (optional)"
+                                        <input value={milestoneState[m.id].note} placeholder={tr("Note (optional)")}
                                             onChange={(e) => setMilestoneState((s) => ({ ...s, [m.id]: { ...s[m.id], note: e.target.value } }))}
                                             className="mt-2 w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
                                     </div>
@@ -127,13 +128,13 @@ function SubmitModal({ report, milestones, onClose, onDone }) {
                     )}
 
                     <div>
-                        <label className="mb-1 block text-xs font-semibold text-gray-700">Supporting document (optional — PDF or Word, max 10 MB)</label>
+                        <label className="mb-1 block text-xs font-semibold text-gray-700">{tr("Supporting document (optional — PDF or Word, max 10 MB)")}</label>
                         <input type="file" accept=".pdf,.doc,.docx" onChange={(e) => setFile(e.target.files?.[0] ?? null)} className="block w-full text-sm text-gray-600" />
                     </div>
                 </div>
 
                 <div className="flex gap-3 border-t border-gray-100 px-6 py-4">
-                    <button onClick={onClose} className="flex-1 rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
+                    <button onClick={onClose} className="flex-1 rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">{tr("Cancel")}</button>
                     <button onClick={submit} disabled={saving} className="flex-1 rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-50">
                         {saving ? 'Submitting…' : 'Submit Report'}
                     </button>
@@ -163,7 +164,7 @@ function ReviewBox({ report, onDone }) {
 
     return (
         <div className="mt-3 space-y-2 rounded-xl border border-blue-100 bg-blue-50/40 p-3">
-            <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes to the PI (required when asking for a revision)"
+            <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder={tr("Notes to the PI (required when asking for a revision)")}
                 className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
             <div className="flex justify-end gap-2">
                 <button onClick={() => decide('revision_requested')} disabled={!!saving} className="inline-flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-50 disabled:opacity-50">
@@ -198,7 +199,7 @@ export default function ProgressReportsTab({ proposalId }) {
     useEffect(() => { load(); }, [load]);
 
     if (loading) return <div className="space-y-3 animate-pulse">{[0, 1, 2].map((i) => <div key={i} className="h-16 rounded-xl bg-gray-100" />)}</div>;
-    if (reports.length === 0) return <p className="text-sm text-gray-500">Progress reports start once the project is funded.</p>;
+    if (reports.length === 0) return <p className="text-sm text-gray-500">{tr("Progress reports start once the project is funded.")}</p>;
 
     const latest = [...reports].reverse().find((r) => r.percent_complete !== null);
 
@@ -207,7 +208,7 @@ export default function ProgressReportsTab({ proposalId }) {
             {latest && (
                 <div className="rounded-xl border border-gray-200 p-4">
                     <div className="flex items-center justify-between text-sm">
-                        <span className="font-medium text-gray-700">Overall progress (as last reported)</span>
+                        <span className="font-medium text-gray-700">{tr("Overall progress (as last reported)")}</span>
                         <span className="font-bold tabular-nums text-gray-900">{latest.percent_complete}%</span>
                     </div>
                     <div className="mt-2 h-2 rounded-full bg-gray-100"><div className="h-2 rounded-full bg-blue-600" style={{ width: `${latest.percent_complete}%` }} /></div>
@@ -225,7 +226,7 @@ export default function ProgressReportsTab({ proposalId }) {
                                 <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-gray-50 text-gray-500"><FileText size={16} /></span>
                                 <div className="min-w-0 flex-1">
                                     <p className="text-sm font-semibold text-gray-900">{r.is_final ? 'Final report' : `Progress report #${r.period_number}`}</p>
-                                    <p className="text-xs text-gray-500">{formatDate(r.period_start)} – {formatDate(r.period_end)} · due {formatDate(r.due_date)}</p>
+                                    <p className="text-xs text-gray-500">{tr(":period_start – :period_end · due :due_date", { period_start: formatDate(r.period_start), period_end: formatDate(r.period_end), due_date: formatDate(r.due_date) })}</p>
                                 </div>
                                 <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${st.cls}`}><st.icon size={11} /> {st.label}</span>
                                 {canSubmit && (
@@ -234,7 +235,7 @@ export default function ProgressReportsTab({ proposalId }) {
                                     </button>
                                 )}
                                 {r.submitted_at && (
-                                    <button onClick={() => setOpen(expanded ? null : r.id)} aria-label="Toggle details" className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-50">
+                                    <button onClick={() => setOpen(expanded ? null : r.id)} aria-label={tr("Toggle details")} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-50">
                                         {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                                     </button>
                                 )}
@@ -264,7 +265,7 @@ export default function ProgressReportsTab({ proposalId }) {
                                     )}
                                     {r.has_attachment && (
                                         <button onClick={() => downloadFile(`/progress-reports/${r.id}/attachment`, 'progress-report')} className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 hover:underline">
-                                            <Paperclip size={12} /> Download attachment
+                                            <Paperclip size={12} /> {tr("Download attachment")}
                                         </button>
                                     )}
                                     {r.review_notes && r.reviewed_by && (

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { translate as tr } from '../lib/i18n'
 import * as Dialog from '@radix-ui/react-dialog';
 import { MessageSquareHeart, X, Star, Lightbulb, Bug, ClipboardList } from 'lucide-react';
 import api from '../lib/api';
@@ -98,7 +99,7 @@ export default function FeedbackPopup({ open, onClose, onSubmitted }) {
                         <textarea
                             value={message}
                             onChange={(e) => setMessage(e.target.value)}
-                            placeholder="Share your thoughts…"
+                            placeholder={tr("Share your thoughts…")}
                             rows={4}
                             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                         />
@@ -109,7 +110,7 @@ export default function FeedbackPopup({ open, onClose, onSubmitted }) {
                     <div className="mt-6 flex justify-end gap-2">
                         <button onClick={onClose}
                             className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 rounded-lg">
-                            Maybe Later
+                            {tr("Maybe Later")}
                         </button>
                         <button onClick={handleSubmit} disabled={submitting}
                             className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">

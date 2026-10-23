@@ -32,6 +32,8 @@ class ReviewAssignment extends Model
         'coi_reason',
         'coi_resolved_at',
         'acknowledged_conflicts',
+        'is_second_opinion',
+        'set_aside_at',
     ];
 
     protected $casts = [
@@ -43,6 +45,8 @@ class ReviewAssignment extends Model
         'coi_resolved_at' => 'datetime',
         'is_external' => 'boolean',
         'acknowledged_conflicts' => 'array',
+        'is_second_opinion' => 'boolean',
+        'set_aside_at' => 'datetime',
     ];
 
     public function proposal(): BelongsTo

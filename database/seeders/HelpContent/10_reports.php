@@ -13,7 +13,8 @@ return [
         'questions' => [
             'Where can I see statistics?', 'What is the pass rate?', 'How many proposals were funded this year?', 'How do I filter by college?',
             'How is the pass rate calculated?', 'How much money has been awarded?', 'Where do proposals drop out?', 'Can I compare years?',
-            'How long does each stage take on average?',
+            'How long does each stage take on average?', 'How did each call perform?', 'How much was awarded per theme?',
+            'What is the gender split of applicants?', 'How do I export call results to Excel?',
         ],
         'body' => "Open **Analytics Dashboard** for the big picture.\n\n"
             ."## What it shows\n"
@@ -22,8 +23,10 @@ return [
             ."- The **funnel** — how many proposals reach each stage, so you can see where they drop out.\n"
             ."- **Money** awarded and disbursed.\n"
             ."- **Time per stage** and **review quality**.\n\n"
+            ."- **By theme** — outcomes and money awarded per focus area; **by college** now shows money awarded too.\n"
+            ."- **Call comparison** — one row per call: applications, how many reached each stage, success rate, money awarded against the call's budget, and PI gender (applied and funded). Click a call to see the whole dashboard for it. **Download Excel** for year-end reporting.\n\n"
             ."## Filters\n"
-            ."Filter by **academic year** (or all years), **category** and **college**. All figures update together.\n\n"
+            ."Filter by **academic year** (or all years), **category**, **college** and **call**. All figures update together.\n\n"
             ."## Good to know\n"
             .'For a printable summary use the **Annual RTT Report**; for your own breakdowns use the **Report Builder**.',
         'page_paths' => ['/admin/analytics'], 'action_label' => 'Open analytics', 'action_url' => '/admin/analytics',

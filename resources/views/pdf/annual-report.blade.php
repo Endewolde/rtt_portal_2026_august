@@ -4,10 +4,11 @@
 <meta charset="UTF-8" />
 <title>Annual RTT Report {{ $academic_year }}</title>
 <style>
+@include('pdf.partials.fonts')
 * { margin:0; padding:0; box-sizing:border-box; }
 
 body {
-    font-family: 'DejaVu Sans', Arial, sans-serif;
+    font-family: 'DejaVu Sans', Arial, 'Noto Sans Ethiopic', sans-serif;
     font-size: 9.5pt;
     color: #1e293b;
     background: #fff;

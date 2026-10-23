@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { translate as tr } from '../lib/i18n'
 import { ShieldCheck, Lock } from 'lucide-react';
 import { get, post } from '../lib/api';
 import { useToast } from './Toast';
@@ -36,7 +37,7 @@ export default function ReviewerAgreementModal({ onAccepted, onClose }) {
                 <div className="flex shrink-0 items-start gap-3 px-6 pt-5">
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600 ring-4 ring-indigo-50"><Lock size={20} /></div>
                     <div>
-                        <h2 id="agreement-title" className="text-lg font-bold text-gray-900">Reviewer Confidentiality Agreement</h2>
+                        <h2 id="agreement-title" className="text-lg font-bold text-gray-900">{tr("Reviewer Confidentiality Agreement")}</h2>
                         <p className="mt-0.5 text-xs text-gray-500">{agreement ? `${agreement.academic_year} academic year · accepted once a year` : 'Loading…'}</p>
                     </div>
                 </div>
@@ -46,11 +47,11 @@ export default function ReviewerAgreementModal({ onAccepted, onClose }) {
                     ) : <div className="h-40 animate-pulse rounded-xl bg-gray-100" />}
                     <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border-2 border-gray-200 p-3 text-sm text-gray-700 has-[:checked]:border-indigo-500 has-[:checked]:bg-indigo-50">
                         <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} className="mt-0.5 rounded accent-indigo-600" />
-                        <span>I have read and agree to keep all proposals and reviews confidential as described above.</span>
+                        <span>{tr("I have read and agree to keep all proposals and reviews confidential as described above.")}</span>
                     </label>
                 </div>
                 <div className="flex shrink-0 gap-3 border-t border-gray-100 px-6 py-4">
-                    {onClose && <button onClick={onClose} className="flex-1 rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">Not now</button>}
+                    {onClose && <button onClick={onClose} className="flex-1 rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">{tr("Not now")}</button>}
                     <button onClick={accept} disabled={!checked || saving || !agreement}
                         className="flex flex-[1.6] items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50">
                         <ShieldCheck size={15} /> {saving ? 'Saving…' : 'I Agree'}

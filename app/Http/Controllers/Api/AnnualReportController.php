@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\Proposal;
 use App\Services\AnnualReportService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
@@ -24,10 +25,15 @@ class AnnualReportController extends Controller
 
         [$startYear, $endYear] = $this->parseAcademicYear($request->query('academic_year'));
 
+        // Years that actually have proposals, in the report's "YYYY-YYYY" form.
+        $years = Proposal::query()->whereNotNull('academic_year')->where('academic_year', 'like', '____-____')
+            ->distinct()->orderByDesc('academic_year')->pluck('academic_year');
+
         return response()->json([
             'data' => $this->service->compile($startYear, $endYear),
             'message' => 'Report data compiled.',
             'errors' => [],
+            'meta' => ['academic_years' => $years],
         ]);
     }
 

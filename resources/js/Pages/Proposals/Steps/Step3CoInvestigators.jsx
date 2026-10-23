@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { translate as tr, Trans } from '../../../lib/i18n'
 import { Search, X, UserPlus, Users, Info, AlertCircle, Clock, CheckCircle2, XCircle } from 'lucide-react';
 import api from '../../../lib/api';
 import { useToast } from '../../../Components/Toast';
@@ -9,9 +10,9 @@ const getInitials = (name) => name?.split(' ').map((n) => n[0]).join('').toUpper
 const getColor   = (name) => COLORS[(name?.charCodeAt(0) ?? 0) % COLORS.length];
 
 function InvitationBadge({ status }) {
-    if (status === 'accepted') return <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-green-100 text-green-700"><CheckCircle2 size={10} /> Accepted</span>;
-    if (status === 'declined') return <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-red-100 text-red-700"><XCircle size={10} /> Declined</span>;
-    return <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-700"><Clock size={10} /> Pending</span>;
+    if (status === 'accepted') return <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-green-100 text-green-700"><CheckCircle2 size={10} /> {tr("Accepted")}</span>;
+    if (status === 'declined') return <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-red-100 text-red-700"><XCircle size={10} /> {tr("Declined")}</span>;
+    return <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-700"><Clock size={10} /> {tr("Pending")}</span>;
 }
 
 export default function Step3CoInvestigators({ proposalId, piUser, onComplete, initialData }) {
@@ -112,22 +113,20 @@ export default function Step3CoInvestigators({ proposalId, piUser, onComplete, i
     return (
         <div className="space-y-6">
             <div>
-                <h2 className="text-lg font-semibold text-gray-900">Co-Investigators</h2>
-                <p className="text-sm text-gray-500 mt-1">Add team members to your proposal.</p>
+                <h2 className="text-lg font-semibold text-gray-900">{tr("Co-Investigators")}</h2>
+                <p className="text-sm text-gray-500 mt-1">{tr("Add team members to your proposal.")}</p>
             </div>
 
             {/* Required co-PI banner */}
             <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl p-4">
                 <Info size={18} className="text-blue-500 shrink-0 mt-0.5" />
                 <div>
-                    <p className="text-sm font-semibold text-blue-800">Team Requirement</p>
+                    <p className="text-sm font-semibold text-blue-800">{tr("Team Requirement")}</p>
                     <p className="text-sm text-blue-700 mt-0.5">
-                        Your proposal must have <strong>at least one Co-Investigator</strong>.
-                        The PI cannot submit alone. Search and add your team members below.
+                        <Trans text="Your proposal must have <b>at least one Co-Investigator</b>. The PI cannot submit alone. Search and add your team members below." />
                     </p>
                     <p className="text-sm text-blue-700 mt-1.5">
-                        Only individuals with the <strong>Staff</strong> role can be added as Co-Investigators —
-                        search results are limited to eligible staff accounts.
+                        <Trans text="Only individuals with the <b>Staff</b> role can be added as Co-Investigators — search results are limited to eligible staff accounts." />
                     </p>
                 </div>
             </div>
@@ -139,7 +138,7 @@ export default function Step3CoInvestigators({ proposalId, piUser, onComplete, i
                     <input
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
-                        placeholder="Search by name or email…"
+                        placeholder={tr("Search by name or email…")}
                         className="flex-1 outline-none text-sm text-gray-900 placeholder-gray-400"
                     />
                     {searching && <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin ml-2" />}
@@ -204,14 +203,14 @@ export default function Step3CoInvestigators({ proposalId, piUser, onComplete, i
                                     </td>
                                     <td className="px-4 py-3 text-xs text-gray-600">{piUser.college_name ?? '—'}</td>
                                     <td className="px-4 py-3">
-                                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">PI</span>
+                                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">{tr("PI")}</span>
                                     </td>
                                     {showInvitationStatus && <td className="px-4 py-3"><span className="text-xs text-gray-400">—</span></td>}
                                     <td className="px-4 py-3 text-center">
                                         <span className={`font-semibold ${piContrib < 20 ? 'text-orange-600' : 'text-blue-700'}`}>
                                             {piContrib.toFixed(1)}%
                                         </span>
-                                        <p className="text-xs text-gray-400">auto</p>
+                                        <p className="text-xs text-gray-400">{tr("auto")}</p>
                                     </td>
                                     <td />
                                 </tr>
@@ -236,7 +235,7 @@ export default function Step3CoInvestigators({ proposalId, piUser, onComplete, i
                                         {c.department_name && <span className="block text-gray-400">{c.department_name}</span>}
                                     </td>
                                     <td className="px-4 py-3">
-                                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">Co-PI</span>
+                                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">{tr("Co-PI")}</span>
                                     </td>
                                     {showInvitationStatus && (
                                         <td className="px-4 py-3">
@@ -286,14 +285,14 @@ export default function Step3CoInvestigators({ proposalId, piUser, onComplete, i
             ) : (
                 <div className="border-2 border-dashed border-gray-200 rounded-lg p-8 text-center">
                     <Users size={32} className="mx-auto text-gray-300 mb-3" />
-                    <p className="text-sm text-gray-500">No co-investigators added yet.</p>
-                    <p className="text-xs text-gray-400 mt-1">Search above to add team members.</p>
+                    <p className="text-sm text-gray-500">{tr("No co-investigators added yet.")}</p>
+                    <p className="text-xs text-gray-400 mt-1">{tr("Search above to add team members.")}</p>
                 </div>
             )}
 
             {!valid && (
                 <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-                    <p className="text-sm text-red-700">Total contribution exceeds 100%. Please adjust the percentages.</p>
+                    <p className="text-sm text-red-700">{tr("Total contribution exceeds 100%. Please adjust the percentages.")}</p>
                 </div>
             )}
 
@@ -301,7 +300,7 @@ export default function Step3CoInvestigators({ proposalId, piUser, onComplete, i
                 <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
                     <AlertCircle size={16} className="text-amber-500" />
                     <p className="text-sm text-amber-700 font-medium">
-                        Add at least one Co-Investigator to continue.
+                        {tr("Add at least one Co-Investigator to continue.")}
                     </p>
                 </div>
             )}
@@ -315,7 +314,7 @@ export default function Step3CoInvestigators({ proposalId, piUser, onComplete, i
             <div className="flex justify-between pt-2">
                 <button onClick={() => onComplete(null, 'back')}
                     className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
-                    Back
+                    {tr("Back")}
                 </button>
                 <button onClick={handleSave} disabled={!hasCoInvestigator || !valid || saving}
                     className={`px-6 py-2 rounded-lg text-sm font-medium transition-colors ${

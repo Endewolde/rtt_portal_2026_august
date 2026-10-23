@@ -386,24 +386,26 @@ function BulkGrantPanel({ onGranted }) {
                     <div>
                         <p className="text-[11px] font-semibold text-red-500 uppercase tracking-widest mb-2">Row errors</p>
                         <div className="rounded-xl overflow-hidden border border-red-100 max-h-48 overflow-y-auto">
-                            <table className="min-w-full text-xs">
-                                <thead>
-                                    <tr className="bg-red-50 border-b border-red-100">
-                                        <th className="px-3 py-2 text-left font-semibold text-red-400 w-12">Row</th>
-                                        <th className="px-3 py-2 text-left font-semibold text-red-400">Tracker</th>
-                                        <th className="px-3 py-2 text-left font-semibold text-red-400">Issue</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {result.errors.map((e, i) => (
-                                        <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-red-50/30'}>
-                                            <td className="px-3 py-2 font-mono text-gray-400">{e.row}</td>
-                                            <td className="px-3 py-2 text-gray-600">{e.tracker_number}</td>
-                                            <td className="px-3 py-2 text-red-500">{e.error}</td>
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full text-xs">
+                                    <thead>
+                                        <tr className="bg-red-50 border-b border-red-100">
+                                            <th className="px-3 py-2 text-left font-semibold text-red-400 w-12">Row</th>
+                                            <th className="px-3 py-2 text-left font-semibold text-red-400">Tracker</th>
+                                            <th className="px-3 py-2 text-left font-semibold text-red-400">Issue</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                    </thead>
+                                    <tbody>
+                                        {result.errors.map((e, i) => (
+                                            <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-red-50/30'}>
+                                                <td className="px-3 py-2 font-mono text-gray-400">{e.row}</td>
+                                                <td className="px-3 py-2 text-gray-600">{e.tracker_number}</td>
+                                                <td className="px-3 py-2 text-red-500">{e.error}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 )}

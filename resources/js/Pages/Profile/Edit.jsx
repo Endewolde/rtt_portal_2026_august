@@ -1,9 +1,10 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
+import { translate as tr } from '../../lib/i18n'
 import {
     User, Mail, Phone, CreditCard, Shield, Lock,
     Camera, Save, Eye, EyeOff, CheckCircle2, AlertCircle,
     Building2, Layers, ExternalLink, ShieldCheck,
-    BookOpen, X, GraduationCap, Monitor, Trash2, Bell, Download, FileLock2,
+    BookOpen, X, GraduationCap, Monitor, Trash2, Bell, Download, FileLock2, Globe,
 } from 'lucide-react'
 import AppLayout from '../../Layouts/AppLayout'
 import { useAuth } from '../../hooks/useAuth'
@@ -73,7 +74,7 @@ function AvatarUpload({ user, onUpdated }) {
             <button onClick={() => ref.current?.click()} disabled={uploading}
                 className="flex items-center gap-1.5 text-xs font-medium text-indigo-600
                            hover:text-indigo-800 disabled:opacity-50 transition-colors">
-                <Camera size={12} /> Change photo
+                <Camera size={12} /> {tr("Change photo")}
             </button>
             <input ref={ref} type="file" accept="image/*" className="hidden" onChange={upload} />
         </div>
@@ -170,7 +171,7 @@ function PersonalInfoForm({ user, onUpdated }) {
                     <Input
                         value={form.name}
                         onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
-                        placeholder="Your full name"
+                        placeholder={tr("Your full name")}
                     />
                 </Field>
                 <Field label="Email Address" hint="Contact admin to change email">
@@ -181,24 +182,24 @@ function PersonalInfoForm({ user, onUpdated }) {
                         type="tel"
                         value={form.phone}
                         onChange={e => setForm(p => ({ ...p, phone: e.target.value }))}
-                        placeholder="+251 9xx xxx xxxx"
+                        placeholder={tr("+251 9xx xxx xxxx")}
                     />
                 </Field>
                 <Field label="Employee ID">
                     <Input
                         value={form.employee_id}
                         onChange={e => setForm(p => ({ ...p, employee_id: e.target.value }))}
-                        placeholder="e.g. EMP-001"
+                        placeholder={tr("e.g. EMP-001")}
                     />
                 </Field>
                 <Field label="Gender">
                     <Select
                         value={form.gender}
                         onChange={e => setForm(p => ({ ...p, gender: e.target.value }))}>
-                        <option value="">Prefer not to say</option>
-                        <option value="male">Male</option>
-                        <option value="female">Female</option>
-                        <option value="other">Other</option>
+                        <option value="">{tr("Prefer not to say")}</option>
+                        <option value="male">{tr("Male")}</option>
+                        <option value="female">{tr("Female")}</option>
+                        <option value="other">{tr("Other")}</option>
                     </Select>
                 </Field>
             </div>
@@ -210,8 +211,8 @@ function PersonalInfoForm({ user, onUpdated }) {
                                    rounded-xl text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60
                                    transition-colors">
                         {saving
-                            ? <><div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Saving…</>
-                            : <><Save size={14} /> Save Changes</>
+                            ? <><div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> {tr("Saving…")}</>
+                            : <><Save size={14} /> {tr("Save Changes")}</>
                         }
                     </button>
                 </div>
@@ -256,7 +257,7 @@ function AccountInfo({ user }) {
             </div>
             {expertise.length > 0 && (
                 <div className="pt-3">
-                    <p className="text-xs text-gray-500 font-medium mb-2">Research Expertise</p>
+                    <p className="text-xs text-gray-500 font-medium mb-2">{tr("Research Expertise")}</p>
                     <div className="flex flex-wrap gap-1.5">
                         {expertise.map((tag, i) => (
                             <span key={i} className="text-xs font-medium bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full border border-indigo-100">
@@ -324,17 +325,17 @@ function ChangePasswordForm() {
 
             {form.password && form.password !== form.password_confirmation && (
                 <div className="flex items-center gap-2 text-xs text-red-600">
-                    <AlertCircle size={13} /> Passwords do not match
+                    <AlertCircle size={13} /> {tr("Passwords do not match")}
                 </div>
             )}
             {form.password?.length > 0 && form.password?.length < 8 && (
                 <div className="flex items-center gap-2 text-xs text-amber-600">
-                    <AlertCircle size={13} /> Password must be at least 8 characters
+                    <AlertCircle size={13} /> {tr("Password must be at least 8 characters")}
                 </div>
             )}
             {form.password?.length >= 8 && form.password === form.password_confirmation && (
                 <div className="flex items-center gap-2 text-xs text-green-600">
-                    <CheckCircle2 size={13} /> Passwords match
+                    <CheckCircle2 size={13} /> {tr("Passwords match")}
                 </div>
             )}
 
@@ -344,8 +345,8 @@ function ChangePasswordForm() {
                                rounded-xl text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50
                                transition-colors">
                     {saving
-                        ? <><div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Changing…</>
-                        : <><Lock size={14} /> Change Password</>
+                        ? <><div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> {tr("Changing…")}</>
+                        : <><Lock size={14} /> {tr("Change Password")}</>
                     }
                 </button>
             </div>
@@ -382,7 +383,7 @@ function SecuritySection({ user, onUpdated }) {
                     <ShieldCheck size={18} className={enabled ? 'text-green-600' : 'text-gray-400'} />
                 </div>
                 <div>
-                    <p className="text-sm font-semibold text-gray-800">Two-Factor Authentication</p>
+                    <p className="text-sm font-semibold text-gray-800">{tr("Two-Factor Authentication")}</p>
                     <p className="text-xs text-gray-500 mt-0.5">
                         {enabled
                             ? 'Enabled — you will receive a 6-digit code by email on each sign-in.'
@@ -443,6 +444,78 @@ const DIGEST_OPTIONS = [
     { value: 'weekly', label: 'Weekly digest', hint: 'One summary email per week instead' },
 ]
 
+function PublicProfileSection() {
+    const { success, error } = useToast()
+    const [form, setForm] = useState(null)
+    const [saving, setSaving] = useState(false)
+
+    useEffect(() => {
+        api.get('/profile/public-profile').then(r => setForm(r.data?.data ?? null)).catch(() => {})
+    }, [])
+
+    if (!form) return <div className="h-24 animate-pulse rounded-xl bg-gray-50" />
+
+    const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+    const url = `${window.location.origin}/researchers/${form.profile_slug}`
+
+    const save = async (next = form) => {
+        setSaving(true)
+        try {
+            const res = await api.put('/profile/public-profile', {
+                public_profile: next.public_profile, bio: next.bio || null, orcid: next.orcid || null, profile_slug: next.profile_slug || null,
+            })
+            setForm(res.data?.data)
+            success(res.data?.message ?? 'Saved.')
+        } catch (e) {
+            const errors = e.response?.data?.errors ?? {}
+            error(Object.values(errors)[0]?.[0] ?? e.response?.data?.message ?? 'Could not save.')
+        }
+        setSaving(false)
+    }
+
+    return (
+        <div className="space-y-5">
+            <ToggleRow
+                label="Show my profile on the public site"
+                hint="Off by default. Shows your name, title, college, photo, expertise, funded projects and checked research outputs — never your email or phone."
+                checked={form.public_profile}
+                disabled={saving}
+                onChange={() => save({ ...form, public_profile: !form.public_profile })}
+            />
+            {form.public_profile && (
+                <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 break-all text-sm font-medium text-indigo-600 hover:underline">
+                    {url} <ExternalLink size={13} className="shrink-0" />
+                </a>
+            )}
+            {!form.has_projects && (
+                <p className="text-xs text-gray-500">{tr("Your funded projects and outputs will appear here once you have one.")}</p>
+            )}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field label="Profile address" hint="Lowercase letters, numbers and hyphens.">
+                    <div className="flex items-center rounded-xl border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-indigo-500">
+                        <span className="pl-3 text-sm text-gray-400">{tr("/researchers/")}</span>
+                        <input value={form.profile_slug ?? ''} onChange={e => set('profile_slug', e.target.value.toLowerCase())}
+                            className="min-w-0 flex-1 rounded-r-xl bg-transparent py-2.5 pr-3 text-sm outline-none" />
+                    </div>
+                </Field>
+                <Field label="ORCID iD" hint="e.g. 0000-0002-1825-0097">
+                    <Input value={form.orcid ?? ''} onChange={e => set('orcid', e.target.value)} placeholder="0000-0000-0000-0000" />
+                </Field>
+            </div>
+            <Field label="Short biography" hint="A few sentences about your research. Shown on your public profile.">
+                <textarea rows={4} maxLength={2000} value={form.bio ?? ''} onChange={e => set('bio', e.target.value)}
+                    className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </Field>
+            <div className="flex justify-end">
+                <button onClick={() => save()} disabled={saving}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-60">
+                    <Save size={14} /> {saving ? 'Saving…' : 'Save'}
+                </button>
+            </div>
+        </div>
+    )
+}
+
 function NotificationPreferencesSection() {
     const { success, error } = useToast()
     const [prefs, setPrefs] = useState(null)
@@ -494,11 +567,9 @@ function NotificationPreferencesSection() {
             />
 
             <div className="pt-4 border-t border-gray-100">
-                <p className="text-sm font-semibold text-gray-800 mb-1">Email Frequency</p>
+                <p className="text-sm font-semibold text-gray-800 mb-1">{tr("Email Frequency")}</p>
                 <p className="text-xs text-gray-500 mb-3">
-                    Choose whether routine notification emails (assignments, decisions, budget updates) arrive
-                    individually or bundled into a periodic summary. Time-sensitive emails (password resets,
-                    login codes, invitations) always send immediately regardless of this setting.
+                    {tr("Choose whether routine notification emails (assignments, decisions, budget updates) arrive individually or bundled into a periodic summary. Time-sensitive emails (password resets, login codes, invitations) always send immediately regardless of this setting.")}
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     {DIGEST_OPTIONS.map(opt => {
@@ -579,17 +650,17 @@ function PrivacySection() {
         <div className="space-y-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <p className="text-sm font-medium text-gray-900">Download your data</p>
-                    <p className="text-xs text-gray-500">Your profile, proposals, team memberships, reviews and notifications, as a file.</p>
+                    <p className="text-sm font-medium text-gray-900">{tr("Download your data")}</p>
+                    <p className="text-xs text-gray-500">{tr("Your profile, proposals, team memberships, reviews and notifications, as a file.")}</p>
                 </div>
                 <button onClick={download} disabled={busy}
                     className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
-                    <Download size={14} /> Download
+                    <Download size={14} /> {tr("Download")}
                 </button>
             </div>
 
             <div className="border-t border-gray-100 pt-5">
-                <p className="text-sm font-medium text-gray-900">Delete your personal data</p>
+                <p className="text-sm font-medium text-gray-900">{tr("Delete your personal data")}</p>
                 <p className="mt-0.5 text-xs text-gray-500">
                     An administrator reviews the request. Your name, contact details and sign-in are removed; proposals and reviews you took part in
                     stay as university records without identifying you. It can't be done while you still have active proposals, reviews or unsettled funds.
@@ -597,26 +668,26 @@ function PrivacySection() {
 
                 {pending ? (
                     <div className="mt-3 flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-                        <p className="text-sm text-amber-800">Request sent {timeAgo(request.created_at)} — waiting for an administrator.</p>
-                        <button onClick={cancel} disabled={busy} className="text-sm font-semibold text-amber-900 underline underline-offset-2 disabled:opacity-50">Cancel request</button>
+                        <p className="text-sm text-amber-800">{tr("Request sent :created_at — waiting for an administrator.", { created_at: timeAgo(request.created_at) })}</p>
+                        <button onClick={cancel} disabled={busy} className="text-sm font-semibold text-amber-900 underline underline-offset-2 disabled:opacity-50">{tr("Cancel request")}</button>
                     </div>
                 ) : request?.status === 'rejected' && !asking ? (
-                    <p className="mt-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">Your last request was declined: {request.admin_note}</p>
+                    <p className="mt-3 rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-700">{tr("Your last request was declined: :admin_note", { admin_note: request.admin_note })}</p>
                 ) : null}
 
                 {!pending && (asking ? (
                     <div className="mt-3 space-y-3">
                         <textarea rows={3} value={reason} maxLength={1000} onChange={e => setReason(e.target.value)}
-                            placeholder="Optional: tell us why"
+                            placeholder={tr("Optional: tell us why")}
                             className="w-full resize-none rounded-xl border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" />
                         <div className="flex gap-2">
-                            <button onClick={() => setAsking(false)} className="rounded-xl border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">Cancel</button>
-                            <button onClick={send} disabled={busy} className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50">Send deletion request</button>
+                            <button onClick={() => setAsking(false)} className="rounded-xl border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">{tr("Cancel")}</button>
+                            <button onClick={send} disabled={busy} className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50">{tr("Send deletion request")}</button>
                         </div>
                     </div>
                 ) : (
                     <button onClick={() => setAsking(true)} className="mt-3 inline-flex items-center gap-2 rounded-xl border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50">
-                        <Trash2 size={14} /> Request deletion
+                        <Trash2 size={14} /> {tr("Request deletion")}
                     </button>
                 ))}
             </div>
@@ -668,7 +739,7 @@ function ActiveSessionsSection() {
     return (
         <div className="space-y-2">
             <p className="text-xs text-gray-400 -mt-1 mb-1">
-                Every device currently signed in to your account. Revoke any you don't recognize.
+                {tr("Every device currently signed in to your account. Revoke any you don't recognize.")}
             </p>
             {sessions.map(s => (
                 <div key={s.id} className="flex items-center justify-between gap-3 border border-gray-100 rounded-xl px-4 py-3">
@@ -683,7 +754,7 @@ function ActiveSessionsSection() {
                                 <p className="text-sm font-medium text-gray-800 truncate">{s.name || 'Session'}</p>
                                 {s.is_current && (
                                     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 shrink-0">
-                                        This device
+                                        {tr("This device")}
                                     </span>
                                 )}
                             </div>
@@ -779,7 +850,7 @@ function AcademicInfoForm({ user, onUpdated }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <Field label="College / Faculty" hint={!canEditCollegeDept ? 'Contact admin to change your college' : undefined}>
                     <Select value={collegeId} onChange={e => setCollegeId(e.target.value)} disabled={!canEditCollegeDept}>
-                        <option value="">Select college…</option>
+                        <option value="">{tr("Select college…")}</option>
                         {colleges.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                     </Select>
                 </Field>
@@ -811,15 +882,15 @@ function AcademicInfoForm({ user, onUpdated }) {
                         onChange={e => setExpertiseInput(e.target.value)}
                         onKeyDown={e => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTag(expertiseInput) } }}
                         onBlur={() => addTag(expertiseInput)}
-                        placeholder="e.g. Machine Learning, Hydrology — press Enter to add"
+                        placeholder={tr("e.g. Machine Learning, Hydrology — press Enter to add")}
                         className="flex-1"
                     />
                     <button onClick={() => addTag(expertiseInput)}
                         className="px-3.5 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition-colors">
-                        Add
+                        {tr("Add")}
                     </button>
                 </div>
-                <p className="text-xs text-gray-400 mt-1">Press Enter or comma to add each area.</p>
+                <p className="text-xs text-gray-400 mt-1">{tr("Press Enter or comma to add each area.")}</p>
             </Field>
 
             {changed && (
@@ -829,8 +900,8 @@ function AcademicInfoForm({ user, onUpdated }) {
                                    rounded-xl text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60
                                    transition-colors">
                         {saving
-                            ? <><div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> Saving…</>
-                            : <><Save size={14} /> Save Changes</>
+                            ? <><div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" /> {tr("Saving…")}</>
+                            : <><Save size={14} /> {tr("Save Changes")}</>
                         }
                     </button>
                 </div>
@@ -861,8 +932,8 @@ export default function ProfileEdit() {
 
                 {/* Header */}
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">My Profile</h1>
-                    <p className="text-sm text-gray-500 mt-1">Manage your personal information and account settings</p>
+                    <h1 className="text-2xl font-bold text-gray-900">{tr("My Profile")}</h1>
+                    <p className="text-sm text-gray-500 mt-1">{tr("Manage your personal information and account settings")}</p>
                 </div>
 
                 {/* Top row: avatar + account info */}
@@ -889,7 +960,7 @@ export default function ProfileEdit() {
 
                     {/* Account info */}
                     <div className="md:col-span-2">
-                        <Card title="Account Information" icon={Shield}
+                        <Card title={tr("Account Information")} icon={Shield}
                               iconColor="bg-indigo-100 text-indigo-600">
                             <AccountInfo user={currentUser} />
                         </Card>
@@ -897,42 +968,48 @@ export default function ProfileEdit() {
                 </div>
 
                 {/* Personal info form */}
-                <Card title="Personal Information" icon={User}
+                <Card title={tr("Personal Information")} icon={User}
                       iconColor="bg-blue-100 text-blue-600">
                     <PersonalInfoForm user={currentUser} onUpdated={handleUpdated} />
                 </Card>
 
                 {/* Academic profile */}
-                <Card title="Academic Profile" icon={GraduationCap}
+                <Card title={tr("Academic Profile")} icon={GraduationCap}
                       iconColor="bg-purple-100 text-purple-600">
                     <AcademicInfoForm user={currentUser} onUpdated={handleUpdated} />
                 </Card>
 
+                {/* Public profile */}
+                <Card title={tr("Public Researcher Profile")} icon={Globe}
+                      iconColor="bg-emerald-100 text-emerald-600">
+                    <PublicProfileSection />
+                </Card>
+
                 {/* Password */}
-                <Card title="Change Password" icon={Lock}
+                <Card title={tr("Change Password")} icon={Lock}
                       iconColor="bg-amber-100 text-amber-600">
                     <ChangePasswordForm />
                 </Card>
 
                 {/* Security */}
-                <Card title="Security" icon={ShieldCheck}
+                <Card title={tr("Security")} icon={ShieldCheck}
                       iconColor="bg-green-100 text-green-600">
                     <SecuritySection user={currentUser} onUpdated={handleUpdated} />
                 </Card>
 
                 {/* Notification preferences */}
-                <Card title="Notification Preferences" icon={Bell}
+                <Card title={tr("Notification Preferences")} icon={Bell}
                       iconColor="bg-indigo-100 text-indigo-600">
                     <NotificationPreferencesSection />
                 </Card>
 
                 {/* Active sessions */}
-                <Card title="Active Sessions" icon={Monitor}
+                <Card title={tr("Active Sessions")} icon={Monitor}
                       iconColor="bg-slate-100 text-slate-600">
                     <ActiveSessionsSection />
                 </Card>
 
-                <Card title="Your Data & Privacy" icon={FileLock2}
+                <Card title={tr("Your Data & Privacy")} icon={FileLock2}
                       iconColor="bg-rose-100 text-rose-600">
                     <PrivacySection />
                 </Card>

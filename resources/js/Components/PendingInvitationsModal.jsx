@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { translate as tr } from '../lib/i18n'
 import { createPortal } from 'react-dom';
 import { router } from '@inertiajs/react';
 import { Users, X, Bell, ChevronRight } from 'lucide-react';
@@ -48,8 +49,8 @@ export default function PendingInvitationsModal({ userId }) {
                                 <Bell size={20} className="text-white" />
                             </div>
                             <div>
-                                <h2 className="text-base font-bold text-white">Invitation Pending</h2>
-                                <p className="text-xs text-white/80 mt-0.5">Action required</p>
+                                <h2 className="text-base font-bold text-white">{tr("Invitation Pending")}</h2>
+                                <p className="text-xs text-white/80 mt-0.5">{tr("Action required")}</p>
                             </div>
                         </div>
                         <button
@@ -66,11 +67,9 @@ export default function PendingInvitationsModal({ userId }) {
                     <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4">
                         <Users size={18} className="text-amber-600 mt-0.5 shrink-0" />
                         <p className="text-sm text-amber-800 leading-relaxed">
-                            You have{' '}
-                            <span className="font-bold">
-                                {count === 1 ? '1 pending co-investigator invitation' : `${count} pending co-investigator invitations`}
-                            </span>
-                            . Please review and respond before the PI can submit the proposal.
+                            {count === 1
+                                ? tr('You have 1 pending co-investigator invitation. Please review and respond before the PI can submit the proposal.')
+                                : tr('You have :count pending co-investigator invitations. Please review and respond before the PI can submit the proposal.', { count })}
                         </p>
                     </div>
 

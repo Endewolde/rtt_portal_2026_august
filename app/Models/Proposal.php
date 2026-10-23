@@ -226,4 +226,9 @@ class Proposal extends Model
     {
         return $this->hasMany(DeadlineExtensionRequest::class);
     }
+
+    public function progressReports(): HasMany
+    {
+        return $this->hasMany(ProgressReport::class);
+    }
 }

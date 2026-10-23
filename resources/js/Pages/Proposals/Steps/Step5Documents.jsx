@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { translate as tr } from '../../../lib/i18n'
 import { Upload, CheckCircle, XCircle, FileText, X, AlertCircle } from 'lucide-react';
 import api from '../../../lib/api';
 import { useToast } from '../../../Components/Toast';
@@ -104,9 +105,9 @@ export default function Step5Documents({ proposalId, onComplete, initialUploads 
     return (
         <div className="space-y-6">
             <div>
-                <h2 className="text-lg font-semibold text-gray-900">Documents</h2>
+                <h2 className="text-lg font-semibold text-gray-900">{tr("Documents")}</h2>
                 <p className="text-sm text-gray-500 mt-1">
-                    Upload the required documents. Required items are marked <span className="text-red-500">*</span>
+                    {tr("Upload the required documents. Required items are marked")} <span className="text-red-500">*</span>
                 </p>
             </div>
 
@@ -135,7 +136,7 @@ export default function Step5Documents({ proposalId, onComplete, initialUploads 
                                                 {dt.label}
                                                 {dt.required && <span className="text-red-500 ml-1">*</span>}
                                             </p>
-                                            {!dt.required && <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">Optional</span>}
+                                            {!dt.required && <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded">{tr("Optional")}</span>}
                                         </div>
                                         <p className="text-xs text-gray-500 mt-0.5">{dt.description}</p>
                                         <p className="text-xs text-gray-400 mt-0.5">
@@ -153,7 +154,7 @@ export default function Step5Documents({ proposalId, onComplete, initialUploads 
                                         {isUp && (
                                             <div className="mt-2">
                                                 <div className="flex items-center justify-between mb-1">
-                                                    <span className="text-xs text-blue-600">Uploading…</span>
+                                                    <span className="text-xs text-blue-600">{tr("Uploading…")}</span>
                                                     <span className="text-xs text-blue-600">{u.progress}%</span>
                                                 </div>
                                                 <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
@@ -192,14 +193,14 @@ export default function Step5Documents({ proposalId, onComplete, initialUploads 
             {!requiredDone && (
                 <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
                     <AlertCircle size={16} className="text-amber-500 shrink-0" />
-                    <p className="text-sm text-amber-700">Please upload all required documents before continuing.</p>
+                    <p className="text-sm text-amber-700">{tr("Please upload all required documents before continuing.")}</p>
                 </div>
             )}
 
             <div className="flex justify-between pt-2">
                 <button onClick={() => onComplete(null, 'back')}
                     className="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
-                    Back
+                    {tr("Back")}
                 </button>
                 <button onClick={handleSave} disabled={!requiredDone || saving}
                     className="px-6 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">

@@ -350,7 +350,7 @@ export default function FeatureManagement() {
             <div className="max-w-5xl mx-auto space-y-5">
 
                 {/* Page header */}
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start flex-wrap justify-between gap-4">
                     <div className="flex items-center gap-3">
                         <div className="h-11 w-11 bg-indigo-50 rounded-xl flex items-center justify-center">
                             <Puzzle size={20} className="text-indigo-600" />

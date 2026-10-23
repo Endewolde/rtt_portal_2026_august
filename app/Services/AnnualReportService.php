@@ -6,6 +6,9 @@ use Illuminate\Support\Facades\DB;
 
 class AnnualReportService
 {
+    /** A proposal counts as funded from the award onwards, including after it moves on to mid-term or completion. */
+    private const FUNDED_STATUSES = ['funded', 'midterm_evaluation', 'completed', 'archived'];
+
     public function compile(int $startYear, int $endYear): array
     {
         $ay = "{$startYear}-{$endYear}"; // e.g. "2026-2027" — matches proposals.academic_year
@@ -31,6 +34,7 @@ class AnnualReportService
         $byStatus = DB::table('proposals')
             ->where('academic_year', $ay)
             ->where('status', '!=', 'draft')
+            ->whereNull('deleted_at')
             ->selectRaw('status, count(*) as total')
             ->groupBy('status')
             ->pluck('total', 'status')
@@ -39,6 +43,7 @@ class AnnualReportService
         $byCategory = DB::table('proposals')
             ->where('academic_year', $ay)
             ->where('status', '!=', 'draft')
+            ->whereNull('deleted_at')
             ->selectRaw('category, count(*) as total')
             ->groupBy('category')
             ->pluck('total', 'category')
@@ -46,7 +51,7 @@ class AnnualReportService
 
         return [
             'total' => array_sum($byStatus),
-            'funded' => (int) ($byStatus['funded'] ?? 0),
+            'funded' => array_sum(array_intersect_key($byStatus, array_flip(self::FUNDED_STATUSES))),
             'completed' => (int) ($byStatus['completed'] ?? 0),
             'rejected' => (int) ($byStatus['rejected'] ?? 0),
             'by_status' => $byStatus,
@@ -127,7 +132,9 @@ class AnnualReportService
         return DB::table('proposals')
             ->join('colleges', 'proposals.college_id', '=', 'colleges.id')
             ->where('proposals.academic_year', $ay)
-            ->selectRaw('colleges.name, count(*) as submitted, sum(case when proposals.status = "funded" then 1 else 0 end) as funded')
+            ->where('proposals.status', '!=', 'draft')
+            ->whereNull('proposals.deleted_at')
+            ->selectRaw("colleges.name, count(*) as submitted, sum(case when proposals.status in ('".implode("','", self::FUNDED_STATUSES)."') then 1 else 0 end) as funded")
             ->groupBy('colleges.id', 'colleges.name')
             ->orderByDesc('submitted')
             ->get()

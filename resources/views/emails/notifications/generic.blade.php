@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ app()->getLocale() }}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>RTT Platform Notification</title>
+<title>{{ __('RTT Platform Notification') }}</title>
 <style>
   body{margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
   .wrap{max-width:600px;margin:40px auto;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 4px 32px rgba(0,0,0,.10);}
@@ -31,28 +31,28 @@
         <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
       </svg>
     </div>
-    <h1>Platform Notification</h1>
+    <h1>{{ __('Platform Notification') }}</h1>
     <p>{{ $platformName }} — {{ $orgName }}</p>
   </div>
 
   <div class="body">
-    <p style="font-size:15px;color:#374151;margin:0 0 16px;">Dear <strong>{{ $recipient->name ?? 'User' }}</strong>,</p>
+    <p style="font-size:15px;color:#374151;margin:0 0 16px;">{!! __('Dear :name,', ['name' => '<strong>'.e($recipient->name ?? __('User')).'</strong>']) !!}</p>
     <p style="font-size:14px;color:#4b5563;line-height:1.75;margin:0 0 20px;">
       {{-- Mail::send() injects its own $message (the Mail\Message object), so the
            notification text arrives as $notification_message; $message is only a
-           string when this view is rendered directly. --}}
-      {{ $notification_message ?? (is_string($message ?? null) ? $message : 'You have a new notification from the RTT platform.') }}
+           string when this view is rendered directly. The text is translated when
+           it is one of the platform's fixed messages. --}}
+      {{ __($notification_message ?? (is_string($message ?? null) ? $message : 'You have a new notification from the RTT platform.')) }}
     </p>
 
     <hr class="divider">
     <p style="font-size:13px;color:#9ca3af;margin:0;">
-      This is an automated notification from <strong>{{ $platformName }}</strong>.
-      Please do not reply directly to this email.
+      {!! __('This is an automated notification from <strong>:platform</strong>. Please do not reply directly to this email.', ['platform' => e($platformName)]) !!}
     </p>
   </div>
 
   <div class="footer">
-    &copy; {{ date('Y') }} <strong>{{ $platformName }}</strong> &middot; {{ $orgName }} Research Office
+    &copy; {{ date('Y') }} <strong>{{ $platformName }}</strong> &middot; {{ __(':org Research Office', ['org' => $orgName]) }}
   </div>
 </div>
 </body>

@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ app()->getLocale() }}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Settlement Verified</title>
+<title>{{ __('Settlement Verified') }}</title>
 <style>
   body{margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
   .wrap{max-width:600px;margin:40px auto;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 4px 32px rgba(0,0,0,.10);}
@@ -42,22 +42,21 @@
         <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
       </svg>
     </div>
-    <h1>Settlement Verified!</h1>
-    <p>Your settlement has been confirmed by Finance</p>
-    <span class="badge">✓ Verified</span>
+    <h1>{{ __('Settlement Verified!') }}</h1>
+    <p>{{ __('Your settlement has been confirmed by Finance') }}</p>
+    <span class="badge">{{ __('✓ Verified') }}</span>
   </div>
 
   <div class="body">
-    <p style="font-size:15px;color:#374151;margin:0 0 16px;">Dear <strong>{{ $recipient->name ?? 'Researcher' }}</strong>,</p>
+    <p style="font-size:15px;color:#374151;margin:0 0 16px;">{!! __('Dear :name,', ['name' => '<strong>'.e($recipient->name ?? __('Researcher')).'</strong>']) !!}</p>
     <p style="font-size:14px;color:#4b5563;line-height:1.75;margin:0 0 20px;">
-      Your settlement documentation for the funding round below has been reviewed and
-      <strong>verified by the Finance Office</strong>. You are now eligible to proceed to the next round.
+      {!! __('Your settlement documentation for the funding round below has been reviewed and <strong>verified by the Finance Office</strong>. You are now eligible to proceed to the next round.') !!}
     </p>
 
     <div class="verified-box">
-      <p class="verified-label">Verified Settlement</p>
-      <p class="verified-round">Round {{ $roundNum }}</p>
-      <p class="verified-sub">Cleared and confirmed by Finance</p>
+      <p class="verified-label">{{ __('Verified Settlement') }}</p>
+      <p class="verified-round">{!! __('Round :round', ['round' => e($roundNum)]) !!}</p>
+      <p class="verified-sub">{{ __('Cleared and confirmed by Finance') }}</p>
     </div>
 
     <div style="text-align:center;">
@@ -65,23 +64,23 @@
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <circle cx="12" cy="12" r="10"/><polyline points="12 8 16 12 12 16"/><line x1="8" y1="12" x2="16" y2="12"/>
         </svg>
-        You are now eligible to submit Round {{ $nextRound }}
+        {{ __('You are now eligible to submit Round :round', ['round' => $nextRound]) }}
       </span>
     </div>
 
     <div class="cta">
-      <a href="{{ config('app.url') }}" class="btn">Start Round {{ $nextRound }} →</a>
-      <p class="cta-sub">Log in to the platform to submit your next budget request.</p>
+      <a href="{{ config('app.url') }}" class="btn">{{ __('Start Round :round →', ['round' => $nextRound]) }}</a>
+      <p class="cta-sub">{{ __('Log in to the platform to submit your next budget request.') }}</p>
     </div>
 
     <hr class="divider">
     <p style="font-size:13px;color:#9ca3af;margin:0;">
-      Sent via <strong>{{ $platformName }}</strong>. Contact the {{ $orgName }} Finance Office if you have any questions.
+      {!! __('Sent via <strong>:platform</strong>. Contact the :org Finance Office if you have any questions.', ['platform' => e($platformName), 'org' => e($orgName)]) !!}
     </p>
   </div>
 
   <div class="footer">
-    &copy; {{ date('Y') }} <strong>{{ $platformName }}</strong> &middot; {{ $orgName }} Research &amp; Technology Transfer
+    &copy; {{ date('Y') }} <strong>{{ $platformName }}</strong> &middot; {{ __(':org Research & Technology Transfer', ['org' => $orgName]) }}
   </div>
 </div>
 </body>

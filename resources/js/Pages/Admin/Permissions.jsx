@@ -78,7 +78,7 @@ export default function Permissions() {
     return (
         <AppLayout breadcrumb="Permissions">
             <div className="max-w-6xl mx-auto">
-                <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center flex-wrap justify-between mb-6 gap-3">
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                             <Key size={22} className="text-blue-600" /> Permissions
@@ -139,42 +139,44 @@ export default function Permissions() {
 
                                 {expanded[resource] && (
                                     <div className="border-t border-gray-100">
-                                        <table className="w-full text-sm">
-                                            <thead className="bg-gray-50">
-                                                <tr>
-                                                    <th className="px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide w-1/2">Permission</th>
-                                                    <th className="px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Roles with access</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody className="divide-y divide-gray-50">
-                                                {perms.map(perm => {
-                                                    const grantedTo = rolesForPerm(perm.name);
-                                                    return (
-                                                        <tr key={perm.id} className="hover:bg-gray-50">
-                                                            <td className="px-5 py-3">
-                                                                <code className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-mono">
-                                                                    {perm.name}
-                                                                </code>
-                                                            </td>
-                                                            <td className="px-5 py-3">
-                                                                {grantedTo.length === 0 ? (
-                                                                    <span className="text-xs text-gray-400 italic">No roles</span>
-                                                                ) : (
-                                                                    <div className="flex flex-wrap gap-1">
-                                                                        {grantedTo.map(r => (
-                                                                            <span key={r.id}
-                                                                                className={`text-xs px-2 py-0.5 rounded-full font-medium ${ROLE_COLORS[r.name] ?? 'bg-gray-100 text-gray-700'}`}>
-                                                                                {r.name.replace(/_/g, ' ')}
-                                                                            </span>
-                                                                        ))}
-                                                                    </div>
-                                                                )}
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-sm">
+                                                <thead className="bg-gray-50">
+                                                    <tr>
+                                                        <th className="px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide w-1/2">Permission</th>
+                                                        <th className="px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Roles with access</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-gray-50">
+                                                    {perms.map(perm => {
+                                                        const grantedTo = rolesForPerm(perm.name);
+                                                        return (
+                                                            <tr key={perm.id} className="hover:bg-gray-50">
+                                                                <td className="px-5 py-3">
+                                                                    <code className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-mono">
+                                                                        {perm.name}
+                                                                    </code>
+                                                                </td>
+                                                                <td className="px-5 py-3">
+                                                                    {grantedTo.length === 0 ? (
+                                                                        <span className="text-xs text-gray-400 italic">No roles</span>
+                                                                    ) : (
+                                                                        <div className="flex flex-wrap gap-1">
+                                                                            {grantedTo.map(r => (
+                                                                                <span key={r.id}
+                                                                                    className={`text-xs px-2 py-0.5 rounded-full font-medium ${ROLE_COLORS[r.name] ?? 'bg-gray-100 text-gray-700'}`}>
+                                                                                    {r.name.replace(/_/g, ' ')}
+                                                                                </span>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
                                     </div>
                                 )}
                             </div>

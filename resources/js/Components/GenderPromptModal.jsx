@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { translate as tr } from '../lib/i18n'
 import { UserCircle2 } from 'lucide-react';
 import api from '../lib/api';
 import { useToast } from './Toast';
@@ -35,9 +36,9 @@ export default function GenderPromptModal({ onSaved }) {
                     <div className="h-12 w-12 rounded-2xl flex items-center justify-center mb-4" style={{ background: 'rgba(255,255,255,0.2)' }}>
                         <UserCircle2 size={24} className="text-white" />
                     </div>
-                    <h2 className="text-lg font-bold text-white">One quick thing</h2>
+                    <h2 className="text-lg font-bold text-white">{tr("One quick thing")}</h2>
                     <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                        Please select your gender to complete your profile.
+                        {tr("Please select your gender to complete your profile.")}
                     </p>
                 </div>
 
@@ -79,7 +80,7 @@ export default function GenderPromptModal({ onSaved }) {
                         {saving ? 'Saving…' : 'Continue'}
                     </button>
                     <p className="text-center text-xs text-gray-400 mt-3">
-                        You can update this anytime in your profile settings.
+                        {tr("You can update this anytime in your profile settings.")}
                     </p>
                 </div>
             </div>

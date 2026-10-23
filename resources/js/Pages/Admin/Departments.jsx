@@ -204,7 +204,7 @@ export default function Departments() {
             <div className="max-w-5xl mx-auto space-y-6">
 
                 {/* Header */}
-                <div className="flex items-center justify-between">
+                <div className="flex items-center flex-wrap justify-between gap-3">
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2.5">
                             <Building2 size={24} className="text-blue-600" /> Departments
@@ -235,7 +235,7 @@ export default function Departments() {
                 {isCollegeOfficer ? (
                     <StatCard label="Total Departments" value={departments.length} icon={Building2} color="bg-blue-500" />
                 ) : (
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                         <StatCard label="Total Departments" value={departments.length} icon={Building2}     color="bg-blue-500" />
                         <StatCard label="Active"            value={activeCount}        icon={CheckCircle}   color="bg-emerald-500" />
                         <StatCard label="Inactive"          value={inactiveCount}      icon={AlertCircle}   color="bg-amber-400" />
@@ -309,58 +309,60 @@ export default function Departments() {
                                 )}
 
                                 {/* Departments table */}
-                                <table className="w-full text-sm">
-                                    <thead>
-                                        <tr className="text-xs text-gray-400 uppercase border-b border-gray-50">
-                                            <th className="px-5 py-2.5 text-left font-medium w-10">#</th>
-                                            <th className="px-5 py-2.5 text-left font-medium">Name</th>
-                                            <th className="px-5 py-2.5 text-left font-medium">Code</th>
-                                            <th className="px-5 py-2.5 text-left font-medium">Status</th>
-                                            <th className="px-5 py-2.5" />
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-gray-50">
-                                        {depts.map((d, i) => (
-                                            <tr key={d.id} className="hover:bg-blue-50/30 transition-colors group">
-                                                <td className="px-5 py-3 text-xs font-medium text-gray-400 tabular-nums w-10">{i + 1}</td>
-                                                <td className="px-5 py-3">
-                                                    <span className="font-semibold text-gray-900">{d.name}</span>
-                                                </td>
-                                                <td className="px-5 py-3">
-                                                    <span className="font-mono text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-md">{d.code}</span>
-                                                </td>
-                                                <td className="px-5 py-3">
-                                                    <span className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-semibold ${
-                                                        d.status === 'active'
-                                                            ? 'bg-emerald-100 text-emerald-700'
-                                                            : 'bg-gray-100 text-gray-500'
-                                                    }`}>
-                                                        <span className={`w-1.5 h-1.5 rounded-full ${d.status === 'active' ? 'bg-emerald-500' : 'bg-gray-400'}`} />
-                                                        {d.status}
-                                                    </span>
-                                                </td>
-                                                <td className="px-5 py-3 text-right">
-                                                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition">
-                                                        <button
-                                                            onClick={() => setModal({ dept: d })}
-                                                            className="p-1.5 text-gray-300 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
-                                                        >
-                                                            <Pencil size={13} />
-                                                        </button>
-                                                        {hasPermission('colleges.delete') && (
-                                                            <button
-                                                                onClick={() => setDeleteConfirm(d)}
-                                                                className="p-1.5 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                                                            >
-                                                                <Trash2 size={13} />
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </td>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                        <thead>
+                                            <tr className="text-xs text-gray-400 uppercase border-b border-gray-50">
+                                                <th className="px-5 py-2.5 text-left font-medium w-10">#</th>
+                                                <th className="px-5 py-2.5 text-left font-medium">Name</th>
+                                                <th className="px-5 py-2.5 text-left font-medium">Code</th>
+                                                <th className="px-5 py-2.5 text-left font-medium">Status</th>
+                                                <th className="px-5 py-2.5" />
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-50">
+                                            {depts.map((d, i) => (
+                                                <tr key={d.id} className="hover:bg-blue-50/30 transition-colors group">
+                                                    <td className="px-5 py-3 text-xs font-medium text-gray-400 tabular-nums w-10">{i + 1}</td>
+                                                    <td className="px-5 py-3">
+                                                        <span className="font-semibold text-gray-900">{d.name}</span>
+                                                    </td>
+                                                    <td className="px-5 py-3">
+                                                        <span className="font-mono text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-md">{d.code}</span>
+                                                    </td>
+                                                    <td className="px-5 py-3">
+                                                        <span className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-semibold ${
+                                                            d.status === 'active'
+                                                                ? 'bg-emerald-100 text-emerald-700'
+                                                                : 'bg-gray-100 text-gray-500'
+                                                        }`}>
+                                                            <span className={`w-1.5 h-1.5 rounded-full ${d.status === 'active' ? 'bg-emerald-500' : 'bg-gray-400'}`} />
+                                                            {d.status}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-5 py-3 text-right">
+                                                        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition">
+                                                            <button
+                                                                onClick={() => setModal({ dept: d })}
+                                                                className="p-1.5 text-gray-300 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                                                            >
+                                                                <Pencil size={13} />
+                                                            </button>
+                                                            {hasPermission('colleges.delete') && (
+                                                                <button
+                                                                    onClick={() => setDeleteConfirm(d)}
+                                                                    className="p-1.5 text-gray-300 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                                                                >
+                                                                    <Trash2 size={13} />
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
                         ))}
                     </div>

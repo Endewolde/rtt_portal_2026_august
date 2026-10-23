@@ -1152,7 +1152,7 @@ function ImportModal({ onClose, onDone }) {
                             </div>
 
                             {/* Stat cards */}
-                            <div className="grid grid-cols-4 gap-3">
+                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                                 {[
                                     { label: 'Total',   val: result.summary.total,   top: '#6366f1', bg: '#eef2ff', text: '#3730a3' },
                                     { label: 'Created', val: result.summary.created, top: '#10b981', bg: '#ecfdf5', text: '#065f46' },
@@ -1174,24 +1174,26 @@ function ImportModal({ onClose, onDone }) {
                                 <div>
                                     <p className="text-[11px] font-semibold text-red-500 uppercase tracking-widest mb-2">Row errors</p>
                                     <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #fee2e2', maxHeight: '180px', overflowY: 'auto' }}>
-                                        <table className="min-w-full text-xs">
-                                            <thead>
-                                                <tr style={{ background: '#fef2f2', borderBottom: '1px solid #fee2e2' }}>
-                                                    <th className="px-3 py-2 text-left font-semibold text-red-400 w-12">Row</th>
-                                                    <th className="px-3 py-2 text-left font-semibold text-red-400">Email</th>
-                                                    <th className="px-3 py-2 text-left font-semibold text-red-400">Issue</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {result.errors.map((e, i) => (
-                                                    <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-red-50/30'}>
-                                                        <td className="px-3 py-2 font-mono text-gray-400">{e.row}</td>
-                                                        <td className="px-3 py-2 text-gray-600">{e.email}</td>
-                                                        <td className="px-3 py-2 text-red-500">{e.error}</td>
+                                        <div className="overflow-x-auto">
+                                            <table className="min-w-full text-xs">
+                                                <thead>
+                                                    <tr style={{ background: '#fef2f2', borderBottom: '1px solid #fee2e2' }}>
+                                                        <th className="px-3 py-2 text-left font-semibold text-red-400 w-12">Row</th>
+                                                        <th className="px-3 py-2 text-left font-semibold text-red-400">Email</th>
+                                                        <th className="px-3 py-2 text-left font-semibold text-red-400">Issue</th>
                                                     </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
+                                                </thead>
+                                                <tbody>
+                                                    {result.errors.map((e, i) => (
+                                                        <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-red-50/30'}>
+                                                            <td className="px-3 py-2 font-mono text-gray-400">{e.row}</td>
+                                                            <td className="px-3 py-2 text-gray-600">{e.email}</td>
+                                                            <td className="px-3 py-2 text-red-500">{e.error}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
                                     </div>
                                 </div>
                             )}

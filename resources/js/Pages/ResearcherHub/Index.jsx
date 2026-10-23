@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { translate as tr } from '../../lib/i18n'
 import { Link } from '@inertiajs/react'
 import {
     FileText, ClipboardCheck, BookOpen, DollarSign,
@@ -167,7 +168,7 @@ export default function ResearcherHubIndex() {
             {/* Header */}
             <div className="mb-6 flex items-start justify-between">
                 <div>
-                    <h1 className="text-xl font-bold text-gray-900">My Research Hub</h1>
+                    <h1 className="text-xl font-bold text-gray-900">{tr("My Research Hub")}</h1>
                     <p className="text-sm text-gray-500 mt-0.5">
                         {user?.name ? `Welcome back, ${user.name.split(' ')[0]}` : 'Your research at a glance'}
                     </p>
@@ -177,7 +178,7 @@ export default function ResearcherHubIndex() {
                     className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors"
                 >
                     <Download size={12} />
-                    Export Calendar
+                    {tr("Export Calendar")}
                 </a>
             </div>
 
@@ -226,10 +227,10 @@ export default function ResearcherHubIndex() {
                 {/* My Proposals — spans 2 cols */}
                 <SectionCard
                     className="lg:col-span-2"
-                    title="My Proposals"
+                    title={tr("My Proposals")}
                     action={
                         <Link href="/my-proposals" className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
-                            View all <ChevronRight size={12} />
+                            {tr("View all")} <ChevronRight size={12} />
                         </Link>
                     }
                 >
@@ -246,9 +247,9 @@ export default function ResearcherHubIndex() {
                     ) : proposals.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-12 text-gray-400">
                             <FileText size={32} className="mb-2 opacity-30" />
-                            <p className="text-sm">No proposals yet</p>
+                            <p className="text-sm">{tr("No proposals yet")}</p>
                             <Link href="/proposals/create" className="mt-3 text-xs text-indigo-600 hover:underline">
-                                Submit your first proposal →
+                                {tr("Submit your first proposal →")}
                             </Link>
                         </div>
                     ) : (
@@ -263,7 +264,7 @@ export default function ResearcherHubIndex() {
                                     <span className="text-sm text-gray-700 flex-1 truncate group-hover:text-gray-900">{p.title}</span>
                                     <div className="flex items-center gap-2 shrink-0">
                                         {p.role === 'co_investigator' && (
-                                            <span className="text-[10px] font-medium text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">Co-PI</span>
+                                            <span className="text-[10px] font-medium text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{tr("Co-PI")}</span>
                                         )}
                                         {p.award?.awarded_amount && (
                                             <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
@@ -279,7 +280,7 @@ export default function ResearcherHubIndex() {
                             {proposals.length > 8 && (
                                 <div className="px-5 py-3 text-center">
                                     <Link href="/my-proposals" className="text-xs text-indigo-600 hover:underline">
-                                        +{proposals.length - 8} more proposals
+                                        {tr("+:proposals_count more proposals", { proposals_count: proposals.length - 8 })}
                                     </Link>
                                 </div>
                             )}
@@ -292,11 +293,11 @@ export default function ResearcherHubIndex() {
 
                     {/* Pending Reviews */}
                     <SectionCard
-                        title="Pending Reviews"
+                        title={tr("Pending Reviews")}
                         action={
                             reviewAssignments.length > 0 && (
                                 <Link href="/reviews" className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
-                                    View all <ChevronRight size={12} />
+                                    {tr("View all")} <ChevronRight size={12} />
                                 </Link>
                             )
                         }
@@ -313,7 +314,7 @@ export default function ResearcherHubIndex() {
                         ) : reviewAssignments.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-8 text-gray-400">
                                 <CheckCircle2 size={24} className="mb-2 opacity-30" />
-                                <p className="text-xs">No pending reviews</p>
+                                <p className="text-xs">{tr("No pending reviews")}</p>
                             </div>
                         ) : (
                             <div className="divide-y divide-gray-50">
@@ -347,13 +348,13 @@ export default function ResearcherHubIndex() {
 
                     {/* Upcoming Deadlines */}
                     <SectionCard
-                        title="Upcoming Deadlines"
+                        title={tr("Upcoming Deadlines")}
                         action={
                             <a
                                 href={calendarUrl}
                                 className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
                             >
-                                <Download size={10} /> .ics
+                                <Download size={10} /> {tr(".ics")}
                             </a>
                         }
                     >
@@ -369,7 +370,7 @@ export default function ResearcherHubIndex() {
                         ) : upcomingDeadlines.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-8 text-gray-400">
                                 <Calendar size={24} className="mb-2 opacity-30" />
-                                <p className="text-xs">No upcoming deadlines</p>
+                                <p className="text-xs">{tr("No upcoming deadlines")}</p>
                             </div>
                         ) : (
                             <div className="divide-y divide-gray-50">
@@ -400,10 +401,10 @@ export default function ResearcherHubIndex() {
             {/* Research Outputs row */}
             <div className="mt-6">
                 <SectionCard
-                    title="Research Outputs"
+                    title={tr("Research Outputs")}
                     action={
                         <Link href="/research-outputs" className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
-                            Manage <ChevronRight size={12} />
+                            {tr("Manage")} <ChevronRight size={12} />
                         </Link>
                     }
                 >

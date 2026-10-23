@@ -122,7 +122,8 @@ class ProposalController extends Controller
             $query->where('academic_year', $request->academic_year);
         }
         if ($request->filled('search')) {
-            $query->where('title', 'LIKE', '%'.$request->search.'%');
+            $term = '%'.$request->search.'%';
+            $query->where(fn ($q) => $q->where('title', 'LIKE', $term)->orWhere('tracker_number', 'LIKE', $term));
         }
         if ($request->filled('pi_search')) {
             $term = '%'.$request->pi_search.'%';

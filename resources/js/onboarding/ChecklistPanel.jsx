@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { translate as tr } from '../lib/i18n'
 import {
     X, CheckCircle2, Circle, PlayCircle, RotateCcw, ArrowRight, Sparkles, Map as MapIcon, Undo2, Radar,
 } from 'lucide-react';
@@ -28,7 +29,7 @@ export default function ChecklistPanel() {
 
     return (
         <div className="fixed inset-0 z-[55] flex justify-end bg-slate-900/40 backdrop-blur-[2px]" onClick={closeChecklist}>
-            <aside role="dialog" aria-modal="true" aria-label="Getting started"
+            <aside role="dialog" aria-modal="true" aria-label={tr("Getting started")}
                 className="flex h-full w-full max-w-md flex-col bg-white shadow-2xl"
                 onClick={(e) => e.stopPropagation()}>
                 {/* Header */}
@@ -36,10 +37,10 @@ export default function ChecklistPanel() {
                     <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-white/10" />
                     <div className="flex items-start justify-between gap-3">
                         <div>
-                            <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-100"><Sparkles size={12} /> Getting started</p>
+                            <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-indigo-100"><Sparkles size={12} /> {tr("Getting started")}</p>
                             <h2 className="mt-1 text-lg font-bold">{config.label}</h2>
                         </div>
-                        <button onClick={closeChecklist} aria-label="Close" className="rounded-lg p-1.5 text-white/70 hover:bg-white/10 hover:text-white">
+                        <button onClick={closeChecklist} aria-label={tr("Close")} className="rounded-lg p-1.5 text-white/70 hover:bg-white/10 hover:text-white">
                             <X size={16} />
                         </button>
                     </div>
@@ -50,7 +51,7 @@ export default function ChecklistPanel() {
                         <span className="text-xs font-semibold tabular-nums">{done}/{checklist.length}</span>
                     </div>
                     {roles.length > 1 && (
-                        <div className="mt-4 flex gap-1.5 overflow-x-auto" role="tablist" aria-label="Role">
+                        <div className="mt-4 flex gap-1.5 overflow-x-auto" role="tablist" aria-label={tr("Role")}>
                             {roles.map((r) => (
                                 <button key={r} role="tab" aria-selected={r === progress.role} onClick={() => switchRole(r)}
                                     className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${r === progress.role ? 'bg-white text-indigo-700' : 'bg-white/15 text-white hover:bg-white/25'}`}>
@@ -67,8 +68,8 @@ export default function ChecklistPanel() {
                             className="flex w-full items-center gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-left hover:bg-indigo-100">
                             <PlayCircle size={20} className="shrink-0 text-indigo-600" />
                             <span className="min-w-0 flex-1">
-                                <span className="block text-sm font-semibold text-indigo-900">Resume “{TOURS[activeTour].title}”</span>
-                                <span className="block text-xs text-indigo-700">Pick up at step {(progress.active_step ?? 0) + 1}</span>
+                                <span className="block text-sm font-semibold text-indigo-900">{tr("Resume “:title”", { title: TOURS[activeTour].title })}</span>
+                                <span className="block text-xs text-indigo-700">{tr("Pick up at step :active_step", { active_step: (progress.active_step ?? 0) + 1 })}</span>
                             </span>
                             <ArrowRight size={16} className="text-indigo-500" />
                         </button>
@@ -76,7 +77,7 @@ export default function ChecklistPanel() {
 
                     {/* Checklist */}
                     <section>
-                        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Your checklist</h3>
+                        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">{tr("Your checklist")}</h3>
                         <ul className="space-y-2">
                             {checklist.map((task) => {
                                 const isDone = isTaskDone(task, progress);
@@ -93,22 +94,22 @@ export default function ChecklistPanel() {
                                                 <div className="mt-2 flex flex-wrap items-center gap-2">
                                                     {!isDone && task.tour && (
                                                         <button onClick={() => startTour(task.tour)} className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-indigo-700">
-                                                            <PlayCircle size={12} /> Start tour
+                                                            <PlayCircle size={12} /> {tr("Start tour")}
                                                         </button>
                                                     )}
                                                     {!isDone && task.route && (
                                                         <button onClick={() => goTo(task.route)} className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2.5 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50">
-                                                            Go there <ArrowRight size={11} />
+                                                            {tr("Go there")} <ArrowRight size={11} />
                                                         </button>
                                                     )}
                                                     {!isDone && !task.tour && !readOnly && (
-                                                        <button onClick={() => toggleTask(task, true)} className="text-[11px] font-medium text-gray-400 hover:text-gray-600">Mark as done</button>
+                                                        <button onClick={() => toggleTask(task, true)} className="text-[11px] font-medium text-gray-400 hover:text-gray-600">{tr("Mark as done")}</button>
                                                     )}
                                                     {detected && task.signal && (
-                                                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600"><Radar size={11} /> Detected from your activity</span>
+                                                        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-600"><Radar size={11} /> {tr("Detected from your activity")}</span>
                                                     )}
                                                     {isDone && (progress.completed_tasks ?? []).includes(task.id) && !readOnly && (
-                                                        <button onClick={() => toggleTask(task, false)} className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-400 hover:text-gray-600"><Undo2 size={11} /> Undo</button>
+                                                        <button onClick={() => toggleTask(task, false)} className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-400 hover:text-gray-600"><Undo2 size={11} /> {tr("Undo")}</button>
                                                     )}
                                                 </div>
                                             </div>
@@ -121,7 +122,7 @@ export default function ChecklistPanel() {
 
                     {/* Tours */}
                     <section>
-                        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">Guided tours</h3>
+                        <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-400">{tr("Guided tours")}</h3>
                         <ul className="divide-y divide-gray-100 rounded-2xl border border-gray-200">
                             {tours.map((id) => {
                                 const finished = completedTours.includes(id);
@@ -149,7 +150,7 @@ export default function ChecklistPanel() {
                 {!readOnly && (
                     <div className="border-t border-gray-100 px-6 py-3.5">
                         <button onClick={restartAll} className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-800">
-                            <RotateCcw size={13} /> Restart onboarding for this role
+                            <RotateCcw size={13} /> {tr("Restart onboarding for this role")}
                         </button>
                     </div>
                 )}

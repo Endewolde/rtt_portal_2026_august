@@ -119,7 +119,7 @@ function PIHistoryModal({ piId, piName, onClose }) {
                             )}
 
                             {/* Summary cards */}
-                            <div className="grid grid-cols-4 gap-2">
+                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                                 {[
                                     { label: 'Total', value: s.total, cls: 'text-gray-700' },
                                     { label: 'Funded', value: s.funded_active, cls: 'text-emerald-700' },

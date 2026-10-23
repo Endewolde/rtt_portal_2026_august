@@ -27,6 +27,7 @@ use App\Services\MailConfigService;
 use App\Services\ReviewAssignmentService;
 use App\Services\ReviewerAgreementService;
 use App\Services\ReviewerConflictService;
+use App\Services\ReviewerMatchService;
 use App\Services\ReviewScoreService;
 use App\Services\WorkflowService;
 use App\Support\AuditLogger;
@@ -606,6 +607,9 @@ class ReviewController extends Controller
             ])->filter(fn ($c) => $c['comment'])->values();
 
             return [
+                // Set aside after a second opinion: shown, but not counted in the blind score.
+                'set_aside' => (bool) $assignment->set_aside_at,
+                'second_opinion' => (bool) $assignment->is_second_opinion,
                 'overall_score' => $scores->isNotEmpty() ? $display['score'] : null,
                 'overall_max' => $scores->isNotEmpty() ? $display['max'] : null,
                 'recommendation' => $recommendation,
@@ -613,7 +617,7 @@ class ReviewController extends Controller
             ];
         })->values();
 
-        $scored = $reviews->whereNotNull('overall_score');
+        $scored = $reviews->whereNotNull('overall_score')->where('set_aside', false);
 
         // The phase scores the decisions are made on: blind (out of its weight sum),
         // defence, and combined (blind + defence, out of 100 with the standard weights).
@@ -1180,6 +1184,39 @@ class ReviewController extends Controller
         ]);
     }
 
+    /** Running blind review or open defence for this proposal's college or category. */
+    private function canAddReviewers(User $user, Proposal $proposal): bool
+    {
+        return $user->canAny(['reviews.manage', 'review_decisions.correct'])
+            && $user->accessScope()->covers($proposal->college_id, $proposal->category);
+    }
+
+    /**
+     * Reviewers suggested for a second opinion while the blind reviewers disagree:
+     * best expertise match first, leaving out everyone already reviewing it and
+     * flagging possible conflicts and full workloads.
+     */
+    public function secondOpinionSuggestions(Request $request, string $id): JsonResponse
+    {
+        $proposal = Proposal::findOrFail($id);
+
+        if (! $this->canAddReviewers($request->user(), $proposal)) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => [], 'meta' => []], 403);
+        }
+
+        $assigned = ReviewAssignment::where('proposal_id', $id)->whereNotIn('status', ['declined'])->pluck('reviewer_id')->all();
+        ['reviewers' => $ranked] = app(ReviewerMatchService::class)->rank($proposal, $assigned, 8);
+
+        // Clean matches with room in their workload first; external reviewers break ties.
+        $ranked = $ranked->sortBy([
+            fn ($a, $b) => (count($a['conflicts']) > 0 || $a['at_capacity']) <=> (count($b['conflicts']) > 0 || $b['at_capacity']),
+            fn ($a, $b) => $b['composite_score'] <=> $a['composite_score'],
+            fn ($a, $b) => $b['is_external'] <=> $a['is_external'],
+        ])->values();
+
+        return response()->json(['data' => $ranked, 'message' => '', 'errors' => [], 'meta' => []]);
+    }
+
     public function addReviewer(Request $request, string $id): JsonResponse
     {
         $request->validate([
@@ -1190,6 +1227,28 @@ class ReviewController extends Controller
         ]);
 
         $proposal = Proposal::findOrFail($id);
+
+        if (! $this->canAddReviewers($request->user(), $proposal)) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => [], 'meta' => []], 403);
+        }
+
+        // Asked for while the blind reviewers disagree: this reviewer is the second opinion.
+        $isSecondOpinion = $proposal->status === 'under_blind_review'
+            && $proposal->review_disagreement_flagged_at
+            && ! $proposal->review_disagreement_resolved_at;
+
+        if ($isSecondOpinion) {
+            $pending = ReviewAssignment::where('proposal_id', $id)->where('is_second_opinion', true)
+                ->whereIn('status', ['pending', 'accepted', 'in_progress'])->with('reviewer:id,name')->first();
+            if ($pending) {
+                return response()->json([
+                    'data' => null,
+                    'message' => "A second opinion has already been requested from {$pending->reviewer?->name}. Remove that reviewer first to ask someone else.",
+                    'errors' => [],
+                    'meta' => [],
+                ], 422);
+            }
+        }
 
         if (! in_array($proposal->status, ['under_blind_review', 'under_open_defence'])) {
             return response()->json([
@@ -1270,7 +1329,19 @@ class ReviewController extends Controller
             'assigned_at' => now(),
             'due_date' => $request->due_date ?? now()->addDays(14)->toDateString(),
             'acknowledged_conflicts' => $acknowledgedConflicts[$request->reviewer_id] ?? null,
+            'is_second_opinion' => $isSecondOpinion,
         ]);
+
+        if ($isSecondOpinion) {
+            $proposal->forceFill(['review_disagreement' => array_merge($proposal->review_disagreement ?? [], [
+                'second_opinion' => [
+                    'reviewer' => $reviewer->name,
+                    'requested_by' => $request->user()->name,
+                    'requested_at' => now()->toIso8601String(),
+                    'due_date' => $assignment->due_date?->toDateString(),
+                ],
+            ])])->saveQuietly();
+        }
 
         $reviewType = $proposal->status === 'under_open_defence' ? 'Open Defence' : 'Blind Review';
         if ($reviewer) {

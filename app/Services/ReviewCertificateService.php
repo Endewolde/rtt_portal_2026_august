@@ -19,16 +19,20 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Illuminate\Support\Traits\Localizable;
 
 /**
  * Certificates of review service: how many blind reviews and open-defence evaluations
  * a reviewer completed in an academic year. Never names the proposals — blind review
  * is confidential. The central office releases each year once its reviews are done;
  * reviewers with at least the minimum qualifying reviews then receive a certificate
- * with their counts frozen, which can later be revoked.
+ * with their counts frozen, which can later be revoked. A released year can be closed
+ * (every certificate withdrawn at once) and then reopened or released again.
  */
 class ReviewCertificateService
 {
+    use Localizable;
+
     public const DEFAULT_SIGNATORY_TITLE = 'Vice President, Research & Technology Transfer';
 
     /**
@@ -56,6 +60,7 @@ class ReviewCertificateService
                     'min_reviews' => $minReviews,
                     'on_time_only' => $onTimeOnly,
                     'released' => $release !== null,
+                    'withdrawn' => (bool) $release?->isClosed(),
                     'eligible' => $release ? $certificate !== null : $counted >= $minReviews,
                     'code' => $certificate?->code,
                     'revoked' => (bool) $certificate?->isRevoked(),
@@ -82,7 +87,7 @@ class ReviewCertificateService
             ->pluck('p.academic_year');
 
         $academicYear = $academicYear ?: $years->first();
-        $release = $academicYear ? ReviewCertificateRelease::with('releasedBy:id,name')->where('academic_year', $academicYear)->first() : null;
+        $release = $academicYear ? ReviewCertificateRelease::with(['releasedBy:id,name', 'closedBy:id,name'])->where('academic_year', $academicYear)->first() : null;
         $rules = $release
             ? ['min_reviews' => $release->min_reviews, 'on_time_only' => $release->on_time_only]
             : $this->currentRules();
@@ -110,6 +115,9 @@ class ReviewCertificateService
                 'released_at' => $release->released_at->toIso8601String(),
                 'released_by' => $release->releasedBy?->name,
                 'certificates_issued' => $release->certificates_issued,
+                'closed_at' => $release->closed_at?->toIso8601String(),
+                'closed_by' => $release->closedBy?->name,
+                'close_reason' => $release->close_reason,
             ] : null,
             'stats' => [
                 'reviewers' => $reviewers->count(),
@@ -123,13 +131,16 @@ class ReviewCertificateService
 
     /**
      * Release a year: issue a certificate to every reviewer who meets the current
-     * rules, with their counts frozen as of now. Happens once per year.
+     * rules, with their counts frozen as of now. Once released, a year can only be
+     * released again after it has been closed; certificates keep their numbers, and
+     * any that no longer qualify are revoked rather than deleted.
      *
      * @throws \RuntimeException
      */
     public function release(string $academicYear, User $actor): ReviewCertificateRelease
     {
-        if (ReviewCertificateRelease::where('academic_year', $academicYear)->exists()) {
+        $existing = ReviewCertificateRelease::where('academic_year', $academicYear)->first();
+        if ($existing && ! $existing->isClosed()) {
             throw new \RuntimeException("Certificates for {$academicYear} have already been released.");
         }
 
@@ -139,36 +150,47 @@ class ReviewCertificateService
             throw new \RuntimeException("No reviewer has {$rules['min_reviews']} or more qualifying reviews in {$academicYear}.");
         }
 
-        $release = DB::transaction(function () use ($academicYear, $actor, $rules, $eligible) {
-            $release = ReviewCertificateRelease::create([
-                'academic_year' => $academicYear,
+        $release = DB::transaction(function () use ($academicYear, $actor, $rules, $eligible, $existing) {
+            $release = ReviewCertificateRelease::updateOrCreate(['academic_year' => $academicYear], [
                 'min_reviews' => $rules['min_reviews'],
                 'on_time_only' => $rules['on_time_only'],
                 'certificates_issued' => $eligible->count(),
                 'released_by' => $actor->id,
                 'released_at' => now(),
+                'closed_at' => null,
+                'closed_by' => null,
+                'close_reason' => null,
             ]);
 
-            // Anything issued before releases existed only stands if it qualifies now.
-            ReviewCertificate::where('academic_year', $academicYear)->whereNotIn('user_id', $eligible->pluck('user_id'))->delete();
+            $noLongerEligible = ReviewCertificate::where('academic_year', $academicYear)->whereNotIn('user_id', $eligible->pluck('user_id'));
+            if ($existing) {
+                // Their numbers were already handed out, so they must keep verifying — as revoked.
+                $noLongerEligible->whereNull('revoked_at')->update([
+                    'revoked_at' => now(),
+                    'revoked_by' => $actor->id,
+                    'revocation_reason' => "Did not meet the rules when {$academicYear} certificates were released again.",
+                ]);
+            } else {
+                // Anything issued before releases existed only stands if it qualifies now.
+                $noLongerEligible->delete();
+            }
 
             foreach ($eligible as $row) {
                 $certificate = ReviewCertificate::firstOrNew(['user_id' => $row['user_id'], 'academic_year' => $academicYear]);
+                // Individual revocations survive a re-release; those are separate decisions.
                 $certificate->fill([
                     'blind_reviews' => $row['counted_blind'],
                     'defence_reviews' => $row['counted_defence'],
                     'code' => $certificate->code ?? $this->newCode(),
                     'issued_at' => now(),
-                    'revoked_at' => null,
-                    'revoked_by' => null,
-                    'revocation_reason' => null,
                 ])->save();
             }
 
             return $release;
         });
 
-        foreach (User::whereIn('id', $eligible->pluck('user_id'))->get() as $reviewer) {
+        $notified = ReviewCertificate::where('academic_year', $academicYear)->whereIn('user_id', $eligible->pluck('user_id'))->whereNull('revoked_at')->pluck('user_id');
+        foreach (User::whereIn('id', $notified)->get() as $reviewer) {
             $this->notify($reviewer, 'review_certificate_released', [
                 'academic_year' => $academicYear,
                 'message' => "Your certificate of review service for {$academicYear} is ready. Thank you for reviewing — download it from My Reviews.",
@@ -176,6 +198,70 @@ class ReviewCertificateService
         }
 
         return $release;
+    }
+
+    /**
+     * Close a released year: every certificate of the year is withdrawn at once — no
+     * downloads, and verification shows it as withdrawn — until it is reopened.
+     *
+     * @throws \RuntimeException
+     */
+    public function close(string $academicYear, User $actor, string $reason): ReviewCertificateRelease
+    {
+        $release = ReviewCertificateRelease::where('academic_year', $academicYear)->first();
+        if (! $release) {
+            throw new \RuntimeException("Certificates for {$academicYear} have not been released.");
+        }
+        if ($release->isClosed()) {
+            throw new \RuntimeException("Certificates for {$academicYear} are already closed.");
+        }
+
+        $release->update(['closed_at' => now(), 'closed_by' => $actor->id, 'close_reason' => $reason]);
+
+        foreach ($this->activeHolders($academicYear) as $reviewer) {
+            $this->notify($reviewer, 'review_certificate_withdrawn', [
+                'academic_year' => $academicYear,
+                'message' => "Certificates of review service for {$academicYear} have been withdrawn for now, including yours. Reason: {$reason}",
+            ]);
+        }
+
+        return $release->fresh();
+    }
+
+    /**
+     * Reopen a closed year exactly as it was released: same certificates, same counts.
+     *
+     * @throws \RuntimeException
+     */
+    public function reopen(string $academicYear): ReviewCertificateRelease
+    {
+        $release = ReviewCertificateRelease::where('academic_year', $academicYear)->first();
+        if (! $release?->isClosed()) {
+            throw new \RuntimeException("Certificates for {$academicYear} are not closed.");
+        }
+
+        $release->update(['closed_at' => null, 'closed_by' => null, 'close_reason' => null]);
+
+        foreach ($this->activeHolders($academicYear) as $reviewer) {
+            $this->notify($reviewer, 'review_certificate_released', [
+                'academic_year' => $academicYear,
+                'message' => "Your certificate of review service for {$academicYear} is available again and can be downloaded from My Reviews.",
+            ]);
+        }
+
+        return $release->fresh();
+    }
+
+    /**
+     * Reviewers holding a certificate of the year that is not individually revoked.
+     *
+     * @return Collection<int, User>
+     */
+    private function activeHolders(string $academicYear): Collection
+    {
+        $userIds = ReviewCertificate::where('academic_year', $academicYear)->whereNull('revoked_at')->pluck('user_id');
+
+        return User::whereIn('id', $userIds)->get();
     }
 
     public function revoke(ReviewCertificate $certificate, User $actor, string $reason): ReviewCertificate
@@ -213,8 +299,12 @@ class ReviewCertificateService
     /** The reviewer's downloadable certificate: the year is released, they qualified, it isn't revoked. */
     public function downloadable(User $reviewer, string $academicYear): ReviewCertificate
     {
-        if (! ReviewCertificateRelease::where('academic_year', $academicYear)->exists()) {
+        $release = ReviewCertificateRelease::where('academic_year', $academicYear)->first();
+        if (! $release) {
             throw new \RuntimeException("Certificates for {$academicYear} have not been released yet.");
+        }
+        if ($release->isClosed()) {
+            throw new \RuntimeException("Certificates for {$academicYear} have been withdrawn.");
         }
 
         $certificate = ReviewCertificate::where('user_id', $reviewer->id)->where('academic_year', $academicYear)->first();
@@ -336,7 +426,8 @@ class ReviewCertificateService
             ->pluck('value', 'key');
         $verifyUrl = $this->verifyUrl($certificate);
 
-        $pdf = Pdf::loadView('pdf.review_certificate', [
+        // In the reviewer's own language.
+        $pdf = $this->withLocale($certificate->user->locale ?: config('app.locale'), fn () => Pdf::loadView('pdf.review_certificate', [
             'certificate' => $certificate,
             'reviewerName' => $certificate->user->name,
             'reviewerTitle' => $certificate->user->title,
@@ -347,7 +438,7 @@ class ReviewCertificateService
             'signatoryTitle' => $settings['certificate_signatory_title'] ?? self::DEFAULT_SIGNATORY_TITLE,
             'verifyUrl' => $verifyUrl,
             'qrCode' => $this->qrCode($verifyUrl),
-        ])->setPaper('a4', 'landscape');
+        ])->setPaper('a4', 'landscape'));
 
         $file = 'review-certificate-'.Str::slug($certificate->academic_year).'.pdf';
 

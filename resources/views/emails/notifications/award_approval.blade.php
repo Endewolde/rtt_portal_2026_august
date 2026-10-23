@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ app()->getLocale() }}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Congratulations — Proposal Funded</title>
+<title>{{ __('Congratulations — Proposal Funded') }}</title>
 <style>
   body{margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
   .wrap{max-width:600px;margin:40px auto;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 4px 32px rgba(0,0,0,.10);}
@@ -47,50 +47,49 @@
         <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
       </svg>
     </div>
-    <h1>Congratulations!</h1>
-    <p>Your research proposal has been funded</p>
-    <span class="badge">✓ Funded</span>
+    <h1>{{ __('Congratulations!') }}</h1>
+    <p>{{ __('Your research proposal has been funded') }}</p>
+    <span class="badge">{{ __('✓ Funded') }}</span>
   </div>
 
   <div class="body">
-    <p style="font-size:15px;color:#374151;margin:0 0 16px;">Dear <strong>{{ $recipient->name ?? 'Researcher' }}</strong>,</p>
+    <p style="font-size:15px;color:#374151;margin:0 0 16px;">{!! __('Dear :name,', ['name' => '<strong>'.e($recipient->name ?? __('Researcher')).'</strong>']) !!}</p>
     <p style="font-size:14px;color:#4b5563;line-height:1.75;margin:0 0 20px;">
-      We are delighted to inform you that your research proposal has been <strong>approved for funding</strong>.
-      This is a significant achievement — congratulations on this outcome!
+      {!! __('We are delighted to inform you that your research proposal has been <strong>approved for funding</strong>. This is a significant achievement — congratulations on this outcome!') !!}
     </p>
 
     <div class="award-card">
       @if(!empty($grant_reference) && $grant_reference !== 'To be assigned')
-      <p class="grant-label">Grant Reference</p>
+      <p class="grant-label">{{ __('Grant Reference') }}</p>
       <p class="grant-ref">{{ $grant_reference }}</p>
       @endif
       @if(!empty($title))
-      <div class="row"><label>Proposal</label><span style="font-weight:600;color:#064e3b;text-align:right;max-width:60%;">{{ $title }}</span></div>
+      <div class="row"><label>{{ __('Proposal') }}</label><span style="font-weight:600;color:#064e3b;text-align:right;max-width:60%;">{{ $title }}</span></div>
       @endif
       @if(!empty($tracker_number))
-      <div class="row"><label>Tracker No.</label><span style="font-family:monospace;font-weight:700;color:#064e3b;">{{ $tracker_number }}</span></div>
+      <div class="row"><label>{{ __('Tracker No.') }}</label><span style="font-family:monospace;font-weight:700;color:#064e3b;">{{ $tracker_number }}</span></div>
       @endif
       @if(!empty($awarded_amount))
-      <div class="row"><label>Awarded Amount</label><span class="amount-highlight">ETB {{ number_format($awarded_amount, 2) }}</span></div>
+      <div class="row"><label>{{ __('Awarded Amount') }}</label><span class="amount-highlight">ETB {{ number_format($awarded_amount, 2) }}</span></div>
       @endif
     </div>
 
     <div class="contact-box">
-      <p class="contact-title">To Begin Disbursement</p>
+      <p class="contact-title">{{ __('To Begin Disbursement') }}</p>
       <p style="font-size:13px;color:#374151;margin:0 0 12px;line-height:1.6;">
-        Contact the <strong>{{ $orgName }} Research &amp; Technology Transfer Office</strong>
+        Contact the <strong>{{ __(':org Research & Technology Transfer', ['org' => $orgName]) }} Office</strong>
         with your grant reference number to initiate the fund disbursement process:
       </p>
       @if($contactEmail)
       <div class="contact-item">
         <div class="contact-dot"></div>
-        <span><strong>Email:</strong> <a href="mailto:{{ $contactEmail }}" style="color:#059669;font-weight:600;">{{ $contactEmail }}</a></span>
+        <span>{!! __('<strong>Email:</strong> <a href="mailto::contact" style="color:#059669;font-weight:600;">:contact</a>', ['contact' => e($contactEmail)]) !!}</span>
       </div>
       @endif
       @if(!empty($grant_reference) && $grant_reference !== 'To be assigned')
       <div class="contact-item">
         <div class="contact-dot"></div>
-        <span><strong>Reference your Grant:</strong> {{ $grant_reference }}</span>
+        <span>{!! __('<strong>Reference your Grant:</strong> :grant_reference', ['grant_reference' => e($grant_reference)]) !!}</span>
       </div>
       @endif
     </div>
@@ -99,17 +98,17 @@
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5" style="flex-shrink:0;margin-top:1px;">
         <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
       </svg>
-      <p>Please bring a printed copy of this notification to any in-person meetings with the Research Office.</p>
+      <p>{{ __('Please bring a printed copy of this notification to any in-person meetings with the Research Office.') }}</p>
     </div>
 
     <hr class="divider">
     <p style="font-size:13px;color:#9ca3af;margin:0;">
-      Sent to <strong>{{ $recipient->email ?? '' }}</strong> via <strong>{{ $platformName }}</strong>.
+      {!! __('Sent to <strong>:email</strong> via <strong>:platform</strong>.', ['email' => e($recipient->email ?? ''), 'platform' => e($platformName)]) !!}
     </p>
   </div>
 
   <div class="footer">
-    &copy; {{ date('Y') }} <strong>{{ $platformName }}</strong> &middot; {{ $orgName }} Research &amp; Technology Transfer
+    &copy; {{ date('Y') }} <strong>{{ $platformName }}</strong> &middot; {{ __(':org Research & Technology Transfer', ['org' => $orgName]) }}
   </div>
 </div>
 </body>

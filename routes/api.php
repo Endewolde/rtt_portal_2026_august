@@ -52,6 +52,7 @@ use App\Http\Controllers\Api\OnboardingController;
 use App\Http\Controllers\Api\OngoingProposalsController;
 use App\Http\Controllers\Api\PersonalDataController;
 use App\Http\Controllers\Api\ProgressReportController;
+use App\Http\Controllers\Api\ProjectRiskController;
 use App\Http\Controllers\Api\ProposalAiScoreController;
 use App\Http\Controllers\Api\ProposalAppealController;
 use App\Http\Controllers\Api\ProposalApprovalReportController;
@@ -65,6 +66,7 @@ use App\Http\Controllers\Api\ProposalWizardController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\RepositoryController;
 use App\Http\Controllers\Api\ResearcherHubController;
+use App\Http\Controllers\Api\ResearcherProfileController;
 use App\Http\Controllers\Api\ResearchImpactController;
 use App\Http\Controllers\Api\ResearchOutputController;
 use App\Http\Controllers\Api\ResourceController;
@@ -72,6 +74,7 @@ use App\Http\Controllers\Api\ReviewCertificateController;
 use App\Http\Controllers\Api\ReviewController;
 use App\Http\Controllers\Api\ReviewDeadlineController;
 use App\Http\Controllers\Api\ReviewerAgreementController;
+use App\Http\Controllers\Api\ReviewerApplicationController;
 use App\Http\Controllers\Api\ReviewerMatchController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\SettingsController;
@@ -145,6 +148,11 @@ Route::prefix('v1')->group(function () {
     Route::get('/colleges/public', [CollegeController::class, 'publicList']);
     Route::get('/colleges/{id}/departments/public', [CollegeController::class, 'publicDepartments']);
     Route::get('/thematic-areas/public', [ThematicAreaController::class, 'publicIndex']);
+    Route::middleware('throttle:5,60,reviewer-apply:')->post('/reviewer-applications', [ReviewerApplicationController::class, 'store']);
+    Route::middleware('throttle:120,1,researchers:')->group(function () {
+        Route::get('/researchers', [ResearcherProfileController::class, 'index']);
+        Route::get('/researchers/{slug}', [ResearcherProfileController::class, 'show']);
+    });
     Route::get('/faqs/public', [FaqController::class, 'public']);
 
     // Lookup options — active values for forms (no auth needed for proposal create)
@@ -393,6 +401,12 @@ Route::prefix('v1')->group(function () {
         Route::post('/proposals/{id}/review/assign', [ReviewController::class, 'assign']);
         // /my and /coi-conflicts must be before /{id} so the static segment wins the route match
         // Onboarding — welcome, guided tours and checklist, per user and role
+        Route::get('/reviewer-applications', [ReviewerApplicationController::class, 'index']);
+        Route::get('/reviewer-applications/{id}/cv', [ReviewerApplicationController::class, 'cv']);
+        Route::post('/reviewer-applications/{id}/approve', [ReviewerApplicationController::class, 'approve']);
+        Route::post('/reviewer-applications/{id}/reject', [ReviewerApplicationController::class, 'reject']);
+        Route::get('/profile/public-profile', [ResearcherProfileController::class, 'settings']);
+        Route::put('/profile/public-profile', [ResearcherProfileController::class, 'updateSettings']);
         Route::get('/onboarding', [OnboardingController::class, 'show']);
         Route::patch('/onboarding', [OnboardingController::class, 'update']);
         Route::post('/onboarding/reset', [OnboardingController::class, 'reset']);
@@ -415,6 +429,8 @@ Route::prefix('v1')->group(function () {
         Route::get('/review-certificates/download', [ReviewCertificateController::class, 'download']);
         Route::get('/review-certificates/admin', [ReviewCertificateController::class, 'overview']);
         Route::post('/review-certificates/admin/release', [ReviewCertificateController::class, 'release']);
+        Route::post('/review-certificates/admin/close', [ReviewCertificateController::class, 'close']);
+        Route::post('/review-certificates/admin/reopen', [ReviewCertificateController::class, 'reopen']);
         Route::post('/review-certificates/{id}/revoke', [ReviewCertificateController::class, 'revoke']);
         Route::post('/review-certificates/{id}/reinstate', [ReviewCertificateController::class, 'reinstate']);
         // Periodic progress reports on funded projects
@@ -459,6 +475,7 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/reviewer-workload/payment-report', [ReviewController::class, 'reviewerPaymentReport']);
         Route::get('/admin/reviewer-analytics', [ReviewController::class, 'reviewerAnalytics']);
         Route::post('/proposals/{id}/review/add-reviewer', [ReviewController::class, 'addReviewer']);
+        Route::get('/proposals/{id}/second-opinion/suggestions', [ReviewController::class, 'secondOpinionSuggestions']);
         Route::delete('/review-assignments/{id}/remove', [ReviewController::class, 'removeReviewer']);
         Route::put('/review-assignments/{id}/reassign', [ReviewController::class, 'reassignReviewer']);
         Route::put('/review-assignments/{id}/extend', [ReviewController::class, 'extendDueDate']);
@@ -517,6 +534,9 @@ Route::prefix('v1')->group(function () {
         Route::get('/college-phase-completion', [CollegePhaseCompletionController::class, 'index']);
 
         // Ongoing proposals — consolidated post-award monitoring view (funded/midterm_evaluation)
+        // Projects at risk — running funded projects ranked by the attention they need
+        Route::get('/projects-at-risk', [ProjectRiskController::class, 'index']);
+        Route::get('/projects-at-risk/export', [ProjectRiskController::class, 'export']);
         Route::get('/ongoing-proposals', [OngoingProposalsController::class, 'index']);
         Route::get('/ongoing-proposals/export', [OngoingProposalsController::class, 'export']);
         Route::get('/ongoing-proposals/grantable', [OngoingProposalsController::class, 'grantable']);
@@ -650,6 +670,7 @@ Route::prefix('v1')->group(function () {
             // Research Outputs
             Route::get('/research-outputs/stats', [ResearchOutputController::class, 'stats']);
             Route::get('/research-outputs/eligible-proposals', [ResearchOutputController::class, 'eligibleProposals']);
+            Route::get('/research-outputs/doi-lookup', [ResearchOutputController::class, 'lookupDoi']);
             Route::get('/research-outputs', [ResearchOutputController::class, 'index']);
             Route::post('/research-outputs', [ResearchOutputController::class, 'store']);
             Route::get('/research-outputs/{id}', [ResearchOutputController::class, 'show']);
@@ -689,14 +710,19 @@ Route::prefix('v1')->group(function () {
         });
 
         Route::get('/admin/analytics', [AnalyticsController::class, 'index']);
+        Route::get('/admin/analytics/calls/export', [AnalyticsController::class, 'exportCalls']);
 
         // ── Reports module (feature: reports) ─────────────────────────────────
         Route::middleware('feature:reports')->group(function () {
             Route::get('/reports', [ReportController::class, 'index']);
             Route::post('/reports/generate', [ReportController::class, 'generate']);
             Route::get('/reports/builder-options', [ReportController::class, 'builderOptions']);
-            Route::get('/reports/{id}/export', [ReportController::class, 'exportExcel']);
-            Route::get('/reports/{id}', [ReportController::class, 'show']);
+            Route::get('/reports/live-options', [ReportController::class, 'liveOptions']);
+            Route::get('/reports/live/{type}', [ReportController::class, 'live']);
+            Route::get('/reports/live/{type}/export', [ReportController::class, 'liveExport']);
+            // Report ids are UUIDs — without the constraint /reports/proposals/export below is caught here.
+            Route::get('/reports/{id}/export', [ReportController::class, 'exportExcel'])->whereUuid('id');
+            Route::get('/reports/{id}', [ReportController::class, 'show'])->whereUuid('id');
         });
         Route::get('/reports/proposals/export', [ReportController::class, 'exportProposals']);
         Route::get('/reports/proposals/stats-pdf', [ReportController::class, 'proposalStatsPdf']);

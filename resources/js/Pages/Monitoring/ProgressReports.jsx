@@ -34,7 +34,7 @@ export default function ProgressReports() {
     return (
         <AppLayout breadcrumb="Progress Reports">
             <div className="mx-auto max-w-5xl space-y-5">
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start flex-wrap justify-between gap-4">
                     <div className="flex items-center gap-3">
                         <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-700 text-white"><ClipboardList size={20} /></span>
                         <div>

@@ -4,9 +4,10 @@
 <meta charset="UTF-8"/>
 <title>RTT Platform — User Manual</title>
 <style>
+@include('pdf.partials.fonts')
 @page { margin: 0; }
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; color: #1e293b; background: #fff; line-height: 1.6; }
+body { font-family: Arial, Helvetica, 'Noto Sans Ethiopic', sans-serif; font-size: 9.5pt; color: #1e293b; background: #fff; line-height: 1.6; }
 .pb { page-break-after: always; }
 
 /* ─── Chapter header ─────────────────── */
@@ -59,10 +60,10 @@ p { margin-bottom: 7px; color: #334155; }
 .ft tr:nth-child(even) td { background: #f8fafc; }
 
 /* ─── Path box ───────────────────────── */
-.path { background: #0f172a; color: #7dd3fc; padding: 4px 10px; font-size: 8pt; margin: 4px 0 8px; font-family: "Courier New", monospace; }
+.path { background: #0f172a; color: #7dd3fc; padding: 4px 10px; font-size: 8pt; margin: 4px 0 8px; font-family: , 'Noto Sans Ethiopic'"Courier New", monospace; }
 
 /* ─── Workflow flow ──────────────────── */
-.flow { font-size: 8pt; background: #f1f5f9; border: 1px solid #e2e8f0; padding: 8px 12px; margin: 6px 0; color: #475569; font-family: "Courier New", monospace; line-height: 1.8; }
+.flow { font-size: 8pt; background: #f1f5f9; border: 1px solid #e2e8f0; padding: 8px 12px; margin: 6px 0; color: #475569; font-family: , 'Noto Sans Ethiopic'"Courier New", monospace; line-height: 1.8; }
 
 /* ─── Feature highlight ──────────────── */
 .fh { border-left: 4px solid #2563eb; background: #f0f6ff; padding: 8px 12px; margin-bottom: 7px; font-size: 9pt; }

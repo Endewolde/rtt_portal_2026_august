@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Database\Query\Builder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -53,10 +54,13 @@ class AnalyticsService
 
     private const FORECAST_MIN_R2 = 0.5;
 
+    /** Themes listed individually before the rest are grouped. */
+    private const MAX_THEMES = 12;
+
     public function __construct(private TurnaroundService $turnaround) {}
 
     /**
-     * @param  array{academic_year: string|null, college_id: string|null, category: string|null}  $filters  null = all
+     * @param  array{academic_year: string|null, college_id: string|null, category: string|null, proposal_call_id?: string|null}  $filters  null = all
      * @return array<string, mixed>
      */
     public function dashboard(array $filters): array
@@ -67,6 +71,7 @@ class AnalyticsService
             'pipeline' => $this->pipeline($filters),
             'categories' => $this->byCategory($filters),
             'colleges' => $this->byCollege($filters),
+            'themes' => $this->byTheme($filters),
             'years' => $this->byYear($filters),
             'monthly' => $this->monthlySubmissions($filters),
             'researchTypes' => $this->byResearchType($filters),
@@ -98,7 +103,25 @@ class AnalyticsService
      */
     private function funnel(array $filters): array
     {
-        $proposals = $this->proposals($filters)->get(['p.id', 'p.status']);
+        $reached = $this->reached($this->proposals($filters)->get(['p.id', 'p.status']));
+        $submitted = $reached[0];
+
+        return collect(self::MILESTONES)->map(fn ($m, $i) => [
+            'key' => $m['key'],
+            'label' => $m['label'],
+            'count' => $reached[$i],
+            'pct_of_submitted' => $submitted > 0 ? round($reached[$i] / $submitted * 100, 1) : null,
+        ])->all();
+    }
+
+    /**
+     * How many of these proposals reached each milestone (index into MILESTONES).
+     *
+     * @param  Collection<int, object{id: string, status: string}>  $proposals
+     * @return list<int>
+     */
+    private function reached(Collection $proposals): array
+    {
         $rejectedFrom = DB::table('workflow_logs')
             ->whereIn('proposal_id', $proposals->where('status', 'rejected')->pluck('id'))
             ->where('to_stage', 'rejected')
@@ -115,14 +138,7 @@ class AnalyticsService
             }
         }
 
-        $submitted = $reached[0];
-
-        return collect(self::MILESTONES)->map(fn ($m, $i) => [
-            'key' => $m['key'],
-            'label' => $m['label'],
-            'count' => $reached[$i],
-            'pct_of_submitted' => $submitted > 0 ? round($reached[$i] / $submitted * 100, 1) : null,
-        ])->all();
+        return $reached;
     }
 
     /** @return list<array{key: string, label: string, count: int}> */
@@ -157,6 +173,7 @@ class AnalyticsService
             ->groupBy('p.college_id')
             ->get()
             ->keyBy('college_id');
+        $awarded = $this->awardedBy($filters, 'p.college_id');
 
         return DB::table('colleges')
             ->whereNull('deleted_at')
@@ -168,10 +185,115 @@ class AnalyticsService
                 'id' => $c->id,
                 'college' => $c->name,
                 'code' => $c->code,
+                'awarded' => (float) ($awarded[$c->id] ?? 0),
             ] + $this->counts($rows[$c->id] ?? null)))
             ->sortByDesc('submitted')
             ->values()
             ->all();
+    }
+
+    /**
+     * Outcomes and money by theme (the proposal's focus area). The largest themes are
+     * listed; the rest are grouped as "Other themes".
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function byTheme(array $filters): array
+    {
+        $theme = "COALESCE(NULLIF(TRIM(p.focus_area), ''), 'Not specified')";
+        $rows = $this->proposals($filters)
+            ->selectRaw("{$theme} as theme, ".$this->outcomeColumns())
+            ->groupBy('theme')
+            ->orderByDesc('submitted')
+            ->get();
+        $awarded = $this->awardedBy($filters, $theme);
+
+        $themes = $rows->map(fn ($r) => $this->withRate(['theme' => $r->theme, 'awarded' => (float) ($awarded[$r->theme] ?? 0)] + $this->counts($r)));
+        if ($themes->count() <= self::MAX_THEMES) {
+            return $themes->values()->all();
+        }
+
+        $rest = $themes->slice(self::MAX_THEMES - 1);
+
+        return $themes->take(self::MAX_THEMES - 1)->push($this->withRate([
+            'theme' => 'Other themes ('.$rest->count().')',
+            'awarded' => $rest->sum('awarded'),
+            'submitted' => $rest->sum('submitted'),
+            'funded' => $rest->sum('funded'),
+            'rejected' => $rest->sum('rejected'),
+            'in_progress' => $rest->sum('in_progress'),
+        ]))->values()->all();
+    }
+
+    /**
+     * One row per call: applications, how far they got, money and gender — the year-end
+     * comparison across calls. The call filter itself doesn't apply here.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function calls(array $filters): array
+    {
+        $filters = ['proposal_call_id' => null] + $filters;
+        $proposals = $this->proposals($filters)
+            ->leftJoin('users as u', 'u.id', '=', 'p.pi_user_id')
+            ->get(['p.id', 'p.status', 'p.proposal_call_id', DB::raw("LOWER(COALESCE(u.gender, '')) as gender")])
+            ->groupBy('proposal_call_id');
+        $awarded = $this->awardedBy($filters, 'p.proposal_call_id');
+
+        return DB::table('proposal_calls')
+            ->whereIn('id', $proposals->keys())
+            ->orderByDesc('academic_year')
+            ->orderBy('title')
+            ->get(['id', 'title', 'academic_year', 'category', 'funding_budget', 'slug'])
+            ->map(function ($call) use ($proposals, $awarded) {
+                $rows = $proposals[$call->id];
+                $reached = $this->reached($rows);
+                $funded = $rows->whereIn('status', self::FUNDED);
+                $money = (float) ($awarded[$call->id] ?? 0);
+                $budget = $call->funding_budget !== null ? (float) $call->funding_budget : null;
+
+                return $this->withRate([
+                    'id' => $call->id,
+                    'title' => $call->title,
+                    'academic_year' => $call->academic_year,
+                    'category' => $call->category,
+                    'is_legacy' => str_starts_with((string) $call->slug, 'legacy-manual-grants-'),
+                    'stages' => collect(self::MILESTONES)->map(fn ($m, $i) => ['key' => $m['key'], 'label' => $m['label'], 'count' => $reached[$i]])->all(),
+                    'awarded' => $money,
+                    'budget' => $budget,
+                    'budget_used_pct' => $budget ? round($money / $budget * 100, 1) : null,
+                    'gender' => [
+                        'female' => $rows->where('gender', 'female')->count(),
+                        'male' => $rows->where('gender', 'male')->count(),
+                        'not_specified' => $rows->whereNotIn('gender', ['female', 'male'])->count(),
+                        'female_funded' => $funded->where('gender', 'female')->count(),
+                        'male_funded' => $funded->where('gender', 'male')->count(),
+                    ],
+                    'submitted' => $rows->count(),
+                    'funded' => $funded->count(),
+                    'rejected' => $rows->whereIn('status', self::REJECTED)->count(),
+                    'in_progress' => $rows->whereNotIn('status', [...self::FUNDED, ...self::REJECTED])->count(),
+                ]);
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Total awarded to funded proposals within the filters, grouped by an SQL expression
+     * over the proposal (alias p).
+     *
+     * @return Collection<string, float>
+     */
+    private function awardedBy(array $filters, string $groupBy): Collection
+    {
+        return $this->proposals($filters)
+            ->whereIn('p.status', self::FUNDED)
+            ->join('awards as a', 'a.proposal_id', '=', 'p.id')
+            ->selectRaw("{$groupBy} as group_key, SUM(a.awarded_amount) as total")
+            ->groupBy('group_key')
+            ->pluck('total', 'group_key')
+            ->map(fn ($v) => (float) $v);
     }
 
     /** Every academic year (the year filter doesn't apply — this is the comparison across years). */
@@ -372,7 +494,8 @@ class AnalyticsService
             ->where('p.status', '!=', 'draft')
             ->when($filters['academic_year'] ?? null, fn ($q, $year) => $q->where('p.academic_year', $year))
             ->when($filters['college_id'] ?? null, fn ($q, $id) => $q->where('p.college_id', $id))
-            ->when($filters['category'] ?? null, fn ($q, $category) => $q->where('p.category', $category));
+            ->when($filters['category'] ?? null, fn ($q, $category) => $q->where('p.category', $category))
+            ->when($filters['proposal_call_id'] ?? null, fn ($q, $callId) => $q->where('p.proposal_call_id', $callId));
     }
 
     private function outcomeColumns(): string

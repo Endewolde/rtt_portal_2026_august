@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { translate as tr } from '../../lib/i18n'
 import { router } from '@inertiajs/react'
 import {
     Bell, X, Check, CheckCheck, Trash2, Filter,
@@ -46,6 +47,7 @@ const TYPE_CFG = {
     data_deletion_reviewed: { icon: AlertTriangle, color: 'blue', label: 'Data Deletion Request', category: 'activity', actionLabel: 'Open Profile', actionUrl: () => '/profile', template: d => d.message || 'Your data deletion request was reviewed' },
     review_certificate_released: { icon: Trophy, color: 'yellow', label: 'Certificate Ready', category: 'activity', actionLabel: 'Open My Reviews', actionUrl: () => '/reviews', template: d => d.message || 'Your certificate of review service is ready' },
     review_certificate_revoked: { icon: AlertTriangle, color: 'red', label: 'Certificate Revoked', category: 'activity', actionLabel: 'Open My Reviews', actionUrl: () => '/reviews', template: d => d.message || 'Your certificate of review service was revoked' },
+    review_certificate_withdrawn: { icon: AlertTriangle, color: 'amber', label: 'Certificates Withdrawn', category: 'activity', actionLabel: 'Open My Reviews', actionUrl: () => '/reviews', template: d => d.message || 'Certificates of review service were withdrawn' },
     progress_report_reviewed: { icon: CheckCircle2, color: 'green', label: 'Progress Report Reviewed', category: 'activity', actionLabel: 'Open Reports', actionUrl: d => d.proposal_id ? `/proposals/${d.proposal_id}?tab=Progress` : '/progress-reports', template: d => d.message || 'Progress Report Reviewed' },
     stage_reminder:              { icon: AlertTriangle, color: 'amber',  label: 'Action Needed', category: 'action', actionLabel: 'Open Proposal', actionUrl: d => d.proposal_id ? `/proposals/${d.proposal_id}` : '/notifications', template: d => d.message || `${d.tracker_number || 'A proposal'} is waiting on you` },
     review_disagreement:         { icon: AlertTriangle, color: 'amber',  label: 'Reviewers Disagree', category: 'action', actionLabel: 'Open Proposal', actionUrl: d => d.proposal_id ? `/proposals/${d.proposal_id}` : '/admin/blind-review', template: d => d.message || `Blind reviewers disagree on ${d.tracker_number || 'a proposal'}` },
@@ -158,12 +160,12 @@ function NotificationCard({ n, selected, onSelect, onMarkRead, onDelete }) {
                     </span>
                     {cfg.category === 'action' && (
                         <span className="flex items-center gap-1 text-[11px] font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-lg">
-                            <Zap size={10} /> Action required
+                            <Zap size={10} /> {tr("Action required")}
                         </span>
                     )}
                     {isUnread && (
                         <span className="flex items-center gap-1 text-[11px] font-medium text-blue-600">
-                            <div className={`h-1.5 w-1.5 rounded-full ${colors.dot}`} /> Unread
+                            <div className={`h-1.5 w-1.5 rounded-full ${colors.dot}`} /> {tr("Unread")}
                         </span>
                     )}
                 </div>
@@ -196,7 +198,7 @@ function NotificationCard({ n, selected, onSelect, onMarkRead, onDelete }) {
                             onClick={() => onMarkRead([n.id])}
                             className="text-xs font-medium text-gray-500 hover:text-blue-600 flex items-center gap-1 transition-colors"
                         >
-                            <Check size={11} /> Mark read
+                            <Check size={11} /> {tr("Mark read")}
                         </button>
                     )}
                 </div>
@@ -206,7 +208,7 @@ function NotificationCard({ n, selected, onSelect, onMarkRead, onDelete }) {
             <button
                 onClick={() => onDelete(n.id)}
                 className="p-1.5 rounded-lg hover:bg-red-50 text-gray-300 hover:text-red-500 transition-colors shrink-0 opacity-0 group-hover:opacity-100 mt-0.5"
-                title="Delete notification"
+                title={tr("Delete notification")}
             >
                 <Trash2 size={13} />
             </button>
@@ -360,7 +362,7 @@ export default function NotificationsIndex() {
                             <div className="h-9 w-9 bg-blue-100 rounded-xl flex items-center justify-center">
                                 <Bell size={18} className="text-blue-600" />
                             </div>
-                            Notifications
+                            {tr("Notifications")}
                         </h1>
                         <p className="text-sm text-gray-500 mt-1 ml-11.5">
                             {unreadCount > 0 ? `${unreadCount} unread · ` : ''}
@@ -373,7 +375,7 @@ export default function NotificationsIndex() {
                                 onClick={markAllRead}
                                 className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-xl transition-colors"
                             >
-                                <CheckCheck size={15} /> Mark all read
+                                <CheckCheck size={15} /> {tr("Mark all read")}
                             </button>
                         )}
                         {readCount > 0 && (
@@ -381,13 +383,13 @@ export default function NotificationsIndex() {
                                 onClick={clearRead}
                                 className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-gray-600 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl transition-colors"
                             >
-                                <Trash2 size={14} /> Clear read
+                                <Trash2 size={14} /> {tr("Clear read")}
                             </button>
                         )}
                         <button
                             onClick={() => load(1)}
                             className="p-2 rounded-xl border border-gray-200 hover:bg-gray-50 text-gray-500 hover:text-gray-700 transition-colors"
-                            title="Refresh"
+                            title={tr("Refresh")}
                         >
                             <RotateCcw size={15} />
                         </button>
@@ -437,7 +439,7 @@ export default function NotificationsIndex() {
                                 <div className={`h-4 w-4 rounded border-2 flex items-center justify-center ${allSelected ? 'bg-blue-600 border-blue-600' : 'border-blue-400'}`}>
                                     {allSelected && <Check size={10} className="text-white" strokeWidth={3} />}
                                 </div>
-                                {selected.size} selected
+                                {tr(":size selected", { size: selected.size })}
                             </button>
                         </div>
                         <div className="flex items-center gap-2">
@@ -445,7 +447,7 @@ export default function NotificationsIndex() {
                                 onClick={bulkMarkRead}
                                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
                             >
-                                <Check size={12} /> Mark read
+                                <Check size={12} /> {tr("Mark read")}
                             </button>
                             <button
                                 onClick={() => setSelected(new Set())}
@@ -476,7 +478,7 @@ export default function NotificationsIndex() {
                         <div className="h-20 w-20 bg-gray-50 rounded-3xl flex items-center justify-center mb-4 border border-gray-100">
                             <Inbox size={32} className="text-gray-300" />
                         </div>
-                        <p className="text-base font-semibold text-gray-700">No notifications</p>
+                        <p className="text-base font-semibold text-gray-700">{tr("No notifications")}</p>
                         <p className="text-sm text-gray-400 mt-1">
                             {unreadOnly ? "You're all caught up!" : typeFilter !== 'all' ? 'No matching notifications' : "Nothing here yet"}
                         </p>
@@ -501,9 +503,9 @@ export default function NotificationsIndex() {
                                 >
                                     {allSelected && <Check size={10} className="text-white" strokeWidth={3} />}
                                 </div>
-                                Select all
+                                {tr("Select all")}
                             </label>
-                            <p className="text-xs text-gray-400">{notifications.length} shown</p>
+                            <p className="text-xs text-gray-400">{tr(":notifications_count shown", { notifications_count: notifications.length })}</p>
                         </div>
 
                         {Object.entries(groups).map(([label, items]) => {
@@ -533,8 +535,8 @@ export default function NotificationsIndex() {
                                     className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-gray-700 bg-white border border-gray-200 rounded-xl hover:border-blue-300 hover:text-blue-700 transition-colors disabled:opacity-50"
                                 >
                                     {loadingMore
-                                        ? <><div className="h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" /> Loading…</>
-                                        : <><ChevronDown size={15} /> Load more</>
+                                        ? <><div className="h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" /> {tr("Loading…")}</>
+                                        : <><ChevronDown size={15} /> {tr("Load more")}</>
                                     }
                                 </button>
                             </div>

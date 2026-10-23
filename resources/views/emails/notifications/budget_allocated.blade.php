@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ app()->getLocale() }}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Budget Allocated</title>
+<title>{{ __('Budget Allocated') }}</title>
 <style>
   body{margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
   .wrap{max-width:600px;margin:40px auto;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 4px 32px rgba(0,0,0,.10);}
@@ -43,49 +43,48 @@
         <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
       </svg>
     </div>
-    <h1>Budget Allocated</h1>
-    <p>Funding has been assigned to your proposal</p>
-    <span class="badge">✓ Allocated</span>
+    <h1>{{ __('Budget Allocated') }}</h1>
+    <p>{{ __('Funding has been assigned to your proposal') }}</p>
+    <span class="badge">{{ __('✓ Allocated') }}</span>
   </div>
 
   <div class="body">
-    <p style="font-size:15px;color:#374151;margin:0 0 16px;">Dear <strong>{{ $recipient->name ?? 'Researcher' }}</strong>,</p>
+    <p style="font-size:15px;color:#374151;margin:0 0 16px;">{!! __('Dear :name,', ['name' => '<strong>'.e($recipient->name ?? __('Researcher')).'</strong>']) !!}</p>
     <p style="font-size:14px;color:#4b5563;line-height:1.75;margin:0 0 20px;">
-      A budget has been <strong>allocated to your proposal</strong> for the upcoming fiscal year.
-      You may now proceed to submit your budget request on the platform.
+      {!! __('A budget has been <strong>allocated to your proposal</strong> for the upcoming fiscal year. You may now proceed to submit your budget request on the platform.') !!}
     </p>
 
     @if(!empty($allocated_amount))
     <div class="amount-box">
-      <p class="amount-label">Allocated Amount</p>
-      <p class="amount-val"><span class="amount-currency">ETB</span>{{ number_format($allocated_amount, 2) }}</p>
+      <p class="amount-label">{{ __('Allocated Amount') }}</p>
+      <p class="amount-val"><span class="amount-currency">{{ __('ETB') }}</span>{{ number_format($allocated_amount, 2) }}</p>
     </div>
     @endif
 
     @if(!empty($title) || !empty($fiscal_year))
     <div class="detail">
       @if(!empty($title))
-      <div class="row"><label>Proposal</label><span style="font-weight:600;color:#0f172a;text-align:right;max-width:60%;">{{ $title }}</span></div>
+      <div class="row"><label>{{ __('Proposal') }}</label><span style="font-weight:600;color:#0f172a;text-align:right;max-width:60%;">{{ $title }}</span></div>
       @endif
       @if(!empty($fiscal_year))
-      <div class="row"><label>Fiscal Year</label><span style="font-weight:700;color:#0f766e;">{{ $fiscal_year }}</span></div>
+      <div class="row"><label>{{ __('Fiscal Year') }}</label><span style="font-weight:700;color:#0f766e;">{{ $fiscal_year }}</span></div>
       @endif
     </div>
     @endif
 
     <div class="cta">
-      <a href="{{ config('app.url') }}" class="btn">Submit Budget Request →</a>
-      <p class="cta-sub">Log in to the platform to submit your budget request.</p>
+      <a href="{{ config('app.url') }}" class="btn">{{ __('Submit Budget Request →') }}</a>
+      <p class="cta-sub">{{ __('Log in to the platform to submit your budget request.') }}</p>
     </div>
 
     <hr class="divider">
     <p style="font-size:13px;color:#9ca3af;margin:0;">
-      Sent via <strong>{{ $platformName }}</strong>. Contact the {{ $orgName }} Finance Office if you have questions about your allocation.
+      {!! __('Sent via <strong>:platform</strong>. Contact the :org Finance Office if you have questions about your allocation.', ['platform' => e($platformName), 'org' => e($orgName)]) !!}
     </p>
   </div>
 
   <div class="footer">
-    &copy; {{ date('Y') }} <strong>{{ $platformName }}</strong> &middot; {{ $orgName }} Research &amp; Technology Transfer
+    &copy; {{ date('Y') }} <strong>{{ $platformName }}</strong> &middot; {{ __(':org Research & Technology Transfer', ['org' => $orgName]) }}
   </div>
 </div>
 </body>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { translate as tr } from '../lib/i18n'
 import { Link } from '@inertiajs/react';
 import { LifeBuoy, PlayCircle, ListChecks, Compass, BookOpen, SkipForward, Sparkles, RotateCcw } from 'lucide-react';
 import { useOnboarding } from './OnboardingContext';
@@ -27,10 +28,10 @@ export default function HelpMenu() {
 
     return (
         <div className="relative" ref={ref}>
-            <button onClick={() => setOpen((v) => !v)} data-tour="help-button" aria-label="Help and guided tours" aria-expanded={open}
+            <button onClick={() => setOpen((v) => !v)} data-tour="help-button" aria-label={tr("Help and guided tours")} aria-expanded={open}
                 className="relative flex h-9 items-center gap-1.5 rounded-xl px-2.5 text-gray-500 transition-colors hover:bg-indigo-50 hover:text-indigo-600">
                 <LifeBuoy size={18} />
-                <span className="hidden text-xs font-semibold lg:inline">Help</span>
+                <span className="hidden text-xs font-semibold lg:inline">{tr("Help")}</span>
                 {remaining > 0 && (
                     <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-indigo-600 px-1 text-[10px] font-bold text-white">
                         {remaining}
@@ -42,18 +43,18 @@ export default function HelpMenu() {
                 <div className="absolute right-0 top-11 z-50 w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xl">
                     {running ? (
                         <div className="border-b border-gray-100 px-4 py-3">
-                            <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-600">Tour in progress</p>
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-600">{tr("Tour in progress")}</p>
                             <p className="mt-0.5 text-sm font-semibold text-gray-900">{TOURS[running.tourId]?.title}</p>
                             <button onClick={act(skipTour)} className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-800">
-                                <SkipForward size={12} /> Skip this tour
+                                <SkipForward size={12} /> {tr("Skip this tour")}
                             </button>
                         </div>
                     ) : activeTour && (
                         <button onClick={act(resumeTour)} className="flex w-full items-center gap-3 border-b border-gray-100 bg-indigo-50/60 px-4 py-3 text-left hover:bg-indigo-50">
                             <PlayCircle size={18} className="shrink-0 text-indigo-600" />
                             <span className="min-w-0">
-                                <span className="block text-sm font-semibold text-indigo-900">Resume tour</span>
-                                <span className="block truncate text-xs text-indigo-700">{TOURS[activeTour].title} · step {(progress.active_step ?? 0) + 1}</span>
+                                <span className="block text-sm font-semibold text-indigo-900">{tr("Resume tour")}</span>
+                                <span className="block truncate text-xs text-indigo-700">{tr(":title · step :active_step", { title: TOURS[activeTour].title, active_step: (progress.active_step ?? 0) + 1 })}</span>
                             </span>
                         </button>
                     )}
@@ -61,28 +62,28 @@ export default function HelpMenu() {
                     <div className="py-1.5">
                         <button onClick={act(openChecklist)} className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
                             <ListChecks size={16} className="text-gray-400" />
-                            <span className="flex-1">Getting-started checklist</span>
-                            {remaining > 0 && <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-700">{remaining} left</span>}
+                            <span className="flex-1">{tr("Getting-started checklist")}</span>
+                            {remaining > 0 && <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-indigo-700">{tr(":remaining left", { remaining: remaining })}</span>}
                         </button>
                         <button onClick={act(openWelcome)} className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
-                            <Sparkles size={16} className="text-gray-400" /> Welcome overview
+                            <Sparkles size={16} className="text-gray-400" /> {tr("Welcome overview")}
                         </button>
                     </div>
 
                     <div className="border-t border-gray-100 py-1.5">
-                        <p className="px-4 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400">Guided tours</p>
+                        <p className="px-4 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400">{tr("Guided tours")}</p>
                         {tours.map((id) => (
                             <button key={id} onClick={act(() => startTour(id))} className="flex w-full items-center gap-3 px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50">
                                 <Compass size={16} className={completed.includes(id) ? 'text-emerald-500' : 'text-gray-400'} />
                                 <span className="min-w-0 flex-1 truncate">{TOURS[id].title}</span>
-                                {completed.includes(id) && <RotateCcw size={12} className="text-gray-300" aria-label="Replay" />}
+                                {completed.includes(id) && <RotateCcw size={12} className="text-gray-300" aria-label={tr("Replay")} />}
                             </button>
                         ))}
                     </div>
 
                     <div className="border-t border-gray-100 py-1.5">
                         <Link href="/help" onClick={() => setOpen(false)} className="flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                            <BookOpen size={16} className="text-gray-400" /> Help Centre
+                            <BookOpen size={16} className="text-gray-400" /> {tr("Help Centre")}
                         </Link>
                     </div>
                 </div>

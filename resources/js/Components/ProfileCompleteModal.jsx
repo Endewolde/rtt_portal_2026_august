@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { translate as tr } from '../lib/i18n'
 import { ClipboardList, X } from 'lucide-react';
 import api from '../lib/api';
 import { useToast } from './Toast';
@@ -87,7 +88,7 @@ export default function ProfileCompleteModal({ user, onSaved }) {
                          style={{ background: 'rgba(255,255,255,0.2)' }}>
                         <ClipboardList size={24} className="text-white" />
                     </div>
-                    <h2 className="text-lg font-bold text-white">Complete your profile</h2>
+                    <h2 className="text-lg font-bold text-white">{tr("Complete your profile")}</h2>
                     <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.75)' }}>
                         {isGenderOnly
                             ? 'Please select your gender to complete your profile.'
@@ -101,7 +102,7 @@ export default function ProfileCompleteModal({ user, onSaved }) {
                     {/* Gender */}
                     {needsGender && (
                         <div>
-                            <p className="text-xs font-semibold text-gray-600 mb-2.5 uppercase tracking-wide">Gender *</p>
+                            <p className="text-xs font-semibold text-gray-600 mb-2.5 uppercase tracking-wide">{tr("Gender *")}</p>
                             <div className="space-y-2">
                                 {GENDER_OPTIONS.map(({ value, label, emoji }) => (
                                     <button
@@ -131,13 +132,13 @@ export default function ProfileCompleteModal({ user, onSaved }) {
                     {/* College */}
                     {needsCollege && (
                         <div>
-                            <p className="text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">College / Faculty *</p>
+                            <p className="text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">{tr("College / Faculty *")}</p>
                             <select
                                 value={collegeId}
                                 onChange={e => setCollegeId(e.target.value)}
                                 className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 hover:border-gray-400"
                             >
-                                <option value="">Select your college…</option>
+                                <option value="">{tr("Select your college…")}</option>
                                 {colleges.map(c => (
                                     <option key={c.id} value={c.id}>{c.name}</option>
                                 ))}
@@ -148,13 +149,13 @@ export default function ProfileCompleteModal({ user, onSaved }) {
                     {/* Department */}
                     {needsCollege && collegeId && departments.length > 0 && (
                         <div>
-                            <p className="text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">Department</p>
+                            <p className="text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">{tr("Department")}</p>
                             <select
                                 value={departmentId}
                                 onChange={e => setDepartmentId(e.target.value)}
                                 className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 hover:border-gray-400"
                             >
-                                <option value="">Select your department (optional)…</option>
+                                <option value="">{tr("Select your department (optional)…")}</option>
                                 {departments.map(d => (
                                     <option key={d.id} value={d.id}>{d.name}</option>
                                 ))}
@@ -165,7 +166,7 @@ export default function ProfileCompleteModal({ user, onSaved }) {
                     {/* Expertise */}
                     {needsExpertise && (
                         <div>
-                            <p className="text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">Research Expertise *</p>
+                            <p className="text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">{tr("Research Expertise *")}</p>
                             {expertiseTags.length > 0 && (
                                 <div className="flex flex-wrap gap-2 mb-2.5">
                                     {expertiseTags.map((tag, i) => (
@@ -192,17 +193,17 @@ export default function ProfileCompleteModal({ user, onSaved }) {
                                         }
                                     }}
                                     onBlur={() => addTag(expertiseInput)}
-                                    placeholder="e.g. Machine Learning, Hydrology…"
+                                    placeholder={tr("e.g. Machine Learning, Hydrology…")}
                                     className="flex-1 border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 hover:border-gray-400"
                                 />
                                 <button
                                     onClick={() => addTag(expertiseInput)}
                                     type="button"
                                     className="px-3.5 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition-colors">
-                                    Add
+                                    {tr("Add")}
                                 </button>
                             </div>
-                            <p className="text-xs text-gray-400 mt-1.5">Press Enter or comma to add. At least one area required.</p>
+                            <p className="text-xs text-gray-400 mt-1.5">{tr("Press Enter or comma to add. At least one area required.")}</p>
                         </div>
                     )}
                 </div>
@@ -218,7 +219,7 @@ export default function ProfileCompleteModal({ user, onSaved }) {
                         {saving ? 'Saving…' : 'Save & Continue'}
                     </button>
                     <p className="text-center text-xs text-gray-400 mt-3">
-                        You can update these anytime in your profile settings.
+                        {tr("You can update these anytime in your profile settings.")}
                     </p>
                 </div>
             </div>

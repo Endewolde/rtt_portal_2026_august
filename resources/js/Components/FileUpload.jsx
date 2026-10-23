@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { translate as tr } from '../lib/i18n'
 import { Upload, X, FileText, CheckCircle } from 'lucide-react';
 
 export default function FileUpload({ accept = '*', maxSize = 10, multiple = false, onUpload, label = 'Upload File' }) {
@@ -50,8 +51,8 @@ export default function FileUpload({ accept = '*', maxSize = 10, multiple = fals
                     ${dragging ? 'border-blue-400 bg-blue-50' : 'border-gray-300 hover:border-gray-400 bg-white'}`}
             >
                 <Upload size={24} className="text-gray-400 mb-2" />
-                <p className="text-sm text-gray-500">Drag & drop or <span className="text-blue-600 font-medium">browse</span></p>
-                <p className="text-xs text-gray-400 mt-1">Max {maxSize}MB · {accept}</p>
+                <p className="text-sm text-gray-500">{tr("Drag & drop or")} <span className="text-blue-600 font-medium">{tr("browse")}</span></p>
+                <p className="text-xs text-gray-400 mt-1">{tr("Max :maxSizeMB · :accept", { maxSize: maxSize, accept: accept })}</p>
                 <input ref={inputRef} type="file" accept={accept} multiple={multiple} className="hidden"
                     onChange={(e) => handleFiles([...e.target.files])} />
             </div>
@@ -63,7 +64,7 @@ export default function FileUpload({ accept = '*', maxSize = 10, multiple = fals
                     <FileText size={18} className="text-gray-400 shrink-0" />
                     <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-gray-700 truncate">{f.name}</p>
-                        <p className="text-xs text-gray-400">{(f.size / 1024).toFixed(1)} KB</p>
+                        <p className="text-xs text-gray-400">{tr(":size KB", { size: (f.size / 1024).toFixed(1) })}</p>
                         {progress[f.name] < 100 && (
                             <div className="mt-1 h-1.5 w-full bg-gray-200 rounded-full overflow-hidden">
                                 <div className="h-full bg-blue-500 transition-all" style={{ width: `${progress[f.name]}%` }} />

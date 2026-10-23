@@ -4,6 +4,7 @@
 <meta charset="UTF-8"/>
 <title>Award Letter</title>
 <style>
+@include('pdf.partials.fonts')
 @page {
     margin-top: 14mm;
     margin-right: 20mm;
@@ -12,7 +13,7 @@
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
 body {
-    font-family: 'Times New Roman', Times, serif;
+    font-family: 'Times New Roman', Times, 'Noto Sans Ethiopic', serif;
     font-size: 11pt;
     color: #000;
     line-height: 1.5;

@@ -74,6 +74,14 @@ export function RequestDeadlineExtensionModal({ proposal, onClose, onSaved }) {
                         Current deadline: <strong>{formatDeadline(deadline.deadline)}</strong>
                     </div>
 
+                    {(deadline.extensions?.length ?? 0) > 0 && (
+                        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-relaxed text-amber-900">
+                            <strong>This will be request number {deadline.extensions.length + 1} for this defence.</strong>{' '}
+                            {deadline.is_extended ? 'The deadline has already been extended once. ' : ''}
+                            Approvers see every earlier request — explain what has changed, or consider replacing a reviewer who can't score.
+                        </div>
+                    )}
+
                     <div>
                         <label className="mb-1.5 block text-xs font-semibold text-gray-700">New deadline <span className="text-red-500">*</span></label>
                         <input

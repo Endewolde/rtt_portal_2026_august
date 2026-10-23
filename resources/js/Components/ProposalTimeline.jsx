@@ -1,9 +1,10 @@
 import { formatDateTime, getStatusLabel } from '../lib/utils';
+import { translate as tr } from '../lib/i18n'
 import { CheckCircle, Circle, Clock } from 'lucide-react';
 
 export default function ProposalTimeline({ history = [], currentStatus }) {
     if (!history.length) {
-        return <p className="text-gray-500 text-sm">No workflow history available.</p>;
+        return <p className="text-gray-500 text-sm">{tr("No workflow history available.")}</p>;
     }
 
     return (
@@ -26,7 +27,7 @@ export default function ProposalTimeline({ history = [], currentStatus }) {
                                 </span>
                                 <span className="text-xs text-gray-400">{formatDateTime(entry.occurred_at)}</span>
                             </div>
-                            <p className="text-xs text-gray-500">By: <span className="font-medium">{entry.actor}</span></p>
+                            <p className="text-xs text-gray-500">{tr("By:")} <span className="font-medium">{entry.actor}</span></p>
                             {entry.notes && <p className="mt-1 text-xs text-gray-600 italic">{entry.notes}</p>}
                         </div>
                     </li>

@@ -5,14 +5,14 @@ import {
     CheckSquare, ClipboardCheck, AlertCircle, AlertTriangle,
     PieChart, DollarSign, CreditCard, CheckCircle,
     Activity, Award, BookOpen, Database, FileLock2, LifeBuoy,
-    BarChart, BarChart2, TrendingUp, TrendingDown,
+    BarChart, BarChart2, TrendingUp, TrendingDown, ChartNoAxesCombined,
     Users, Building, Building2, Shield, Settings, Bell, Key,
     Globe, LogOut, FlaskConical, Brain, ChevronLeft, ChevronRight, X, Menu,
     FolderOpen, EyeOff, Presentation, ClipboardList,
     BadgeDollarSign, Trophy, Archive, ListChecks, ShieldCheck,
     User, ChevronDown, ChevronUp, Lock, Clock, UserX,
     CalendarDays, Banknote, Landmark, MessageSquareHeart, LogIn, Scale, ScrollText, Milestone, FileBarChart2, FolderSearch,
-    HelpCircle, Sliders, FileSignature, ShieldAlert, CalendarClock, CalendarPlus, Timer,
+    HelpCircle, Sliders, FileSignature, ShieldAlert, CalendarClock, CalendarPlus, Timer, UserPlus,
 } from 'lucide-react'
 import NotificationBell from '../Components/NotificationBell'
 import FeedbackPopup from '../Components/FeedbackPopup'
@@ -34,6 +34,8 @@ import { useSessionTimeout } from '../hooks/useSessionTimeout'
 import { cn } from '../lib/utils'
 import api from '../lib/api'
 import { canOpenPath } from '../lib/routeAccess'
+import { translate as tr } from '../lib/i18n'
+import LanguageSwitch from '../Components/LanguageSwitch'
 
 // Sub-feature gate per page — mirrors every hasSubFeature(...) check already used to
 // hide/show the matching sidebar nav item below. Turning a sub-feature off in Feature
@@ -69,6 +71,7 @@ const ROUTE_SUBFEATURE = {
     '/disbursements':             'finance.disbursements',
     '/settlements':               'finance.settlements',
     '/ongoing-proposals':         'monitoring.ongoing',
+    '/projects-at-risk':          'monitoring.ongoing',
     '/midterm-evaluations':       'monitoring.midterm',
     '/completion-workshops':      'monitoring.completion',
     '/research-outputs':          'monitoring.outputs',
@@ -132,7 +135,7 @@ function UnauthorizedView({ user, reason }) {
                 <Link href="/dashboard"
                     className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600
                                text-white text-sm font-semibold rounded-xl hover:bg-indigo-700 transition-colors">
-                    <LayoutDashboard size={15} /> Go to Dashboard
+                    <LayoutDashboard size={15} /> {tr("Go to Dashboard")}
                 </Link>
             </div>
         </div>
@@ -149,9 +152,9 @@ function SessionWarningModal({ secondsLeft, onContinue, onLogout }) {
                                 bg-amber-50 mb-4">
                     <Clock size={26} className="text-amber-500" />
                 </div>
-                <h2 className="text-lg font-bold text-gray-900 mb-1">Session Expiring</h2>
+                <h2 className="text-lg font-bold text-gray-900 mb-1">{tr("Session Expiring")}</h2>
                 <p className="text-sm text-gray-500 mb-2">
-                    You've been inactive. Your session will expire in
+                    {tr("You've been inactive. Your session will expire in")}
                 </p>
                 <div className="text-4xl font-bold text-amber-600 mb-5 tabular-nums">
                     {secondsLeft}s
@@ -160,12 +163,12 @@ function SessionWarningModal({ secondsLeft, onContinue, onLogout }) {
                     <button onClick={onContinue}
                         className="flex-1 px-4 py-2.5 bg-indigo-600 text-white text-sm font-semibold
                                    rounded-xl hover:bg-indigo-700 transition-colors">
-                        Continue Session
+                        {tr("Continue Session")}
                     </button>
                     <button onClick={onLogout}
                         className="px-4 py-2.5 border border-gray-200 text-gray-600 text-sm
                                    font-semibold rounded-xl hover:bg-gray-50 transition-colors">
-                        Logout
+                        {tr("Logout")}
                     </button>
                 </div>
             </div>
@@ -255,7 +258,7 @@ const ICONS = {
     BadgeDollarSign, Trophy, Archive, ListChecks, ShieldCheck,
     Globe, CalendarDays, Banknote, Landmark,
     FlaskConical, Brain, MessageSquareHeart, Scale, ScrollText, Milestone, FileBarChart2, FolderSearch,
-    HelpCircle, Sliders, Clock, FileSignature, ShieldAlert, CalendarClock, CalendarPlus, Timer,
+    HelpCircle, Sliders, Clock, FileSignature, ShieldAlert, CalendarClock, CalendarPlus, Timer, UserPlus,
     BuildingOffice: Building2,
 }
 
@@ -267,7 +270,7 @@ const GROUP_ICONS = {
     'Review & Evaluation': ClipboardCheck,
     'Budget':              DollarSign,
     'Monitoring':          Activity,
-    'Reports':             BarChart2,
+    'Insights':            ChartNoAxesCombined,
     'User':                Bell,
     'Events':              CalendarDays,
     'External Funds':      Banknote,
@@ -385,13 +388,13 @@ function UserMenu({ user, logout, unreadNotifications, isSuperAdmin, collapsed, 
                         <Link href="/profile" onClick={() => setOpen(false)}
                             className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
                             <User size={14} className="text-indigo-500" />
-                            <span>My Profile</span>
+                            <span>{tr("My Profile")}</span>
                         </Link>
                         <Link href="/notifications" onClick={() => setOpen(false)}
                             className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
                             <div className="flex items-center gap-3">
                                 <Bell size={14} className="text-blue-500" />
-                                <span>Notifications</span>
+                                <span>{tr("Notifications")}</span>
                             </div>
                             {unreadNotifications > 0 && (
                                 <span className="flex h-5 min-w-5 items-center justify-center rounded-full
@@ -400,18 +403,22 @@ function UserMenu({ user, logout, unreadNotifications, isSuperAdmin, collapsed, 
                                 </span>
                             )}
                         </Link>
+                        <div className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm text-gray-700 sm:hidden">
+                            <span>{tr('Language')}</span>
+                            <LanguageSwitch reload className="text-gray-500" />
+                        </div>
                         {isSuperAdmin && (
                             <Link href="/admin/settings" onClick={() => setOpen(false)}
                                 className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
                                 <Settings size={14} className="text-gray-400" />
-                                <span>Settings</span>
+                                <span>{tr("Settings")}</span>
                             </Link>
                         )}
                         {canImpersonate && (
                             <button onClick={() => { setOpen(false); onSwitchLogin?.() }}
                                 className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
                                 <LogIn size={14} className="text-emerald-500" />
-                                <span>Switch Login</span>
+                                <span>{tr("Switch Login")}</span>
                             </button>
                         )}
 
@@ -420,7 +427,7 @@ function UserMenu({ user, logout, unreadNotifications, isSuperAdmin, collapsed, 
                         <button onClick={() => { setOpen(false); logout() }}
                             className="flex w-full items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors">
                             <LogOut size={14} />
-                            <span>Sign out</span>
+                            <span>{tr("Sign out")}</span>
                         </button>
                     </div>
                 </div>
@@ -457,14 +464,14 @@ function GuestBanner() {
                     <UserX size={14} className="text-amber-600" />
                 </div>
                 <p className="text-xs text-amber-800 leading-snug">
-                    <span className="font-semibold">You are logged in as a Guest.</span>
-                    {' '}You have limited access. Please contact the administrator to be assigned the appropriate role.
+                    <span className="font-semibold">{tr("You are logged in as a Guest.")}</span>
+                    {' '}{tr("You have limited access. Please contact the administrator to be assigned the appropriate role.")}
                 </p>
             </div>
             <button
                 onClick={() => setDismissed(true)}
                 className="shrink-0 text-amber-500 hover:text-amber-700 transition-colors"
-                title="Dismiss"
+                title={tr("Dismiss")}
             >
                 <X size={14} />
             </button>
@@ -846,6 +853,10 @@ export default function AppLayout({ children, breadcrumb }) {
                     show: canOpen('/admin/reviewer-workload') && hasSubFeature('evaluation.reviewer_workload'),
                 },
                 {
+                    label: 'Reviewer Applications', href: '/admin/reviewer-applications', icon: 'UserPlus',
+                    show: canOpen('/admin/reviewer-applications'),
+                },
+                {
                     label: 'Review Deadlines', href: '/admin/review-deadlines', icon: 'Clock',
                     show: canOpen('/admin/review-deadlines') && hasSubFeature('evaluation.review_deadlines'),
                     badge: c => c.overdue_reviews,
@@ -910,6 +921,10 @@ export default function AppLayout({ children, breadcrumb }) {
                     badge: c => c.ongoing_awaiting_midterm,
                 },
                 {
+                    label: 'Projects at Risk', href: '/projects-at-risk', icon: 'ShieldAlert',
+                    show: canOpen('/projects-at-risk') && hasSubFeature('monitoring.ongoing'),
+                },
+                {
                     label: 'Progress Reports', href: '/progress-reports', icon: 'ClipboardList',
                     show: canOpen('/progress-reports'),
                 },
@@ -942,51 +957,44 @@ export default function AppLayout({ children, breadcrumb }) {
             ],
         },
         {
-            group: 'Reports',
+            // One analytics area: every page here also carries the shared Insights tab bar.
+            group: 'Insights',
             items: [
                 {
-                    label: 'Generate Report', href: '/reports', icon: 'BarChart',
+                    label: 'Overview', href: '/insights', icon: 'LayoutDashboard',
+                    show: canOpen('/insights'),
+                },
+                {
+                    label: 'Reports', href: '/reports', icon: 'BarChart',
                     show: canOpen('/reports') && hasSubFeature('reports.generate'),
                 },
                 {
-                    label: 'Report Builder', href: '/reports/builder', icon: 'Sliders',
-                    show: canOpen('/reports/builder') && hasSubFeature('reports.generate'),
-                },
-                {
-                    label: 'Proposal Statistics', href: '/reports?type=proposal_count_by_category', icon: 'TrendingUp',
-                    show: canOpen('/reports') && scope !== 'own' && hasSubFeature('reports.statistics'),
-                },
-                {
-                    label: 'College Performance', href: '/reports?type=college_performance', icon: 'BarChart2',
-                    show: canOpen('/reports') && scope === 'all' && hasSubFeature('reports.college'),
-                },
-                {
-                    label: 'College Dashboard', href: '/reports/college-dashboard', icon: 'Building2',
-                    show: canOpen('/reports/college-dashboard'),
-                },
-                {
-                    label: 'Budget Utilization', href: '/reports?type=budget_utilization', icon: 'TrendingDown',
-                    show: canOpen('/reports') && perm('budget_requests.view_any') && hasSubFeature('reports.budget'),
-                },
-                {
-                    label: 'Analytics Dashboard', href: '/admin/analytics', icon: 'Brain',
+                    label: 'Analytics', href: '/admin/analytics', icon: 'Brain',
                     show: canOpen('/admin/analytics') && hasSubFeature('reports.analytics'),
-                },
-                {
-                    label: 'Turnaround', href: '/admin/turnaround', icon: 'Timer',
-                    show: canOpen('/admin/turnaround'),
                 },
                 {
                     label: 'Proposal Pipeline', href: '/admin/proposal-pipeline', icon: 'Activity',
                     show: canOpen('/admin/proposal-pipeline') && hasSubFeature('reports.analytics'),
                 },
                 {
+                    label: 'Turnaround', href: '/admin/turnaround', icon: 'Timer',
+                    show: canOpen('/admin/turnaround'),
+                },
+                {
                     label: 'College Phase Completion', href: '/admin/college-phase-completion', icon: 'ListChecks',
                     show: canOpen('/admin/college-phase-completion') && hasSubFeature('reports.analytics'),
                 },
                 {
+                    label: 'College Dashboard', href: '/reports/college-dashboard', icon: 'Building2',
+                    show: canOpen('/reports/college-dashboard'),
+                },
+                {
                     label: 'Annual RTT Report', href: '/reports/annual', icon: 'FileBarChart2',
                     show: canOpen('/reports/annual') && hasSubFeature('reports.generate'),
+                },
+                {
+                    label: 'Report Builder', href: '/reports/builder', icon: 'Sliders',
+                    show: canOpen('/reports/builder') && hasSubFeature('reports.generate'),
                 },
                 {
                     label: 'Proposal Archive', href: '/admin/proposal-archive', icon: 'FolderSearch',
@@ -1106,7 +1114,7 @@ export default function AppLayout({ children, breadcrumb }) {
             readOnly={isImpersonating}
             suspended={showProfileComplete}
         >
-        <div className="flex h-screen bg-gray-50/50 overflow-hidden">
+        <div className="relative flex h-screen bg-gray-50/50 overflow-hidden">
 
             {/* ── Offline banner ────────────────────────────────────────────── */}
             {!isOnline && (
@@ -1117,7 +1125,7 @@ export default function AppLayout({ children, breadcrumb }) {
                         <span className="absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75 animate-ping" />
                         <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
                     </span>
-                    No internet connection — changes you make may not be saved until you reconnect.
+                    {tr("No internet connection — changes you make may not be saved until you reconnect.")}
                 </div>
             )}
 
@@ -1191,7 +1199,7 @@ export default function AppLayout({ children, breadcrumb }) {
                                         /* Collapsed: group icon as a tooltip trigger */
                                         <Link
                                             href={group.items[0]?.href ?? '#'}
-                                            title={group.group}
+                                            title={tr(group.group)}
                                             onClick={() => setMobileOpen(false)}
                                             className="relative flex items-center justify-center my-0.5"
                                         >
@@ -1227,7 +1235,7 @@ export default function AppLayout({ children, breadcrumb }) {
                                                 </span>
                                             )}
                                             <span className="flex-1 text-left text-[11px] font-semibold uppercase tracking-widest leading-none">
-                                                {group.group}
+                                                {tr(group.group)}
                                             </span>
                                             <ChevronDown
                                                 size={12}
@@ -1256,7 +1264,7 @@ export default function AppLayout({ children, breadcrumb }) {
                                                 /* Collapsed: centered icon square */
                                                 if (collapsed) {
                                                     return (
-                                                        <Link key={item.href} href={item.href} title={item.label}
+                                                        <Link key={item.href} href={item.href} title={tr(item.label)}
                                                             data-tour={`nav:${item.href.split('?')[0]}`}
                                                             onClick={(e) => handleNavClick(e, item.href)}
                                                             className="relative flex items-center justify-center my-0.5">
@@ -1299,7 +1307,7 @@ export default function AppLayout({ children, breadcrumb }) {
                                                             'flex-1 truncate text-[13px] leading-snug',
                                                             active ? 'font-semibold tracking-tight' : 'font-medium'
                                                         )}>
-                                                            {item.label}
+                                                            {tr(item.label)}
                                                         </span>
 
                                                         <NavBadge count={badgeCount} collapsed={false} />
@@ -1317,7 +1325,7 @@ export default function AppLayout({ children, breadcrumb }) {
                 {/* In-sidebar collapse toggle — desktop only */}
                 <div className={cn('hidden md:block shrink-0 px-2 py-2', sc.separator)}>
                     {collapsed ? (
-                        <button onClick={toggleCollapsed} title="Expand sidebar"
+                        <button onClick={toggleCollapsed} title={tr("Expand sidebar")}
                             className={cn(
                                 'flex h-9 w-9 mx-auto items-center justify-center rounded-xl transition-all duration-150',
                                 sc.collapseRow
@@ -1325,13 +1333,13 @@ export default function AppLayout({ children, breadcrumb }) {
                             <ChevronRight size={15} />
                         </button>
                     ) : (
-                        <button onClick={toggleCollapsed} title="Collapse sidebar"
+                        <button onClick={toggleCollapsed} title={tr("Collapse sidebar")}
                             className={cn(
                                 'group flex w-full items-center gap-3 rounded-xl px-3 py-2 transition-all duration-150',
                                 sc.collapseRow
                             )}>
                             <ChevronLeft size={15} className="shrink-0" />
-                            <span className="flex-1 text-left text-[13px] font-medium">Collapse Sidebar</span>
+                            <span className="flex-1 text-left text-[13px] font-medium">{tr("Collapse Sidebar")}</span>
                         </button>
                     )}
                 </div>
@@ -1369,14 +1377,14 @@ export default function AppLayout({ children, breadcrumb }) {
                                     </p>
                                 </div>
                             </Link>
-                            <button onClick={logout} title="Sign out"
+                            <button onClick={logout} title={tr("Sign out")}
                                 className={cn('p-2 rounded-xl transition-colors shrink-0', sc.logout)}>
                                 <LogOut size={13} />
                             </button>
                         </div>
                     ) : (
                         <div className="space-y-1">
-                            <Link href="/profile" title="My Profile"
+                            <Link href="/profile" title={tr("My Profile")}
                                 className={cn(
                                     'flex w-full items-center justify-center py-2 rounded-xl transition-colors',
                                     sc.profileRow
@@ -1392,7 +1400,7 @@ export default function AppLayout({ children, breadcrumb }) {
                                     }
                                 </div>
                             </Link>
-                            <button onClick={logout} title="Sign out"
+                            <button onClick={logout} title={tr("Sign out")}
                                 className={cn(
                                     'flex w-full items-center justify-center p-2 rounded-xl transition-colors',
                                     sc.logout
@@ -1431,7 +1439,7 @@ export default function AppLayout({ children, breadcrumb }) {
                         <button
                             className="md:hidden p-2 rounded-xl text-gray-500 hover:bg-gray-100 transition-colors shrink-0"
                             onClick={() => setMobileOpen(v => !v)}
-                            aria-label="Open menu"
+                            aria-label={tr("Open menu")}
                             data-tour="menu-toggle"
                         >
                             <Menu size={20} />
@@ -1460,11 +1468,12 @@ export default function AppLayout({ children, breadcrumb }) {
                                        bg-gray-50 hover:bg-indigo-50 transition-all"
                         >
                             <Search size={12} />
-                            <span>Search</span>
+                            <span>{tr("Search")}</span>
                             <kbd className="flex items-center gap-0.5 text-[10px] opacity-60">
                                 <span>⌘</span><span>K</span>
                             </kbd>
                         </button>
+                        <LanguageSwitch reload className="hidden text-gray-500 sm:flex" />
                         {user && <HelpMenu />}
                         <span data-tour="notifications" className="flex">
                             <NotificationBell key={user?.id} onCountChange={setUnreadNotifications} />
@@ -1490,11 +1499,11 @@ export default function AppLayout({ children, breadcrumb }) {
                     <div className="flex items-center justify-between gap-3 px-5 py-2.5
                                     bg-indigo-600 text-white shrink-0">
                         <p className="text-xs font-medium flex-1 min-w-0 truncate">
-                            Viewing as {user?.name} — actions you take affect this account.
+                            {tr("Viewing as :name — actions you take affect this account.", { name: user?.name })}
                         </p>
                         <button onClick={stopImpersonating}
                             className="shrink-0 text-xs font-semibold bg-white/15 hover:bg-white/25 px-3 py-1 rounded-lg transition-colors">
-                            Return to Admin
+                            {tr("Return to Admin")}
                         </button>
                     </div>
                 )}
@@ -1515,13 +1524,16 @@ export default function AppLayout({ children, breadcrumb }) {
                 )}
 
                 {/* Page content — guarded by role/permission check */}
-                <main className="flex-1 overflow-y-auto p-5 md:p-6">
+                {/* relative: absolutely positioned elements inside a page (e.g. visually hidden
+                    file inputs) are placed within this scrolling panel. Without it they are placed
+                    against the whole document and stretch it, leaving blank space below the app. */}
+                <main className="relative flex-1 overflow-y-auto p-5 md:p-6">
                     {!authReady
                         ? (
                             <div className="flex items-center justify-center h-full">
                                 <div className="flex flex-col items-center gap-3 text-gray-400">
                                     <div className="w-8 h-8 border-[3px] border-indigo-600 border-t-transparent rounded-full animate-spin" />
-                                    <p className="text-xs font-medium">Loading…</p>
+                                    <p className="text-xs font-medium">{tr("Loading…")}</p>
                                 </div>
                             </div>
                         )
@@ -1574,7 +1586,7 @@ export default function AppLayout({ children, breadcrumb }) {
             {switchTarget && (
                 <ConfirmDialog
                     open
-                    title="Login as this user?"
+                    title={tr("Login as this user?")}
                     description={`You will be signed in as "${switchTarget.name}" (${switchTarget.email}). Use "Return to Admin" in the banner to come back to your own account.`}
                     confirmLabel={switching ? 'Logging in…' : 'Login as User'}
                     onConfirm={confirmSwitchLogin}

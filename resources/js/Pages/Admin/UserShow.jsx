@@ -414,7 +414,7 @@ export default function AdminUserShow() {
                     <Skeleton className="h-5 w-24" />
                     <Skeleton className="h-56 w-full rounded-2xl" />
                     <Skeleton className="h-12 w-full rounded-xl" />
-                    <div className="grid grid-cols-4 gap-3">
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                         {[...Array(8)].map((_, i) => <Skeleton key={i} className="h-24" />)}
                     </div>
                 </div>

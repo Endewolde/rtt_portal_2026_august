@@ -9,6 +9,7 @@ import {
     CalendarRange,
 } from 'lucide-react';
 import { formatCurrency } from '../../lib/utils';
+import { useToast } from '../Toast';
 
 // ─── Excel export (shared by every report view) ────────────────────────────────
 
@@ -34,13 +35,14 @@ export async function downloadSnapshotExcel(snapshot, onError) {
 
 export function DownloadExcelButton({ snapshot, className = '' }) {
     const [downloading, setDownloading] = useState(false);
+    const { error } = useToast();
     if (!snapshot || snapshot.status !== 'ready') return null;
 
     return (
         <button
             onClick={async () => {
                 setDownloading(true);
-                await downloadSnapshotExcel(snapshot, msg => alert(msg));
+                await downloadSnapshotExcel(snapshot, error);
                 setDownloading(false);
             }}
             disabled={downloading}
@@ -160,8 +162,24 @@ export function SubjectIcon({ subject, ...props }) {
 
 // ─── Chart components ─────────────────────────────────────────────────────────
 
-function ProposalStatisticsChart({ data }) {
+const GRID = { strokeDasharray: '4 4', stroke: '#eef0f3', vertical: false };
+const AXIS = { tick: { fontSize: 12, fill: '#6b7280' }, tickLine: false, axisLine: { stroke: '#e5e7eb' } };
+const TOOLTIP = {
+    cursor: { fill: 'rgba(99,102,241,0.06)' },
+    contentStyle: { borderRadius: 12, border: '1px solid #e5e7eb', boxShadow: '0 10px 25px -10px rgba(15,23,42,0.25)', fontSize: 12, padding: '8px 12px' },
+    labelStyle: { fontWeight: 600, color: '#111827', marginBottom: 4 },
+};
+const LEGEND = { iconType: 'circle', iconSize: 8, wrapperStyle: { fontSize: 12, paddingTop: 8 } };
+
+/** Recharts click handler that hands the original report row to onDrill. */
+const drill = (onDrill) => (entry) => {
+    const row = entry?.payload?.raw ?? entry?.raw;
+    if (onDrill && row) onDrill(row);
+};
+
+function ProposalStatisticsChart({ data, onDrill }) {
     const rows = data.map(r => ({
+        raw: r,
         name:         CATEGORY_LABEL[r.category] ?? r.category,
         'Total':      r.total        ?? 0,
         'In Review':  r.under_review ?? 0,
@@ -174,18 +192,19 @@ function ProposalStatisticsChart({ data }) {
         <div className="space-y-6">
             <ResponsiveContainer width="100%" height={320}>
                 <BarChart data={rows} margin={{ top: 8, right: 24, bottom: 8, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                    <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="Total"     fill="#6366f1" radius={[4,4,0,0]} />
-                    <Bar dataKey="In Review" fill="#f59e0b" radius={[4,4,0,0]} />
-                    <Bar dataKey="Accepted"  fill="#10b981" radius={[4,4,0,0]} />
-                    <Bar dataKey="Rejected"  fill="#ef4444" radius={[4,4,0,0]} />
+                    <CartesianGrid {...GRID} />
+                    <XAxis dataKey="name" {...AXIS} tick={{ fontSize: 12, fill: '#6b7280' }} />
+                    <YAxis allowDecimals={false} {...AXIS} axisLine={false} width={40} />
+                    <Tooltip {...TOOLTIP} />
+                    <Legend {...LEGEND} />
+                    <Bar dataKey="Total"     fill="#6366f1" onClick={drill(onDrill)} cursor={onDrill ? 'pointer' : undefined} radius={[6,6,0,0]} maxBarSize={44} />
+                    <Bar dataKey="In Review" fill="#f59e0b" onClick={drill(onDrill)} cursor={onDrill ? 'pointer' : undefined} radius={[6,6,0,0]} maxBarSize={44} />
+                    <Bar dataKey="Accepted"  fill="#10b981" onClick={drill(onDrill)} cursor={onDrill ? 'pointer' : undefined} radius={[6,6,0,0]} maxBarSize={44} />
+                    <Bar dataKey="Rejected"  fill="#ef4444" onClick={drill(onDrill)} cursor={onDrill ? 'pointer' : undefined} radius={[6,6,0,0]} maxBarSize={44} />
                 </BarChart>
             </ResponsiveContainer>
             <SummaryTable
+                onRowClick={onDrill ? (i) => onDrill(rows[i].raw) : undefined}
                 columns={['Category', 'Total', 'In Review', 'Accepted', 'Rejected']}
                 rows={rows.map(r => [r.name, r['Total'], r['In Review'], r['Accepted'], r['Rejected']])}
             />
@@ -193,8 +212,9 @@ function ProposalStatisticsChart({ data }) {
     );
 }
 
-function ProposalTrendChart({ data }) {
+function ProposalTrendChart({ data, onDrill }) {
     const rows = data.map(r => ({
+        raw: r,
         name:      r.academic_year,
         Submitted: r.submitted ?? 0,
         Funded:    r.funded ?? 0,
@@ -205,18 +225,19 @@ function ProposalTrendChart({ data }) {
     return (
         <div className="space-y-6">
             <ResponsiveContainer width="100%" height={320}>
-                <LineChart data={rows} margin={{ top: 8, right: 24, bottom: 8, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                    <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                    <Tooltip />
-                    <Legend />
-                    <Line type="monotone" dataKey="Submitted" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} />
-                    <Line type="monotone" dataKey="Funded"    stroke="#10b981" strokeWidth={2} dot={{ r: 3 }} />
-                    <Line type="monotone" dataKey="Rejected"  stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} />
+                <LineChart data={rows} margin={{ top: 8, right: 24, bottom: 8, left: 0 }} onClick={(e) => onDrill && e?.activePayload?.[0] && onDrill(e.activePayload[0].payload.raw)} style={onDrill ? { cursor: 'pointer' } : undefined}>
+                    <CartesianGrid {...GRID} />
+                    <XAxis dataKey="name" {...AXIS} tick={{ fontSize: 12, fill: '#6b7280' }} />
+                    <YAxis allowDecimals={false} {...AXIS} axisLine={false} width={40} />
+                    <Tooltip {...TOOLTIP} />
+                    <Legend {...LEGEND} />
+                    <Line type="monotone" dataKey="Submitted" stroke="#6366f1" strokeWidth={2.5} dot={{ r: 3.5, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 5 }} />
+                    <Line type="monotone" dataKey="Funded"    stroke="#10b981" strokeWidth={2.5} dot={{ r: 3.5, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 5 }} />
+                    <Line type="monotone" dataKey="Rejected"  stroke="#ef4444" strokeWidth={2.5} dot={{ r: 3.5, strokeWidth: 2, fill: '#fff' }} activeDot={{ r: 5 }} />
                 </LineChart>
             </ResponsiveContainer>
             <SummaryTable
+                onRowClick={onDrill ? (i) => onDrill(rows[i].raw) : undefined}
                 columns={['Academic Year', 'Submitted', 'Funded', 'Rejected', 'Funded %']}
                 rows={rows.map(r => [r.name, r['Submitted'], r['Funded'], r['Rejected'], `${r['Funded %']}%`])}
             />
@@ -224,8 +245,9 @@ function ProposalTrendChart({ data }) {
     );
 }
 
-function CollegePerformanceChart({ data }) {
+function CollegePerformanceChart({ data, onDrill }) {
     const rows = data.map(r => ({
+        raw: r,
         name:       r.college_name,
         Submitted:  r.proposals_submitted  ?? 0,
         Accepted:   r.proposals_accepted   ?? 0,
@@ -238,17 +260,18 @@ function CollegePerformanceChart({ data }) {
         <div className="space-y-6">
             <ResponsiveContainer width="100%" height={320}>
                 <BarChart data={rows} margin={{ top: 8, right: 24, bottom: 8, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-15} textAnchor="end" height={50} />
-                    <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="Submitted" fill="#6366f1" radius={[4,4,0,0]} />
-                    <Bar dataKey="Accepted"  fill="#10b981" radius={[4,4,0,0]} />
-                    <Bar dataKey="Outputs"   fill="#f59e0b" radius={[4,4,0,0]} />
+                    <CartesianGrid {...GRID} />
+                    <XAxis dataKey="name" {...AXIS} tick={{ fontSize: 11, fill: '#6b7280' }} interval={0} angle={-15} textAnchor="end" height={50} />
+                    <YAxis allowDecimals={false} {...AXIS} axisLine={false} width={40} />
+                    <Tooltip {...TOOLTIP} />
+                    <Legend {...LEGEND} />
+                    <Bar dataKey="Submitted" fill="#6366f1" onClick={drill(onDrill)} cursor={onDrill ? 'pointer' : undefined} radius={[6,6,0,0]} maxBarSize={44} />
+                    <Bar dataKey="Accepted"  fill="#10b981" onClick={drill(onDrill)} cursor={onDrill ? 'pointer' : undefined} radius={[6,6,0,0]} maxBarSize={44} />
+                    <Bar dataKey="Outputs"   fill="#f59e0b" onClick={drill(onDrill)} cursor={onDrill ? 'pointer' : undefined} radius={[6,6,0,0]} maxBarSize={44} />
                 </BarChart>
             </ResponsiveContainer>
             <SummaryTable
+                onRowClick={onDrill ? (i) => onDrill(rows[i].raw) : undefined}
                 columns={['College', 'Submitted', 'Accepted', 'Total Awarded', 'Outputs', 'Publications']}
                 rows={rows.map(r => [r.name, r.Submitted, r.Accepted, formatCurrency(r.Awarded), r.Outputs, r.Pubs])}
             />
@@ -256,8 +279,9 @@ function CollegePerformanceChart({ data }) {
     );
 }
 
-function ReviewerWorkloadChart({ data }) {
+function ReviewerWorkloadChart({ data, onDrill }) {
     const rows = data.map(r => ({
+        raw: r,
         name:      r.reviewer_name,
         Assigned:  r.total_assigned ?? 0,
         Submitted: r.submitted      ?? 0,
@@ -269,17 +293,18 @@ function ReviewerWorkloadChart({ data }) {
         <div className="space-y-6">
             <ResponsiveContainer width="100%" height={320}>
                 <BarChart data={rows} margin={{ top: 8, right: 24, bottom: 8, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-15} textAnchor="end" height={50} />
-                    <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="Assigned"  fill="#6366f1" radius={[4,4,0,0]} />
-                    <Bar dataKey="Submitted" fill="#10b981" radius={[4,4,0,0]} />
-                    <Bar dataKey="Pending"   fill="#f59e0b" radius={[4,4,0,0]} />
+                    <CartesianGrid {...GRID} />
+                    <XAxis dataKey="name" {...AXIS} tick={{ fontSize: 11, fill: '#6b7280' }} interval={0} angle={-15} textAnchor="end" height={50} />
+                    <YAxis allowDecimals={false} {...AXIS} axisLine={false} width={40} />
+                    <Tooltip {...TOOLTIP} />
+                    <Legend {...LEGEND} />
+                    <Bar dataKey="Assigned"  fill="#6366f1" onClick={drill(onDrill)} cursor={onDrill ? 'pointer' : undefined} radius={[6,6,0,0]} maxBarSize={44} />
+                    <Bar dataKey="Submitted" fill="#10b981" onClick={drill(onDrill)} cursor={onDrill ? 'pointer' : undefined} radius={[6,6,0,0]} maxBarSize={44} />
+                    <Bar dataKey="Pending"   fill="#f59e0b" onClick={drill(onDrill)} cursor={onDrill ? 'pointer' : undefined} radius={[6,6,0,0]} maxBarSize={44} />
                 </BarChart>
             </ResponsiveContainer>
             <SummaryTable
+                onRowClick={onDrill ? (i) => onDrill(rows[i].raw) : undefined}
                 columns={['Reviewer', 'Assigned', 'Submitted', 'Pending', 'Avg Days']}
                 rows={rows.map(r => [r.name, r.Assigned, r.Submitted, r.Pending, r['Avg Days']])}
             />
@@ -287,8 +312,9 @@ function ReviewerWorkloadChart({ data }) {
     );
 }
 
-function BudgetUtilizationChart({ data }) {
+function BudgetUtilizationChart({ data, onDrill }) {
     const rows = data.map(r => ({
+        raw: r,
         name:       r.tracker_number,
         title:      r.proposal_title,
         Allocated:  parseFloat(r.allocated  ?? 0),
@@ -301,14 +327,14 @@ function BudgetUtilizationChart({ data }) {
         <div className="space-y-6">
             <ResponsiveContainer width="100%" height={320}>
                 <BarChart data={rows} margin={{ top: 8, right: 24, bottom: 8, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                    <YAxis tickFormatter={v => `${(v/1000).toFixed(0)}K`} tick={{ fontSize: 12 }} />
-                    <Tooltip formatter={v => formatCurrency(v)} />
-                    <Legend />
-                    <Bar dataKey="Allocated"  fill="#6366f1" radius={[4,4,0,0]} />
-                    <Bar dataKey="Disbursed"  fill="#10b981" radius={[4,4,0,0]} />
-                    <Bar dataKey="Settled"    fill="#06b6d4" radius={[4,4,0,0]} />
+                    <CartesianGrid {...GRID} />
+                    <XAxis dataKey="name" {...AXIS} tick={{ fontSize: 11, fill: '#6b7280' }} />
+                    <YAxis tickFormatter={v => `${(v/1000).toFixed(0)}K`} {...AXIS} axisLine={false} width={48} />
+                    <Tooltip {...TOOLTIP} formatter={v => formatCurrency(v)} />
+                    <Legend {...LEGEND} />
+                    <Bar dataKey="Allocated"  fill="#6366f1" onClick={drill(onDrill)} cursor={onDrill ? 'pointer' : undefined} radius={[6,6,0,0]} maxBarSize={44} />
+                    <Bar dataKey="Disbursed"  fill="#10b981" onClick={drill(onDrill)} cursor={onDrill ? 'pointer' : undefined} radius={[6,6,0,0]} maxBarSize={44} />
+                    <Bar dataKey="Settled"    fill="#06b6d4" onClick={drill(onDrill)} cursor={onDrill ? 'pointer' : undefined} radius={[6,6,0,0]} maxBarSize={44} />
                 </BarChart>
             </ResponsiveContainer>
 
@@ -323,7 +349,7 @@ function BudgetUtilizationChart({ data }) {
                     </thead>
                     <tbody className="divide-y divide-gray-50">
                         {rows.map((r, i) => (
-                            <tr key={i} className="hover:bg-gray-50">
+                            <tr key={i} onClick={onDrill ? () => onDrill(r.raw) : undefined} className={`hover:bg-indigo-50/30 ${onDrill ? 'cursor-pointer' : ''}`}>
                                 <td className="px-4 py-3 text-xs font-medium text-gray-400 tabular-nums w-10">{i + 1}</td>
                                 <td className="px-4 py-3 font-mono text-xs text-blue-600 font-bold">{r.name}</td>
                                 <td className="px-4 py-3 text-xs text-gray-700 max-w-48 truncate" title={r.title}>{r.title}</td>
@@ -347,8 +373,9 @@ function BudgetUtilizationChart({ data }) {
     );
 }
 
-function ReviewPipelineChart({ data }) {
+function ReviewPipelineChart({ data, onDrill }) {
     const rows = data.map(r => ({
+        raw: r,
         name:  STAGE_LABEL[r.stage] ?? r.stage,
         count: r.count ?? 0,
     }));
@@ -357,14 +384,14 @@ function ReviewPipelineChart({ data }) {
 
     return (
         <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid gap-6 lg:grid-cols-2">
                 <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={rows} margin={{ top: 8, right: 24, bottom: 8, left: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-20} textAnchor="end" height={55} />
-                        <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                        <Tooltip />
-                        <Bar dataKey="count" radius={[4,4,0,0]}>
+                        <CartesianGrid {...GRID} />
+                        <XAxis dataKey="name" {...AXIS} tick={{ fontSize: 10, fill: '#6b7280' }} interval={0} angle={-20} textAnchor="end" height={55} />
+                        <YAxis allowDecimals={false} {...AXIS} axisLine={false} width={40} />
+                        <Tooltip {...TOOLTIP} />
+                        <Bar dataKey="count" radius={[6,6,0,0]} maxBarSize={44} onClick={drill(onDrill)} cursor={onDrill ? 'pointer' : undefined}>
                             {rows.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                         </Bar>
                     </BarChart>
@@ -372,10 +399,11 @@ function ReviewPipelineChart({ data }) {
 
                 <ResponsiveContainer width="100%" height={300}>
                     <PieChart>
-                        <Pie data={rows} dataKey="count" nameKey="name" cx="50%" cy="50%" outerRadius={110} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                        <Pie data={rows} onClick={drill(onDrill)} cursor={onDrill ? 'pointer' : undefined} dataKey="count" nameKey="name" cx="50%" cy="50%" innerRadius={62} outerRadius={105} paddingAngle={2} stroke="#fff" strokeWidth={2}>
                             {rows.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                         </Pie>
-                        <Tooltip />
+                        <Tooltip {...TOOLTIP} />
+                        <Legend {...LEGEND} layout="vertical" align="right" verticalAlign="middle" />
                     </PieChart>
                 </ResponsiveContainer>
             </div>
@@ -383,8 +411,9 @@ function ReviewPipelineChart({ data }) {
     );
 }
 
-function ApprovalRateChart({ data }) {
+function ApprovalRateChart({ data, onDrill }) {
     const rows = data.map(r => ({
+        raw: r,
         name:       CATEGORY_LABEL[r.category] ?? r.category,
         Total:      r.total_submitted   ?? 0,
         Accepted:   r.total_accepted    ?? 0,
@@ -396,16 +425,17 @@ function ApprovalRateChart({ data }) {
         <div className="space-y-6">
             <ResponsiveContainer width="100%" height={320}>
                 <BarChart data={rows} margin={{ top: 8, right: 24, bottom: 8, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                    <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="Total"    fill="#6366f1" radius={[4,4,0,0]} />
-                    <Bar dataKey="Accepted" fill="#10b981" radius={[4,4,0,0]} />
+                    <CartesianGrid {...GRID} />
+                    <XAxis dataKey="name" {...AXIS} tick={{ fontSize: 12, fill: '#6b7280' }} />
+                    <YAxis allowDecimals={false} {...AXIS} axisLine={false} width={40} />
+                    <Tooltip {...TOOLTIP} />
+                    <Legend {...LEGEND} />
+                    <Bar dataKey="Total"    fill="#6366f1" onClick={drill(onDrill)} cursor={onDrill ? 'pointer' : undefined} radius={[6,6,0,0]} maxBarSize={44} />
+                    <Bar dataKey="Accepted" fill="#10b981" onClick={drill(onDrill)} cursor={onDrill ? 'pointer' : undefined} radius={[6,6,0,0]} maxBarSize={44} />
                 </BarChart>
             </ResponsiveContainer>
             <SummaryTable
+                onRowClick={onDrill ? (i) => onDrill(rows[i].raw) : undefined}
                 columns={['Category', 'Total', 'Accepted', 'Approval %', 'Rejection %']}
                 rows={rows.map(r => [r.name, r.Total, r.Accepted, `${r['Approval %']}%`, `${r['Rejection %']}%`])}
             />
@@ -413,8 +443,9 @@ function ApprovalRateChart({ data }) {
     );
 }
 
-function ProposalsByCollegeChart({ data }) {
+function ProposalsByCollegeChart({ data, onDrill }) {
     const rows = data.map(r => ({
+        raw: r,
         name:       r.college_name,
         Total:      r.total_proposals ?? 0,
         Accepted:   r.accepted        ?? 0,
@@ -425,16 +456,17 @@ function ProposalsByCollegeChart({ data }) {
         <div className="space-y-6">
             <ResponsiveContainer width="100%" height={320}>
                 <BarChart data={rows} margin={{ top: 8, right: 24, bottom: 8, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-15} textAnchor="end" height={50} />
-                    <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="Total"    fill="#3b82f6" radius={[4,4,0,0]} />
-                    <Bar dataKey="Accepted" fill="#10b981" radius={[4,4,0,0]} />
+                    <CartesianGrid {...GRID} />
+                    <XAxis dataKey="name" {...AXIS} tick={{ fontSize: 11, fill: '#6b7280' }} interval={0} angle={-15} textAnchor="end" height={50} />
+                    <YAxis allowDecimals={false} {...AXIS} axisLine={false} width={40} />
+                    <Tooltip {...TOOLTIP} />
+                    <Legend {...LEGEND} />
+                    <Bar dataKey="Total"    fill="#3b82f6" onClick={drill(onDrill)} cursor={onDrill ? 'pointer' : undefined} radius={[6,6,0,0]} maxBarSize={44} />
+                    <Bar dataKey="Accepted" fill="#10b981" onClick={drill(onDrill)} cursor={onDrill ? 'pointer' : undefined} radius={[6,6,0,0]} maxBarSize={44} />
                 </BarChart>
             </ResponsiveContainer>
             <SummaryTable
+                onRowClick={onDrill ? (i) => onDrill(rows[i].raw) : undefined}
                 columns={['College', 'Total Proposals', 'Accepted', 'Rejection Rate']}
                 rows={rows.map(r => [r.name, r.Total, r.Accepted, `${r['Rejection %']}%`])}
             />
@@ -442,8 +474,9 @@ function ProposalsByCollegeChart({ data }) {
     );
 }
 
-function ComplaintsByCollegeChart({ data }) {
+function ComplaintsByCollegeChart({ data, onDrill }) {
     const rows = data.map(r => ({
+        raw: r,
         name:        r.college_name,
         Total:       r.total_complaints ?? 0,
         Resolved:    (r.resolved ?? 0) + (r.dismissed ?? 0),
@@ -457,16 +490,17 @@ function ComplaintsByCollegeChart({ data }) {
         <div className="space-y-6">
             <ResponsiveContainer width="100%" height={320}>
                 <BarChart data={rows} margin={{ top: 8, right: 24, bottom: 8, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-15} textAnchor="end" height={50} />
-                    <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="Resolved"   fill="#10b981" radius={[4,4,0,0]} />
-                    <Bar dataKey="Unresolved" fill="#f43f5e" radius={[4,4,0,0]} />
+                    <CartesianGrid {...GRID} />
+                    <XAxis dataKey="name" {...AXIS} tick={{ fontSize: 11, fill: '#6b7280' }} interval={0} angle={-15} textAnchor="end" height={50} />
+                    <YAxis allowDecimals={false} {...AXIS} axisLine={false} width={40} />
+                    <Tooltip {...TOOLTIP} />
+                    <Legend {...LEGEND} />
+                    <Bar dataKey="Resolved"   fill="#10b981" onClick={drill(onDrill)} cursor={onDrill ? 'pointer' : undefined} radius={[6,6,0,0]} maxBarSize={44} />
+                    <Bar dataKey="Unresolved" fill="#f43f5e" onClick={drill(onDrill)} cursor={onDrill ? 'pointer' : undefined} radius={[6,6,0,0]} maxBarSize={44} />
                 </BarChart>
             </ResponsiveContainer>
             <SummaryTable
+                onRowClick={onDrill ? (i) => onDrill(rows[i].raw) : undefined}
                 columns={['College', 'Total', 'Resolved', 'Unresolved', 'Level 1 (College)', 'Level 2 (Officer)', 'Avg Resolution']}
                 rows={rows.map(r => [
                     r.name, r.Total, r.Resolved, r.Unresolved, r.level1, r.level2,
@@ -506,30 +540,32 @@ export function ReportBuilderTable({ data }) {
 
     return (
         <SummaryTable
+            onRowClick={onDrill ? (i) => onDrill(rows[i].raw) : undefined}
             columns={columns.map(builderLabel)}
             rows={rows.map(r => columns.map(c => r[c] ?? '—'))}
         />
     );
 }
 
-export function SummaryTable({ columns, rows }) {
+export function SummaryTable({ columns, rows, onRowClick }) {
     return (
         <div className="overflow-x-auto rounded-xl border border-gray-200">
             <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
+                <thead className="border-b border-gray-200 bg-gray-50/80">
                     <tr>
-                        <th className="px-4 py-3 text-left text-xs font-bold text-gray-400 uppercase tracking-wide w-10">#</th>
-                        {columns.map(c => (
-                            <th key={c} className="px-4 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide">{c}</th>
+                        <th className="w-10 px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">#</th>
+                        {columns.map((c, j) => (
+                            <th key={c} className={`px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-500 ${j === 0 ? 'text-left' : 'text-right'}`}>{c}</th>
                         ))}
                     </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-gray-100">
                     {rows.map((row, i) => (
-                        <tr key={i} className="hover:bg-gray-50">
-                            <td className="px-4 py-3 text-xs font-medium text-gray-400 tabular-nums">{i + 1}</td>
+                        <tr key={i} onClick={onRowClick ? () => onRowClick(i) : undefined}
+                            className={`transition-colors hover:bg-indigo-50/30 ${onRowClick ? 'cursor-pointer' : ''}`}>
+                            <td className="px-4 py-2.5 text-xs font-medium tabular-nums text-gray-400">{i + 1}</td>
                             {row.map((cell, j) => (
-                                <td key={j} className={`px-4 py-3 text-sm ${j === 0 ? 'font-semibold text-gray-800' : 'text-gray-600'}`}>{cell}</td>
+                                <td key={j} className={`px-4 py-2.5 text-sm ${j === 0 ? 'text-left font-medium text-gray-900' : 'text-right tabular-nums text-gray-600'}`}>{cell}</td>
                             ))}
                         </tr>
                     ))}
@@ -539,7 +575,7 @@ export function SummaryTable({ columns, rows }) {
     );
 }
 
-export function renderChart(type, data) {
+export function renderChart(type, data, { onDrill } = {}) {
     if (!data || data.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center py-16 text-gray-400">
@@ -549,16 +585,130 @@ export function renderChart(type, data) {
         );
     }
     switch (type) {
-        case 'proposal_count_by_category':  return <ProposalStatisticsChart data={data} />;
-        case 'proposal_count_by_college':   return <ProposalsByCollegeChart data={data} />;
-        case 'proposal_trend_by_year':      return <ProposalTrendChart data={data} />;
-        case 'college_performance':          return <CollegePerformanceChart data={data} />;
-        case 'reviewer_workload':            return <ReviewerWorkloadChart data={data} />;
-        case 'budget_utilization':           return <BudgetUtilizationChart data={data} />;
-        case 'approval_rate_by_category':    return <ApprovalRateChart data={data} />;
-        case 'review_progress_pipeline':     return <ReviewPipelineChart data={data} />;
-        case 'complaint_summary':            return <ComplaintsByCollegeChart data={data} />;
+        case 'proposal_count_by_category':  return <ProposalStatisticsChart data={data} onDrill={onDrill} />;
+        case 'proposal_count_by_college':   return <ProposalsByCollegeChart data={data} onDrill={onDrill} />;
+        case 'proposal_trend_by_year':      return <ProposalTrendChart data={data} onDrill={onDrill} />;
+        case 'college_performance':          return <CollegePerformanceChart data={data} onDrill={onDrill} />;
+        case 'reviewer_workload':            return <ReviewerWorkloadChart data={data} onDrill={onDrill} />;
+        case 'budget_utilization':           return <BudgetUtilizationChart data={data} onDrill={onDrill} />;
+        case 'approval_rate_by_category':    return <ApprovalRateChart data={data} onDrill={onDrill} />;
+        case 'review_progress_pipeline':     return <ReviewPipelineChart data={data} onDrill={onDrill} />;
+        case 'complaint_summary':            return <ComplaintsByCollegeChart data={data} onDrill={onDrill} />;
         case 'custom_builder':               return <ReportBuilderTable data={data} />;
         default:                             return <pre className="text-xs text-gray-600 overflow-auto">{JSON.stringify(data, null, 2)}</pre>;
+    }
+}
+
+// ─── Headline figures per report ──────────────────────────────────────────────
+
+const num = (v) => Number(v ?? 0);
+const sum = (rows, key) => rows.reduce((s, r) => s + num(r[key]), 0);
+const pct = (part, whole) => (whole > 0 ? `${Math.round((part / whole) * 100)}%` : '—');
+const compact = (v) => new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(v);
+
+/**
+ * Four headline figures for a report's rows: [{ label, value, hint?, tone }].
+ * Tones: indigo, emerald, amber, red, slate.
+ */
+export function reportKpis(type, rows = []) {
+    switch (type) {
+        case 'proposal_count_by_category': {
+            const total = sum(rows, 'total');
+            return [
+                { label: 'Proposals', value: total, tone: 'indigo' },
+                { label: 'Under review', value: sum(rows, 'under_review'), tone: 'amber' },
+                { label: 'Accepted', value: sum(rows, 'accepted'), hint: `${pct(sum(rows, 'accepted'), total)} of all`, tone: 'emerald' },
+                { label: 'Rejected', value: sum(rows, 'rejected'), hint: `${pct(sum(rows, 'rejected'), total)} of all`, tone: 'red' },
+            ];
+        }
+        case 'proposal_count_by_college': {
+            const total = sum(rows, 'total_proposals');
+            const top = [...rows].sort((a, b) => num(b.total_proposals) - num(a.total_proposals))[0];
+            return [
+                { label: 'Colleges', value: rows.length, tone: 'slate' },
+                { label: 'Proposals', value: total, tone: 'indigo' },
+                { label: 'Accepted', value: sum(rows, 'accepted'), hint: `${pct(sum(rows, 'accepted'), total)} acceptance`, tone: 'emerald' },
+                { label: 'Most active', value: top ? num(top.total_proposals) : '—', hint: top?.college_name, tone: 'amber' },
+            ];
+        }
+        case 'proposal_trend_by_year': {
+            const last = rows[rows.length - 1];
+            const prev = rows[rows.length - 2];
+            const change = last && prev && num(prev.submitted) > 0 ? Math.round(((num(last.submitted) - num(prev.submitted)) / num(prev.submitted)) * 100) : null;
+            return [
+                { label: 'Years covered', value: rows.length, tone: 'slate' },
+                { label: `Submitted ${last?.academic_year ?? ''}`.trim(), value: last ? num(last.submitted) : '—', hint: change != null ? `${change >= 0 ? '▲' : '▼'} ${Math.abs(change)}% vs ${prev.academic_year}` : undefined, tone: 'indigo' },
+                { label: 'Funded', value: last ? num(last.funded) : '—', hint: last?.academic_year, tone: 'emerald' },
+                { label: 'Funding rate', value: last ? `${num(last.funded_rate_percent)}%` : '—', hint: last?.academic_year, tone: 'amber' },
+            ];
+        }
+        case 'approval_rate_by_category': {
+            const total = sum(rows, 'total_submitted');
+            const accepted = sum(rows, 'total_accepted');
+            const best = [...rows].sort((a, b) => num(b.approval_rate_percent) - num(a.approval_rate_percent))[0];
+            return [
+                { label: 'Submitted', value: total, tone: 'indigo' },
+                { label: 'Accepted', value: accepted, tone: 'emerald' },
+                { label: 'Approval rate', value: pct(accepted, total), tone: 'amber' },
+                { label: 'Highest rate', value: best ? `${num(best.approval_rate_percent)}%` : '—', hint: best ? (CATEGORY_LABEL[best.category] ?? best.category) : undefined, tone: 'slate' },
+            ];
+        }
+        case 'review_progress_pipeline': {
+            const by = Object.fromEntries(rows.map((r) => [r.stage, num(r.count)]));
+            const total = rows.reduce((s, r) => s + num(r.count), 0);
+            const inReview = (by.under_blind_review ?? 0) + (by.blind_review_passed ?? 0) + (by.under_open_defence ?? 0) + (by.accepted ?? 0);
+            const funded = (by.funded ?? 0) + (by.midterm_evaluation ?? 0) + (by.completed ?? 0);
+            const busiest = [...rows].sort((a, b) => num(b.count) - num(a.count))[0];
+            return [
+                { label: 'In the pipeline', value: total, tone: 'indigo' },
+                { label: 'In review', value: inReview, hint: 'Blind review to central evaluation', tone: 'amber' },
+                { label: 'Funded & running', value: funded, tone: 'emerald' },
+                { label: 'Busiest stage', value: busiest ? num(busiest.count) : '—', hint: busiest ? (STAGE_LABEL[busiest.stage] ?? busiest.stage) : undefined, tone: 'slate' },
+            ];
+        }
+        case 'college_performance': {
+            const submitted = sum(rows, 'proposals_submitted');
+            return [
+                { label: 'Proposals', value: submitted, tone: 'indigo' },
+                { label: 'Accepted', value: sum(rows, 'proposals_accepted'), hint: `${pct(sum(rows, 'proposals_accepted'), submitted)} acceptance`, tone: 'emerald' },
+                { label: 'Total awarded', value: `ETB ${compact(sum(rows, 'total_awarded'))}`, tone: 'amber' },
+                { label: 'Research outputs', value: sum(rows, 'outputs_produced'), hint: `${sum(rows, 'publications_count')} journal articles`, tone: 'slate' },
+            ];
+        }
+        case 'reviewer_workload': {
+            const assigned = sum(rows, 'total_assigned');
+            const submitted = sum(rows, 'submitted');
+            const timed = rows.filter((r) => r.average_days_to_review != null && num(r.submitted) > 0);
+            const avgDays = timed.length ? (timed.reduce((s, r) => s + num(r.average_days_to_review) * num(r.submitted), 0) / timed.reduce((s, r) => s + num(r.submitted), 0)).toFixed(1) : '—';
+            return [
+                { label: 'Reviewers', value: rows.length, tone: 'slate' },
+                { label: 'Assignments', value: assigned, tone: 'indigo' },
+                { label: 'Completed', value: submitted, hint: `${pct(submitted, assigned)} completion`, tone: 'emerald' },
+                { label: 'Avg days to review', value: avgDays, tone: 'amber' },
+            ];
+        }
+        case 'budget_utilization': {
+            const allocated = sum(rows, 'allocated');
+            const disbursed = sum(rows, 'disbursed');
+            return [
+                { label: 'Funded projects', value: rows.length, tone: 'slate' },
+                { label: 'Allocated', value: `ETB ${compact(allocated)}`, tone: 'indigo' },
+                { label: 'Disbursed', value: `ETB ${compact(disbursed)}`, hint: `${pct(disbursed, allocated)} of allocation`, tone: 'emerald' },
+                { label: 'Settled', value: `ETB ${compact(sum(rows, 'settled'))}`, tone: 'amber' },
+            ];
+        }
+        case 'complaint_summary': {
+            const total = sum(rows, 'total_complaints');
+            const closed = sum(rows, 'resolved') + sum(rows, 'dismissed');
+            const timed = rows.filter((r) => r.avg_resolution_days != null);
+            return [
+                { label: 'Complaints', value: total, tone: 'indigo' },
+                { label: 'Unresolved', value: sum(rows, 'unresolved'), tone: 'red' },
+                { label: 'Resolution rate', value: pct(closed, total), tone: 'emerald' },
+                { label: 'Avg days to resolve', value: timed.length ? (timed.reduce((s, r) => s + num(r.avg_resolution_days), 0) / timed.length).toFixed(1) : '—', tone: 'amber' },
+            ];
+        }
+        default:
+            return [];
     }
 }

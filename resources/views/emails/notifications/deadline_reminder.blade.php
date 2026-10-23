@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ app()->getLocale() }}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Deadline Reminder</title>
+<title>{{ __('Deadline Reminder') }}</title>
 <style>
   body{margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
   .wrap{max-width:600px;margin:40px auto;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 4px 32px rgba(0,0,0,.10);}
@@ -43,28 +43,28 @@
         <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
       </svg>
     </div>
-    <h1>Deadline Reminder</h1>
-    <p>Action required — submit before the deadline</p>
+    <h1>{{ __('Deadline Reminder') }}</h1>
+    <p>{{ __('Action required — submit before the deadline') }}</p>
   </div>
 
   <div class="body">
-    <p style="font-size:15px;color:#374151;margin:0 0 20px;">Dear <strong>{{ $recipient->name ?? 'Researcher' }}</strong>,</p>
+    <p style="font-size:15px;color:#374151;margin:0 0 20px;">{!! __('Dear :name,', ['name' => '<strong>'.e($recipient->name ?? __('Researcher')).'</strong>']) !!}</p>
 
     <div class="countdown">
       <p class="countdown-num">{{ $days_remaining ?? '?' }}</p>
-      <p class="countdown-label">{{ $daysLeft === 1 ? 'day' : 'days' }} remaining until the submission deadline</p>
+      <p class="countdown-label">{{ $daysLeft === 1 ? __('day remaining until the submission deadline') : __('days remaining until the submission deadline') }}</p>
       @if($isUrgent)
-      <span class="urgency-pill">⚠ Urgent — Act Now</span>
+      <span class="urgency-pill">{{ __('⚠ Urgent — Act Now') }}</span>
       @endif
     </div>
 
     @if(!empty($call_title) || !empty($deadline_date))
     <div class="detail">
       @if(!empty($call_title))
-      <div class="row"><label>Proposal Call</label><span style="font-weight:600;color:#0f172a;text-align:right;max-width:60%;">{{ $call_title }}</span></div>
+      <div class="row"><label>{{ __('Proposal Call') }}</label><span style="font-weight:600;color:#0f172a;text-align:right;max-width:60%;">{{ $call_title }}</span></div>
       @endif
       @if(!empty($deadline_date))
-      <div class="row"><label>Deadline</label><span style="font-weight:700;color:#dc2626;">{{ $deadline_date }}</span></div>
+      <div class="row"><label>{{ __('Deadline') }}</label><span style="font-weight:700;color:#dc2626;">{{ $deadline_date }}</span></div>
       @endif
     </div>
     @endif
@@ -73,18 +73,17 @@
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ca8a04" stroke-width="2.5" style="flex-shrink:0;margin-top:1px;">
         <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
       </svg>
-      <p>Please ensure your proposal is complete and submitted before the deadline. Late submissions may not be accepted.</p>
+      <p>{{ __('Please ensure your proposal is complete and submitted before the deadline. Late submissions may not be accepted.') }}</p>
     </div>
 
     <hr class="divider">
     <p style="font-size:13px;color:#9ca3af;margin:0;">
-      Log in to <strong>{{ $platformName }}</strong> to submit your proposal before the deadline.
-      Contact the {{ $orgName }} Research Office if you need assistance.
+      {!! __('Log in to <strong>:platform</strong> to submit your proposal before the deadline. Contact the :org Research Office if you need assistance.', ['platform' => e($platformName), 'org' => e($orgName)]) !!}
     </p>
   </div>
 
   <div class="footer">
-    &copy; {{ date('Y') }} <strong>{{ $platformName }}</strong> &middot; {{ $orgName }} Research &amp; Technology Transfer
+    &copy; {{ date('Y') }} <strong>{{ $platformName }}</strong> &middot; {{ __(':org Research & Technology Transfer', ['org' => $orgName]) }}
   </div>
 </div>
 </body>

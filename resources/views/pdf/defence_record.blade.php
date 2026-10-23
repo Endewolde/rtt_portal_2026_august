@@ -4,8 +4,9 @@
 <meta charset="utf-8">
 <title>Open Defence Record — {{ $proposal->tracker_number }}</title>
 <style>
+@include('pdf.partials.fonts')
     @page { margin: 36pt 40pt 48pt; }
-    body { font-family: 'DejaVu Sans', sans-serif; font-size: 9.5pt; color: #1f2937; }
+    body { font-family: 'DejaVu Sans', 'Noto Sans Ethiopic', sans-serif; font-size: 9.5pt; color: #1f2937; }
     .head { border-bottom: 2pt solid #1e3a8a; padding-bottom: 10pt; margin-bottom: 14pt; }
     .head td { vertical-align: middle; }
     .logo { height: 46pt; }

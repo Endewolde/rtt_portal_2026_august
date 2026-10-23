@@ -65,6 +65,44 @@ class ReviewCertificateController extends Controller
         );
     }
 
+    /** Withdraw every certificate of a released year at once, e.g. when the release was a mistake. */
+    public function close(Request $request): JsonResponse
+    {
+        if (! $request->user()?->can('review_certificates.manage')) {
+            return $this->forbidden();
+        }
+
+        $validated = $request->validate([
+            'academic_year' => 'required|string|max:20',
+            'reason' => 'required|string|min:10|max:500',
+        ]);
+
+        try {
+            $this->certificates->close($validated['academic_year'], $request->user(), $validated['reason']);
+        } catch (\RuntimeException $e) {
+            return response()->json(['data' => null, 'message' => $e->getMessage(), 'errors' => [], 'meta' => []], 422);
+        }
+
+        return $this->ok($this->certificates->overview($validated['academic_year']), "Certificates for {$validated['academic_year']} are closed. Reviewers have been notified.");
+    }
+
+    public function reopen(Request $request): JsonResponse
+    {
+        if (! $request->user()?->can('review_certificates.manage')) {
+            return $this->forbidden();
+        }
+
+        $academicYear = (string) $request->validate(['academic_year' => 'required|string|max:20'])['academic_year'];
+
+        try {
+            $this->certificates->reopen($academicYear);
+        } catch (\RuntimeException $e) {
+            return response()->json(['data' => null, 'message' => $e->getMessage(), 'errors' => [], 'meta' => []], 422);
+        }
+
+        return $this->ok($this->certificates->overview($academicYear), "Certificates for {$academicYear} are open again. Reviewers have been notified.");
+    }
+
     public function revoke(Request $request, string $id): JsonResponse
     {
         if (! $request->user()?->can('review_certificates.manage')) {
@@ -112,7 +150,7 @@ class ReviewCertificateController extends Controller
 
         return $this->ok([
             'code' => $certificate->code,
-            'status' => $certificate->isRevoked() ? 'revoked' : 'valid',
+            'status' => $certificate->isRevoked() ? 'revoked' : ($certificate->release->isClosed() ? 'withdrawn' : 'valid'),
             'reviewer' => trim(($certificate->user->title ? $certificate->user->title.' ' : '').$certificate->user->name),
             'academic_year' => $certificate->academic_year,
             'blind_reviews' => $certificate->blind_reviews,
@@ -120,6 +158,7 @@ class ReviewCertificateController extends Controller
             'total' => $certificate->total(),
             'issued_at' => $certificate->issued_at->toIso8601String(),
             'revoked_at' => $certificate->revoked_at?->toIso8601String(),
+            'withdrawn_at' => $certificate->release->closed_at?->toIso8601String(),
         ]);
     }
 

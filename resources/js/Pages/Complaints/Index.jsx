@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { translate as tr } from '../../lib/i18n'
 import { Link } from '@inertiajs/react';
 import {
     MessageSquareWarning, MessageSquare, ArrowUpCircle, Pencil, Trash2, X, ChevronRight,
@@ -62,7 +63,7 @@ function DetailDrawer({ complaint: initial, permissions, onClose, onAction }) {
 
     return (
         <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/40 backdrop-blur-[2px]" onClick={onClose}>
-            <aside role="dialog" aria-modal="true" aria-label="Complaint details"
+            <aside role="dialog" aria-modal="true" aria-label={tr("Complaint details")}
                 className="flex h-full w-full max-w-xl flex-col bg-white shadow-2xl"
                 onClick={e => e.stopPropagation()}>
                 {/* Header */}
@@ -74,7 +75,7 @@ function DetailDrawer({ complaint: initial, permissions, onClose, onAction }) {
                             </span>
                             <StatusBadge status={complaint.status} />
                         </div>
-                        <button onClick={onClose} aria-label="Close" className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                        <button onClick={onClose} aria-label={tr("Close")} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
                             <X size={16} />
                         </button>
                     </div>
@@ -89,11 +90,11 @@ function DetailDrawer({ complaint: initial, permissions, onClose, onAction }) {
                 <div className="flex-1 overflow-y-auto px-6 py-5">
                     <dl className="mb-6 grid grid-cols-2 gap-3 text-xs">
                         <div className="rounded-xl bg-gray-50 p-3">
-                            <dt className="text-gray-400">Filed by</dt>
+                            <dt className="text-gray-400">{tr("Filed by")}</dt>
                             <dd className="mt-0.5 font-semibold text-gray-800">{complaint.complainant?.name ?? '—'}</dd>
                         </div>
                         <div className="rounded-xl bg-gray-50 p-3">
-                            <dt className="text-gray-400">Handled by</dt>
+                            <dt className="text-gray-400">{tr("Handled by")}</dt>
                             <dd className="mt-0.5 font-semibold text-gray-800">
                                 {complaint.resolved_by?.name ?? handler ?? (complaint.level === 'college' ? 'College office' : 'Category director')}
                             </dd>
@@ -103,7 +104,7 @@ function DetailDrawer({ complaint: initial, permissions, onClose, onAction }) {
                     {complaint.escalated_from_id && (
                         <div className="mb-5 flex items-start gap-2 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2.5 text-xs text-orange-800">
                             <ArrowUpCircle size={14} className="mt-px shrink-0" />
-                            Escalated from a Level 1 college complaint after the complainant disagreed with its outcome.
+                            {tr("Escalated from a Level 1 college complaint after the complainant disagreed with its outcome.")}
                         </div>
                     )}
 
@@ -113,31 +114,31 @@ function DetailDrawer({ complaint: initial, permissions, onClose, onAction }) {
                 {/* Footer */}
                 <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 bg-gray-50/60 px-6 py-4">
                     <Link href={`/proposals/${complaint.proposal?.id}`} className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800">
-                        <FileText size={13} /> View proposal <ChevronRight size={12} />
+                        <FileText size={13} /> {tr("View proposal")} <ChevronRight size={12} />
                     </Link>
                     <div className="flex flex-wrap gap-2">
                         {canWithdraw && (
                             <button onClick={() => onAction('withdraw', complaint)}
                                 className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50">
-                                <Trash2 size={13} /> Withdraw
+                                <Trash2 size={13} /> {tr("Withdraw")}
                             </button>
                         )}
                         {canEdit && (
                             <button onClick={() => onAction('edit', complaint)}
                                 className="inline-flex items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50">
-                                <Pencil size={13} /> Edit
+                                <Pencil size={13} /> {tr("Edit")}
                             </button>
                         )}
                         {canEscalate && (
                             <button onClick={() => onAction('escalate', complaint)}
                                 className="inline-flex items-center gap-1.5 rounded-xl bg-orange-500 px-3 py-2 text-xs font-semibold text-white hover:bg-orange-600">
-                                <ArrowUpCircle size={13} /> Escalate
+                                <ArrowUpCircle size={13} /> {tr("Escalate")}
                             </button>
                         )}
                         {canRespond && (
                             <button onClick={() => onAction('respond', complaint)}
                                 className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800">
-                                <MessageSquare size={13} /> Respond
+                                <MessageSquare size={13} /> {tr("Respond")}
                             </button>
                         )}
                     </div>
@@ -314,18 +315,18 @@ export default function ComplaintsIndex() {
                         {canRespond && (
                             <button onClick={() => setRespond(c)}
                                 className="inline-flex items-center gap-1 rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-slate-800">
-                                <MessageSquare size={11} /> Respond
+                                <MessageSquare size={11} /> {tr("Respond")}
                             </button>
                         )}
                         {canEscalate && (
                             <button onClick={() => setEscalate(c)}
                                 className="inline-flex items-center gap-1 rounded-lg bg-orange-500 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-orange-600">
-                                <ArrowUpCircle size={11} /> Escalate
+                                <ArrowUpCircle size={11} /> {tr("Escalate")}
                             </button>
                         )}
-                        <button onClick={() => setDetail(c)} aria-label="Open complaint"
+                        <button onClick={() => setDetail(c)} aria-label={tr("Open complaint")}
                             className="inline-flex items-center gap-0.5 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50">
-                            Open <ChevronRight size={12} />
+                            {tr("Open")} <ChevronRight size={12} />
                         </button>
                     </div>
                 );
@@ -351,17 +352,17 @@ export default function ComplaintsIndex() {
                             <MessageSquareWarning size={20} className="text-white" />
                         </div>
                         <div>
-                            <h1 className="text-xl font-bold text-gray-900">Complaints</h1>
+                            <h1 className="text-xl font-bold text-gray-900">{tr("Complaints")}</h1>
                             <p className="mt-0.5 text-sm text-gray-500">{subtitle}</p>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
                         <button onClick={load} className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-500 hover:bg-gray-50">
-                            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> Refresh
+                            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} /> {tr("Refresh")}
                         </button>
                         {isUser && (
                             <Link href="/my-proposals" className="flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800">
-                                <FileText size={15} /> File from a proposal
+                                <FileText size={15} /> {tr("File from a proposal")}
                             </Link>
                         )}
                     </div>
@@ -404,7 +405,7 @@ export default function ComplaintsIndex() {
                 <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
                     <div className="flex flex-col gap-3 border-b border-gray-100 px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
                         {levelTabs.length > 1 ? (
-                            <div className="inline-flex w-fit rounded-xl bg-gray-100 p-1" role="tablist" aria-label="Complaint level">
+                            <div className="inline-flex w-fit rounded-xl bg-gray-100 p-1" role="tablist" aria-label={tr("Complaint level")}>
                                 {levelTabs.map(tab => (
                                     <button key={tab.value} role="tab" aria-selected={levelFilter === tab.value}
                                         onClick={() => setLevelFilter(tab.value)}
@@ -461,7 +462,7 @@ export default function ComplaintsIndex() {
             )}
             <ConfirmDialog
                 open={!!withdraw}
-                title="Withdraw complaint"
+                title={tr("Withdraw complaint")}
                 description={`Withdraw your complaint about ${withdraw?.proposal?.tracker_number ?? 'this proposal'}? This can't be undone.`}
                 confirmLabel={withdrawing ? 'Withdrawing…' : 'Withdraw'}
                 confirmVariant="danger"

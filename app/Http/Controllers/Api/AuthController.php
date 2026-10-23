@@ -322,8 +322,13 @@ class AuthController extends Controller
             ], 422);
         }
 
-        // Expire after 60 minutes
-        if (now()->diffInMinutes($record->created_at, false) < -60) {
+        // Expire after 60 minutes — or 7 days for the first password of an account
+        // created from an approved reviewer application, never signed in to yet.
+        $owner = User::where('email', $request->email)->first(['id', 'registration_method', 'last_login_at']);
+        $lifetime = $owner && $owner->registration_method === 'reviewer_application' && ! $owner->last_login_at
+            ? 60 * 24 * 7
+            : 60;
+        if (now()->diffInMinutes($record->created_at, false) < -$lifetime) {
             DB::table('password_reset_tokens')->where('email', $request->email)->delete();
 
             return response()->json([

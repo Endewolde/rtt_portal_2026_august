@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { translate as tr } from '../lib/i18n'
 import { Clock, Calendar, ArrowRight, Download, Microscope, Users, Zap, Lightbulb, LayoutGrid } from 'lucide-react';
 import { downloadFile } from '../lib/download';
 import { cn } from '../lib/utils';
@@ -163,7 +164,7 @@ export default function ProposalCallCard({ call, onApply }) {
                                 downloadFile(`/proposal-calls/${call.id}/guidelines/download`, call.guidelines_filename).catch(() => {});
                             }}
                             className="flex items-center gap-1 text-[10px] font-semibold text-white/70 hover:text-white bg-white/10 hover:bg-white/20 px-2 py-1 rounded-full transition-colors">
-                            <Download size={10} /> Guidelines
+                            <Download size={10} /> {tr("Guidelines")}
                         </button>
                     )}
                 </div>
@@ -196,11 +197,11 @@ export default function ProposalCallCard({ call, onApply }) {
                     {/* Opens date */}
                     <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mb-4">
                         <Calendar size={11} className="shrink-0" />
-                        <span>Opens {startDateStr}</span>
+                        <span>{tr("Opens :startDateStr", { startDateStr: startDateStr })}</span>
                         {call.proposals_count > 0 && (
                             <>
                                 <span className="mx-1 text-slate-200">·</span>
-                                <span className="font-semibold text-slate-500">{call.proposals_count} submitted</span>
+                                <span className="font-semibold text-slate-500">{tr(":proposals_count submitted", { proposals_count: call.proposals_count })}</span>
                             </>
                         )}
                     </div>
@@ -211,7 +212,7 @@ export default function ProposalCallCard({ call, onApply }) {
                     {countdown.expired ? (
                         <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 mb-3">
                             <div className="w-2 h-2 rounded-full bg-slate-400 shrink-0" />
-                            <span className="text-sm font-semibold text-slate-400">This call has closed</span>
+                            <span className="text-sm font-semibold text-slate-400">{tr("This call has closed")}</span>
                         </div>
                     ) : (
                         <div className={cn('rounded-xl px-3 py-3 mb-3 border', urgency.bg, urgency.border)}>
@@ -242,7 +243,7 @@ export default function ProposalCallCard({ call, onApply }) {
                                             style={{ width: `${elapsedPct}%` }} />
                                     </div>
                                     <p className="text-[9px] text-slate-400 mt-1 text-right font-medium">
-                                        {Math.round(elapsedPct)}% of time elapsed
+                                        {tr(":elapsedPct% of time elapsed", { elapsedPct: Math.round(elapsedPct) })}
                                     </p>
                                 </div>
                             </div>

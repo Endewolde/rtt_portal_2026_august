@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ app()->getLocale() }}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Proposal Submitted Successfully</title>
+<title>{{ __('Proposal Submitted Successfully') }}</title>
 <style>
   body{margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
   .wrap{max-width:600px;margin:40px auto;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 4px 32px rgba(0,0,0,.10);}
@@ -46,57 +46,55 @@
         <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
       </svg>
     </div>
-    <h1>Proposal Submitted!</h1>
-    <p>Your proposal is now awaiting validation</p>
-    <span class="badge">✓ Submitted</span>
+    <h1>{{ __('Proposal Submitted!') }}</h1>
+    <p>{{ __('Your proposal is now awaiting validation') }}</p>
+    <span class="badge">{{ __('✓ Submitted') }}</span>
   </div>
 
   <div class="body">
-    <p style="font-size:15px;color:#374151;margin:0 0 16px;">Dear <strong>{{ $recipient->name ?? 'Researcher' }}</strong>,</p>
+    <p style="font-size:15px;color:#374151;margin:0 0 16px;">{!! __('Dear :name,', ['name' => '<strong>'.e($recipient->name ?? __('Researcher')).'</strong>']) !!}</p>
     <p style="font-size:14px;color:#4b5563;line-height:1.75;margin:0 0 20px;">
-      Your research proposal has been <strong>successfully submitted</strong> and is now pending validation by the Central Office.
-      Your tracking number is shown below — keep it safe.
+      {!! __('Your research proposal has been <strong>successfully submitted</strong> and is now pending validation by the Central Office. Your tracking number is shown below — keep it safe.') !!}
     </p>
 
     <div class="tracker-box">
-      <p class="tracker-label">Tracker Number</p>
+      <p class="tracker-label">{{ __('Tracker Number') }}</p>
       <p class="tracker-val">{{ $tracker_number ?? 'N/A' }}</p>
-      <p class="tracker-hint">Use this number to check your proposal status at any time</p>
+      <p class="tracker-hint">{{ __('Use this number to check your proposal status at any time') }}</p>
     </div>
 
     @if(!empty($title))
     <div class="detail">
-      <div class="row"><label>Proposal Title</label><span style="font-weight:600;color:#0f172a;text-align:right;max-width:60%;">{{ $title }}</span></div>
-      <div class="row"><label>Submitted</label><span style="font-weight:600;color:#0f172a;">{{ now()->format('d M Y, H:i') }}</span></div>
-      <div class="row"><label>Status</label><span style="font-weight:700;color:#059669;">Pending Validation</span></div>
+      <div class="row"><label>{{ __('Proposal Title') }}</label><span style="font-weight:600;color:#0f172a;text-align:right;max-width:60%;">{{ $title }}</span></div>
+      <div class="row"><label>{{ __('Submitted') }}</label><span style="font-weight:600;color:#0f172a;">{{ now()->format('d M Y, H:i') }}</span></div>
+      <div class="row"><label>{{ __('Status') }}</label><span style="font-weight:700;color:#059669;">{{ __('Pending Validation') }}</span></div>
     </div>
     @endif
 
     <div class="steps">
-      <p class="steps-title">What Happens Next</p>
+      <p class="steps-title">{{ __('What Happens Next') }}</p>
       <div class="step">
         <div class="step-num">1</div>
-        <div class="step-text">Your proposal will be reviewed for <strong>completeness</strong> by the Central Office.</div>
+        <div class="step-text">{!! __('Your proposal will be reviewed for <strong>completeness</strong> by the Central Office.') !!}</div>
       </div>
       <div class="step">
         <div class="step-num">2</div>
-        <div class="step-text">You will receive a notification once <strong>validation is complete</strong>.</div>
+        <div class="step-text">{!! __('You will receive a notification once <strong>validation is complete</strong>.') !!}</div>
       </div>
       <div class="step">
         <div class="step-num">3</div>
-        <div class="step-text">Use your tracker number to <strong>monitor your proposal status</strong> on the platform at any time.</div>
+        <div class="step-text">{!! __('Use your tracker number to <strong>monitor your proposal status</strong> on the platform at any time.') !!}</div>
       </div>
     </div>
 
     <hr class="divider">
     <p style="font-size:13px;color:#9ca3af;margin:0;">
-      This confirmation was sent to <strong>{{ $recipient->email ?? '' }}</strong>.
-      Please contact the {{ $orgName }} Research Office if you have any questions.
+      {!! __('This confirmation was sent to <strong>:email</strong>. Please contact the :org Research Office if you have any questions.', ['email' => e($recipient->email ?? ''), 'org' => e($orgName)]) !!}
     </p>
   </div>
 
   <div class="footer">
-    &copy; {{ date('Y') }} <strong>{{ $platformName }}</strong> &middot; {{ $orgName }} Research &amp; Technology Transfer
+    &copy; {{ date('Y') }} <strong>{{ $platformName }}</strong> &middot; {{ __(':org Research & Technology Transfer', ['org' => $orgName]) }}
   </div>
 </div>
 </body>

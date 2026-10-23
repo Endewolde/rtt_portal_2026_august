@@ -141,7 +141,7 @@ export default function NoCostExtensions() {
         <AppLayout breadcrumb="No-Cost Extensions">
             <div className="max-w-4xl mx-auto space-y-6">
 
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start flex-wrap justify-between gap-4">
                     <div className="flex items-center gap-3">
                         <div className="h-11 w-11 bg-slate-900 rounded-2xl flex items-center justify-center shrink-0">
                             <CalendarRange size={20} className="text-white" />

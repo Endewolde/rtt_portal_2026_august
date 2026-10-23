@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { translate as tr } from '../lib/i18n'
 import { ShieldQuestion, X, Info, History } from 'lucide-react';
 import { post } from '../lib/api';
 import { formatDate, getStatusLabel } from '../lib/utils';
@@ -61,7 +62,7 @@ export default function ReportMistakenApprovalModal({ proposal, previousReport =
                             </p>
                         </div>
                     </div>
-                    <button onClick={onClose} aria-label="Close" className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                    <button onClick={onClose} aria-label={tr("Close")} className="rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
                         <X size={16} />
                     </button>
                 </div>
@@ -70,7 +71,7 @@ export default function ReportMistakenApprovalModal({ proposal, previousReport =
                     {previousReport && (
                         <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 px-4 py-3 text-xs text-emerald-900">
                             <p className="flex items-center gap-1.5 font-semibold">
-                                <History size={13} /> Reported {formatDate(previousReport.created_at)} — approval stood
+                                <History size={13} /> {tr("Reported :created_at — approval stood", { created_at: formatDate(previousReport.created_at) })}
                             </p>
                             {previousReport.resolution_notes && (
                                 <p className="mt-1.5 leading-relaxed text-emerald-800">
@@ -78,15 +79,15 @@ export default function ReportMistakenApprovalModal({ proposal, previousReport =
                                     {previousReport.reviewed_by?.name && <span className="text-emerald-600"> — {previousReport.reviewed_by.name}</span>}
                                 </p>
                             )}
-                            <p className="mt-1.5 text-emerald-700">Explain what is new — evidence or an issue the director didn't consider.</p>
+                            <p className="mt-1.5 text-emerald-700">{tr("Explain what is new — evidence or an issue the director didn't consider.")}</p>
                         </div>
                     )}
 
                     <div>
                         <label className="mb-1.5 block text-xs font-semibold text-gray-700">
-                            What is wrong with this proposal? <span className="text-red-500">*</span>
+                            {tr("What is wrong with this proposal?")} <span className="text-red-500">*</span>
                         </label>
-                        <ReasonSelect options={APPROVAL_REPORT_ISSUES} value={issueType} onChange={setIssueType} placeholder="Select the issue with this proposal…" />
+                        <ReasonSelect options={APPROVAL_REPORT_ISSUES} value={issueType} onChange={setIssueType} placeholder={tr("Select the issue with this proposal…")} />
                     </div>
 
                     {issueType && (
@@ -95,7 +96,7 @@ export default function ReportMistakenApprovalModal({ proposal, previousReport =
                                 <span>
                                     {previousReport
                                         ? <>What is new since the last report? <span className="text-red-500">*</span></>
-                                        : isOther ? <>Describe the issue <span className="text-red-500">*</span></> : <>Additional details <span className="font-normal text-gray-400">(optional)</span></>}
+                                        : isOther ? <>Describe the issue <span className="text-red-500">*</span></> : <>Additional details <span className="font-normal text-gray-400">{tr("(optional)")}</span></>}
                                 </span>
                                 <span className={`font-normal tabular-nums ${details.length > MAX_DETAILS ? 'text-red-500' : 'text-gray-400'}`}>
                                     {details.length}/{MAX_DETAILS}
@@ -114,7 +115,7 @@ export default function ReportMistakenApprovalModal({ proposal, previousReport =
                                 className="w-full resize-none rounded-xl border border-gray-300 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
                             />
                             {(detailsRequired || detailsTooShort) && details.trim().length < 10 && (
-                                <p className="mt-1 text-xs text-gray-400">Please write at least 10 characters.</p>
+                                <p className="mt-1 text-xs text-gray-400">{tr("Please write at least 10 characters.")}</p>
                             )}
                         </div>
                     )}
@@ -133,7 +134,7 @@ export default function ReportMistakenApprovalModal({ proposal, previousReport =
 
                 <div className="flex gap-3 border-t border-gray-100 px-6 py-4">
                     <button onClick={onClose} className="flex-1 rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
-                        Cancel
+                        {tr("Cancel")}
                     </button>
                     <button
                         onClick={submit}

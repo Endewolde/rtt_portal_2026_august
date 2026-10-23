@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ app()->getLocale() }}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Team Update</title>
+<title>{{ __('Team Update') }}</title>
 <style>
   body{margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
   .wrap{max-width:600px;margin:40px auto;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 4px 32px rgba(0,0,0,.10);}
@@ -50,40 +50,40 @@
         <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
       </svg>
     </div>
-    <h1>Team Update</h1>
-    <p>A change has been made to your proposal team</p>
+    <h1>{{ __('Team Update') }}</h1>
+    <p>{{ __('A change has been made to your proposal team') }}</p>
   </div>
 
   <div class="body">
-    <p style="font-size:15px;color:#374151;margin:0 0 16px;">Dear <strong>{{ $recipient->name ?? 'Team Member' }}</strong>,</p>
+    <p style="font-size:15px;color:#374151;margin:0 0 16px;">{!! __('Dear :name,', ['name' => '<strong>'.e($recipient->name ?? __('Team Member')).'</strong>']) !!}</p>
     <p style="font-size:14px;color:#4b5563;line-height:1.75;margin:0 0 20px;">
-      There has been a team update on the following proposal. Please review the details below.
+      {{ __('There has been a team update on the following proposal. Please review the details below.') }}
     </p>
 
     @if(!empty($tracker_number))
     <div class="tracker-row">
-      <span class="tracker-label">Tracker Number</span>
+      <span class="tracker-label">{{ __('Tracker Number') }}</span>
       <span class="tracker-val">{{ $tracker_number }}</span>
     </div>
     @endif
 
     @if(!empty($member_name) || !empty($actionText))
     <div class="change-card">
-      <p class="change-title">Change Details</p>
+      <p class="change-title">{{ __('Change Details') }}</p>
       @if(!empty($member_name))
       <div class="change-row">
         <div class="change-dot"></div>
-        <span class="change-label">Member</span>
+        <span class="change-label">{{ __('Member') }}</span>
         <span class="change-val">{{ $member_name }}</span>
       </div>
       @endif
       @if(!empty($actionText))
       <div class="change-row">
         <div class="change-dot"></div>
-        <span class="change-label">Action</span>
+        <span class="change-label">{{ __('Action') }}</span>
         <span>
           <span class="action-badge" style="background:{{ $actionBg }};color:{{ $actionColor }};border:1px solid {{ $actionBorder }};">
-            {{ $actionText }}
+            {{ __($actionText) }}
           </span>
         </span>
       </div>
@@ -93,13 +93,12 @@
 
     <hr class="divider">
     <p style="font-size:13px;color:#9ca3af;margin:0;">
-      You received this notification because you are a member of this proposal on <strong>{{ $platformName }}</strong>.
-      Contact the {{ $orgName }} Research Office if you have questions.
+      {!! __('You received this notification because you are a member of this proposal on <strong>:platform</strong>. Contact the :org Research Office if you have questions.', ['platform' => e($platformName), 'org' => e($orgName)]) !!}
     </p>
   </div>
 
   <div class="footer">
-    &copy; {{ date('Y') }} <strong>{{ $platformName }}</strong> &middot; {{ $orgName }} Research &amp; Technology Transfer
+    &copy; {{ date('Y') }} <strong>{{ $platformName }}</strong> &middot; {{ __(':org Research & Technology Transfer', ['org' => $orgName]) }}
   </div>
 </div>
 </body>

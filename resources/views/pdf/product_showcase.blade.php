@@ -4,9 +4,10 @@
 <meta charset="UTF-8"/>
 <title>RTT Platform — Product Showcase</title>
 <style>
+@include('pdf.partials.fonts')
 @page { margin: 0; }
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; color: #1e293b; background: #fff; line-height: 1.55; }
+body { font-family: Arial, Helvetica, 'Noto Sans Ethiopic', sans-serif; font-size: 9.5pt; color: #1e293b; background: #fff; line-height: 1.55; }
 .pb  { page-break-after: always; }
 
 /* ─── Layout helpers ──────────────────── */

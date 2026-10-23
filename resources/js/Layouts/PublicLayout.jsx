@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, usePage } from '@inertiajs/react';
-import { FlaskConical, Menu, X, Search, Download, ChevronDown, Clock, Calendar, ArrowRight, Flame, CalendarDays, MapPin, Video, Building2, Globe, Star, FileText, ShieldCheck } from 'lucide-react';
+import { FlaskConical, Menu, X, Search, Download, ChevronDown, Clock, Calendar, ArrowRight, Flame, CalendarDays, MapPin, Video, Building2, Globe, Star, FileText, ShieldCheck, UserPlus, Users } from 'lucide-react';
 import { get } from '../lib/api';
 import { useT } from '../lib/i18n';
 import LanguageSwitch from '../Components/LanguageSwitch';
@@ -493,6 +493,8 @@ const DEFAULT_NAV = [
     { href: '/funding-opportunities',  label: 'Funding Opportunities' },
     { href: '/repository',             label: 'Repository'            },
     { href: '/tracker',                label: 'Track Proposal'        },
+    // New items go last: settings refer to items by position.
+    { href: '/researchers',            label: 'Researchers'           },
 ];
 
 // ─── Layout ───────────────────────────────────────────────────────────────────
@@ -933,6 +935,16 @@ export default function PublicLayout({ children }) {
                                 <li>
                                     <Link href="/download" className="inline-flex items-center gap-1.5 hover:text-white transition-colors">
                                         <Download size={14} /> {t('Downloads')}
+                                    </Link>
+                                </li>
+                                <li>
+                                    <Link href="/reviewers/apply" className="inline-flex items-center gap-1.5 hover:text-white transition-colors">
+                                        <UserPlus size={14} /> {t('Become a Reviewer')}
+                                    </Link>
+                                </li>
+                                <li>
+                                    <Link href="/researchers" className="inline-flex items-center gap-1.5 hover:text-white transition-colors">
+                                        <Users size={14} /> {t('Our Researchers')}
                                     </Link>
                                 </li>
                             </ul>

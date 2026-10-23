@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { translate as tr } from '../lib/i18n'
 import { Sparkles, Lock, CheckCircle2, AlertTriangle, Lightbulb, RefreshCw, ListChecks, Wallet } from 'lucide-react';
 import { get, post } from '../lib/api';
 import { useToast } from './Toast';
@@ -46,13 +47,13 @@ export default function AiWritingCoach({ proposalId }) {
                 <div className="flex items-start gap-3">
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-100 text-violet-700"><Sparkles size={17} /></span>
                     <div>
-                        <h3 className="text-sm font-semibold text-gray-900">Check my proposal</h3>
-                        <p className="flex items-center gap-1 text-xs text-gray-500"><Lock size={11} /> Private AI feedback against the call's scoring criteria. Reviewers never see it, and it doesn't affect your score.</p>
+                        <h3 className="text-sm font-semibold text-gray-900">{tr("Check my proposal")}</h3>
+                        <p className="flex items-center gap-1 text-xs text-gray-500"><Lock size={11} /> {tr("Private AI feedback against the call's scoring criteria. Reviewers never see it, and it doesn't affect your score.")}</p>
                     </div>
                 </div>
                 <button onClick={run} disabled={running || limitReached}
                     className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-50">
-                    {running ? <><RefreshCw size={14} className="animate-spin" /> Reading your proposal…</> : <><Sparkles size={14} /> {result ? 'Check again' : 'Check my proposal'}</>}
+                    {running ? <><RefreshCw size={14} className="animate-spin" /> {tr("Reading your proposal…")}</> : <><Sparkles size={14} /> {result ? 'Check again' : 'Check my proposal'}</>}
                 </button>
             </header>
 
@@ -72,7 +73,7 @@ export default function AiWritingCoach({ proposalId }) {
 
                     {result.criteria.length > 0 && (
                         <div>
-                            <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500"><ListChecks size={13} /> Against each criterion</p>
+                            <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500"><ListChecks size={13} /> {tr("Against each criterion")}</p>
                             <ul className="divide-y divide-gray-100 rounded-xl border border-gray-200">
                                 {result.criteria.map((c, i) => (
                                     <li key={i} className="px-4 py-3">
@@ -88,13 +89,13 @@ export default function AiWritingCoach({ proposalId }) {
                     <div className="grid gap-3 md:grid-cols-2">
                         {result.missing.length > 0 && (
                             <div className="rounded-xl border border-rose-100 bg-rose-50/50 px-4 py-3">
-                                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-rose-700">Missing</p>
+                                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-rose-700">{tr("Missing")}</p>
                                 <ul className="list-disc space-y-1 pl-4 text-sm text-gray-700">{result.missing.map((m, i) => <li key={i}>{m}</li>)}</ul>
                             </div>
                         )}
                         {result.strengths.length > 0 && (
                             <div className="rounded-xl border border-emerald-100 bg-emerald-50/50 px-4 py-3">
-                                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Strengths</p>
+                                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-emerald-700">{tr("Strengths")}</p>
                                 <ul className="list-disc space-y-1 pl-4 text-sm text-gray-700">{result.strengths.map((m, i) => <li key={i}>{m}</li>)}</ul>
                             </div>
                         )}

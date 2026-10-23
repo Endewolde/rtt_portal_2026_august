@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ app()->getLocale() }}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Co-Investigator Invitation</title>
+<title>{{ __('Co-Investigator Invitation') }}</title>
 <style>
   body{margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
   .wrap{max-width:600px;margin:40px auto;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 4px 32px rgba(0,0,0,.10);}
@@ -44,56 +44,54 @@
         <path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
       </svg>
     </div>
-    <h1>You Are a Co-Investigator</h1>
-    <p>You have been listed on a research proposal</p>
-    <span class="badge">Co-Investigator</span>
+    <h1>{{ __('You Are a Co-Investigator') }}</h1>
+    <p>{{ __('You have been listed on a research proposal') }}</p>
+    <span class="badge">{{ __('Co-Investigator') }}</span>
   </div>
 
   <div class="body">
-    <p style="font-size:15px;color:#374151;margin:0 0 16px;">Dear <strong>{{ $recipient->name ?? 'Researcher' }}</strong>,</p>
+    <p style="font-size:15px;color:#374151;margin:0 0 16px;">{!! __('Dear :name,', ['name' => '<strong>'.e($recipient->name ?? __('Researcher')).'</strong>']) !!}</p>
     <p style="font-size:14px;color:#4b5563;line-height:1.75;margin:0 0 20px;">
-      You have been listed as a <strong>Co-Investigator</strong> on a research proposal that has been
-      successfully submitted by <strong>{{ $pi_name ?? 'the Principal Investigator' }}</strong>.
+      {!! __('You have been listed as a <strong>Co-Investigator</strong> on a research proposal that has been successfully submitted by <strong>:pi</strong>.', ['pi' => e($pi_name ?? __('the Principal Investigator'))]) !!}
     </p>
 
     <div class="proposal-card">
-      <p class="proposal-label">Proposal Details</p>
+      <p class="proposal-label">{{ __('Proposal Details') }}</p>
       @if(!empty($tracker_number))
       <p class="proposal-tracker">{{ $tracker_number }}</p>
       @endif
       @if(!empty($title))
-      <div class="row"><label>Title</label><span style="font-weight:600;color:#1e1b4b;text-align:right;max-width:60%;">{{ $title }}</span></div>
+      <div class="row"><label>{{ __('Title') }}</label><span style="font-weight:600;color:#1e1b4b;text-align:right;max-width:60%;">{{ $title }}</span></div>
       @endif
       @if(!empty($pi_name))
-      <div class="row"><label>Principal Investigator</label><span style="font-weight:600;color:#1e1b4b;">{{ $pi_name }}</span></div>
+      <div class="row"><label>{{ __('Principal Investigator') }}</label><span style="font-weight:600;color:#1e1b4b;">{{ $pi_name }}</span></div>
       @endif
     </div>
 
     <div class="implications">
-      <p class="impl-title">What This Means for You</p>
+      <p class="impl-title">{{ __('What This Means for You') }}</p>
       <div class="impl-item">
         <div class="impl-dot"></div>
-        <span>You may be required to <strong>sign budget request documents</strong> during the funding phase.</span>
+        <span>{!! __('You may be required to <strong>sign budget request documents</strong> during the funding phase.') !!}</span>
       </div>
       <div class="impl-item">
         <div class="impl-dot"></div>
-        <span>You will receive <strong>email updates</strong> on the proposal's progress throughout the review process.</span>
+        <span>{!! __('You will receive <strong>email updates</strong> on the proposal\'s progress throughout the review process.') !!}</span>
       </div>
       <div class="impl-item">
         <div class="impl-dot"></div>
-        <span>Log in to <strong>{{ $platformName }}</strong> to view proposal details using your tracker number.</span>
+        <span>{!! __('Log in to <strong>:platform</strong> to view proposal details using your tracker number.', ['platform' => e($platformName)]) !!}</span>
       </div>
     </div>
 
     <hr class="divider">
     <p style="font-size:13px;color:#9ca3af;margin:0;">
-      If you were not informed about this proposal or believe this is an error,
-      please contact <strong>{{ $pi_name ?? 'the Principal Investigator' }}</strong> or the {{ $orgName }} Research Office.
+      {!! __('If you were not informed about this proposal or believe this is an error, please contact <strong>:pi</strong> or the :org Research Office.', ['pi' => e($pi_name ?? __('the Principal Investigator')), 'org' => e($orgName)]) !!}
     </p>
   </div>
 
   <div class="footer">
-    &copy; {{ date('Y') }} <strong>{{ $platformName }}</strong> &middot; {{ $orgName }} Research &amp; Technology Transfer
+    &copy; {{ date('Y') }} <strong>{{ $platformName }}</strong> &middot; {{ __(':org Research & Technology Transfer', ['org' => $orgName]) }}
   </div>
 </div>
 </body>

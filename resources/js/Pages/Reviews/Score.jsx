@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { translate as tr } from '../../lib/i18n'
 import { usePage, router } from '@inertiajs/react';
 import {
     Download, FileText, ClipboardCheck, BarChart2,
@@ -225,7 +226,7 @@ export default function ReviewScore() {
             <div className="flex justify-center items-center min-h-[50vh]">
                 <div className="flex flex-col items-center gap-3">
                     <div className="w-10 h-10 border-[3px] border-blue-600 border-t-transparent rounded-full animate-spin" />
-                    <p className="text-sm text-gray-400">Loading review…</p>
+                    <p className="text-sm text-gray-400">{tr("Loading review…")}</p>
                 </div>
             </div>
         </AppLayout>
@@ -243,7 +244,7 @@ export default function ReviewScore() {
     if (!assignment) return (
         <AppLayout breadcrumb="Score Review">
             <div className="p-6 text-center">
-                <p className="text-gray-500 text-sm">Assignment not found.</p>
+                <p className="text-gray-500 text-sm">{tr("Assignment not found.")}</p>
             </div>
         </AppLayout>
     );
@@ -265,12 +266,12 @@ export default function ReviewScore() {
                             <div className="w-16 h-16 bg-red-100 rounded-2xl flex items-center justify-center mx-auto mb-5">
                                 <Lock size={28} className="text-red-600" />
                             </div>
-                            <p className="text-xs font-semibold uppercase tracking-wide text-red-600">Submission closed</p>
-                            <h1 className="mt-1 text-lg font-bold text-gray-900">Score submission period has ended</h1>
+                            <p className="text-xs font-semibold uppercase tracking-wide text-red-600">{tr("Submission closed")}</p>
+                            <h1 className="mt-1 text-lg font-bold text-gray-900">{tr("Score submission period has ended")}</h1>
                             <p className="mt-3 text-sm leading-relaxed text-gray-600">{defenceSession.deadline_passed_message}</p>
                             {defenceDeadlineLabel && (
                                 <p className="mt-4 rounded-xl bg-gray-50 px-4 py-2.5 text-xs text-gray-500">
-                                    Due date was <strong className="text-gray-700">{defenceDeadlineLabel}</strong>
+                                    {tr("Due date was")} <strong className="text-gray-700">{defenceDeadlineLabel}</strong>
                                     {proposal?.tracker_number && <> · {proposal.tracker_number}</>}
                                 </p>
                             )}
@@ -278,7 +279,7 @@ export default function ReviewScore() {
                                 onClick={() => router.visit('/reviews')}
                                 className="mt-6 inline-flex items-center gap-1.5 rounded-xl border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
                             >
-                                <ChevronLeft size={14} /> Back to My Reviews
+                                <ChevronLeft size={14} /> {tr("Back to My Reviews")}
                             </button>
                         </div>
                     </div>
@@ -302,9 +303,9 @@ export default function ReviewScore() {
                             <div className="w-16 h-16 bg-amber-100 rounded-2xl flex items-center justify-center mx-auto mb-5">
                                 <Calendar size={28} className="text-amber-500" />
                             </div>
-                            <h2 className="text-lg font-bold text-gray-900 mb-2">Defence Not Yet Started</h2>
+                            <h2 className="text-lg font-bold text-gray-900 mb-2">{tr("Defence Not Yet Started")}</h2>
                             <p className="text-sm text-gray-500 mb-5 leading-relaxed">
-                                This session hasn't been reached yet. You can only submit scores on the scheduled date.
+                                {tr("This session hasn't been reached yet. You can only submit scores on the scheduled date.")}
                             </p>
                             <div className="bg-amber-50 border border-amber-100 rounded-2xl px-4 py-4 mb-6 text-left space-y-2.5">
                                 <div className="flex items-center gap-2.5 text-sm">
@@ -328,7 +329,7 @@ export default function ReviewScore() {
                                 onClick={() => window.history.back()}
                                 className="w-full py-2.5 px-4 bg-gray-900 text-white rounded-xl text-sm font-semibold hover:bg-gray-700 transition-colors flex items-center justify-center gap-2"
                             >
-                                <ChevronLeft size={15} /> Go Back
+                                <ChevronLeft size={15} /> {tr("Go Back")}
                             </button>
                         </div>
                     </div>
@@ -375,7 +376,7 @@ export default function ReviewScore() {
                                     <span className="text-sm font-normal text-gray-400">/{maxTotal}</span>
                                 </p>
                                 <p className="text-[11px] text-gray-400 mt-0.5 tabular-nums">
-                                    {answered}/{allQuestions.length} answered
+                                    {tr(":answered/:allQuestions_count answered", { answered: answered, allQuestions_count: allQuestions.length })}
                                 </p>
                             </div>
 
@@ -391,7 +392,7 @@ export default function ReviewScore() {
 
                             {submitted && (
                                 <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-2 rounded-xl">
-                                    <CheckCircle2 size={14} /> Submitted
+                                    <CheckCircle2 size={14} /> {tr("Submitted")}
                                 </span>
                             )}
                         </div>
@@ -400,15 +401,15 @@ export default function ReviewScore() {
                     {isOpenDefence && !submitted && defenceDeadlineLabel && (
                         <div className="flex flex-wrap items-center justify-between gap-2 px-1 pb-2">
                             <p className="flex items-center gap-1.5 text-xs text-purple-700">
-                                <Clock size={12} /> Submit your score by <strong>{defenceDeadlineLabel}</strong>
-                                {defenceSession?.deadline_extended && <span className="rounded-full bg-purple-100 px-1.5 py-0.5 text-[10px] font-semibold">Extended</span>}
+                                <Clock size={12} /> {tr("Submit your score by")} <strong>{defenceDeadlineLabel}</strong>
+                                {defenceSession?.deadline_extended && <span className="rounded-full bg-purple-100 px-1.5 py-0.5 text-[10px] font-semibold">{tr("Extended")}</span>}
                             </p>
                             {!defenceSession?.attendance && (defenceSession?.absence_reported
                                 ? <span className="text-xs font-medium text-amber-700">
                                     {defenceSession.absence_reported_by_me ? 'You reported' : 'A panel member reported'} that the team did not appear — awaiting the college officer.
                                   </span>
                                 : <button type="button" onClick={reportAbsence} className="text-xs font-semibold text-red-600 hover:text-red-700 hover:underline">
-                                    Team did not appear?
+                                    {tr("Team did not appear?")}
                                   </button>)}
                         </div>
                     )}
@@ -457,8 +458,8 @@ export default function ReviewScore() {
                                         <CheckCircle2 size={20} className="text-emerald-600" />
                                     </div>
                                     <div>
-                                        <p className="text-sm font-bold text-emerald-800">Review Submitted Successfully</p>
-                                        <p className="text-xs text-emerald-600 mt-0.5">Your scores have been recorded and cannot be changed.</p>
+                                        <p className="text-sm font-bold text-emerald-800">{tr("Review Submitted Successfully")}</p>
+                                        <p className="text-xs text-emerald-600 mt-0.5">{tr("Your scores have been recorded and cannot be changed.")}</p>
                                     </div>
                                 </div>
                             )}
@@ -485,7 +486,7 @@ export default function ReviewScore() {
                                                     </h3>
                                                     {cat.weight != null && (
                                                         <span className="text-[11px] font-semibold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
-                                                            {cat.weight}% weight
+                                                            {tr(":weight% weight", { weight: cat.weight })}
                                                         </span>
                                                     )}
                                                 </div>
@@ -513,12 +514,12 @@ export default function ReviewScore() {
                                                                 {catWeighted}
                                                                 <span className="text-xs font-normal text-gray-400">/{cat.weight}</span>
                                                             </p>
-                                                            <p className="text-[10px] text-gray-400">weighted</p>
+                                                            <p className="text-[10px] text-gray-400">{tr("weighted")}</p>
                                                         </>
                                                     ) : (
                                                         <>
                                                             <p className="text-sm font-bold text-gray-800 tabular-nums">{catEarned}/{catMax}</p>
-                                                            <p className="text-[10px] text-gray-400">score</p>
+                                                            <p className="text-[10px] text-gray-400">{tr("score")}</p>
                                                         </>
                                                     )}
                                                 </div>
@@ -543,7 +544,7 @@ export default function ReviewScore() {
                                                             <div className="flex-1">
                                                                 <p className="text-sm text-gray-800 leading-relaxed">
                                                                     {q.question_text}
-                                                                    {q.is_required && <span className="text-red-500 ml-1 text-xs">*required</span>}
+                                                                    {q.is_required && <span className="text-red-500 ml-1 text-xs">{tr("*required")}</span>}
                                                                 </p>
                                                             </div>
                                                         </div>
@@ -574,7 +575,7 @@ export default function ReviewScore() {
                                                             {/* Required warning */}
                                                             {q.is_required && current == null && (
                                                                 <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1">
-                                                                    <AlertTriangle size={10} /> Please select a score
+                                                                    <AlertTriangle size={10} /> {tr("Please select a score")}
                                                                 </p>
                                                             )}
 
@@ -583,7 +584,7 @@ export default function ReviewScore() {
                                                                 value={comment}
                                                                 onChange={e => updateAnswer(q.id, 'comment', e.target.value)}
                                                                 disabled={submitted}
-                                                                placeholder="Add a comment or justification (optional)…"
+                                                                placeholder={tr("Add a comment or justification (optional)…")}
                                                                 rows={2}
                                                                 className="mt-3 w-full text-sm border border-gray-200 rounded-xl px-3 py-2.5 resize-none
                                                                            focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400
@@ -602,7 +603,7 @@ export default function ReviewScore() {
                             {!submitted && categories.length > 0 && (
                                 <div className="flex items-center justify-between pt-2 pb-6">
                                     <p className="text-xs text-gray-400">
-                                        {answered}/{allQuestions.length} questions answered
+                                        {tr(":answered/:allQuestions_count questions answered", { answered: answered, allQuestions_count: allQuestions.length })}
                                     </p>
                                     <button
                                         onClick={handleSubmit}
@@ -621,15 +622,15 @@ export default function ReviewScore() {
                         <div className="space-y-4">
                             <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm space-y-5">
                                 <div>
-                                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Abstract</h3>
+                                    <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">{tr("Abstract")}</h3>
                                     <p className="text-sm text-gray-700 leading-relaxed">
-                                        {proposal?.abstract || <span className="text-gray-400 italic">No abstract provided.</span>}
+                                        {proposal?.abstract || <span className="text-gray-400 italic">{tr("No abstract provided.")}</span>}
                                     </p>
                                 </div>
 
                                 {proposal?.keywords && (
                                     <div>
-                                        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">Keywords</h3>
+                                        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">{tr("Keywords")}</h3>
                                         <div className="flex flex-wrap gap-1.5">
                                             {proposal.keywords.split(',').map(kw => kw.trim()).filter(Boolean).map(kw => (
                                                 <span key={kw} className="text-xs bg-blue-50 text-blue-700 px-3 py-1 rounded-full border border-blue-100 font-medium">
@@ -646,12 +647,12 @@ export default function ReviewScore() {
                                     <span className="text-lg">🔒</span>
                                 </div>
                                 <div>
-                                    <p className="text-sm font-bold text-amber-800 mb-0.5">Blind Review — Identities Hidden</p>
+                                    <p className="text-sm font-bold text-amber-800 mb-0.5">{tr("Blind Review — Identities Hidden")}</p>
                                     <p className="text-sm text-amber-700">
-                                        Team size: <strong>{proposal?.members_count ?? 1}</strong> member(s)
+                                        {tr("Team size:")} <strong>{proposal?.members_count ?? 1}</strong> {tr("member(s)")}
                                     </p>
                                     <p className="text-xs text-amber-600 mt-1">
-                                        Researcher identities are hidden to ensure unbiased evaluation.
+                                        {tr("Researcher identities are hidden to ensure unbiased evaluation.")}
                                     </p>
                                 </div>
                             </div>
@@ -661,11 +662,11 @@ export default function ReviewScore() {
                     {/* DOCUMENTS TAB */}
                     {activeTab === 'documents' && (
                         <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
-                            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Uploaded Documents</h3>
+                            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">{tr("Uploaded Documents")}</h3>
                             {(proposal?.documents ?? []).length === 0 ? (
                                 <div className="text-center py-8">
                                     <Paperclip size={28} className="mx-auto text-gray-200 mb-2" />
-                                    <p className="text-sm text-gray-400">No documents uploaded.</p>
+                                    <p className="text-sm text-gray-400">{tr("No documents uploaded.")}</p>
                                 </div>
                             ) : (
                                 <div className="space-y-2.5">
@@ -690,7 +691,7 @@ export default function ReviewScore() {
                                                 ).catch(() => toast.error('Download failed.'))}
                                                 className="flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-800 px-3 py-2 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors shrink-0 ml-3"
                                             >
-                                                <Download size={12} /> Download
+                                                <Download size={12} /> {tr("Download")}
                                             </button>
                                         </div>
                                     ))}
@@ -702,11 +703,11 @@ export default function ReviewScore() {
                     {/* BUDGET TAB */}
                     {activeTab === 'budget' && (
                         <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
-                            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">Budget Summary</h3>
+                            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">{tr("Budget Summary")}</h3>
                             {(proposal?.budgets ?? []).length === 0 ? (
                                 <div className="text-center py-8">
                                     <DollarSign size={28} className="mx-auto text-gray-200 mb-2" />
-                                    <p className="text-sm text-gray-400">No budget information available.</p>
+                                    <p className="text-sm text-gray-400">{tr("No budget information available.")}</p>
                                 </div>
                             ) : (
                                 <div className="space-y-1.5">
@@ -719,12 +720,12 @@ export default function ReviewScore() {
                                                 )}
                                             </div>
                                             <span className="text-sm font-semibold text-gray-800 shrink-0 ml-6 tabular-nums">
-                                                ETB {parseFloat(item.amount ?? 0).toLocaleString()}
+                                                {tr("ETB :amount", { amount: parseFloat(item.amount ?? 0).toLocaleString() })}
                                             </span>
                                         </div>
                                     ))}
                                     <div className="flex items-center justify-between px-4 py-3.5 bg-blue-600 rounded-xl text-white mt-3">
-                                        <span className="text-sm font-bold">Total Budget Requested</span>
+                                        <span className="text-sm font-bold">{tr("Total Budget Requested")}</span>
                                         <span className="text-base font-extrabold tabular-nums">
                                             ETB {proposal.budgets.reduce((s, i) => s + parseFloat(i.amount ?? 0), 0).toLocaleString()}
                                         </span>

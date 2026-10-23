@@ -190,3 +190,70 @@ test('the QR code on the certificate opens its public verification page', functi
 test('certificates are signed by the Vice President by default', function () {
     expect(ReviewCertificateService::DEFAULT_SIGNATORY_TITLE)->toBe('Vice President, Research & Technology Transfer');
 });
+
+test('closing a release withdraws every certificate until it is reopened', function () {
+    rc_review($this, $this->blind);
+    rc_review($this, $this->blind);
+    rc_release($this);
+    $code = ReviewCertificate::first()->code;
+
+    $this->actingAs($this->central, 'sanctum')
+        ->postJson('/api/v1/review-certificates/admin/close', ['academic_year' => '2025/2026', 'reason' => 'Released before defences finished.'])
+        ->assertOk()
+        ->assertJsonPath('data.release.close_reason', 'Released before defences finished.');
+
+    expect(DB::table('notifications')->where('notifiable_id', $this->reviewer->id)->where('type', 'review_certificate_withdrawn')->exists())->toBeTrue();
+    $this->actingAs($this->reviewer, 'sanctum')
+        ->get('/api/v1/review-certificates/download?academic_year=2025/2026', ['Accept' => 'application/json'])
+        ->assertNotFound()
+        ->assertJsonPath('message', 'Certificates for 2025/2026 have been withdrawn.');
+    $this->actingAs($this->reviewer, 'sanctum')->getJson('/api/v1/review-certificates')->assertJsonPath('data.0.withdrawn', true);
+    $this->getJson("/api/v1/certificates/verify/{$code}")->assertOk()->assertJsonPath('data.status', 'withdrawn');
+
+    $this->actingAs($this->central, 'sanctum')->postJson('/api/v1/review-certificates/admin/reopen', ['academic_year' => '2025/2026'])->assertOk();
+
+    $this->getJson("/api/v1/certificates/verify/{$code}")->assertJsonPath('data.status', 'valid');
+    expect(ReviewCertificate::first()->code)->toBe($code);
+});
+
+test('a release can only be closed once, with a reason, by the central office', function () {
+    rc_review($this, $this->blind);
+    rc_review($this, $this->blind);
+
+    $close = fn (array $body = []) => $this->actingAs($this->central, 'sanctum')
+        ->postJson('/api/v1/review-certificates/admin/close', $body + ['academic_year' => '2025/2026', 'reason' => 'Released by mistake today.']);
+
+    $close()->assertStatus(422);
+    rc_release($this);
+    $close(['reason' => 'short'])->assertStatus(422);
+    $this->actingAs($this->reviewer, 'sanctum')
+        ->postJson('/api/v1/review-certificates/admin/close', ['academic_year' => '2025/2026', 'reason' => 'Released by mistake today.'])
+        ->assertForbidden();
+    $close()->assertOk();
+    $close()->assertStatus(422);
+    $this->actingAs($this->central, 'sanctum')->postJson('/api/v1/review-certificates/admin/reopen', ['academic_year' => '2024/2025'])->assertStatus(422);
+});
+
+test('a closed year can be released again with the current rules, keeping numbers and revoking those who no longer qualify', function () {
+    $other = User::factory()->create();
+    rc_review($this, $this->blind);
+    rc_review($this, $this->blind);
+    rc_review($this, $this->blind);
+    rc_review($this, $this->blind, reviewer: $other);
+    rc_review($this, $this->blind, reviewer: $other);
+    rc_release($this);
+    $mine = ReviewCertificate::where('user_id', $this->reviewer->id)->first();
+    $theirs = ReviewCertificate::where('user_id', $other->id)->first();
+
+    rc_release($this)->assertStatus(422);
+    $this->actingAs($this->central, 'sanctum')
+        ->postJson('/api/v1/review-certificates/admin/close', ['academic_year' => '2025/2026', 'reason' => 'Minimum should have been three.']);
+    rc_setting('certificate_min_reviews', '3');
+
+    rc_release($this)->assertOk()->assertJsonPath('data.release.closed_at', null)->assertJsonPath('data.rules.min_reviews', 3);
+
+    expect($mine->fresh()->code)->toBe($mine->code)
+        ->and($mine->fresh()->isRevoked())->toBeFalse()
+        ->and($theirs->fresh()->isRevoked())->toBeTrue();
+    $this->getJson("/api/v1/certificates/verify/{$theirs->code}")->assertJsonPath('data.status', 'revoked');
+});

@@ -223,7 +223,7 @@ class ReviewAssignmentService
         $reviewers = $query
             ->orderBy('active_assignments')
             ->orderBy('name')
-            ->get(['id', 'name', 'title', 'email', 'college_id', 'department_id', 'expertise']);
+            ->get(['id', 'name', 'title', 'email', 'college_id', 'department_id', 'expertise', 'affiliation']);
 
         $conflicts = $this->conflicts->forProposal($proposal, $reviewers->pluck('id'));
 

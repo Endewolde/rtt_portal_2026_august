@@ -338,12 +338,13 @@ class ReviewScoreService
         // proposal; otherwise fall back to the original per-call query unchanged.
         if ($proposal->relationLoaded('reviewAssignments')) {
             $submitted = $proposal->reviewAssignments->where('status', 'submitted');
-            $blindAssignments = $submitted->filter(fn ($a) => str_starts_with($a->evaluationType?->name ?? '', 'blind_review'))->values();
+            $blindAssignments = $submitted->filter(fn ($a) => str_starts_with($a->evaluationType?->name ?? '', 'blind_review') && ! $a->set_aside_at)->values();
             $defenceAssignments = $submitted->filter(fn ($a) => str_starts_with($a->evaluationType?->name ?? '', 'open_defence'))->values();
         } else {
             $blindAssignments = ReviewAssignment::where('proposal_id', $proposal->id)
                 ->whereHas('evaluationType', fn ($q) => $q->where('name', 'like', 'blind_review%'))
                 ->where('status', 'submitted')
+                ->whereNull('set_aside_at')
                 ->get();
             $defenceAssignments = ReviewAssignment::where('proposal_id', $proposal->id)
                 ->whereHas('evaluationType', fn ($q) => $q->where('name', 'like', 'open_defence%'))
@@ -795,10 +796,17 @@ class ReviewScoreService
         }
 
         $threshold = $this->thresholdValue('blind_threshold');
+        $secondOpinionNote = null;
 
-        // Reviewers far apart (or on opposite sides of the pass mark): hold the
-        // automatic decision until an officer adds a reviewer or moderates.
-        if (! $moderationNote && ! $proposal->review_disagreement_resolved_at) {
+        // A second opinion was asked for because the reviewers disagreed, and it is in:
+        // the two closest scores decide and the furthest is set aside.
+        if (! $moderationNote && $proposal->review_disagreement_flagged_at && ! $proposal->review_disagreement_resolved_at
+            && $assignments->contains(fn ($a) => $a->is_second_opinion)) {
+            $secondOpinionNote = $this->settleWithSecondOpinion($proposal, $assignments);
+            $assignments = $assignments->each->refresh();
+        } elseif (! $moderationNote && ! $proposal->review_disagreement_resolved_at) {
+            // Reviewers far apart (or on opposite sides of the pass mark): hold the
+            // automatic decision until an officer asks for a second opinion or moderates.
             $disagreement = $this->blindDisagreement($assignments, $threshold);
 
             if ($disagreement) {
@@ -813,7 +821,9 @@ class ReviewScoreService
             }
         }
 
-        $phase = $this->phaseScore($assignments->map(fn ($a) => $this->calculateWeightedDisplay($a)));
+        // Scores set aside after a second opinion stay on record but don't count.
+        $counted = $assignments->filter(fn ($a) => ! $a->set_aside_at);
+        $phase = $this->phaseScore($counted->map(fn ($a) => $this->calculateWeightedDisplay($a)));
         $rawAvg = $phase['score'];
         $rawMax = $phase['max'];
         $scoreLabel = $rawMax > 0 ? "{$rawAvg}/{$rawMax}" : (string) $rawAvg;
@@ -824,7 +834,8 @@ class ReviewScoreService
         $passes = $rawAvg >= $threshold;
         $note = ($passes ? 'Blind review passed.' : 'Blind review failed.')
             ." Average score: {$scoreLabel}. Threshold: {$threshold}."
-            .($moderationNote ? " Decided despite reviewer disagreement — moderation note: {$moderationNote}" : '');
+            .($moderationNote ? " Decided despite reviewer disagreement — moderation note: {$moderationNote}" : '')
+            .($secondOpinionNote ? " {$secondOpinionNote}" : '');
 
         $this->workflowService->transition(
             $proposal,
@@ -833,6 +844,7 @@ class ReviewScoreService
             $note,
             ['automatic' => true, 'average_score' => $rawAvg, 'score_label' => $scoreLabel, 'threshold' => $threshold]
                 + ($moderationNote ? ['moderated' => true, 'moderation_note' => $moderationNote] : [])
+                + ($secondOpinionNote ? ['second_opinion' => true] : [])
         );
     }
 
@@ -895,6 +907,61 @@ class ReviewScoreService
     }
 
     /**
+     * Decide a disagreement once the second opinion is in: keep the two scores that
+     * agree most, set the others aside (still on record, not counted), and mark the
+     * disagreement resolved. Returns the note for the decision.
+     *
+     * @param  Collection<int, ReviewAssignment>  $assignments  every submitted blind-review assignment
+     */
+    private function settleWithSecondOpinion(Proposal $proposal, Collection $assignments): string
+    {
+        $letter = 'A';
+        $scored = $assignments->values()->map(function (ReviewAssignment $a) use (&$letter) {
+            $display = $this->calculateWeightedDisplay($a);
+
+            return [
+                'assignment' => $a,
+                'label' => 'Reviewer '.$letter++.($a->is_second_opinion ? ' (second opinion)' : ''),
+                'score' => round(min($display['score'], $display['max']), 2),
+                'max' => (float) $display['max'],
+            ];
+        })->values();
+
+        // The pair of scores closest together; ties go to the earlier-assigned pair.
+        $best = null;
+        for ($i = 0; $i < $scored->count(); $i++) {
+            for ($j = $i + 1; $j < $scored->count(); $j++) {
+                $gap = abs($scored[$i]['score'] - $scored[$j]['score']);
+                if ($best === null || $gap < $best['gap']) {
+                    $best = ['i' => $i, 'j' => $j, 'gap' => $gap];
+                }
+            }
+        }
+
+        $kept = collect([$scored[$best['i']], $scored[$best['j']]]);
+        $setAside = $scored->reject(fn ($s, $k) => $k === $best['i'] || $k === $best['j'])->values();
+
+        ReviewAssignment::whereIn('id', $setAside->map(fn ($s) => $s['assignment']->id))->update(['set_aside_at' => now()]);
+
+        $describe = fn ($s) => "{$s['label']} {$s['score']}/{$s['max']}";
+        $note = 'Decided with a second opinion: the two closest scores ('.$kept->map($describe)->implode(' and ').') were averaged; '
+            .$setAside->map($describe)->implode(', ').($setAside->count() === 1 ? ' was' : ' were').' set aside.';
+
+        $proposal->forceFill([
+            'review_disagreement' => array_merge($proposal->review_disagreement ?? [], [
+                'settlement' => [
+                    'kept' => $kept->map(fn ($s) => ['label' => $s['label'], 'score' => $s['score'], 'max' => $s['max']])->all(),
+                    'set_aside' => $setAside->map(fn ($s) => ['label' => $s['label'], 'score' => $s['score'], 'max' => $s['max']])->all(),
+                ],
+            ]),
+            'review_disagreement_resolved_at' => now(),
+            'review_disagreement_note' => $note,
+        ])->saveQuietly();
+
+        return $note;
+    }
+
+    /**
      * Officer decides a held proposal with the scores it has, recording why.
      *
      * @throws \RuntimeException
@@ -949,7 +1016,7 @@ class ReviewScoreService
             'tracker_number' => $proposal->tracker_number,
             'title' => $proposal->title,
             'message' => "Blind reviewers disagree on {$proposal->tracker_number} ({$scoreList}). "
-                .'The automatic decision is on hold — add a reviewer or decide with the current scores.',
+                .'The automatic decision is on hold — ask for a second opinion (suggested reviewers are listed on the proposal) or decide with the current scores.',
         ];
 
         foreach ($recipients as $recipient) {

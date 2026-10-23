@@ -29,6 +29,83 @@ class ReportController extends Controller
         return response()->json(['data' => $snapshots]);
     }
 
+    /** A report's current figures for the chosen year, college and category — no generating step. */
+    public function live(Request $request, string $type): JsonResponse
+    {
+        if (! $request->user()?->can('reports.view_any')) {
+            abort(403, 'Unauthorized.');
+        }
+        if (! in_array($type, ReportService::LIVE_TYPES, true)) {
+            abort(404, 'Unknown report.');
+        }
+
+        $result = $this->service->live($type, $this->liveFilters($request), $request->boolean('fresh'));
+
+        return response()->json(['data' => $result['rows'], 'message' => '', 'errors' => [], 'meta' => ['generated_at' => $result['generated_at']]]);
+    }
+
+    /** The live report, exactly as filtered on screen, as an Excel file. */
+    public function liveExport(Request $request, string $type): BinaryFileResponse
+    {
+        if (! $request->user()?->can('reports.view_any')) {
+            abort(403, 'Unauthorized.');
+        }
+        if (! in_array($type, ReportService::LIVE_TYPES, true)) {
+            abort(404, 'Unknown report.');
+        }
+
+        [$rows, $fields] = $this->tabulateResult($this->service->live($type, $this->liveFilters($request))['rows']);
+        if (empty($rows)) {
+            abort(422, 'There is nothing to export for these filters.');
+        }
+
+        $columns = collect($fields)->mapWithKeys(fn ($f) => [$f => $this->columnLabel($f)])->all();
+
+        return Excel::download(new ReportSnapshotExport($rows, $columns), $type.'_'.now()->format('Ymd_His').'.xlsx');
+    }
+
+    /** Years and colleges the live report filters offer, within the user's scope. */
+    public function liveOptions(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (! $user?->can('reports.view_any')) {
+            abort(403, 'Unauthorized.');
+        }
+
+        $collegeId = $user->accessScope()->isCollege() ? $user->accessScope()->collegeId : null;
+
+        return response()->json(['data' => $this->service->liveFilterOptions($collegeId) + [
+            'college_scoped' => (bool) $collegeId,
+            'category_scope' => $request->_category_scope,
+            'can_save' => $user->can('reports.create'),
+        ], 'message' => '', 'errors' => [], 'meta' => []]);
+    }
+
+    /**
+     * Filters from the query string, with the user's college/category scope enforced
+     * over whatever was asked for.
+     *
+     * @return array<string, string>
+     */
+    private function liveFilters(Request $request): array
+    {
+        $filters = $request->validate([
+            'academic_year' => 'nullable|string|max:20',
+            'college_id' => 'nullable|string|max:64',
+            'category' => 'nullable|string|max:50',
+        ]);
+
+        $scope = $request->user()->accessScope();
+        if ($scope->isCollege()) {
+            $filters['college_id'] = $scope->collegeId;
+        }
+        if ($request->_category_scope) {
+            $filters['category'] = $request->_category_scope;
+        }
+
+        return array_filter($filters);
+    }
+
     /** Whitelisted subjects/dimensions/metrics the report builder UI can offer. */
     public function builderOptions(Request $request): JsonResponse
     {
@@ -118,7 +195,8 @@ class ReportController extends Controller
         }
 
         if (array_is_list($result) && ! empty($result) && is_array($result[0])) {
-            return [$result, array_keys($result[0])];
+            // Ids are there for drill-down on screen, not for the spreadsheet.
+            return [$result, array_values(array_filter(array_keys($result[0]), fn ($f) => ! str_ends_with($f, '_id')))];
         }
 
         return [[], []];
@@ -186,6 +264,10 @@ class ReportController extends Controller
         }
         if ($request->filled('academic_year')) {
             $query->where('academic_year', $request->academic_year);
+        }
+        if ($request->filled('search')) {
+            $term = '%'.$request->search.'%';
+            $query->where(fn ($q) => $q->where('title', 'LIKE', $term)->orWhere('tracker_number', 'LIKE', $term));
         }
 
         $proposals = $query->orderByDesc('created_at')->get();

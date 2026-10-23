@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ app()->getLocale() }}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Proposal Decision</title>
+<title>{{ __('Proposal Decision') }}</title>
 <style>
   body{margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
   .wrap{max-width:600px;margin:40px auto;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 4px 32px rgba(0,0,0,.10);}
@@ -61,6 +61,7 @@
   elseif ($isValidated)     { $heroClass = 'hero-validated'; $heroBg = '#1e40af'; $icon = 'check'; $label = '✓ Validated'; $heading = 'Proposal Validated'; $sub = 'Your proposal passed initial review.'; }
   elseif ($isReview)        { $heroClass = 'hero-review'; $heroBg = '#6b21a8'; $icon = 'eye'; $label = '⟳ Under Review'; $heading = 'Under Review'; $sub = 'Your proposal has entered the review phase.'; }
   else                      { $heroClass = 'hero-default'; $heroBg = '#334155'; $icon = 'info'; $label = strtoupper($dec); $heading = 'Proposal Update'; $sub = 'An update on your research proposal.'; }
+  [$label, $heading, $sub] = [__($label), __($heading), __($sub)];
 @endphp
 <div class="wrap">
   @include('emails.partials.logo_header')
@@ -90,37 +91,36 @@
   </div>
 
   <div class="body">
-    <p style="font-size:15px;color:#374151;margin:0 0 16px;">Dear <strong>{{ $recipient->name ?? 'Researcher' }}</strong>,</p>
+    <p style="font-size:15px;color:#374151;margin:0 0 16px;">{!! __('Dear :name,', ['name' => '<strong>'.e($recipient->name ?? __('Researcher')).'</strong>']) !!}</p>
 
     @if(!empty($title))
     <p style="font-size:14px;color:#4b5563;line-height:1.75;margin:0 0 20px;">
-      This is an update regarding your research proposal: <strong>{{ $title }}</strong>.
+      {!! __('This is an update regarding your research proposal: <strong>:title</strong>.', ['title' => e($title)]) !!}
     </p>
     @endif
 
     @if(!empty($tracker_number))
     <div class="tracker-row">
-      <span class="tracker-label">Tracker Number</span>
+      <span class="tracker-label">{{ __('Tracker Number') }}</span>
       <span class="tracker-val">{{ $tracker_number }}</span>
     </div>
     @endif
 
     @if(!empty($reason))
     <div class="reason-box {{ $isAccepted ? 'reason-accepted' : ($isRejected ? 'reason-rejected' : 'reason-other') }}">
-      <p class="reason-label">{{ $isRejected ? 'Reason' : 'Notes' }}</p>
-      <p class="reason-text">{{ $reason }}</p>
+      <p class="reason-label">{{ $isRejected ? __('Reason') : __('Notes') }}</p>
+      <p class="reason-text">{{ __($reason) }}</p>
     </div>
     @endif
 
     <hr class="divider">
     <p style="font-size:13px;color:#9ca3af;margin:0;">
-      Sent to <strong>{{ $recipient->email ?? '' }}</strong> via <strong>{{ $platformName }}</strong>.
-      Please contact the {{ $orgName }} Research Office if you have questions.
+      {!! __('Sent to <strong>:email</strong> via <strong>:platform</strong>. Please contact the :org Research Office if you have questions.', ['email' => e($recipient->email ?? ''), 'platform' => e($platformName), 'org' => e($orgName)]) !!}
     </p>
   </div>
 
   <div class="footer">
-    &copy; {{ date('Y') }} <strong>{{ $platformName }}</strong> &middot; {{ $orgName }} Research &amp; Technology Transfer
+    &copy; {{ date('Y') }} <strong>{{ $platformName }}</strong> &middot; {{ __(':org Research & Technology Transfer', ['org' => $orgName]) }}
   </div>
 </div>
 </body>

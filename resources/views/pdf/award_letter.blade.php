@@ -5,10 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Grant Award Notification – {{ $proposal->tracker_number }}</title>
 <style>
+@include('pdf.partials.fonts')
     * { margin: 0; padding: 0; box-sizing: border-box; }
 
     body {
-        font-family: 'DejaVu Serif', Georgia, serif;
+        font-family: 'DejaVu Serif', Georgia, 'Noto Sans Ethiopic', serif;
         font-size: 11.5pt;
         color: #1a1a1a;
         background: #fff;

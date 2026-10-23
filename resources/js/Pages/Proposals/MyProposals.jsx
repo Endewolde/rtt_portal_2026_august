@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { translate as tr, Trans } from '../../lib/i18n'
 import { Link } from '@inertiajs/react';
 import {
     FolderOpen, Pencil, Search, Trophy, AlertCircle,
@@ -41,10 +42,10 @@ function InvitationResponseBanner({ proposal, onRespond }) {
         <div className="mb-3 px-3 py-3 bg-amber-50 border border-amber-200 rounded-xl space-y-2">
             <div className="flex items-center gap-2">
                 <Clock size={13} className="text-amber-500 shrink-0" />
-                <p className="text-xs font-semibold text-amber-800">Invitation Pending — Your Response Required</p>
+                <p className="text-xs font-semibold text-amber-800">{tr("Invitation Pending — Your Response Required")}</p>
             </div>
             <p className="text-xs text-amber-700">
-                You have been invited as a co-investigator on this proposal. Please accept or decline to let the PI know.
+                {tr("You have been invited as a co-investigator on this proposal. Please accept or decline to let the PI know.")}
             </p>
             <div className="flex gap-2 pt-0.5">
                 <button
@@ -119,11 +120,11 @@ function ProposalCard({ proposal, isCoPI, userId, pendingBudgetIds, onViewReason
 
                             {isCoPI ? (
                                 <span className="inline-flex items-center gap-1 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-medium border border-purple-200">
-                                    <Users size={10} /> Co-Investigator
+                                    <Users size={10} /> {tr("Co-Investigator")}
                                 </span>
                             ) : (
                                 <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium border border-blue-200">
-                                    PI
+                                    {tr("PI")}
                                 </span>
                             )}
 
@@ -131,7 +132,7 @@ function ProposalCard({ proposal, isCoPI, userId, pendingBudgetIds, onViewReason
                         </div>
 
                         <h3 className="text-sm font-semibold text-gray-900 line-clamp-2 leading-snug">
-                            {proposal.title || <span className="italic text-gray-400">Untitled Draft</span>}
+                            {proposal.title || <span className="italic text-gray-400">{tr("Untitled Draft")}</span>}
                         </h3>
                     </div>
                 </div>
@@ -141,11 +142,11 @@ function ProposalCard({ proposal, isCoPI, userId, pendingBudgetIds, onViewReason
                     {proposal.academic_year && <span>{proposal.academic_year}</span>}
                     {proposal.category && <span className="capitalize">{getCategoryLabel(proposal.category)}</span>}
                     {proposal.college?.name && <span>{proposal.college.name}</span>}
-                    {proposal.submitted_at && <span>Submitted {formatDate(proposal.submitted_at)}</span>}
+                    {proposal.submitted_at && <span>{tr("Submitted :submitted_at", { submitted_at: formatDate(proposal.submitted_at) })}</span>}
 
                     {isCoPI && membership && (
                         <span className="font-medium text-purple-600">
-                            Contribution: {membership.contribution_percentage}%
+                            {tr("Contribution: :contribution_percentage%", { contribution_percentage: membership.contribution_percentage })}
                         </span>
                     )}
                     {!isCoPI && proposal.co_investigators_count > 0 && (
@@ -154,14 +155,14 @@ function ProposalCard({ proposal, isCoPI, userId, pendingBudgetIds, onViewReason
                         </span>
                     )}
                     {proposal.budget_total > 0 && (
-                        <span>Budget: {formatCurrency(proposal.budget_total)}</span>
+                        <span>{tr("Budget: :budget_total", { budget_total: formatCurrency(proposal.budget_total) })}</span>
                     )}
                 </div>
 
                 {/* Rejection reason */}
                 {isRejected && proposal.rejection_reason && (
                     <div className="mb-3 px-3 py-2 bg-red-50 border border-red-200 rounded-xl">
-                        <p className="text-xs font-semibold text-red-700 mb-0.5">Rejection Reason</p>
+                        <p className="text-xs font-semibold text-red-700 mb-0.5">{tr("Rejection Reason")}</p>
                         <p className="text-xs text-red-600 line-clamp-2">{proposal.rejection_reason}</p>
                     </div>
                 )}
@@ -170,7 +171,7 @@ function ProposalCard({ proposal, isCoPI, userId, pendingBudgetIds, onViewReason
                 {hasPending && (
                     <div className="mb-3 flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl">
                         <FileSignature size={13} className="text-amber-500 shrink-0" />
-                        <p className="text-xs font-medium text-amber-700">Your signature is required on a budget request</p>
+                        <p className="text-xs font-medium text-amber-700">{tr("Your signature is required on a budget request")}</p>
                     </div>
                 )}
 
@@ -184,7 +185,7 @@ function ProposalCard({ proposal, isCoPI, userId, pendingBudgetIds, onViewReason
                 {isCoPI && proposal.my_invitation_status === 'declined' && (
                     <div className="mb-3 flex items-center gap-2 px-3 py-2 bg-red-50 border border-red-200 rounded-xl">
                         <XCircle size={13} className="text-red-500 shrink-0" />
-                        <p className="text-xs font-medium text-red-700">You declined this co-investigator invitation</p>
+                        <p className="text-xs font-medium text-red-700">{tr("You declined this co-investigator invitation")}</p>
                     </div>
                 )}
 
@@ -194,7 +195,7 @@ function ProposalCard({ proposal, isCoPI, userId, pendingBudgetIds, onViewReason
                     {!isCoPI && isDraft && !proposal.rejection_reason && (
                         <Link href={`/proposals/create?resume=${proposal.id}`}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700">
-                            <Pencil size={12} /> Continue
+                            <Pencil size={12} /> {tr("Continue")}
                         </Link>
                     )}
                     {!isCoPI && isDraft && proposal.rejection_reason && (
@@ -206,7 +207,7 @@ function ProposalCard({ proposal, isCoPI, userId, pendingBudgetIds, onViewReason
                     {!isCoPI && isDraft && (
                         <button onClick={() => onDelete(proposal)}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-medium hover:bg-red-100">
-                            <Trash2 size={12} /> Delete
+                            <Trash2 size={12} /> {tr("Delete")}
                         </button>
                     )}
 
@@ -214,7 +215,7 @@ function ProposalCard({ proposal, isCoPI, userId, pendingBudgetIds, onViewReason
                     {isReview && proposal.tracker_number && (
                         <Link href={`/tracker?number=${proposal.tracker_number}`}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 text-white rounded-lg text-xs font-medium hover:bg-purple-700">
-                            <Search size={12} /> Track
+                            <Search size={12} /> {tr("Track")}
                         </Link>
                     )}
 
@@ -222,7 +223,7 @@ function ProposalCard({ proposal, isCoPI, userId, pendingBudgetIds, onViewReason
                     {isAwarded && (
                         <Link href={`/proposals/${proposal.id}`}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-medium hover:bg-emerald-700">
-                            <Trophy size={12} /> View Award
+                            <Trophy size={12} /> {tr("View Award")}
                         </Link>
                     )}
                     {proposal.status === 'funded' && proposal.award && (
@@ -232,7 +233,7 @@ function ProposalCard({ proposal, isCoPI, userId, pendingBudgetIds, onViewReason
                                 `Award-Letter-${proposal.award.grant_reference}.pdf`
                             ).catch(() => {})}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-300 rounded-lg text-xs font-medium hover:bg-emerald-100">
-                            <Download size={12} /> Award Letter
+                            <Download size={12} /> {tr("Award Letter")}
                         </button>
                     )}
 
@@ -240,7 +241,7 @@ function ProposalCard({ proposal, isCoPI, userId, pendingBudgetIds, onViewReason
                     {AWARDED_STATUSES.slice(0, 3).includes(proposal.status) && (
                         <Link href="/budget-requests"
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white rounded-lg text-xs font-medium hover:bg-teal-700">
-                            <DollarSign size={12} /> Budget
+                            <DollarSign size={12} /> {tr("Budget")}
                         </Link>
                     )}
 
@@ -248,7 +249,7 @@ function ProposalCard({ proposal, isCoPI, userId, pendingBudgetIds, onViewReason
                     {hasPending && (
                         <Link href="/budget-requests"
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-white rounded-lg text-xs font-semibold hover:bg-amber-600">
-                            <FileSignature size={12} /> Sign Budget
+                            <FileSignature size={12} /> {tr("Sign Budget")}
                         </Link>
                     )}
 
@@ -256,7 +257,7 @@ function ProposalCard({ proposal, isCoPI, userId, pendingBudgetIds, onViewReason
                     {isRejected && proposal.rejection_reason && (
                         <button onClick={() => onViewReason(proposal)}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-600 border border-red-200 rounded-lg text-xs font-medium hover:bg-red-100">
-                            <AlertCircle size={12} /> View Reason
+                            <AlertCircle size={12} /> {tr("View Reason")}
                         </button>
                     )}
 
@@ -277,24 +278,24 @@ function ProposalCard({ proposal, isCoPI, userId, pendingBudgetIds, onViewReason
                     {!isCoPI && !isDraft && (
                         <button onClick={() => onClone(proposal)}
                             className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 text-gray-500 rounded-lg text-xs font-medium hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-colors">
-                            <Copy size={12} /> Clone
+                            <Copy size={12} /> {tr("Clone")}
                         </button>
                     )}
 
                     {/* View details — always shown */}
                     <Link href={`/proposals/${proposal.id}`}
                         className="px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-50">
-                        View Details
+                        {tr("View Details")}
                     </Link>
                 </div>
 
                 {/* Workflow history */}
                 {timelineOpen && (
                     <div className="mt-4 pt-4 border-t border-gray-100">
-                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">Workflow History</p>
+                        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">{tr("Workflow History")}</p>
                         {timelineData?.length > 0
                             ? <ProposalTimeline history={timelineData} currentStatus={proposal.status} />
-                            : <p className="text-xs text-gray-400 italic">No workflow history recorded yet.</p>
+                            : <p className="text-xs text-gray-400 italic">{tr("No workflow history recorded yet.")}</p>
                         }
                     </div>
                 )}
@@ -444,7 +445,7 @@ export default function MyProposals() {
                                     : `You have ${pendingInvitations.length} pending co-investigator invitations`}
                             </p>
                             <p className="text-xs text-amber-700 mt-0.5">
-                                Switch to the <strong>As Co-PI</strong> tab to accept or decline.
+                                <Trans text="Switch to the <b>As Co-PI</b> tab to accept or decline." />
                             </p>
                         </div>
                     </div>
@@ -454,10 +455,10 @@ export default function MyProposals() {
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                            <FolderOpen size={22} className="text-blue-600" /> My Proposals
+                            <FolderOpen size={22} className="text-blue-600" /> {tr("My Proposals")}
                         </h1>
                         <p className="text-sm text-gray-500 mt-1">
-                            {myProposals.length} as PI · {coProposals.length} as Co-Investigator
+                            {tr(":myProposals_count as PI · :coProposals_count as Co-Investigator", { myProposals_count: myProposals.length, coProposals_count: coProposals.length })}
                         </p>
                     </div>
                     <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 sm:shrink-0">
@@ -468,12 +469,12 @@ export default function MyProposals() {
                                 className="flex items-center gap-1.5 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-3 py-2 sm:py-1.5 rounded-lg transition-colors shrink-0"
                             >
                                 <Download size={12} />
-                                Calendar
+                                {tr("Calendar")}
                             </a>
                         </div>
                         <Link href="/proposals/create"
                             className="flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 shadow-sm w-full sm:w-auto">
-                            + New Application
+                            {tr("+ New Application")}
                         </Link>
                     </div>
                 </div>
@@ -487,12 +488,12 @@ export default function MyProposals() {
                                 {pendingCount} pending budget request signature{pendingCount > 1 ? 's' : ''}
                             </p>
                             <p className="text-xs text-amber-700 mt-0.5">
-                                Budget requests on proposals you're part of are waiting for your signature.
+                                {tr("Budget requests on proposals you're part of are waiting for your signature.")}
                             </p>
                         </div>
                         <Link href="/budget-requests"
                             className="shrink-0 text-xs font-semibold text-amber-800 border border-amber-400 bg-amber-100 px-3 py-1.5 rounded-lg hover:bg-amber-200 transition-colors">
-                            Go to Budget Requests →
+                            {tr("Go to Budget Requests →")}
                         </Link>
                     </div>
                 )}
@@ -525,7 +526,7 @@ export default function MyProposals() {
                 ) : visible.length === 0 ? (
                     <div className="bg-white border border-gray-200 rounded-2xl p-12 text-center">
                         <FolderOpen size={40} className="mx-auto text-gray-300 mb-3" />
-                        <h3 className="text-gray-600 font-medium mb-1">No proposals here</h3>
+                        <h3 className="text-gray-600 font-medium mb-1">{tr("No proposals here")}</h3>
                         <p className="text-sm text-gray-400">
                             {activeTab === 'all'
                                 ? 'You have no proposals yet.'
@@ -534,7 +535,7 @@ export default function MyProposals() {
                         {activeTab === 'all' && (
                             <Link href="/proposals/create"
                                 className="mt-4 inline-block px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700">
-                                Start New Application
+                                {tr("Start New Application")}
                             </Link>
                         )}
                     </div>
@@ -586,13 +587,13 @@ export default function MyProposals() {
                                     {p.status === 'draft' && !coProposalIds.has(p.id) && (
                                         <button onClick={() => handleDeleteProposal(p)}
                                             className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                                            title="Delete draft">
+                                            title={tr("Delete draft")}>
                                             <Trash2 size={13} />
                                         </button>
                                     )}
                                     <Link href={`/proposals/${p.id}`}
                                         className="px-2.5 py-1 border border-gray-300 text-gray-700 rounded-lg text-xs font-medium hover:bg-gray-50">
-                                        View
+                                        {tr("View")}
                                     </Link>
                                 </div>
                             )}
@@ -624,14 +625,14 @@ export default function MyProposals() {
             {reasonModal && (
                 <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-                        <h3 className="text-base font-semibold text-gray-900 mb-2">Rejection Reason</h3>
+                        <h3 className="text-base font-semibold text-gray-900 mb-2">{tr("Rejection Reason")}</h3>
                         <p className="text-xs text-gray-500 mb-3 font-mono">{reasonModal.tracker_number}</p>
                         <p className="text-sm text-gray-700 bg-red-50 border border-red-200 rounded-xl p-4 leading-relaxed">
                             {reasonModal.rejection_reason}
                         </p>
                         <button onClick={() => setReasonModal(null)}
                             className="mt-4 w-full px-4 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-700 hover:bg-gray-50 font-medium">
-                            Close
+                            {tr("Close")}
                         </button>
                     </div>
                 </div>

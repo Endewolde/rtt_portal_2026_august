@@ -463,7 +463,7 @@ function SettlementCard({ settlement, onRefresh, canVerifyCollege, canVerifyFina
             </div>
 
             {/* Financial summary */}
-            <div className="grid grid-cols-3 gap-3 mb-4">
+            <div className="grid grid-cols-1 gap-3 mb-4 sm:grid-cols-3">
                 <div className="bg-gray-50 rounded-lg p-3 text-center">
                     <p className="text-xs text-gray-500">Approved</p>
                     <p className="text-sm font-bold text-gray-900">
@@ -763,7 +763,7 @@ function SettlementsTable({ settlements }) {
                                 </span>
                             </div>
                             <p className="text-xs text-gray-600 mb-2">{s.budget_request?.proposal?.title}</p>
-                            <div className="grid grid-cols-3 gap-2 text-xs mb-1.5">
+                            <div className="grid grid-cols-1 gap-2 text-xs mb-1.5 sm:grid-cols-3">
                                 <div>
                                     <p className="text-gray-400">Approved</p>
                                     <p className="font-semibold text-gray-900">ETB {parseFloat(s.budget_request?.total_amount || 0).toLocaleString()}</p>

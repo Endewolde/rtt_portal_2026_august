@@ -1,10 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Link } from '@inertiajs/react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import {
-    Sliders, ArrowRight, ArrowLeft, RefreshCw, Clock, Layers,
-    Wand2, Table2, Filter,
+    Sliders, ArrowRight, RefreshCw, Clock, Layers,
+    Wand2, Table2, Filter, RotateCcw, CheckCircle2,
 } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
+import InsightsNav from '../../Components/InsightsNav';
+import { PageHeader, Panel, EmptyState, CHART } from '../../Components/Insights/Kit';
 import { post, get } from '../../lib/api';
 import { useAuth } from '../../hooks/useAuth';
 import { formatDateTime, getStatusLabel } from '../../lib/utils';
@@ -22,9 +24,7 @@ const STEPS = [
     { n: 5, label: 'Generate' },
 ];
 
-// Academic years the report builder can filter on — a wide, always-available
-// range rather than only the years that already have data.
-const ACADEMIC_YEARS = Array.from({ length: 100 }, (_, i) => `${2000 + i}-${2001 + i}`);
+const CHART_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#06b6d4'];
 
 const CATEGORY_OPTIONS = [
     { value: 'research', label: 'Research' },
@@ -57,9 +57,35 @@ const STATUS_OPTIONS_BY_SUBJECT = {
     review_workload: REVIEW_STATUSES.map(s => ({ value: s, label: builderLabel(s) })),
 };
 
-const SELECT_CLASS = 'w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-slate-400';
+const SELECT_CLASS = 'w-full text-base sm:text-sm border border-gray-200 rounded-xl px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-200';
 
-function FilterControl({ subject, filterKey, value, onChange, colleges, lockedCollege }) {
+/** A bar chart of the result when it is grouped by exactly one field — the table stays below it. */
+function ResultChart({ data }) {
+    const dims = data?.dimensions ?? [];
+    const metrics = (data?.metrics ?? []).filter((m) => (data?.rows ?? []).some((r) => r[m] != null && !Number.isNaN(Number(r[m]))));
+    const rows = data?.rows ?? [];
+    if (dims.length !== 1 || metrics.length === 0 || rows.length < 2 || rows.length > 40) return null;
+
+    const dim = dims[0];
+    const chartRows = rows.map((r) => ({ name: dim === 'status' ? getStatusLabel(r[dim]) : builderLabel(String(r[dim] ?? '—')), ...Object.fromEntries(metrics.map((m) => [m, Number(r[m] ?? 0)])) }));
+
+    return (
+        <div className="rounded-xl border border-gray-100 p-3">
+            <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={chartRows} margin={{ top: 8, right: 8, bottom: 8, left: 0 }}>
+                    <CartesianGrid {...CHART.grid} />
+                    <XAxis dataKey="name" {...CHART.axis} tick={{ fontSize: 11, fill: '#6b7280' }} interval={0} angle={chartRows.length > 6 ? -20 : 0} textAnchor={chartRows.length > 6 ? 'end' : 'middle'} height={chartRows.length > 6 ? 60 : 30} />
+                    <YAxis allowDecimals={false} {...CHART.yAxis} />
+                    <Tooltip {...CHART.tooltip} />
+                    {metrics.length > 1 && <Legend {...CHART.legend} />}
+                    {metrics.map((m, i) => <Bar key={m} dataKey={m} name={builderLabel(m)} fill={CHART_COLORS[i % CHART_COLORS.length]} radius={[6, 6, 0, 0]} maxBarSize={44} />)}
+                </BarChart>
+            </ResponsiveContainer>
+        </div>
+    );
+}
+
+function FilterControl({ subject, filterKey, value, onChange, colleges, lockedCollege, years }) {
     if (filterKey === 'college_id') {
         if (lockedCollege) {
             // College officers can only ever build reports scoped to their own
@@ -82,7 +108,7 @@ function FilterControl({ subject, filterKey, value, onChange, colleges, lockedCo
         return (
             <select value={value} onChange={e => onChange(e.target.value)} className={SELECT_CLASS}>
                 <option value="">All Years</option>
-                {ACADEMIC_YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+                {years.map(y => <option key={y} value={y}>{y}</option>)}
             </select>
         );
     }
@@ -138,6 +164,7 @@ export default function ReportBuilder() {
     const [result,       setResult]       = useState(null);
 
     const [colleges,       setColleges]       = useState([]);
+    const [years,          setYears]          = useState([]);
     const [history,        setHistory]        = useState([]);
     const [historyLoading, setHistoryLoading]  = useState(true);
 
@@ -153,6 +180,8 @@ export default function ReportBuilder() {
                 );
             });
         get('/colleges').then(r => setColleges(r.data ?? [])).catch(() => {});
+        // Only years that actually have proposals.
+        get('/reports/live-options').then(r => setYears(r.data?.years ?? [])).catch(() => {});
     }, []);
 
     const loadHistory = useCallback(() =>
@@ -222,48 +251,33 @@ export default function ReportBuilder() {
 
     return (
         <AppLayout breadcrumb="Report Builder">
-            <div className="max-w-6xl mx-auto space-y-5">
+            <InsightsNav />
+            <div className="max-w-7xl mx-auto space-y-6">
 
-                {/* Header */}
-                <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                        <Link
-                            href="/reports"
-                            className="h-9 w-9 rounded-lg border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 shrink-0"
-                        >
-                            <ArrowLeft size={16} />
-                        </Link>
-                        <div className="h-10 w-10 rounded-xl bg-slate-800 flex items-center justify-center shrink-0">
-                            <Sliders size={18} className="text-white" />
-                        </div>
-                        <div>
-                            <h1 className="text-2xl font-bold text-gray-900">Report Builder</h1>
-                            <p className="text-sm text-gray-500 mt-0.5">Build your own report from a subject, filters, dimensions, and metrics</p>
-                        </div>
-                    </div>
-                </div>
+                <PageHeader icon={Sliders} color="violet" title="Report Builder"
+                    description="Pick a subject, filter it, choose what to group by and measure — then chart, export or keep it." />
 
                 <div className="grid lg:grid-cols-5 gap-6">
 
                     {/* ── Config wizard ── */}
                     <div className="lg:col-span-2 space-y-4">
-                        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                        <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
                             {/* Stepper */}
-                            <div className="flex items-center px-5 py-4 border-b border-gray-100 bg-gray-50/60">
+                            <div className="flex items-center px-5 py-4 border-b border-gray-100 bg-linear-to-r from-violet-50/60 to-indigo-50/40">
                                 {STEPS.map((s, i) => (
                                     <div key={s.n} className="flex items-center flex-1 last:flex-none">
                                         <div className="flex items-center gap-2">
-                                            <div className={`h-6 w-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${
-                                                step >= s.n ? 'bg-slate-800 text-white' : 'bg-gray-200 text-gray-500'
+                                            <div className={`h-6 w-6 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 transition ${
+                                                step > s.n ? 'bg-violet-600 text-white' : step === s.n ? 'bg-white text-violet-700 ring-2 ring-violet-500' : 'bg-gray-200 text-gray-500'
                                             }`}>
-                                                {s.n}
+                                                {step > s.n ? <CheckCircle2 size={13} /> : s.n}
                                             </div>
-                                            <span className={`text-xs font-semibold hidden sm:inline ${step >= s.n ? 'text-slate-800' : 'text-gray-400'}`}>
+                                            <span className={`text-xs font-semibold hidden xl:inline ${step >= s.n ? 'text-violet-800' : 'text-gray-400'}`}>
                                                 {s.label}
                                             </span>
                                         </div>
                                         {i < STEPS.length - 1 && (
-                                            <div className={`flex-1 h-0.5 mx-2 rounded ${step > s.n ? 'bg-slate-800' : 'bg-gray-200'}`} />
+                                            <div className={`flex-1 h-0.5 mx-2 rounded ${step > s.n ? 'bg-violet-500' : 'bg-gray-200'}`} />
                                         )}
                                     </div>
                                 ))}
@@ -286,16 +300,16 @@ export default function ReportBuilder() {
                                             {Object.keys(options).map(s => (
                                                 <button key={s} type="button" onClick={() => chooseSubject(s)}
                                                     className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 text-left transition-all ${
-                                                        subject === s ? 'border-slate-700 bg-slate-50 shadow-sm' : 'border-gray-100 hover:border-gray-200'
+                                                        subject === s ? 'border-violet-500 bg-violet-50/60 shadow-sm' : 'border-gray-100 hover:border-gray-200'
                                                     }`}
                                                 >
                                                     <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${
-                                                        subject === s ? 'bg-slate-700 text-white' : 'bg-gray-100 text-gray-500'
+                                                        subject === s ? 'bg-violet-600 text-white' : 'bg-gray-100 text-gray-500'
                                                     }`}>
                                                         <SubjectIcon subject={s} size={15} />
                                                     </div>
                                                     <p className="text-sm font-semibold text-gray-800">{builderLabel(s)}</p>
-                                                    {subject === s && <ArrowRight size={14} className="ml-auto text-slate-700" />}
+                                                    {subject === s && <ArrowRight size={14} className="ml-auto text-violet-600" />}
                                                 </button>
                                             ))}
                                         </div>
@@ -320,6 +334,7 @@ export default function ReportBuilder() {
                                                             onChange={v => setFilterValue(key, v)}
                                                             colleges={colleges}
                                                             lockedCollege={lockedCollege}
+                                                            years={years}
                                                         />
                                                     </div>
                                                 ))}
@@ -335,9 +350,9 @@ export default function ReportBuilder() {
                                                 {subjectOptions.dimensions.map(dim => (
                                                     <button key={dim} type="button"
                                                         onClick={() => toggleIn(dimensions, setDimensions, dim)}
-                                                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                                                        className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
                                                             dimensions.includes(dim)
-                                                                ? 'bg-slate-700 border-slate-700 text-white'
+                                                                ? 'bg-violet-600 border-violet-600 text-white'
                                                                 : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
                                                         }`}
                                                     >
@@ -354,9 +369,9 @@ export default function ReportBuilder() {
                                                 {subjectOptions.metrics.map(metric => (
                                                     <button key={metric} type="button"
                                                         onClick={() => toggleIn(metrics, setMetrics, metric)}
-                                                        className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                                                        className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
                                                             metrics.includes(metric)
-                                                                ? 'bg-slate-700 border-slate-700 text-white'
+                                                                ? 'bg-emerald-600 border-emerald-600 text-white'
                                                                 : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
                                                         }`}
                                                     >
@@ -370,7 +385,7 @@ export default function ReportBuilder() {
                                             <button
                                                 onClick={generate}
                                                 disabled={generating || !ready}
-                                                className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-slate-800 py-2.5 text-sm font-semibold text-white hover:bg-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                                className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-linear-to-r from-violet-600 to-indigo-600 py-2.5 text-sm font-semibold text-white shadow-sm shadow-violet-200 hover:opacity-95 disabled:opacity-50 disabled:cursor-not-allowed transition"
                                             >
                                                 {generating
                                                     ? <><RefreshCw size={14} className="animate-spin" /> Generating…</>
@@ -380,9 +395,9 @@ export default function ReportBuilder() {
                                             <button
                                                 onClick={reset}
                                                 type="button"
-                                                className="px-3 py-2.5 rounded-xl text-xs font-semibold text-gray-500 border border-gray-200 hover:bg-gray-50 transition-colors shrink-0"
+                                                className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl text-xs font-semibold text-gray-500 border border-gray-200 hover:bg-gray-50 transition-colors shrink-0"
                                             >
-                                                Reset
+                                                <RotateCcw size={12} /> Reset
                                             </button>
                                         </div>
                                     </>
@@ -391,13 +406,8 @@ export default function ReportBuilder() {
                         </div>
 
                         {/* History */}
-                        <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3">
-                            <div className="flex items-center justify-between">
-                                <h2 className="text-sm font-bold text-gray-800">Your Builder Reports</h2>
-                                <button onClick={loadHistory} className="text-xs text-indigo-600 hover:underline flex items-center gap-1">
-                                    <RefreshCw size={11} /> Refresh
-                                </button>
-                            </div>
+                        <Panel title="Your builder reports" icon={Clock} bodyClassName="p-4 space-y-3"
+                            actions={<button onClick={loadHistory} className="inline-flex items-center gap-1 text-xs font-medium text-gray-500 hover:text-gray-800"><RefreshCw size={11} /> Refresh</button>}>
 
                             {historyLoading ? (
                                 <div className="space-y-2">
@@ -439,25 +449,27 @@ export default function ReportBuilder() {
                                     ))}
                                 </ul>
                             )}
-                        </div>
+                        </Panel>
                     </div>
 
                     {/* ── Preview / results ── */}
                     <div className="lg:col-span-3">
-                        <div className="bg-white rounded-2xl border border-gray-200 p-6 min-h-112">
+                        <div className="bg-white rounded-2xl border border-gray-200 p-5 sm:p-6 min-h-112 lg:sticky lg:top-4">
                             {result ? (
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between flex-wrap gap-2">
                                         <div>
-                                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
+                                            <p className="font-semibold text-gray-900">
                                                 {builderLabel(result.result?.subject ?? '')}
+                                                {(result.result?.dimensions ?? []).length > 0 && <span className="font-normal text-gray-500"> by {(result.result.dimensions).map(builderLabel).join(', ')}</span>}
                                             </p>
                                             <p className="text-xs text-gray-400 mt-0.5">
-                                                Generated {formatDateTime(result.completed_at ?? result.created_at)}
+                                                {(result.result?.rows ?? []).length} row{(result.result?.rows ?? []).length === 1 ? '' : 's'} · generated {formatDateTime(result.completed_at ?? result.created_at)}
                                             </p>
                                         </div>
                                         <DownloadExcelButton snapshot={result} />
                                     </div>
+                                    <ResultChart data={result.result} />
                                     <ReportBuilderTable data={result.result} />
                                 </div>
                             ) : generating ? (
@@ -466,13 +478,8 @@ export default function ReportBuilder() {
                                     <p className="text-sm font-medium">Generating your report…</p>
                                 </div>
                             ) : (
-                                <div className="flex flex-col items-center justify-center h-full py-20 text-gray-400">
-                                    <Sliders size={40} className="mb-3 opacity-40" />
-                                    <p className="text-sm font-medium text-gray-500">
-                                        {subject ? 'Choose your metrics, then generate' : 'Choose a subject to get started'}
-                                    </p>
-                                    <p className="text-xs text-gray-400 mt-1">Your report preview will appear here</p>
-                                </div>
+                                <EmptyState icon={Sliders} title={subject ? 'Choose your metrics, then generate' : 'Choose a subject to get started'}
+                                    text="Group by one field to get a chart as well as the table." />
                             )}
                         </div>
                     </div>

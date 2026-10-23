@@ -87,7 +87,7 @@ export default function Contracts() {
             <div className="max-w-6xl mx-auto space-y-5">
 
                 {/* Page header */}
-                <div className="flex items-center justify-between">
+                <div className="flex items-center flex-wrap justify-between gap-3">
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                             <FileSignature size={22} className="text-blue-600" /> Contracts

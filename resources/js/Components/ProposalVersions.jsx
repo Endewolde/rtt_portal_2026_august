@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { translate as tr } from '../lib/i18n'
 import { GitCompare, ChevronDown, ChevronUp, Plus, Minus, ArrowRight, FileText, Users, Wallet, PenLine } from 'lucide-react';
 import { get } from '../lib/api';
 import { formatCurrency } from '../lib/utils';
@@ -8,7 +9,7 @@ const formatDate = (iso) => new Date(iso).toLocaleDateString('en-GB', { day: 'nu
 function TextChange({ change }) {
     const [open, setOpen] = useState(false);
     const long = String(change.before ?? '').length > 160 || String(change.after ?? '').length > 160;
-    const show = (v) => (v === null || v === undefined || v === '' ? <span className="italic text-gray-400">empty</span> : String(v));
+    const show = (v) => (v === null || v === undefined || v === '' ? <span className="italic text-gray-400">{tr("empty")}</span> : String(v));
 
     if (!long) {
         return (
@@ -29,11 +30,11 @@ function TextChange({ change }) {
             {open && (
                 <div className="mt-2 grid gap-2 md:grid-cols-2">
                     <div className="rounded-lg border border-rose-100 bg-rose-50/50 p-3">
-                        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-rose-600">Before</p>
+                        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-rose-600">{tr("Before")}</p>
                         <p className="whitespace-pre-line text-gray-700">{show(change.before)}</p>
                     </div>
                     <div className="rounded-lg border border-emerald-100 bg-emerald-50/50 p-3">
-                        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">After</p>
+                        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-emerald-700">{tr("After")}</p>
                         <p className="whitespace-pre-line text-gray-700">{show(change.after)}</p>
                     </div>
                 </div>
@@ -59,7 +60,7 @@ const Removed = ({ children }) => <p className="flex items-start gap-1.5 text-xs
 
 function Changes({ changes }) {
     if (!changes || changes.count === 0) {
-        return <p className="text-xs text-gray-500">Resubmitted without changes.</p>;
+        return <p className="text-xs text-gray-500">{tr("Resubmitted without changes.")}</p>;
     }
     const { fields, team, budget, documents } = changes;
     const budgetChanged = budget.added.length || budget.removed.length || budget.changed.length;
@@ -67,13 +68,13 @@ function Changes({ changes }) {
     return (
         <div className="space-y-4">
             {fields.length > 0 && (
-                <Group icon={PenLine} title="Proposal details">
+                <Group icon={PenLine} title={tr("Proposal details")}>
                     {fields.map((c) => <TextChange key={c.field} change={c} />)}
                 </Group>
             )}
             {(team.added.length > 0 || team.removed.length > 0) && (
-                <Group icon={Users} title="Team">
-                    {team.added.map((n) => <Added key={`a-${n}`}>{n} joined</Added>)}
+                <Group icon={Users} title={tr("Team")}>
+                    {team.added.map((n) => <Added key={`a-${n}`}>{tr(":n joined", { n: n })}</Added>)}
                     {team.removed.map((n) => <Removed key={`r-${n}`}>{n}</Removed>)}
                 </Group>
             )}
@@ -89,8 +90,8 @@ function Changes({ changes }) {
                 </Group>
             )}
             {(documents.added.length > 0 || documents.removed.length > 0) && (
-                <Group icon={FileText} title="Documents">
-                    {documents.added.map((n, i) => <Added key={`a${i}`}>{n} uploaded</Added>)}
+                <Group icon={FileText} title={tr("Documents")}>
+                    {documents.added.map((n, i) => <Added key={`a${i}`}>{tr(":n uploaded", { n: n })}</Added>)}
                     {documents.removed.map((n, i) => <Removed key={`r${i}`}>{n}</Removed>)}
                 </Group>
             )}
@@ -121,8 +122,8 @@ export default function ProposalVersions({ proposalId }) {
             <header className="flex items-center gap-2.5 border-b border-indigo-50 bg-indigo-50/40 px-5 py-3.5">
                 <GitCompare size={16} className="text-indigo-600" />
                 <div>
-                    <h3 className="text-sm font-semibold text-gray-900">Submission Versions</h3>
-                    <p className="text-xs text-gray-500">Submitted {versions.length} times — expand a version to see what changed from the one before.</p>
+                    <h3 className="text-sm font-semibold text-gray-900">{tr("Submission Versions")}</h3>
+                    <p className="text-xs text-gray-500">{tr("Submitted :versions_count times — expand a version to see what changed from the one before.", { versions_count: versions.length })}</p>
                 </div>
             </header>
             <ol className="divide-y divide-gray-100">

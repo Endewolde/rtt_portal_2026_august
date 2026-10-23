@@ -47,6 +47,7 @@ export const ROUTE_ACCESS = [
     ['/admin/coi-conflicts',       'conflicts.manage'],
     ['/admin/defence-extensions',  'defence_extensions.approve'],
     ['/admin/reviewer-workload',   'reviewer_workload.view'],
+    ['/admin/reviewer-applications', 'reviewers.recruit'],
     ['/admin/review-certificates', 'review_certificates.manage'],
     // Monitoring & finance
     ['/admin/ethical-clearance',   'ethical_clearance.review'],
@@ -54,6 +55,7 @@ export const ROUTE_ACCESS = [
     ['/admin/budget-revisions',    'budget_revisions.review'],
     ['/admin/repository',          'repository.manage'],
     ['/ongoing-proposals',         'monitoring.ongoing'],
+    ['/projects-at-risk',          'monitoring.ongoing'],
     ['/progress-reports',          'progress_reports.review'],
     ['/budget-allocations',        'budget_allocations.view_any'],
     ['/budget-requests',           'budget_requests.view_any'],
@@ -66,6 +68,7 @@ export const ROUTE_ACCESS = [
     ['/research-impact',           'research_outputs.view_any'],
     ['/admin/external-funds',      'external_funds.view_any'],
     // Reports
+    ['/insights',                  ['reports.view_any', 'analytics.view']],
     ['/admin/analytics',           'analytics.view'],
     ['/admin/turnaround',          'turnaround.view'],
     ['/admin/proposal-pipeline',   'pipeline.view'],

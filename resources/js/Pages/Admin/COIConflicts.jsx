@@ -202,7 +202,7 @@ export default function COIConflicts() {
         <AppLayout breadcrumb="COI Conflicts">
             <div className="max-w-5xl mx-auto space-y-5">
 
-                <div className="flex items-center justify-between">
+                <div className="flex items-center flex-wrap justify-between gap-3">
                     <div>
                         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                             <ShieldAlert size={22} className="text-red-500" /> COI Conflicts

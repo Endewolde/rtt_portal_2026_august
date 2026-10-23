@@ -714,118 +714,120 @@ export default function ProposalCallsAdmin() {
                 </div>
             ) : (
                 <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                    <table className="w-full text-sm">
-                        <thead className="bg-gray-50 border-b border-gray-200">
-                            <tr>
-                                {['#', 'Title', 'Category', 'Year', 'Status', 'Opens', 'Deadline', 'Submissions', ''].map((h) => (
-                                    <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                                        {h}
-                                    </th>
-                                ))}
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-100">
-                            {filteredCalls.map((c, i) => (
-                                <tr key={c.id}
-                                    onClick={() => canManage && openEdit(c)}
-                                    className={canManage ? 'hover:bg-gray-50 cursor-pointer' : ''}>
-                                    <td className="px-4 py-3 text-xs font-medium text-gray-400 tabular-nums w-10">{i + 1}</td>
-                                    <td className="px-4 py-3 max-w-xs">
-                                        <p className="font-medium text-gray-900 line-clamp-1">{c.title}</p>
-                                        <p className="text-xs text-gray-400 font-mono mt-0.5">{c.slug}</p>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${CATEGORY_COLORS[c.category] ?? 'bg-gray-100 text-gray-600'}`}>
-                                            {getCategoryLabel(c.category)}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3 text-sm text-gray-600">{c.academic_year}</td>
-                                    <td className="px-4 py-3">
-                                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[c.status] ?? 'bg-gray-100 text-gray-600'}`}>
-                                            {c.status}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3 text-xs text-gray-500">
-                                        {c.start_date_formatted ?? formatDate(c.start_date)}
-                                    </td>
-                                    <td className="px-4 py-3 text-xs text-gray-500">
-                                        {c.end_date_formatted ?? formatDate(c.end_date)}
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <Link href={`/proposal-calls/${c.id}/submissions`}
-                                            onClick={(e) => e.stopPropagation()}
-                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors">
-                                            {c.proposals_count ?? 0} submitted
-                                        </Link>
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <div className="flex items-center gap-1.5 justify-end" onClick={(e) => e.stopPropagation()}>
-                                            <Link href={`/proposal-calls/${c.id}/submissions`}
-                                                className="p-1.5 text-gray-400 hover:text-blue-600 transition-colors rounded"
-                                                title="View submissions">
-                                                <Eye size={15} />
-                                            </Link>
-
-                                            {canManage && (
-                                                <>
-                                                    <button onClick={() => openEdit(c)}
-                                                        className="p-1.5 text-gray-400 hover:text-indigo-600 transition-colors rounded"
-                                                        title="Edit">
-                                                        <Pencil size={15} />
-                                                    </button>
-
-                                                    {c.status === 'draft' && (
-                                                        <button onClick={() => setConfirmAction({ type: 'activate', call: c })}
-                                                            className="p-1.5 text-gray-400 hover:text-green-600 transition-colors rounded"
-                                                            title="Activate">
-                                                            <CheckCircle size={15} />
-                                                        </button>
-                                                    )}
-
-                                                    {c.status !== 'active' && (
-                                                        <button onClick={() => handleDelete(c.id)}
-                                                            className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                                                            title="Delete">
-                                                            <Trash2 size={15} />
-                                                        </button>
-                                                    )}
-
-                                                    {c.status === 'active' && (
-                                                        <button onClick={() => setConfirmAction({ type: 'close', call: c })}
-                                                            className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded"
-                                                            title="Close">
-                                                            <XCircle size={15} />
-                                                        </button>
-                                                    )}
-
-                                                    {c.status === 'closed' && (
-                                                        <button onClick={() => handleReopen(c.id)}
-                                                            className="p-1.5 text-green-600 hover:text-green-800 hover:bg-green-50 rounded transition-colors"
-                                                            title="Reopen call">
-                                                            <RefreshCw size={15} />
-                                                        </button>
-                                                    )}
-
-                                                    {c.guidelines_filename && (
-                                                        <button
-                                                            type="button"
-                                                            title="Download guidelines"
-                                                            onClick={() => downloadFile(
-                                                                `/proposal-calls/${c.id}/guidelines/download`,
-                                                                c.guidelines_filename
-                                                            ).catch(() => toast.error('Download failed.'))}
-                                                            className="p-1.5 text-gray-400 hover:text-blue-600 transition-colors rounded bg-transparent border-none cursor-pointer">
-                                                            <Download size={15} />
-                                                        </button>
-                                                    )}
-                                                </>
-                                            )}
-                                        </div>
-                                    </td>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead className="bg-gray-50 border-b border-gray-200">
+                                <tr>
+                                    {['#', 'Title', 'Category', 'Year', 'Status', 'Opens', 'Deadline', 'Submissions', ''].map((h) => (
+                                        <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                            {h}
+                                        </th>
+                                    ))}
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {filteredCalls.map((c, i) => (
+                                    <tr key={c.id}
+                                        onClick={() => canManage && openEdit(c)}
+                                        className={canManage ? 'hover:bg-gray-50 cursor-pointer' : ''}>
+                                        <td className="px-4 py-3 text-xs font-medium text-gray-400 tabular-nums w-10">{i + 1}</td>
+                                        <td className="px-4 py-3 max-w-xs">
+                                            <p className="font-medium text-gray-900 line-clamp-1">{c.title}</p>
+                                            <p className="text-xs text-gray-400 font-mono mt-0.5">{c.slug}</p>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${CATEGORY_COLORS[c.category] ?? 'bg-gray-100 text-gray-600'}`}>
+                                                {getCategoryLabel(c.category)}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-sm text-gray-600">{c.academic_year}</td>
+                                        <td className="px-4 py-3">
+                                            <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${STATUS_COLORS[c.status] ?? 'bg-gray-100 text-gray-600'}`}>
+                                                {c.status}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-xs text-gray-500">
+                                            {c.start_date_formatted ?? formatDate(c.start_date)}
+                                        </td>
+                                        <td className="px-4 py-3 text-xs text-gray-500">
+                                            {c.end_date_formatted ?? formatDate(c.end_date)}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <Link href={`/proposal-calls/${c.id}/submissions`}
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors">
+                                                {c.proposals_count ?? 0} submitted
+                                            </Link>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <div className="flex items-center gap-1.5 justify-end" onClick={(e) => e.stopPropagation()}>
+                                                <Link href={`/proposal-calls/${c.id}/submissions`}
+                                                    className="p-1.5 text-gray-400 hover:text-blue-600 transition-colors rounded"
+                                                    title="View submissions">
+                                                    <Eye size={15} />
+                                                </Link>
+
+                                                {canManage && (
+                                                    <>
+                                                        <button onClick={() => openEdit(c)}
+                                                            className="p-1.5 text-gray-400 hover:text-indigo-600 transition-colors rounded"
+                                                            title="Edit">
+                                                            <Pencil size={15} />
+                                                        </button>
+
+                                                        {c.status === 'draft' && (
+                                                            <button onClick={() => setConfirmAction({ type: 'activate', call: c })}
+                                                                className="p-1.5 text-gray-400 hover:text-green-600 transition-colors rounded"
+                                                                title="Activate">
+                                                                <CheckCircle size={15} />
+                                                            </button>
+                                                        )}
+
+                                                        {c.status !== 'active' && (
+                                                            <button onClick={() => handleDelete(c.id)}
+                                                                className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                                                                title="Delete">
+                                                                <Trash2 size={15} />
+                                                            </button>
+                                                        )}
+
+                                                        {c.status === 'active' && (
+                                                            <button onClick={() => setConfirmAction({ type: 'close', call: c })}
+                                                                className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded"
+                                                                title="Close">
+                                                                <XCircle size={15} />
+                                                            </button>
+                                                        )}
+
+                                                        {c.status === 'closed' && (
+                                                            <button onClick={() => handleReopen(c.id)}
+                                                                className="p-1.5 text-green-600 hover:text-green-800 hover:bg-green-50 rounded transition-colors"
+                                                                title="Reopen call">
+                                                                <RefreshCw size={15} />
+                                                            </button>
+                                                        )}
+
+                                                        {c.guidelines_filename && (
+                                                            <button
+                                                                type="button"
+                                                                title="Download guidelines"
+                                                                onClick={() => downloadFile(
+                                                                    `/proposal-calls/${c.id}/guidelines/download`,
+                                                                    c.guidelines_filename
+                                                                ).catch(() => toast.error('Download failed.'))}
+                                                                className="p-1.5 text-gray-400 hover:text-blue-600 transition-colors rounded bg-transparent border-none cursor-pointer">
+                                                                <Download size={15} />
+                                                            </button>
+                                                        )}
+                                                    </>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             )}
 

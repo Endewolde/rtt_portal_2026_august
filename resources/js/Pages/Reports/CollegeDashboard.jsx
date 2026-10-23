@@ -1,82 +1,24 @@
 import { useState, useEffect } from 'react'
-import { usePage } from '@inertiajs/react'
-import {
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-    ResponsiveContainer, PieChart, Pie, Cell,
-} from 'recharts'
-import {
-    Building2, Users, TrendingUp, CheckCircle2, XCircle, Clock,
-    BarChart2, Download, RefreshCw,
-} from 'lucide-react'
+import { Link, usePage } from '@inertiajs/react'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
+import { Building2, Users, Files, Trophy, Hourglass, XCircle, BarChart2, Layers, Tags, ArrowRight } from 'lucide-react'
 import AppLayout from '../../Layouts/AppLayout'
+import InsightsNav from '../../Components/InsightsNav'
+import { PageHeader, Select, RefreshButton, StatCard, Panel, EmptyState, StatSkeletons, Skeleton, DataTable, CHART } from '../../Components/Insights/Kit'
 import { useToast } from '../../Components/Toast'
 import { get } from '../../lib/api'
-import { cn } from '../../lib/utils'
-
-const STATUS_LABEL = {
-    submitted:           'Submitted',
-    validated:           'Validated',
-    under_blind_review:  'Blind Review',
-    blind_review_passed: 'Review Passed',
-    under_open_defence:  'Open Defence',
-    accepted:            'Central Evaluation',
-    funded:              'Funded',
-    midterm_evaluation:  'Midterm',
-    completed:           'Completed',
-    rejected:            'Rejected',
-}
+import { getStatusLabel, getCategoryLabel } from '../../lib/utils'
 
 const STATUS_COLOR = {
-    submitted:           '#6366f1',
-    validated:           '#3b82f6',
-    under_blind_review:  '#8b5cf6',
-    blind_review_passed: '#06b6d4',
-    under_open_defence:  '#f59e0b',
-    accepted:            '#10b981',
-    funded:              '#22c55e',
-    midterm_evaluation:  '#14b8a6',
-    completed:           '#64748b',
-    rejected:            '#ef4444',
+    submitted: '#6366f1', validated: '#3b82f6', under_blind_review: '#8b5cf6', blind_review_passed: '#06b6d4',
+    under_open_defence: '#f59e0b', accepted: '#14b8a6', funded: '#22c55e', midterm_evaluation: '#10b981',
+    completed: '#64748b', rejected: '#ef4444', archived: '#94a3b8',
 }
+const GENDER = { male: ['Male', '#6366f1'], female: ['Female', '#ec4899'], other: ['Other', '#8b5cf6'], not_specified: ['Not specified', '#94a3b8'] }
 
-const CATEGORY_LABEL = {
-    research:             'Research',
-    community_engagement: 'Community',
-    technology_transfer:  'Technology',
-}
-
-const GENDER_COLOR = { male: '#6366f1', female: '#ec4899', not_specified: '#94a3b8' }
-
-function StatCard({ icon: Icon, label, value, sub, color = 'indigo' }) {
-    const colorMap = {
-        indigo:  { bg: 'bg-indigo-600',  soft: 'bg-indigo-50',  text: 'text-indigo-600' },
-        green:   { bg: 'bg-green-600',   soft: 'bg-green-50',   text: 'text-green-600'  },
-        red:     { bg: 'bg-red-500',     soft: 'bg-red-50',     text: 'text-red-500'    },
-        amber:   { bg: 'bg-amber-500',   soft: 'bg-amber-50',   text: 'text-amber-600'  },
-        blue:    { bg: 'bg-blue-600',    soft: 'bg-blue-50',    text: 'text-blue-600'   },
-    }
-    const c = colorMap[color] ?? colorMap.indigo
-    return (
-        <div className="bg-white border border-gray-100 rounded-xl p-5">
-            <div className="flex items-center gap-3 mb-3">
-                <div className={cn('h-9 w-9 rounded-xl flex items-center justify-center', c.bg)}>
-                    <Icon size={16} className="text-white" />
-                </div>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label}</p>
-            </div>
-            <p className="text-3xl font-bold text-gray-900">{value ?? 0}</p>
-            {sub != null && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
-        </div>
-    )
-}
-
-function ChartCard({ title, children }) {
-    return (
-        <div className="bg-white border border-gray-100 rounded-2xl p-5">
-            <p className="text-sm font-bold text-gray-800 mb-4">{title}</p>
-            {children}
-        </div>
-    )
+function RateChip({ rate }) {
+    const tone = rate >= 50 ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : rate >= 25 ? 'bg-amber-50 text-amber-700 ring-amber-200' : 'bg-gray-50 text-gray-500 ring-gray-200'
+    return <span className={`rounded-full px-2 py-0.5 text-xs font-bold ring-1 ${tone}`}>{rate}%</span>
 }
 
 export default function CollegeDashboard() {
@@ -89,272 +31,164 @@ export default function CollegeDashboard() {
     const load = async () => {
         setLoading(true)
         try {
-            const params = {}
-            if (year) params.academic_year = year
-            const r = await get('/proposals/statistics', params)
-            // get() already unwraps to the JSON body ({ data, message, errors, meta }) —
-            // r.data IS the payload; r.data.data was one level too deep and always
-            // undefined, silently rendering every stat as its 0 fallback.
+            // get() already unwraps to the JSON body ({ data, message, errors, meta }) — r.data IS the payload.
+            const r = await get('/proposals/statistics', year ? { academic_year: year } : {})
             setStats(r.data ?? null)
         } catch { error('Failed to load statistics.') }
         finally { setLoading(false) }
     }
 
-    useEffect(() => { load() }, [year])
+    useEffect(() => { load() }, [year]) // eslint-disable-line react-hooks/exhaustive-deps
 
     const totals = stats?.totals ?? {}
-    const byDept = (stats?.by_department ?? []).map(d => ({
-        name: d.department_name ?? d.code,
-        Total: d.total,
-        Funded: d.funded,
-    }))
-    const byStatus = Object.entries(stats?.by_status ?? {}).map(([k, v]) => ({
-        name: STATUS_LABEL[k] ?? k,
-        value: v,
-        fill: STATUS_COLOR[k] ?? '#6366f1',
-    }))
-    const byCategory = Object.entries(stats?.by_category ?? {}).map(([k, v]) => ({
-        name: CATEGORY_LABEL[k] ?? k,
-        value: v,
-    }))
-    const byGender = (stats?.by_gender ?? []).map(g => ({
-        name: g.gender === 'not_specified' ? 'N/A' : g.gender.charAt(0).toUpperCase() + g.gender.slice(1),
-        value: g.total,
-        fill: GENDER_COLOR[g.gender] ?? '#94a3b8',
-    }))
+    const submitted = Number(totals.submitted || 0)
+    const decided = Number(totals.funded || 0) + Number(totals.rejected || 0)
+    const successRate = decided > 0 ? Math.round((Number(totals.funded || 0) / decided) * 100) : null
 
-    const successRate = totals.submitted > 0
-        ? Math.round((totals.funded / totals.submitted) * 100)
-        : 0
+    const departments = stats?.by_department ?? []
+    const byDept = departments.map((d) => ({ name: d.department_name ?? d.code, Total: Number(d.total), Funded: Number(d.funded) }))
+    const byStatus = Object.entries(stats?.by_status ?? {}).map(([k, v]) => ({ key: k, name: getStatusLabel(k), value: Number(v), fill: STATUS_COLOR[k] ?? '#6366f1' }))
+    const statusTotal = byStatus.reduce((s, x) => s + x.value, 0)
+    const byCategory = Object.entries(stats?.by_category ?? {}).map(([k, v]) => ({ key: k, name: getCategoryLabel(k), value: Number(v) }))
+    const categoryTotal = byCategory.reduce((s, x) => s + x.value, 0)
+    const byGender = (stats?.by_gender ?? []).map((g) => ({ name: (GENDER[g.gender] ?? GENDER.not_specified)[0], value: Number(g.total), funded: Number(g.funded), fill: (GENDER[g.gender] ?? GENDER.not_specified)[1] }))
+    const genderTotal = byGender.reduce((s, x) => s + x.value, 0)
 
-    // academic_year is stored (and set via app_settings.current_academic_year) as a
-    // "YYYY-YYYY" range string, not a bare year — the dropdown must submit the same
-    // format or the filter silently matches no proposals at all.
-    const currentYear = new Date().getFullYear()
-    const years = Array.from({ length: 5 }, (_, i) => `${currentYear - i}-${currentYear - i + 1}`)
+    // Only years that actually have proposals, always including the one selected.
+    const years = [...new Set([year, ...(stats?.available_years ?? [])].filter(Boolean))]
+    const yearQuery = year ? `&academic_year=${year}` : ''
 
     return (
         <AppLayout breadcrumb="College Dashboard">
-            <div className="max-w-6xl mx-auto space-y-6">
+            <InsightsNav />
+            <div className="mx-auto max-w-7xl space-y-6">
+                <PageHeader icon={Building2} color="sky" title="College Research Dashboard" description="Proposals from researchers in your college — departments, stages, categories and gender.">
+                    <Select label="Academic year" value={year} onChange={setYear}>
+                        <option value="">All academic years</option>
+                        {years.map((y) => <option key={y} value={y}>{y}</option>)}
+                    </Select>
+                    <RefreshButton onClick={load} loading={loading} />
+                </PageHeader>
 
-                {/* Header */}
-                <div className="flex items-center justify-between flex-wrap gap-3">
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-900">College Research Dashboard</h1>
-                        <p className="text-sm text-gray-500 mt-1">Proposals submitted by researchers in your college</p>
+                {loading && !stats ? <StatSkeletons /> : (
+                    <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                        <StatCard icon={Files} color="indigo" label="Submitted" value={submitted} hint={`${Number(totals.draft || 0)} more still in draft`} href={`/proposals?${yearQuery.slice(1)}`} />
+                        <StatCard icon={Trophy} color="emerald" label="Funded" value={Number(totals.funded || 0)} hint={successRate != null ? `${successRate}% of decided proposals` : 'None decided yet'} />
+                        <StatCard icon={Hourglass} color="amber" label="Under review" value={Number(totals.under_review || 0)} hint="Blind review to central evaluation" />
+                        <StatCard icon={XCircle} color="red" label="Rejected" value={Number(totals.rejected || 0)} href={`/proposals?status=rejected${yearQuery}`} />
                     </div>
-                    <div className="flex items-center gap-2">
-                        <select value={year} onChange={e => setYear(e.target.value)}
-                            className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                            <option value="">All Years</option>
-                            {years.map(y => <option key={y} value={y}>{y}</option>)}
-                        </select>
-                        <button onClick={load} disabled={loading}
-                            className="flex items-center gap-1.5 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50">
-                            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
-                            Refresh
-                        </button>
-                    </div>
-                </div>
+                )}
 
-                {/* KPI row */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    <StatCard icon={TrendingUp}   label="Total Proposals"  value={totals.total}        color="indigo" />
-                    <StatCard icon={CheckCircle2} label="Funded"            value={totals.funded}       color="green"
-                        sub={`${successRate}% success rate`} />
-                    <StatCard icon={Clock}        label="Under Review"      value={totals.under_review} color="amber" />
-                    <StatCard icon={XCircle}      label="Rejected"          value={totals.rejected}     color="red"   />
-                </div>
-
-                {/* Charts row 1 */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    {/* By department */}
-                    <ChartCard title="Proposals by Department">
-                        {byDept.length === 0 ? (
-                            <div className="flex items-center justify-center h-40 text-gray-300">
-                                <BarChart2 size={28} />
-                            </div>
-                        ) : (
-                            <ResponsiveContainer width="100%" height={220}>
-                                <BarChart data={byDept} margin={{ left: -20 }}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                                    <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                                    <YAxis tick={{ fontSize: 11 }} />
-                                    <Tooltip />
-                                    <Legend wrapperStyle={{ fontSize: 11 }} />
-                                    <Bar dataKey="Total"  fill="#6366f1" radius={[4, 4, 0, 0]} />
-                                    <Bar dataKey="Funded" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                <div className={`grid gap-6 lg:grid-cols-5 ${loading && stats ? 'opacity-60 transition' : ''}`}>
+                    <Panel title="Proposals by department" subtitle="Submitted and funded" icon={BarChart2} className="lg:col-span-3">
+                        {loading && !stats ? <Skeleton className="h-64" /> : byDept.length === 0 ? <EmptyState icon={BarChart2} title="No proposals yet" /> : (
+                            <ResponsiveContainer width="100%" height={Math.max(220, byDept.length * 38)}>
+                                <BarChart data={byDept} layout="vertical" margin={{ left: 8, right: 16 }} barGap={2}>
+                                    <CartesianGrid {...CHART.grid} horizontal={false} vertical />
+                                    <XAxis type="number" allowDecimals={false} {...CHART.axis} />
+                                    <YAxis type="category" dataKey="name" width={150} {...CHART.yAxis} tick={{ fontSize: 11, fill: '#4b5563' }} />
+                                    <Tooltip {...CHART.tooltip} />
+                                    <Legend {...CHART.legend} />
+                                    <Bar dataKey="Total" fill="#6366f1" radius={[0, 6, 6, 0]} maxBarSize={14} />
+                                    <Bar dataKey="Funded" fill="#22c55e" radius={[0, 6, 6, 0]} maxBarSize={14} />
                                 </BarChart>
                             </ResponsiveContainer>
                         )}
-                    </ChartCard>
+                    </Panel>
 
-                    {/* By status pie */}
-                    <ChartCard title="Pipeline Status Breakdown">
-                        {byStatus.length === 0 ? (
-                            <div className="flex items-center justify-center h-40 text-gray-300">
-                                <BarChart2 size={28} />
-                            </div>
-                        ) : (
-                            <div className="flex items-center gap-4">
-                                <ResponsiveContainer width="55%" height={220}>
-                                    <PieChart>
-                                        <Pie data={byStatus} dataKey="value" cx="50%" cy="50%"
-                                            innerRadius={50} outerRadius={80} paddingAngle={2}>
-                                            {byStatus.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
-                                        </Pie>
-                                        <Tooltip formatter={(v, n) => [v, n]} />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                                <div className="flex-1 space-y-1.5 min-w-0">
-                                    {byStatus.map((s, i) => (
-                                        <div key={i} className="flex items-center justify-between gap-2">
-                                            <div className="flex items-center gap-1.5 min-w-0">
-                                                <div className="h-2 w-2 rounded-full shrink-0" style={{ background: s.fill }} />
-                                                <span className="text-[11px] text-gray-600 truncate">{s.name}</span>
-                                            </div>
-                                            <span className="text-[11px] font-bold text-gray-800 shrink-0">{s.value}</span>
-                                        </div>
-                                    ))}
+                    <Panel title="Where proposals are" subtitle="By stage" icon={Layers} className="lg:col-span-2">
+                        {loading && !stats ? <Skeleton className="h-64" /> : byStatus.length === 0 ? <EmptyState icon={Layers} title="No proposals yet" /> : (
+                            <div className="flex flex-col items-center gap-4 sm:flex-row lg:flex-col xl:flex-row">
+                                <div className="relative h-44 w-44 shrink-0">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie data={byStatus} dataKey="value" innerRadius={52} outerRadius={80} paddingAngle={2} stroke="#fff" strokeWidth={2}>
+                                                {byStatus.map((s) => <Cell key={s.key} fill={s.fill} />)}
+                                            </Pie>
+                                            <Tooltip {...CHART.tooltip} />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                    <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                                        <span className="text-2xl font-bold tabular-nums text-gray-900">{statusTotal}</span>
+                                        <span className="text-[10px] uppercase tracking-wider text-gray-400">proposals</span>
+                                    </div>
                                 </div>
+                                <ul className="w-full min-w-0 flex-1 space-y-1.5">
+                                    {byStatus.sort((a, b) => b.value - a.value).map((s) => (
+                                        <li key={s.key}>
+                                            <Link href={`/proposals?status=${s.key}${yearQuery}`} className="flex items-center gap-2 rounded-lg px-1.5 py-0.5 text-xs hover:bg-gray-50">
+                                                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: s.fill }} />
+                                                <span className="flex-1 truncate text-gray-600">{s.name}</span>
+                                                <span className="font-semibold tabular-nums text-gray-900">{s.value}</span>
+                                            </Link>
+                                        </li>
+                                    ))}
+                                </ul>
                             </div>
                         )}
-                    </ChartCard>
+                    </Panel>
                 </div>
 
-                {/* Charts row 2 */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    {/* By category */}
-                    <ChartCard title="Proposals by Research Category">
-                        {byCategory.length === 0 ? (
-                            <div className="flex items-center justify-center h-32 text-gray-300">
-                                <BarChart2 size={24} />
-                            </div>
-                        ) : (
-                            <div className="space-y-3 py-1">
-                                {byCategory.map(c => {
-                                    const pct = totals.total > 0 ? Math.round((c.value / totals.total) * 100) : 0
+                <div className="grid gap-6 lg:grid-cols-2">
+                    <Panel title="By category" icon={Tags}>
+                        {loading && !stats ? <Skeleton className="h-32" /> : byCategory.length === 0 ? <EmptyState icon={Tags} title="No proposals yet" /> : (
+                            <div className="space-y-4">
+                                {byCategory.map((c) => {
+                                    const pct = categoryTotal > 0 ? Math.round((c.value / categoryTotal) * 100) : 0
                                     return (
-                                        <div key={c.name}>
-                                            <div className="flex justify-between text-xs font-medium text-gray-700 mb-1">
-                                                <span>{c.name}</span>
-                                                <span>{c.value} ({pct}%)</span>
+                                        <Link key={c.key} href={`/proposals?category=${c.key}${yearQuery}`} className="group block">
+                                            <div className="mb-1 flex justify-between text-sm">
+                                                <span className="text-gray-700 group-hover:text-gray-900">{c.name}</span>
+                                                <span className="font-semibold tabular-nums text-gray-900">{c.value} <span className="text-xs font-normal text-gray-400">{pct}%</span></span>
                                             </div>
-                                            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                                                <div className="h-full bg-indigo-500 rounded-full transition-all"
-                                                    style={{ width: `${pct}%` }} />
+                                            <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                                                <div className="h-full rounded-full bg-indigo-500 transition-all duration-700 group-hover:bg-indigo-600" style={{ width: `${pct}%` }} />
                                             </div>
-                                        </div>
+                                        </Link>
                                     )
                                 })}
                             </div>
                         )}
-                    </ChartCard>
+                    </Panel>
 
-                    {/* By gender */}
-                    <ChartCard title="Gender Distribution of Principal Investigators">
-                        {byGender.length === 0 ? (
-                            <div className="flex items-center justify-center h-32 text-gray-300">
-                                <Users size={24} />
-                            </div>
-                        ) : (
-                            <div className="flex items-center gap-6">
-                                <ResponsiveContainer width="50%" height={160}>
-                                    <PieChart>
-                                        <Pie data={byGender} dataKey="value" cx="50%" cy="50%"
-                                            outerRadius={65} paddingAngle={3}>
-                                            {byGender.map((g, i) => <Cell key={i} fill={g.fill} />)}
-                                        </Pie>
-                                        <Tooltip />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                                <div className="flex-1 space-y-3">
-                                    {byGender.map((g, i) => (
-                                        <div key={i} className="flex items-center justify-between">
-                                            <div className="flex items-center gap-2">
-                                                <div className="h-3 w-3 rounded-full" style={{ background: g.fill }} />
-                                                <span className="text-xs text-gray-600">{g.name}</span>
-                                            </div>
-                                            <span className="text-sm font-bold text-gray-800">{g.value}</span>
-                                        </div>
-                                    ))}
+                    <Panel title="Principal investigators by gender" icon={Users}>
+                        {loading && !stats ? <Skeleton className="h-32" /> : byGender.length === 0 ? <EmptyState icon={Users} title="No proposals yet" /> : (
+                            <div className="space-y-3">
+                                <div className="flex h-3 overflow-hidden rounded-full bg-gray-100">
+                                    {byGender.map((g) => <div key={g.name} style={{ width: `${(g.value / genderTotal) * 100}%`, background: g.fill }} title={`${g.name}: ${g.value}`} />)}
                                 </div>
+                                <ul className="grid gap-2 sm:grid-cols-2">
+                                    {byGender.map((g) => (
+                                        <li key={g.name} className="flex items-center gap-2.5 rounded-xl border border-gray-100 px-3 py-2">
+                                            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: g.fill }} />
+                                            <span className="flex-1 text-sm text-gray-700">{g.name}</span>
+                                            <span className="text-right">
+                                                <span className="block text-sm font-bold tabular-nums text-gray-900">{g.value} <span className="text-xs font-normal text-gray-400">{genderTotal > 0 ? Math.round((g.value / genderTotal) * 100) : 0}%</span></span>
+                                                <span className="block text-[10px] text-gray-400">{g.value > 0 ? Math.round((g.funded / g.value) * 100) : 0}% funded</span>
+                                            </span>
+                                        </li>
+                                    ))}
+                                </ul>
                             </div>
                         )}
-                    </ChartCard>
+                    </Panel>
                 </div>
 
-                {/* Department detail table */}
-                {byDept.length > 0 && (
-                    <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
-                        <div className="px-5 py-4 border-b border-gray-100">
-                            <p className="text-sm font-bold text-gray-800">Department Breakdown</p>
-                        </div>
-                        <div className="hidden sm:block overflow-x-auto">
-                            <table className="w-full text-sm">
-                                <thead>
-                                    <tr className="bg-gray-50 border-b border-gray-100">
-                                        <th className="text-left px-5 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Department</th>
-                                        <th className="text-right px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Total</th>
-                                        <th className="text-right px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Funded</th>
-                                        <th className="text-right px-5 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide">Rate</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-50">
-                                    {(stats?.by_department ?? []).map((d, i) => {
-                                        const rate = d.total > 0 ? Math.round((d.funded / d.total) * 100) : 0
-                                        return (
-                                            <tr key={i} className="hover:bg-gray-50/50">
-                                                <td className="px-5 py-3">
-                                                    <p className="font-medium text-gray-800">{d.department_name}</p>
-                                                    <p className="text-xs text-gray-400">{d.code}</p>
-                                                </td>
-                                                <td className="text-right px-4 py-3 font-semibold text-gray-900">{d.total}</td>
-                                                <td className="text-right px-4 py-3 text-green-600 font-semibold">{d.funded}</td>
-                                                <td className="text-right px-5 py-3">
-                                                    <span className={cn(
-                                                        'text-xs font-bold px-2 py-0.5 rounded-full',
-                                                        rate >= 50 ? 'bg-green-100 text-green-700' :
-                                                        rate >= 25 ? 'bg-amber-100 text-amber-700' :
-                                                        'bg-gray-100 text-gray-500'
-                                                    )}>
-                                                        {rate}%
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                        )
-                                    })}
-                                </tbody>
-                            </table>
-                        </div>
-
-                        {/* Mobile: stacked cards */}
-                        <div className="sm:hidden divide-y divide-gray-50">
-                            {(stats?.by_department ?? []).map((d, i) => {
-                                const rate = d.total > 0 ? Math.round((d.funded / d.total) * 100) : 0
-                                return (
-                                    <div key={i} className="px-4 py-3 flex items-center justify-between gap-3">
-                                        <div className="min-w-0">
-                                            <p className="font-medium text-gray-800 text-sm truncate">{d.department_name}</p>
-                                            <p className="text-xs text-gray-400">{d.code}</p>
-                                        </div>
-                                        <div className="flex items-center gap-3 shrink-0 text-sm">
-                                            <span className="text-gray-900 font-semibold">{d.total}</span>
-                                            <span className="text-green-600 font-semibold">{d.funded}</span>
-                                            <span className={cn(
-                                                'text-xs font-bold px-2 py-0.5 rounded-full',
-                                                rate >= 50 ? 'bg-green-100 text-green-700' :
-                                                rate >= 25 ? 'bg-amber-100 text-amber-700' :
-                                                'bg-gray-100 text-gray-500'
-                                            )}>
-                                                {rate}%
-                                            </span>
-                                        </div>
-                                    </div>
-                                )
-                            })}
-                        </div>
-                    </div>
+                {departments.length > 0 && (
+                    <Panel title="Department breakdown" icon={Building2} bodyClassName=""
+                        actions={<Link href={`/reports?type=college_performance${yearQuery}`} className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800">College performance report <ArrowRight size={13} /></Link>}>
+                        <DataTable
+                            rows={departments}
+                            rowKey={(d) => d.id ?? d.department_name}
+                            minWidth={420}
+                            columns={[
+                                { key: 'department_name', label: 'Department', render: (d) => <><p className="font-medium text-gray-900">{d.department_name}</p><p className="text-xs text-gray-400">{d.code}</p></> },
+                                { key: 'total', label: 'Total', align: 'right', className: 'font-semibold text-gray-900' },
+                                { key: 'funded', label: 'Funded', align: 'right', className: 'font-semibold text-emerald-600' },
+                                { key: 'rate', label: 'Funded rate', align: 'right', render: (d) => <RateChip rate={d.total > 0 ? Math.round((d.funded / d.total) * 100) : 0} /> },
+                            ]}
+                        />
+                    </Panel>
                 )}
             </div>
         </AppLayout>

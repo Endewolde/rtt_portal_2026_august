@@ -137,10 +137,11 @@ function EmptyState({ icon: Icon = Inbox, title = 'Nothing here yet', subtitle =
     );
 }
 
-function ActionMenu({ items, btnRef }) {
+function ActionMenu({ items }) {
     const [open, setOpen] = useState(false);
     const [pos, setPos] = useState({ top: 0, right: 0 });
     const menuRef = useRef(null);
+    const btnRef = useRef(null);
 
     useEffect(() => {
         if (!open) return;
@@ -151,31 +152,42 @@ function ActionMenu({ items, btnRef }) {
         return () => document.removeEventListener('mousedown', close);
     }, [open]);
 
-    const toggle = () => {
+    // Close on scroll/resize so the fixed menu never drifts away from its button.
+    useEffect(() => {
+        if (!open) return;
+        const close = () => setOpen(false);
+        window.addEventListener('resize', close);
+        window.addEventListener('scroll', close, true);
+        return () => { window.removeEventListener('resize', close); window.removeEventListener('scroll', close, true); };
+    }, [open]);
+
+    const toggle = (e) => {
+        // Cards on phones open on tap; the menu must not open them too.
+        e.stopPropagation();
         if (open) { setOpen(false); return; }
         const rect = btnRef.current.getBoundingClientRect();
-        const menuH = items.length * 36 + 16;
-        const top = rect.bottom + menuH > window.innerHeight ? rect.top - menuH - 4 : rect.bottom + 4;
-        setPos({ top, right: window.innerWidth - rect.right });
+        const menuH = items.length * 40 + 16;
+        const top = rect.bottom + menuH > window.innerHeight ? Math.max(8, rect.top - menuH - 4) : rect.bottom + 4;
+        setPos({ top, right: Math.max(8, window.innerWidth - rect.right) });
         setOpen(true);
     };
 
     return (
         <>
-            <button ref={btnRef} onClick={toggle}
-                className={cn('p-1.5 rounded-lg transition-colors lg:opacity-0 lg:group-hover:opacity-100',
+            <button ref={btnRef} onClick={toggle} aria-label="Actions"
+                className={cn('p-2 lg:p-1.5 rounded-lg transition-colors lg:opacity-0 lg:group-hover:opacity-100 lg:focus:opacity-100',
                     open ? 'bg-gray-100 text-gray-700' : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100')}>
-                <MoreHorizontal size={13} />
+                <MoreHorizontal size={16} className="lg:size-[13px]" />
             </button>
             {open && createPortal(
-                <div ref={menuRef}
+                <div ref={menuRef} onClick={(e) => e.stopPropagation()}
                     style={{ position: 'fixed', top: pos.top, right: pos.right, zIndex: 9999 }}
-                    className="bg-white border border-gray-100 rounded-xl shadow-xl w-52 py-1.5 overflow-hidden">
+                    className="bg-white border border-gray-100 rounded-xl shadow-xl w-56 max-w-[calc(100vw-16px)] py-1.5 overflow-hidden">
                     {items.map((item, i) => item.divider
                         ? <div key={i} className="my-1 border-t border-gray-100" />
                         : (
                             <button key={i} onClick={() => { item.onClick(); setOpen(false); }}
-                                className={cn('w-full flex items-center gap-2.5 px-4 py-2 text-xs font-medium transition-colors',
+                                className={cn('w-full flex items-center gap-2.5 px-4 py-2.5 lg:py-2 text-sm lg:text-xs font-medium text-left transition-colors',
                                     item.danger
                                         ? 'text-red-600 hover:bg-red-50'
                                         : 'text-gray-700 hover:bg-indigo-50 hover:text-indigo-700')}>
@@ -261,16 +273,16 @@ function OpportunityModal({ opp, agencies, onSave, onClose }) {
     };
 
     const f = key => ({ value: form[key] ?? '', onChange: e => setForm(p => ({ ...p, [key]: e.target.value })) });
-    const cls = 'w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:bg-white';
+    const cls = 'w-full border border-gray-200 rounded-xl px-3 py-2.5 text-base sm:text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:bg-white';
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[2px] p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden max-h-[90vh] flex flex-col">
-                <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 shrink-0">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-[2px] sm:p-4">
+            <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden max-h-[92dvh] sm:max-h-[90vh] flex flex-col">
+                <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-100 shrink-0">
                     <h2 className="text-base font-bold text-gray-900">{opp ? 'Edit Opportunity' : 'New Funding Opportunity'}</h2>
                     <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg"><X size={16} /></button>
                 </div>
-                <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+                <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-4">
                     <div>
                         <label className="block text-xs font-semibold text-gray-700 mb-1.5">Funding Agency *</label>
                         <select {...f('agency_id')} className={cls}>
@@ -361,7 +373,7 @@ function OpportunityModal({ opp, agencies, onSave, onClose }) {
                         <span className="text-sm text-gray-700 font-medium flex items-center gap-1"><Star size={12} className="text-amber-500" /> Feature on public explore page</span>
                     </label>
                 </div>
-                <div className="flex gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/50 shrink-0">
+                <div className="flex gap-3 px-4 sm:px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-gray-100 bg-gray-50/50 shrink-0">
                     <button onClick={onClose} className="flex-1 py-2.5 border border-gray-200 bg-white rounded-xl text-sm text-gray-700 hover:bg-gray-50 font-semibold transition-colors">Cancel</button>
                     <button onClick={save} disabled={saving} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 disabled:opacity-60 transition-colors flex items-center justify-center gap-2">
                         {saving ? <><Loader2 size={13} className="animate-spin" /> Saving…</> : opp ? 'Update Opportunity' : 'Create Opportunity'}
@@ -400,19 +412,19 @@ function AwardModal({ application, onSave, onClose }) {
     };
 
     const f = key => ({ value: form[key] ?? '', onChange: e => setForm(p => ({ ...p, [key]: e.target.value })) });
-    const cls = 'w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:bg-white';
+    const cls = 'w-full border border-gray-200 rounded-xl px-3 py-2.5 text-base sm:text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:bg-white';
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[2px] p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] flex flex-col">
-                <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 shrink-0">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-[2px] sm:p-4">
+            <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[92dvh] sm:max-h-[90vh] flex flex-col">
+                <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-100 shrink-0">
                     <div>
                         <h2 className="text-base font-bold text-gray-900">Record Award</h2>
                         <p className="text-xs text-gray-400 mt-0.5">{truncate(application?.title, 55)}</p>
                     </div>
                     <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg"><X size={16} /></button>
                 </div>
-                <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+                <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-4">
                     <div>
                         <label className="block text-xs font-semibold text-gray-700 mb-1.5">Award Title *</label>
                         <input {...f('title')} className={cls} />
@@ -450,7 +462,7 @@ function AwardModal({ application, onSave, onClose }) {
                         <textarea {...f('conditions')} rows={3} placeholder="Special conditions, reporting deadlines, compliance requirements…" className={cn(cls, 'resize-none')} />
                     </div>
                 </div>
-                <div className="flex gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/50 shrink-0">
+                <div className="flex gap-3 px-4 sm:px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-gray-100 bg-gray-50/50 shrink-0">
                     <button onClick={onClose} className="flex-1 py-2.5 border border-gray-200 bg-white rounded-xl text-sm text-gray-700 hover:bg-gray-50 font-semibold transition-colors">Cancel</button>
                     <button onClick={save} disabled={saving} className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 disabled:opacity-60 transition-colors flex items-center justify-center gap-2">
                         {saving ? <><Loader2 size={13} className="animate-spin" /> Saving…</> : <><Award size={13} /> Record Award</>}
@@ -478,9 +490,9 @@ function MilestoneForm({ onSave, onCancel }) {
         <div className="mb-3 p-3 bg-indigo-50/60 border border-indigo-100 rounded-xl space-y-2">
             <input value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
                 placeholder="Milestone title *"
-                className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                className="w-full text-base sm:text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
             <input type="date" value={form.due_date} onChange={e => setForm(p => ({ ...p, due_date: e.target.value }))}
-                className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                className="w-full text-base sm:text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
             <div className="flex gap-2">
                 <button onClick={onCancel} className="flex-1 py-1.5 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">Cancel</button>
                 <button onClick={save} disabled={saving || !form.title || !form.due_date}
@@ -509,16 +521,16 @@ function ExpenditureForm({ onSave, onCancel }) {
         <div className="mb-3 p-3 bg-orange-50/60 border border-orange-100 rounded-xl space-y-2">
             <input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
                 placeholder="Description *"
-                className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                className="w-full text-base sm:text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
             <div className="grid grid-cols-2 gap-2">
                 <input type="number" value={form.amount} onChange={e => setForm(p => ({ ...p, amount: e.target.value }))}
                     placeholder="Amount *"
-                    className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                    className="w-full text-base sm:text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
                 <input type="date" value={form.expense_date} onChange={e => setForm(p => ({ ...p, expense_date: e.target.value }))}
-                    className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                    className="w-full text-base sm:text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
             </div>
             <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
-                className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                className="w-full text-base sm:text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
                 {BUDGET_CATEGORIES.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
             </select>
             <div className="flex gap-2">
@@ -606,7 +618,7 @@ function AwardDrawer({ award: initialAward, onClose, onUpdate }) {
             <div className="fixed inset-0 bg-black/30 z-40" onClick={onClose} />
             <div className="fixed inset-y-0 right-0 w-[500px] max-w-full bg-white shadow-2xl z-50 flex flex-col">
                 {/* Header */}
-                <div className="px-6 py-5 border-b border-gray-100 flex items-start gap-3 shrink-0">
+                <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-100 flex items-start gap-3 shrink-0">
                     <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
                         <Award size={18} className="text-emerald-600" />
                     </div>
@@ -623,7 +635,7 @@ function AwardDrawer({ award: initialAward, onClose, onUpdate }) {
                 </div>
 
                 {/* Body */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
 
                     {/* Financial summary */}
                     <div className="grid grid-cols-3 gap-3">
@@ -654,7 +666,7 @@ function AwardDrawer({ award: initialAward, onClose, onUpdate }) {
                     </div>
 
                     {/* Agency + dates */}
-                    <div className="grid grid-cols-2 gap-4 text-xs bg-gray-50 rounded-xl p-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs bg-gray-50 rounded-xl p-4">
                         <div>
                             <p className="text-gray-400 font-medium mb-0.5">Agency</p>
                             <p className="text-gray-800 font-semibold">{award.agency?.name ?? '—'}</p>
@@ -664,7 +676,7 @@ function AwardDrawer({ award: initialAward, onClose, onUpdate }) {
                             <p className="text-gray-800 font-semibold">{formatDate(award.start_date)} – {formatDate(award.end_date)}</p>
                         </div>
                         {award.conditions && (
-                            <div className="col-span-2">
+                            <div className="sm:col-span-2">
                                 <p className="text-gray-400 font-medium mb-0.5">Conditions</p>
                                 <p className="text-gray-700 leading-relaxed">{award.conditions}</p>
                             </div>
@@ -729,9 +741,9 @@ function AwardDrawer({ award: initialAward, onClose, onUpdate }) {
                                                 m.status === 'completed' ? 'text-gray-400' : 'text-gray-500')}>
                                             {formatDate(m.due_date)}
                                         </p>
-                                        <button onClick={() => handleDeleteMilestone(m.id)}
-                                            className="opacity-0 group-hover:opacity-100 p-0.5 text-gray-300 hover:text-red-400 transition-all">
-                                            <X size={11} />
+                                        <button onClick={() => handleDeleteMilestone(m.id)} aria-label="Remove milestone"
+                                            className="p-1 text-gray-300 hover:text-red-400 transition-all sm:opacity-0 sm:group-hover:opacity-100">
+                                            <X size={12} />
                                         </button>
                                     </div>
                                 ))}
@@ -869,7 +881,7 @@ function ApplicationReviewDrawer({ application, onClose, onUpdate }) {
             <div className="fixed inset-y-0 right-0 w-[540px] max-w-full bg-white shadow-2xl z-50 flex flex-col">
 
                 {/* Header */}
-                <div className="px-6 py-5 border-b border-gray-100 flex items-start gap-3 shrink-0">
+                <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-100 flex items-start gap-3 shrink-0">
                     <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center shrink-0">
                         <ClipboardList size={17} className="text-violet-600" />
                     </div>
@@ -886,10 +898,10 @@ function ApplicationReviewDrawer({ application, onClose, onUpdate }) {
                 </div>
 
                 {/* Body */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-5">
+                <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
 
                     {/* Application summary card */}
-                    <div className="bg-gray-50 rounded-xl p-4 grid grid-cols-2 gap-3 text-xs">
+                    <div className="bg-gray-50 rounded-xl p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                         <div>
                             <p className="text-gray-400 font-medium mb-0.5">Principal Investigator</p>
                             <p className="text-gray-800 font-semibold">{application.pi_name || application.principalInvestigator?.name || '—'}</p>
@@ -955,10 +967,10 @@ function ApplicationReviewDrawer({ application, onClose, onUpdate }) {
                                     <div key={stage.key} className={cn('border rounded-xl overflow-hidden transition-colors', stageColor(review))}>
 
                                         {/* Stage header */}
-                                        <div className="px-4 py-3 flex items-center justify-between gap-3">
-                                            <div className="min-w-0">
+                                        <div className="px-4 py-3 flex flex-wrap items-center justify-between gap-2 sm:gap-3">
+                                            <div className="min-w-0 flex-1">
                                                 <p className="text-xs font-bold text-gray-800">{stage.label}</p>
-                                                <p className="text-[11px] text-gray-400 truncate">{stage.description}</p>
+                                                <p className="text-[11px] text-gray-400 sm:truncate">{stage.description}</p>
                                             </div>
                                             <div className="flex items-center gap-2 shrink-0">
                                                 {review
@@ -994,7 +1006,7 @@ function ApplicationReviewDrawer({ application, onClose, onUpdate }) {
                                             <div className="px-4 pb-4 border-t border-black/5 space-y-2 pt-3">
                                                 <select value={form.status ?? ''}
                                                     onChange={e => setForms(p => ({ ...p, [stage.key]: { ...p[stage.key], status: e.target.value } }))}
-                                                    className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                                                    className="w-full text-base sm:text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
                                                     <option value="">Select decision…</option>
                                                     <option value="approved">✓ Approved</option>
                                                     <option value="revision_required">↩ Revision Required</option>
@@ -1003,7 +1015,7 @@ function ApplicationReviewDrawer({ application, onClose, onUpdate }) {
                                                 <textarea value={form.comments ?? ''}
                                                     onChange={e => setForms(p => ({ ...p, [stage.key]: { ...p[stage.key], comments: e.target.value } }))}
                                                     rows={2} placeholder="Comments (optional)…"
-                                                    className="w-full text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none" />
+                                                    className="w-full text-base sm:text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none" />
                                                 <button onClick={() => handleSubmit(stage.key)}
                                                     disabled={!form.status || form.saving}
                                                     className="w-full py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-1.5">
@@ -1021,7 +1033,7 @@ function ApplicationReviewDrawer({ application, onClose, onUpdate }) {
 
                 {/* Footer actions */}
                 {isInReview && !loading && (
-                    <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 shrink-0 space-y-2">
+                    <div className="px-4 sm:px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-gray-100 bg-gray-50/50 shrink-0 space-y-2">
                         {allApproved ? (
                             <button onClick={() => handleAdvance('approved_for_submission')}
                                 className="w-full py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
@@ -1066,7 +1078,7 @@ function DashboardTab() {
 
     if (loading) {
         return (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                 {[...Array(8)].map((_, i) => (
                     <div key={i} className="bg-white rounded-2xl border border-gray-100 p-4 animate-pulse h-24" />
                 ))}
@@ -1090,21 +1102,21 @@ function DashboardTab() {
 
     return (
         <div className="space-y-6">
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
                 {kpis.map(({ label, value, sub, icon: Icon, color, ring }) => (
-                    <div key={label} className={cn('bg-white rounded-2xl border border-gray-100 p-4 flex items-center gap-3 shadow-sm ring-1', ring)}>
-                        <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center shrink-0', color)}>
+                    <div key={label} className={cn('bg-white rounded-2xl border border-gray-100 p-3 sm:p-4 flex items-center gap-2.5 sm:gap-3 shadow-sm ring-1 min-w-0', ring)}>
+                        <div className={cn('w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0', color)}>
                             <Icon size={17} className="text-white" />
                         </div>
                         <div className="min-w-0">
-                            <p className="text-xl font-black text-gray-900 leading-none tabular-nums">{value}</p>
+                            <p className="text-lg sm:text-xl font-black text-gray-900 leading-none tabular-nums truncate">{value}</p>
                             <p className="text-[11px] text-gray-500 mt-0.5 truncate">{label}</p>
                         </div>
                     </div>
                 ))}
             </div>
 
-            <div className="grid lg:grid-cols-2 gap-6">
+            <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
                 <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
                     <div className="px-5 py-4 border-b border-gray-50 flex items-center gap-2">
                         <Building2 size={14} className="text-indigo-500" />
@@ -1166,8 +1178,8 @@ function DashboardTab() {
                             const pct = Math.round((c.total / max) * 100);
                             return (
                                 <div key={i}>
-                                    <div className="flex justify-between text-xs mb-1">
-                                        <span className="font-medium text-gray-700 truncate max-w-xs">{c.name}</span>
+                                    <div className="flex justify-between gap-2 text-xs mb-1">
+                                        <span className="font-medium text-gray-700 truncate min-w-0">{c.name}</span>
                                         <span className="font-bold text-gray-600 tabular-nums shrink-0 ml-2">USD {Number(c.total).toLocaleString()}</span>
                                     </div>
                                     <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
@@ -1268,13 +1280,13 @@ function ApplicationModal({ app, agencies, colleges, departments, onSave, onClos
     };
 
     const f   = key => ({ value: form[key] ?? '', onChange: e => setForm(p => ({ ...p, [key]: e.target.value })) });
-    const cls = 'w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:bg-white';
+    const cls = 'w-full border border-gray-200 rounded-xl px-3 py-2.5 text-base sm:text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:bg-white';
     const err = key => errors[key] && <p className="text-xs text-red-500 mt-1">{errors[key][0]}</p>;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[2px] p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden max-h-[92vh] flex flex-col">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-[2px] sm:p-4">
+            <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden max-h-[92dvh] flex flex-col">
+                <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-gray-100 shrink-0">
                     <div>
                         <h2 className="text-base font-bold text-gray-900">{app ? 'Edit Registration' : 'Register Externally Funded Project'}</h2>
                         <p className="text-xs text-gray-400 mt-0.5">Fill in all required fields marked with *</p>
@@ -1282,7 +1294,7 @@ function ApplicationModal({ app, agencies, colleges, departments, onSave, onClos
                     <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg"><X size={16} /></button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+                <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-4">
 
                     {/* ── Project Info ── */}
                     <SectionHeading>Project Information</SectionHeading>
@@ -1453,21 +1465,21 @@ function ApplicationModal({ app, agencies, colleges, departments, onSave, onClos
                                             <input value={coi.name}
                                                 onChange={e => setCoi(i, 'name', e.target.value)}
                                                 placeholder="Full name…"
-                                                className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                                                className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-base sm:text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
                                         </div>
                                         <div>
                                             <label className="block text-[11px] font-semibold text-gray-600 mb-1">Telephone</label>
                                             <input value={coi.phone}
                                                 onChange={e => setCoi(i, 'phone', e.target.value)}
                                                 placeholder="+251…"
-                                                className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                                                className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-base sm:text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
                                         </div>
                                         <div>
                                             <label className="block text-[11px] font-semibold text-gray-600 mb-1">Email</label>
                                             <input value={coi.email}
                                                 onChange={e => setCoi(i, 'email', e.target.value)}
                                                 placeholder="email@…"
-                                                className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                                                className="w-full border border-gray-200 rounded-lg px-2.5 py-2 text-base sm:text-xs bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
                                         </div>
                                     </div>
                                 </div>
@@ -1512,7 +1524,7 @@ function ApplicationModal({ app, agencies, colleges, departments, onSave, onClos
 
                 </div>
 
-                <div className="flex gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/50 shrink-0">
+                <div className="flex gap-3 px-4 sm:px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-gray-100 bg-gray-50/50 shrink-0">
                     <button onClick={onClose} className="flex-1 py-2.5 border border-gray-200 bg-white rounded-xl text-sm text-gray-700 hover:bg-gray-50 font-semibold transition-colors">Cancel</button>
                     <button onClick={save} disabled={saving} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 disabled:opacity-60 transition-colors flex items-center justify-center gap-2">
                         {saving ? <><Loader2 size={13} className="animate-spin" /> Saving…</> : <><Send size={13} /> {app ? 'Update Registration' : 'Register Project'}</>}
@@ -1609,8 +1621,8 @@ function ApplicationsTab() {
     return (
         <div className="space-y-4">
             {/* RTT platform link banner */}
-            <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100 rounded-2xl px-5 py-4 flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center shrink-0">
+            <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100 rounded-2xl px-4 sm:px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                <div className="hidden sm:flex w-10 h-10 rounded-xl bg-indigo-100 items-center justify-center shrink-0">
                     <Link2 size={17} className="text-indigo-600" />
                 </div>
                 <div className="flex-1 min-w-0">
@@ -1618,13 +1630,13 @@ function ApplicationsTab() {
                     <p className="text-xs text-indigo-600 mt-0.5">Sign in to your account to submit a grant application through the RTT platform and track it through the internal review process.</p>
                 </div>
                 <a href="/explore" target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors shrink-0 whitespace-nowrap">
+                    className="flex items-center justify-center gap-1.5 px-4 py-2.5 sm:py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors shrink-0 whitespace-nowrap">
                     <ExternalLink size={12} /> Open Platform
                 </a>
             </div>
 
             {/* Workflow guide banner */}
-            <div className="bg-white border border-gray-100 rounded-2xl px-5 py-3 overflow-x-auto">
+            <div className="bg-white border border-gray-100 rounded-2xl px-3 sm:px-5 py-3 overflow-x-auto">
                 <div className="flex items-center gap-0 min-w-max">
                     {WORKFLOW_STEPS.map((step, i) => (
                         <div key={step.key} className="flex items-center">
@@ -1653,10 +1665,10 @@ function ApplicationsTab() {
 
             {/* Toolbar */}
             <div className="flex flex-wrap gap-2.5 items-center">
-                <div className="relative flex-1 min-w-52">
+                <div className="relative basis-full sm:basis-auto sm:flex-1 sm:min-w-52">
                     <Search size={13} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                     <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Search title or ref…"
-                        className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white" />
+                        className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white" />
                 </div>
                 <div className="flex gap-2 ml-auto">
                     <button onClick={load} className="p-2.5 rounded-xl border border-gray-200 text-gray-400 hover:bg-gray-50 transition-colors">
@@ -1709,7 +1721,6 @@ function ApplicationsTab() {
                                             </p>
                                             <p className="text-xs text-gray-400">{formatDate(item.submitted_at) || '—'}</p>
                                             <ActionMenu
-                                                btnRef={{ current: null }}
                                                 items={[
                                                     { label: 'Edit', icon: Pencil, onClick: () => setModal(item) },
                                                     ...getWorkflowActions(item, handleStatusUpdate, setAwardTarget, setReviewTarget),
@@ -1719,7 +1730,7 @@ function ApplicationsTab() {
                                             />
                                         </div>
                                         {/* Mobile card */}
-                                        <div className="lg:hidden px-4 py-4" onClick={() => inReview && setReviewTarget(item)}>
+                                        <div className="lg:hidden px-4 py-4">
                                             <div className="flex items-start gap-3">
                                                 <Avatar name={item.agency?.name} size={9} />
                                                 <div className="flex-1 min-w-0">
@@ -1727,7 +1738,6 @@ function ApplicationsTab() {
                                                     <p className="text-[11px] text-gray-400 mt-0.5">{item.agency?.name} · <span className="font-mono">{item.ref_number}</span></p>
                                                 </div>
                                                 <ActionMenu
-                                                    btnRef={{ current: null }}
                                                     items={[
                                                         { label: 'Edit', icon: Pencil, onClick: () => setModal(item) },
                                                         ...getWorkflowActions(item, handleStatusUpdate, setAwardTarget, setReviewTarget),
@@ -1736,13 +1746,20 @@ function ApplicationsTab() {
                                                     ]}
                                                 />
                                             </div>
-                                            <div className="flex flex-wrap gap-2 mt-3">
+                                            <div className="flex flex-wrap items-center gap-2 mt-3">
                                                 <StatusDot status={item.status} statuses={APP_STATUSES} />
                                                 <CatBadge category={item.category} />
                                                 {item.amount_requested && (
-                                                    <span className="text-[11px] text-gray-500">{item.currency} {Number(item.amount_requested).toLocaleString()}</span>
+                                                    <span className="text-[11px] font-semibold text-gray-600 tabular-nums">{item.currency} {Number(item.amount_requested).toLocaleString()}</span>
                                                 )}
+                                                {item.submitted_at && <span className="text-[11px] text-gray-400">Submitted {formatDate(item.submitted_at)}</span>}
                                             </div>
+                                            {inReview && (
+                                                <button onClick={() => setReviewTarget(item)}
+                                                    className="mt-3 w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-violet-50 text-violet-700 text-xs font-bold hover:bg-violet-100 transition-colors">
+                                                    <ClipboardList size={13} /> Open Review Panel
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 );
@@ -1753,7 +1770,7 @@ function ApplicationsTab() {
             </div>
 
             {totalPages > 1 && (
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
                     <p className="text-xs text-gray-400">Page {page} of {totalPages} — {meta?.total ?? 0} applications</p>
                     <div className="flex items-center gap-1">
                         <button disabled={page <= 1} onClick={() => setPage(p => p - 1)}
@@ -1844,10 +1861,10 @@ function AwardsTab() {
     return (
         <div className="space-y-4">
             <div className="flex flex-wrap gap-2.5 items-center">
-                <div className="relative flex-1 min-w-52">
+                <div className="relative basis-full sm:basis-auto sm:flex-1 sm:min-w-52">
                     <Search size={13} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                     <input value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} placeholder="Search award or number…"
-                        className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white" />
+                        className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white" />
                 </div>
                 <div className="relative">
                     <Filter size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
@@ -1886,7 +1903,6 @@ function AwardsTab() {
                                         <p className="text-xs text-gray-400">{formatDate(item.start_date)}</p>
                                         <p className="text-xs text-gray-400">{formatDate(item.end_date)}</p>
                                         <ActionMenu
-                                            btnRef={{ current: null }}
                                             items={[
                                                 { label: 'Manage Award', icon: Eye, onClick: () => setDrawerAward(item) },
                                                 { divider: true },
@@ -1894,19 +1910,27 @@ function AwardsTab() {
                                             ]}
                                         />
                                     </div>
-                                    <div className="lg:hidden px-4 py-4" onClick={() => setDrawerAward(item)}>
+                                    <div className="lg:hidden px-4 py-4 cursor-pointer" onClick={() => setDrawerAward(item)}>
                                         <div className="flex items-start gap-3">
                                             <div className="w-9 h-9 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
                                                 <Award size={16} className="text-emerald-600" />
                                             </div>
                                             <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-bold text-gray-900 line-clamp-1">{item.title}</p>
-                                                <p className="text-[11px] text-gray-400">{item.agency?.name} · <span className="font-mono">{item.award_number}</span></p>
+                                                <p className="text-sm font-bold text-gray-900 line-clamp-2">{item.title}</p>
+                                                <p className="text-[11px] text-gray-400 truncate">{item.agency?.name} · <span className="font-mono">{item.award_number}</span></p>
                                             </div>
+                                            <ActionMenu
+                                                items={[
+                                                    { label: 'Manage Award', icon: Eye, onClick: () => setDrawerAward(item) },
+                                                    { divider: true },
+                                                    { label: 'Delete', icon: Trash2, danger: true, onClick: () => setConfirm(item.id) },
+                                                ]}
+                                            />
                                         </div>
-                                        <div className="flex flex-wrap gap-2 mt-3">
+                                        <div className="flex flex-wrap items-center gap-2 mt-3">
                                             <StatusDot status={item.status} statuses={AWARD_STATUSES} />
-                                            <span className="text-xs font-bold text-emerald-700">{item.currency} {Number(item.amount_awarded).toLocaleString()}</span>
+                                            <span className="text-xs font-bold text-emerald-700 tabular-nums">{item.currency} {Number(item.amount_awarded).toLocaleString()}</span>
+                                            <span className="text-[11px] text-gray-400">{formatDate(item.start_date)} – {formatDate(item.end_date)}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -1917,7 +1941,7 @@ function AwardsTab() {
             </div>
 
             {totalPages > 1 && (
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-2">
                     <p className="text-xs text-gray-400">Page {page} of {totalPages}</p>
                     <div className="flex gap-1">
                         <button disabled={page <= 1} onClick={() => setPage(p => p - 1)}
@@ -2013,10 +2037,10 @@ function OpportunitiesTab() {
     return (
         <div className="space-y-4">
             <div className="flex flex-wrap gap-2.5 items-center">
-                <div className="relative flex-1 min-w-52">
+                <div className="relative basis-full sm:basis-auto sm:flex-1 sm:min-w-52">
                     <Search size={13} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                     <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search opportunities…"
-                        className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white" />
+                        className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white" />
                 </div>
                 <div className="relative">
                     <Filter size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
@@ -2059,7 +2083,6 @@ function OpportunitiesTab() {
                                             )}
                                         </div>
                                         <ActionMenu
-                                            btnRef={{ current: null }}
                                             items={[
                                                 { label: 'Edit', icon: Pencil, onClick: () => setModal(item) },
                                                 { divider: true },
@@ -2138,16 +2161,16 @@ function AgencyModal({ agency, onSave, onClose }) {
     };
 
     const f = key => ({ value: form[key] ?? '', onChange: e => setForm(p => ({ ...p, [key]: e.target.value })) });
-    const cls = 'w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:bg-white';
+    const cls = 'w-full border border-gray-200 rounded-xl px-3 py-2.5 text-base sm:text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:bg-white';
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[2px] p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[90vh] flex flex-col">
-                <div className="flex items-center justify-between px-6 py-5 border-b border-gray-100 shrink-0">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-[2px] sm:p-4">
+            <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden max-h-[92dvh] sm:max-h-[90vh] flex flex-col">
+                <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-4 sm:py-5 border-b border-gray-100 shrink-0">
                     <h2 className="text-base font-bold text-gray-900">{agency ? 'Edit Agency' : 'New Funding Agency'}</h2>
                     <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg"><X size={16} /></button>
                 </div>
-                <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+                <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-4">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div className="sm:col-span-2">
                             <label className="block text-xs font-semibold text-gray-700 mb-1.5">Name *</label>
@@ -2196,7 +2219,7 @@ function AgencyModal({ agency, onSave, onClose }) {
                         </div>
                     </div>
                 </div>
-                <div className="flex gap-3 px-6 py-4 border-t border-gray-100 bg-gray-50/50 shrink-0">
+                <div className="flex gap-3 px-4 sm:px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-gray-100 bg-gray-50/50 shrink-0">
                     <button onClick={onClose} className="flex-1 py-2.5 border border-gray-200 bg-white rounded-xl text-sm text-gray-700 hover:bg-gray-50 font-semibold">Cancel</button>
                     <button onClick={save} disabled={saving} className="flex-1 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 disabled:opacity-60 flex items-center justify-center gap-2">
                         {saving ? <><Loader2 size={13} className="animate-spin" /> Saving…</> : agency ? 'Update Agency' : 'Create Agency'}
@@ -2256,15 +2279,15 @@ function AgenciesTab() {
 
     return (
         <div className="space-y-4">
-            <div className="flex gap-2.5 items-center">
-                <div className="relative flex-1">
+            <div className="flex flex-wrap gap-2.5 items-center">
+                <div className="relative flex-1 min-w-0">
                     <Search size={13} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                     <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search agencies…"
-                        className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white" />
+                        className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-gray-200 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white" />
                 </div>
                 <button onClick={() => setModal('create')}
                     className="flex items-center gap-1.5 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-bold hover:bg-indigo-700 transition-colors">
-                    <Plus size={14} /> Add Agency
+                    <Plus size={14} /> <span className="hidden sm:inline">Add Agency</span><span className="sm:hidden">Add</span>
                 </button>
             </div>
 
@@ -2300,7 +2323,6 @@ function AgenciesTab() {
                                             {item.is_active ? 'Active' : 'Inactive'}
                                         </span>
                                         <ActionMenu
-                                            btnRef={{ current: null }}
                                             items={[
                                                 { label: 'Edit', icon: Pencil, onClick: () => setModal(item) },
                                                 { divider: true },
@@ -2308,14 +2330,22 @@ function AgenciesTab() {
                                             ]}
                                         />
                                     </div>
-                                    <div className="lg:hidden px-4 py-4 flex items-center gap-3">
+                                    <div className="lg:hidden px-4 py-4 flex items-start gap-3">
                                         <Avatar name={item.name} size={9} />
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-sm font-bold text-gray-900 truncate">{item.name}</p>
-                                            <p className="text-xs text-gray-400">{item.type} · {item.country || '—'}</p>
+                                            <p className="text-sm font-bold text-gray-900 truncate">{item.name}{item.acronym ? <span className="font-normal text-gray-400"> · {item.acronym}</span> : null}</p>
+                                            <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                                                <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full capitalize', TYPE_COLORS[item.type] ?? TYPE_COLORS.other)}>{item.type}</span>
+                                                <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full', item.is_active ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500')}>
+                                                    {item.is_active ? 'Active' : 'Inactive'}
+                                                </span>
+                                                {item.country && <span className="text-[11px] text-gray-400">{item.country}</span>}
+                                            </div>
+                                            {(item.contact_person || item.contact_email) && (
+                                                <p className="text-[11px] text-gray-500 mt-1 truncate">{[item.contact_person, item.contact_email].filter(Boolean).join(' · ')}</p>
+                                            )}
                                         </div>
                                         <ActionMenu
-                                            btnRef={{ current: null }}
                                             items={[
                                                 { label: 'Edit', icon: Pencil, onClick: () => setModal(item) },
                                                 { label: 'Delete', icon: Trash2, danger: true, onClick: () => setConfirm(item.id) },
@@ -2363,28 +2393,30 @@ export default function ExternalFunds() {
 
     return (
         <AppLayout breadcrumb="External Funds">
-            <div className="max-w-7xl mx-auto space-y-6 pb-10">
-                <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-200">
+            <div className="max-w-7xl mx-auto space-y-5 sm:space-y-6 pb-10 min-w-0">
+                <div className="flex items-center gap-3 sm:gap-4">
+                    <div className="w-11 h-11 sm:w-12 sm:h-12 shrink-0 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-200">
                         <Banknote size={22} className="text-white" />
                     </div>
-                    <div>
-                        <h1 className="text-2xl font-black text-gray-900 tracking-tight">External Funds</h1>
-                        <p className="text-sm text-gray-500 mt-0.5">Manage grants, funding agencies, applications, and award lifecycle</p>
+                    <div className="min-w-0">
+                        <h1 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight">External Funds</h1>
+                        <p className="text-xs sm:text-sm text-gray-500 mt-0.5">Manage grants, funding agencies, applications, and award lifecycle</p>
                     </div>
                 </div>
 
-                <div className="flex gap-1 p-1 bg-gray-100 rounded-xl w-fit overflow-x-auto">
+                <div className="-mx-5 px-5 md:mx-0 md:px-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <div className="flex gap-1 p-1 bg-gray-100 rounded-xl w-max">
                     {TABS.map(tab => (
                         <button key={tab.id} onClick={() => setActiveTab(tab.id)}
                             className={cn(
-                                'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap',
+                                'flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap',
                                 activeTab === tab.id ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700',
                             )}>
                             <tab.icon size={14} />
                             {tab.label}
                         </button>
                     ))}
+                </div>
                 </div>
 
                 {activeTab === 'dashboard'     && <DashboardTab />}

@@ -112,6 +112,22 @@ export default function VerifyCertificate() {
                             ['Certificate no.', c.code],
                         ]} />
                     </div>
+                ) : c?.status === 'withdrawn' ? (
+                    <div className="overflow-hidden rounded-2xl border border-amber-200 bg-white shadow-sm">
+                        <div className="flex items-center gap-3 bg-amber-50 px-6 py-5">
+                            <ShieldX size={28} className="text-amber-600" />
+                            <div>
+                                <p className="text-lg font-bold text-amber-900">{t('Certificate withdrawn')}</p>
+                                <p className="text-sm text-amber-700">{t('This certificate was issued, but the certificates for its academic year have been withdrawn.')}</p>
+                            </div>
+                        </div>
+                        <Details rows={[
+                            ['Issued to', c.reviewer],
+                            ['Academic year', c.academic_year],
+                            ['Withdrawn', formatDate(c.withdrawn_at)],
+                            ['Certificate no.', c.code],
+                        ]} />
+                    </div>
                 ) : c ? (
                     <div className="overflow-hidden rounded-2xl border border-emerald-200 bg-white shadow-sm">
                         <div className="flex items-center gap-3 bg-emerald-50 px-6 py-5">

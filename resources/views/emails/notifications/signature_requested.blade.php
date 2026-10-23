@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ app()->getLocale() }}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Signature Required</title>
+<title>{{ __('Signature Required') }}</title>
 <style>
   body{margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
   .wrap{max-width:600px;margin:40px auto;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 4px 32px rgba(0,0,0,.10);}
@@ -42,25 +42,24 @@
         <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/>
       </svg>
     </div>
-    <h1>Signature Required</h1>
-    <p>Your action is needed on a budget request</p>
-    <span class="badge">Action Required</span>
+    <h1>{{ __('Signature Required') }}</h1>
+    <p>{{ __('Your action is needed on a budget request') }}</p>
+    <span class="badge">{{ __('Action Required') }}</span>
   </div>
 
   <div class="body">
-    <p style="font-size:15px;color:#374151;margin:0 0 16px;">Dear <strong>{{ $recipient->name ?? 'Team Member' }}</strong>,</p>
+    <p style="font-size:15px;color:#374151;margin:0 0 16px;">{!! __('Dear :name,', ['name' => '<strong>'.e($recipient->name ?? __('Team Member')).'</strong>']) !!}</p>
     <p style="font-size:14px;color:#4b5563;line-height:1.75;margin:0 0 20px;">
-      Your <strong>signature is required</strong> on a budget request for the following proposal.
-      Please log in to the platform to review the request and either sign or refuse with a reason.
+      {!! __('Your <strong>signature is required</strong> on a budget request for the following proposal. Please log in to the platform to review the request and either sign or refuse with a reason.') !!}
     </p>
 
     <div class="info-card">
-      <p class="info-card-title">Budget Request Details</p>
+      <p class="info-card-title">{{ __('Budget Request Details') }}</p>
       @if(!empty($round_number))
-      <div class="row"><label>Funding Round</label><span style="font-weight:700;color:#92400e;">Round {{ $round_number }}</span></div>
+      <div class="row"><label>{{ __('Funding Round') }}</label><span style="font-weight:700;color:#92400e;">{{ __('Round :round', ['round' => $round_number]) }}</span></div>
       @endif
       @if(!empty($title))
-      <div class="row"><label>Proposal</label><span style="font-weight:600;color:#0f172a;text-align:right;max-width:60%;">{{ $title }}</span></div>
+      <div class="row"><label>{{ __('Proposal') }}</label><span style="font-weight:600;color:#0f172a;text-align:right;max-width:60%;">{{ $title }}</span></div>
       @endif
     </div>
 
@@ -68,22 +67,22 @@
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.5" style="flex-shrink:0;margin-top:1px;">
         <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
       </svg>
-      <p>Please review and sign <strong>as soon as possible</strong>. Delays may affect the budget disbursement timeline.</p>
+      <p>{!! __('Please review and sign <strong>as soon as possible</strong>. Delays may affect the budget disbursement timeline.') !!}</p>
     </div>
 
     <div class="cta">
-      <a href="{{ config('app.url') }}" class="btn">Sign Budget Request →</a>
-      <p class="cta-sub">Log in to the platform and navigate to your budget requests.</p>
+      <a href="{{ config('app.url') }}" class="btn">{{ __('Sign Budget Request →') }}</a>
+      <p class="cta-sub">{{ __('Log in to the platform and navigate to your budget requests.') }}</p>
     </div>
 
     <hr class="divider">
     <p style="font-size:13px;color:#9ca3af;margin:0;">
-      You received this because you are listed as a co-investigator or signatory on this proposal via <strong>{{ $platformName }}</strong>.
+      {!! __('You received this because you are listed as a co-investigator or signatory on this proposal via <strong>:platform</strong>.', ['platform' => e($platformName)]) !!}
     </p>
   </div>
 
   <div class="footer">
-    &copy; {{ date('Y') }} <strong>{{ $platformName }}</strong> &middot; {{ $orgName }} Research &amp; Technology Transfer
+    &copy; {{ date('Y') }} <strong>{{ $platformName }}</strong> &middot; {{ __(':org Research & Technology Transfer', ['org' => $orgName]) }}
   </div>
 </div>
 </body>

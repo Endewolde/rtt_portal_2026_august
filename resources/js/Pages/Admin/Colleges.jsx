@@ -209,7 +209,7 @@ export default function AdminColleges() {
                 </div>
 
                 {/* Stats */}
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <StatCard label="Total Colleges"   value={colleges.length} icon={Building}  color="bg-indigo-500" />
                     <StatCard label="Active Colleges"  value={activeCount}     icon={Building2} color="bg-emerald-500" />
                     <StatCard label="Total Departments" value={totalDepts}     icon={Users}     color="bg-blue-500" />
@@ -243,121 +243,123 @@ export default function AdminColleges() {
                             <p className="text-gray-400 font-medium">{search ? 'No colleges match your search.' : 'No colleges found.'}</p>
                         </div>
                     ) : (
-                        <table className="min-w-full">
-                            <thead>
-                                <tr className="bg-linear-to-r from-indigo-600 to-indigo-700">
-                                    {['#', 'College', 'Code', 'Dean', 'Departments', 'Status', ''].map((h) => (
-                                        <th key={h} className="px-5 py-3.5 text-left text-xs font-semibold text-indigo-100 uppercase tracking-wide">{h}</th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-50">
-                                {filtered.map((college, idx) => (
-                                    <>
-                                        <tr
-                                            key={college.id}
-                                            className={`hover:bg-indigo-50/40 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}
-                                        >
-                                            <td className="px-5 py-4 text-xs font-medium text-indigo-200 tabular-nums w-10">{idx + 1}</td>
-                                            <td className="px-5 py-4">
-                                                <button
-                                                    onClick={() => toggleExpand(college.id)}
-                                                    className="flex items-center gap-2.5 text-sm font-semibold text-gray-900 hover:text-indigo-700 transition"
-                                                >
-                                                    <span className={`p-0.5 rounded transition-transform ${expanded[college.id] ? 'text-indigo-600 rotate-0' : 'text-gray-400'}`}>
-                                                        {expanded[college.id]
-                                                            ? <ChevronDown size={15} />
-                                                            : <ChevronRight size={15} />
-                                                        }
-                                                    </span>
-                                                    <span className="flex items-center gap-2">
-                                                        <span className="w-7 h-7 rounded-lg bg-indigo-100 flex items-center justify-center text-xs font-bold text-indigo-700">
-                                                            {college.code?.slice(0, 2)}
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full">
+                                <thead>
+                                    <tr className="bg-linear-to-r from-indigo-600 to-indigo-700">
+                                        {['#', 'College', 'Code', 'Dean', 'Departments', 'Status', ''].map((h) => (
+                                            <th key={h} className="px-5 py-3.5 text-left text-xs font-semibold text-indigo-100 uppercase tracking-wide">{h}</th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-50">
+                                    {filtered.map((college, idx) => (
+                                        <>
+                                            <tr
+                                                key={college.id}
+                                                className={`hover:bg-indigo-50/40 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}
+                                            >
+                                                <td className="px-5 py-4 text-xs font-medium text-indigo-200 tabular-nums w-10">{idx + 1}</td>
+                                                <td className="px-5 py-4">
+                                                    <button
+                                                        onClick={() => toggleExpand(college.id)}
+                                                        className="flex items-center gap-2.5 text-sm font-semibold text-gray-900 hover:text-indigo-700 transition"
+                                                    >
+                                                        <span className={`p-0.5 rounded transition-transform ${expanded[college.id] ? 'text-indigo-600 rotate-0' : 'text-gray-400'}`}>
+                                                            {expanded[college.id]
+                                                                ? <ChevronDown size={15} />
+                                                                : <ChevronRight size={15} />
+                                                            }
                                                         </span>
-                                                        {college.name}
+                                                        <span className="flex items-center gap-2">
+                                                            <span className="w-7 h-7 rounded-lg bg-indigo-100 flex items-center justify-center text-xs font-bold text-indigo-700">
+                                                                {college.code?.slice(0, 2)}
+                                                            </span>
+                                                            {college.name}
+                                                        </span>
+                                                    </button>
+                                                </td>
+                                                <td className="px-5 py-4">
+                                                    <span className="font-mono text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-md">{college.code}</span>
+                                                </td>
+                                                <td className="px-5 py-4 text-sm text-gray-600">
+                                                    {college.dean_name
+                                                        ? <div>
+                                                            <p className="font-medium text-gray-800">{college.dean_name}</p>
+                                                            {college.dean_email && <p className="text-xs text-gray-400">{college.dean_email}</p>}
+                                                          </div>
+                                                        : <span className="text-gray-300">—</span>
+                                                    }
+                                                </td>
+                                                <td className="px-5 py-4">
+                                                    <span className="inline-flex items-center gap-1.5 text-sm text-gray-700">
+                                                        <Building2 size={13} className="text-blue-400" />
+                                                        {college.departments_count ?? 0}
                                                     </span>
-                                                </button>
-                                            </td>
-                                            <td className="px-5 py-4">
-                                                <span className="font-mono text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-md">{college.code}</span>
-                                            </td>
-                                            <td className="px-5 py-4 text-sm text-gray-600">
-                                                {college.dean_name
-                                                    ? <div>
-                                                        <p className="font-medium text-gray-800">{college.dean_name}</p>
-                                                        {college.dean_email && <p className="text-xs text-gray-400">{college.dean_email}</p>}
-                                                      </div>
-                                                    : <span className="text-gray-300">—</span>
-                                                }
-                                            </td>
-                                            <td className="px-5 py-4">
-                                                <span className="inline-flex items-center gap-1.5 text-sm text-gray-700">
-                                                    <Building2 size={13} className="text-blue-400" />
-                                                    {college.departments_count ?? 0}
-                                                </span>
-                                            </td>
-                                            <td className="px-5 py-4">
-                                                <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${
-                                                    (college.status ?? 'active') === 'active'
-                                                        ? 'bg-emerald-100 text-emerald-700'
-                                                        : 'bg-gray-100 text-gray-500'
-                                                }`}>
-                                                    <span className={`w-1.5 h-1.5 rounded-full ${(college.status ?? 'active') === 'active' ? 'bg-emerald-500' : 'bg-gray-400'}`} />
-                                                    {college.status ?? 'active'}
-                                                </span>
-                                            </td>
-                                            <td className="px-5 py-4 text-right">
-                                                {hasPermission('colleges.update') && (
-                                                    <div className="flex items-center justify-end gap-1">
-                                                        <button
-                                                            onClick={() => openEdit(college)}
-                                                            className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
-                                                        >
-                                                            <Pencil size={14} />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => setDeleteConfirm(college)}
-                                                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                                                        >
-                                                            <Trash2 size={14} />
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </td>
-                                        </tr>
-
-                                        {/* Departments row */}
-                                        {expanded[college.id] && (
-                                            <tr key={`${college.id}-depts`} className="bg-indigo-50/60">
-                                                <td colSpan={6} className="px-8 py-4">
-                                                    {deptLoading[college.id] ? (
-                                                        <div className="flex items-center gap-2 text-xs text-indigo-400">
-                                                            <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
-                                                            Loading departments…
-                                                        </div>
-                                                    ) : (departments[college.id] ?? []).length === 0 ? (
-                                                        <p className="text-xs text-gray-400 italic">No departments added yet.</p>
-                                                    ) : (
-                                                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
-                                                            {(departments[college.id] ?? []).map((d) => (
-                                                                <div key={d.id} className="bg-white rounded-lg border border-indigo-100 px-3 py-2 flex items-center gap-2">
-                                                                    <Building2 size={12} className="text-indigo-400 shrink-0" />
-                                                                    <div className="min-w-0">
-                                                                        <p className="text-xs font-semibold text-gray-800 truncate">{d.name}</p>
-                                                                        <p className="text-[10px] text-gray-400 font-mono">{d.code}</p>
-                                                                    </div>
-                                                                    <span className={`ml-auto shrink-0 w-1.5 h-1.5 rounded-full ${d.status === 'active' ? 'bg-emerald-400' : 'bg-gray-300'}`} />
-                                                                </div>
-                                                            ))}
+                                                </td>
+                                                <td className="px-5 py-4">
+                                                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                                                        (college.status ?? 'active') === 'active'
+                                                            ? 'bg-emerald-100 text-emerald-700'
+                                                            : 'bg-gray-100 text-gray-500'
+                                                    }`}>
+                                                        <span className={`w-1.5 h-1.5 rounded-full ${(college.status ?? 'active') === 'active' ? 'bg-emerald-500' : 'bg-gray-400'}`} />
+                                                        {college.status ?? 'active'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-5 py-4 text-right">
+                                                    {hasPermission('colleges.update') && (
+                                                        <div className="flex items-center justify-end gap-1">
+                                                            <button
+                                                                onClick={() => openEdit(college)}
+                                                                className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                                                            >
+                                                                <Pencil size={14} />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => setDeleteConfirm(college)}
+                                                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                                                            >
+                                                                <Trash2 size={14} />
+                                                            </button>
                                                         </div>
                                                     )}
                                                 </td>
                                             </tr>
-                                        )}
-                                    </>
-                                ))}
-                            </tbody>
-                        </table>
+
+                                            {/* Departments row */}
+                                            {expanded[college.id] && (
+                                                <tr key={`${college.id}-depts`} className="bg-indigo-50/60">
+                                                    <td colSpan={6} className="px-8 py-4">
+                                                        {deptLoading[college.id] ? (
+                                                            <div className="flex items-center gap-2 text-xs text-indigo-400">
+                                                                <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                                                                Loading departments…
+                                                            </div>
+                                                        ) : (departments[college.id] ?? []).length === 0 ? (
+                                                            <p className="text-xs text-gray-400 italic">No departments added yet.</p>
+                                                        ) : (
+                                                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                                                                {(departments[college.id] ?? []).map((d) => (
+                                                                    <div key={d.id} className="bg-white rounded-lg border border-indigo-100 px-3 py-2 flex items-center gap-2">
+                                                                        <Building2 size={12} className="text-indigo-400 shrink-0" />
+                                                                        <div className="min-w-0">
+                                                                            <p className="text-xs font-semibold text-gray-800 truncate">{d.name}</p>
+                                                                            <p className="text-[10px] text-gray-400 font-mono">{d.code}</p>
+                                                                        </div>
+                                                                        <span className={`ml-auto shrink-0 w-1.5 h-1.5 rounded-full ${d.status === 'active' ? 'bg-emerald-400' : 'bg-gray-300'}`} />
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     )}
                 </div>
 

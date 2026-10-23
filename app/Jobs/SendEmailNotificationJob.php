@@ -14,10 +14,11 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Traits\Localizable;
 
 class SendEmailNotificationJob implements ShouldQueue
 {
-    use Dispatchable, DispatchesToWorkerWhenAlive, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable, DispatchesToWorkerWhenAlive, InteractsWithQueue, Localizable, Queueable, SerializesModels;
 
     public int $tries = 3;
 
@@ -45,7 +46,13 @@ class SendEmailNotificationJob implements ShouldQueue
 
         app(MailConfigService::class)->applyFromDatabase();
 
-        $subject = $this->getSubject();
+        // Written in the language the recipient reads the platform in.
+        $this->withLocale($this->recipient->locale ?: config('app.locale'), fn () => $this->send());
+    }
+
+    private function send(): void
+    {
+        $subject = $this->localizedSubject($this->getSubject());
         $template = $this->getTemplate();
 
         try {
@@ -70,6 +77,23 @@ class SendEmailNotificationJob implements ShouldQueue
             ]);
             throw $e;
         }
+    }
+
+    /**
+     * Subjects are "Fixed wording — detail". Both parts are translated where a
+     * translation exists; a tracker number or name has none and stays as it is.
+     */
+    private function localizedSubject(string $subject): string
+    {
+        foreach ([' — ', ': '] as $separator) {
+            if (str_contains($subject, $separator)) {
+                [$fixed, $rest] = explode($separator, $subject, 2);
+
+                return __($fixed).$separator.__($rest);
+            }
+        }
+
+        return __($subject);
     }
 
     private function getSubject(): string
@@ -114,6 +138,7 @@ class SendEmailNotificationJob implements ShouldQueue
             'progress_report_reviewed' => 'Your Progress Report Was Reviewed — '.($this->data['tracker_number'] ?? ''),
             'review_certificate_released' => 'Your Certificate of Review Service — '.($this->data['academic_year'] ?? ''),
             'review_certificate_revoked' => 'Certificate of Review Service Revoked — '.($this->data['academic_year'] ?? ''),
+            'review_certificate_withdrawn' => 'Certificates of Review Service Withdrawn — '.($this->data['academic_year'] ?? ''),
             'stage_reminder' => 'Action Needed — '.($this->data['tracker_number'] ?? '').' Is Waiting On You',
             'review_disagreement' => 'Blind Reviewers Disagree — Decision On Hold — '.($this->data['tracker_number'] ?? ''),
             'approval_report_resolved' => 'Your Mistaken-Approval Report Was Reviewed — '.($this->data['tracker_number'] ?? ''),
@@ -129,6 +154,7 @@ class SendEmailNotificationJob implements ShouldQueue
             'defence_deadline_passed' => 'Defence Score Deadline Passed — '.($this->data['tracker_number'] ?? ''),
             'defence_absence_reported' => 'Team Reported Absent From Open Defence — '.($this->data['tracker_number'] ?? ''),
             'defence_attendance_needed' => 'Confirm The Open Defence Was Held — '.($this->data['tracker_number'] ?? ''),
+            'reviewer_application_received' => 'New Reviewer Application',
             'defence_score_voided' => 'Open Defence Score Voided — '.($this->data['tracker_number'] ?? ''),
             default => 'RTT Platform Notification',
         };

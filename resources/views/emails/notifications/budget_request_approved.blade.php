@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ app()->getLocale() }}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Budget Request Approved</title>
+<title>{{ __('Budget Request Approved') }}</title>
 <style>
   body{margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
   .wrap{max-width:600px;margin:40px auto;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 4px 32px rgba(0,0,0,.10);}
@@ -48,65 +48,64 @@
         <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
       </svg>
     </div>
-    <h1>Budget Approved!</h1>
-    <p>Your budget request has been approved by the college</p>
-    <span class="badge">✓ Approved</span>
+    <h1>{{ __('Budget Approved!') }}</h1>
+    <p>{{ __('Your budget request has been approved by the college') }}</p>
+    <span class="badge">{{ __('✓ Approved') }}</span>
   </div>
 
   <div class="body">
-    <p style="font-size:15px;color:#374151;margin:0 0 16px;">Dear <strong>{{ $recipient->name ?? 'Researcher' }}</strong>,</p>
+    <p style="font-size:15px;color:#374151;margin:0 0 16px;">{!! __('Dear :name,', ['name' => '<strong>'.e($recipient->name ?? __('Researcher')).'</strong>']) !!}</p>
     <p style="font-size:14px;color:#4b5563;line-height:1.75;margin:0 0 20px;">
-      We are pleased to inform you that your budget request has been <strong>approved</strong> by the college.
-      The Finance Office will process the disbursement based on the approved budget.
+      {!! __('We are pleased to inform you that your budget request has been <strong>approved</strong> by the college. The Finance Office will process the disbursement based on the approved budget.') !!}
     </p>
 
     <div class="approval-card">
       @if(!empty($tracker_number))
-      <p class="tracker-label">Tracker Number</p>
+      <p class="tracker-label">{{ __('Tracker Number') }}</p>
       <p class="tracker-val">{{ $tracker_number }}</p>
       @endif
       @if(!empty($title))
-      <div class="row"><label>Proposal</label><span style="font-weight:600;color:#14532d;text-align:right;max-width:60%;">{{ $title }}</span></div>
+      <div class="row"><label>{{ __('Proposal') }}</label><span style="font-weight:600;color:#14532d;text-align:right;max-width:60%;">{{ $title }}</span></div>
       @endif
       @if(!empty($round_number))
-      <div class="row"><label>Funding Round</label><span style="font-weight:600;color:#14532d;">Round {{ $round_number }}</span></div>
+      <div class="row"><label>{{ __('Funding Round') }}</label><span style="font-weight:600;color:#14532d;">{{ __('Round :round', ['round' => $round_number]) }}</span></div>
       @endif
       @if(!empty($requested_amount))
-      <div class="row"><label>Approved Amount</label><span class="amount-highlight">ETB {{ number_format($requested_amount, 2) }}</span></div>
+      <div class="row"><label>{{ __('Approved Amount') }}</label><span class="amount-highlight">ETB {{ number_format($requested_amount, 2) }}</span></div>
       @endif
     </div>
 
     @if(!empty($notes))
     <div class="notes-box">
-      <p class="notes-label">College Review Notes</p>
+      <p class="notes-label">{{ __('College Review Notes') }}</p>
       <p class="notes-text">{{ $notes }}</p>
     </div>
     @endif
 
     <div class="steps">
-      <p class="steps-title">Next Steps</p>
+      <p class="steps-title">{{ __('Next Steps') }}</p>
       <div class="step">
         <div class="step-num">1</div>
-        <div class="step-text">The <strong>Finance Office</strong> will process the disbursement based on the approved budget.</div>
+        <div class="step-text">{!! __('The <strong>Finance Office</strong> will process the disbursement based on the approved budget.') !!}</div>
       </div>
       <div class="step">
         <div class="step-num">2</div>
-        <div class="step-text">You will be <strong>notified once the funds</strong> are disbursed to your account.</div>
+        <div class="step-text">{!! __('You will be <strong>notified once the funds</strong> are disbursed to your account.') !!}</div>
       </div>
       <div class="step">
         <div class="step-num">3</div>
-        <div class="step-text">Ensure all expenditures are <strong>properly documented</strong> for future settlement reporting.</div>
+        <div class="step-text">{!! __('Ensure all expenditures are <strong>properly documented</strong> for future settlement reporting.') !!}</div>
       </div>
     </div>
 
     <hr class="divider">
     <p style="font-size:13px;color:#9ca3af;margin:0;">
-      Sent via <strong>{{ $platformName }}</strong>. Contact the {{ $orgName }} Finance Office for disbursement queries.
+      {!! __('Sent via <strong>:platform</strong>. Contact the :org Finance Office for disbursement queries.', ['platform' => e($platformName), 'org' => e($orgName)]) !!}
     </p>
   </div>
 
   <div class="footer">
-    &copy; {{ date('Y') }} <strong>{{ $platformName }}</strong> &middot; {{ $orgName }} Research &amp; Technology Transfer
+    &copy; {{ date('Y') }} <strong>{{ $platformName }}</strong> &middot; {{ __(':org Research & Technology Transfer', ['org' => $orgName]) }}
   </div>
 </div>
 </body>

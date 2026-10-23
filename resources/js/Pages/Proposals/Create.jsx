@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { translate as tr } from '../../lib/i18n'
 import {
     Clock, AlertCircle, CheckCircle2, ChevronRight, FileText,
     Users, DollarSign, Upload, Eye, Send, Megaphone, ArrowLeft,
@@ -47,7 +48,7 @@ function StepSidebar({ currentStep, completedSteps, onGoTo }) {
     return (
         <aside className="hidden lg:block w-56 shrink-0">
             <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-3 sticky top-6">
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2 mb-2">Progress</p>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2 mb-2">{tr("Progress")}</p>
                 <div className="space-y-0.5">
                     {STEPS.map((s, i) => {
                         const done    = completedSteps.has(i);
@@ -91,7 +92,7 @@ function StepSidebar({ currentStep, completedSteps, onGoTo }) {
                 {/* Progress bar */}
                 <div className="mt-4 px-2">
                     <div className="flex justify-between text-[10px] text-gray-400 mb-1">
-                        <span>Progress</span>
+                        <span>{tr("Progress")}</span>
                         <span>{Math.round((completedSteps.size / STEPS.length) * 100)}%</span>
                     </div>
                     <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
@@ -159,7 +160,7 @@ function Step1({ data, onChange, errors, category, lookupOptions }) {
                 <input
                     value={data.title ?? ''}
                     onChange={e => onChange({ ...data, title: e.target.value })}
-                    placeholder="Enter a clear, descriptive title for your proposal"
+                    placeholder={tr("Enter a clear, descriptive title for your proposal")}
                     className={inputCls('title')}
                 />
                 <FieldError k="title" />
@@ -172,12 +173,12 @@ function Step1({ data, onChange, errors, category, lookupOptions }) {
                     value={data.abstract ?? ''}
                     onChange={e => onChange({ ...data, abstract: e.target.value })}
                     rows={5}
-                    placeholder="Provide a comprehensive summary of your proposal (minimum 100 characters)…"
+                    placeholder={tr("Provide a comprehensive summary of your proposal (minimum 100 characters)…")}
                     className={`${inputCls('abstract')} resize-none`}
                 />
                 <div className={`flex items-center justify-between mt-1.5 text-xs ${abstractOk ? 'text-green-600' : 'text-gray-400'}`}>
-                    <span>{abstractLen} / 100 characters minimum</span>
-                    {abstractOk && <span className="flex items-center gap-1"><CheckCircle2 size={11} /> Meets requirement</span>}
+                    <span>{tr(":abstractLen / 100 characters minimum", { abstractLen: abstractLen })}</span>
+                    {abstractOk && <span className="flex items-center gap-1"><CheckCircle2 size={11} /> {tr("Meets requirement")}</span>}
                 </div>
                 <FieldError k="abstract" />
             </div>
@@ -188,10 +189,10 @@ function Step1({ data, onChange, errors, category, lookupOptions }) {
                 <input
                     value={data.keywords ?? ''}
                     onChange={e => onChange({ ...data, keywords: e.target.value })}
-                    placeholder="e.g. machine learning, climate change, Ethiopian agriculture"
+                    placeholder={tr("e.g. machine learning, climate change, Ethiopian agriculture")}
                     className={inputCls('keywords')}
                 />
-                <p className="text-xs text-gray-400 mt-1">Separate keywords with commas.</p>
+                <p className="text-xs text-gray-400 mt-1">{tr("Separate keywords with commas.")}</p>
             </div>
 
             {/* ── Category-specific fields ───────────────────── */}
@@ -212,7 +213,7 @@ function Step1({ data, onChange, errors, category, lookupOptions }) {
                             onChange={e => onChange({ ...data, focus_area: e.target.value })}
                             className={inputCls('focus_area')}
                         >
-                            <option value="">Select a focus area…</option>
+                            <option value="">{tr("Select a focus area…")}</option>
                             {focusOptions.map(opt => (
                                 <option key={opt} value={opt}>{opt}</option>
                             ))}
@@ -229,7 +230,7 @@ function Step1({ data, onChange, errors, category, lookupOptions }) {
                                 onChange={e => onChange({ ...data, research_type: e.target.value })}
                                 className={inputCls('research_type')}
                             >
-                                <option value="">Select research type…</option>
+                                <option value="">{tr("Select research type…")}</option>
                                 {researchTypeOptions.map(opt => (
                                     <option key={opt} value={opt}>{opt}</option>
                                 ))}
@@ -247,7 +248,7 @@ function Step1({ data, onChange, errors, category, lookupOptions }) {
                                 onChange={e => onChange({ ...data, duration_months: e.target.value })}
                                 className={inputCls('duration_months')}
                             >
-                                <option value="">Select duration…</option>
+                                <option value="">{tr("Select duration…")}</option>
                                 {DURATION_OPTIONS.map(m => (
                                     <option key={m} value={m}>
                                         {m < 12 ? `${m} months` : `${m / 12} year${m > 12 ? 's' : ''}`}
@@ -264,7 +265,7 @@ function Step1({ data, onChange, errors, category, lookupOptions }) {
             {/* Ethical Clearance — only shown when feature is enabled */}
             {hasSubFeature('workflow.ethical_clearance') && (
                 <div className="mt-6 border border-amber-200 bg-amber-50 rounded-xl p-4 space-y-3">
-                    <p className="text-sm font-semibold text-amber-800">Ethical Clearance</p>
+                    <p className="text-sm font-semibold text-amber-800">{tr("Ethical Clearance")}</p>
                     <div className="flex items-center gap-3">
                         <input
                             id="ec-required"
@@ -274,15 +275,15 @@ function Step1({ data, onChange, errors, category, lookupOptions }) {
                             className="h-4 w-4 rounded border-gray-300 text-amber-600"
                         />
                         <label htmlFor="ec-required" className="text-sm text-gray-700">
-                            This proposal requires ethical clearance approval
+                            {tr("This proposal requires ethical clearance approval")}
                         </label>
                     </div>
                     {data.ethical_clearance_required && (
                         <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">Clearance Reference Number</label>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">{tr("Clearance Reference Number")}</label>
                             <input
                                 type="text"
-                                placeholder="e.g. EC-2026-00123"
+                                placeholder={tr("e.g. EC-2026-00123")}
                                 value={data.ethical_clearance_number ?? ''}
                                 onChange={e => onChange({ ...data, ethical_clearance_number: e.target.value })}
                                 className="w-full rounded-lg border border-amber-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
@@ -309,7 +310,7 @@ function Step2({ user }) {
             <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl p-4">
                 <Info size={16} className="text-blue-500 shrink-0 mt-0.5" />
                 <p className="text-sm text-blue-700">
-                    Your profile is automatically used as the Principal Investigator. To update this information, edit your profile settings.
+                    {tr("Your profile is automatically used as the Principal Investigator. To update this information, edit your profile settings.")}
                 </p>
             </div>
 
@@ -352,8 +353,8 @@ function Step4({ items, onChange, rowErrors }) {
             {items.length === 0 ? (
                 <div className="border-2 border-dashed border-amber-300 bg-amber-50 rounded-xl px-4 py-10 text-center">
                     <DollarSign size={28} className="mx-auto text-amber-400 mb-2" />
-                    <p className="text-sm font-semibold text-amber-700">No budget items yet</p>
-                    <p className="text-xs text-amber-600 mt-1">Add at least one budget item to continue.</p>
+                    <p className="text-sm font-semibold text-amber-700">{tr("No budget items yet")}</p>
+                    <p className="text-xs text-amber-600 mt-1">{tr("Add at least one budget item to continue.")}</p>
                 </div>
             ) : (
                 <div className="space-y-2">
@@ -369,7 +370,7 @@ function Step4({ items, onChange, rowErrors }) {
                                         onChange={e => update(i, 'category', e.target.value)}
                                         className={`text-xs font-medium border rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white flex-1 min-w-0 ${rowErr?.category ? 'border-red-400' : 'border-gray-200'}`}
                                     >
-                                        <option value="">Category…</option>
+                                        <option value="">{tr("Category…")}</option>
                                         {BUDGET_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                                     </select>
 
@@ -381,7 +382,7 @@ function Step4({ items, onChange, rowErrors }) {
 
                                     {/* Amount with ETB prefix */}
                                     <div className={`flex items-center shrink-0 rounded-lg border overflow-hidden ${rowErr?.amount ? 'border-red-400' : 'border-gray-200'}`}>
-                                        <span className="px-2.5 py-1.5 bg-gray-50 border-r border-gray-200 text-xs font-semibold text-gray-500">ETB</span>
+                                        <span className="px-2.5 py-1.5 bg-gray-50 border-r border-gray-200 text-xs font-semibold text-gray-500">{tr("ETB")}</span>
                                         <input
                                             type="number" min="0"
                                             value={item.amount}
@@ -402,13 +403,13 @@ function Step4({ items, onChange, rowErrors }) {
                                     <input
                                         value={item.description}
                                         onChange={e => update(i, 'description', e.target.value)}
-                                        placeholder="Item description *"
+                                        placeholder={tr("Item description *")}
                                         className={`text-sm border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400 ${rowErr?.description ? 'border-red-400 bg-red-50' : 'border-gray-200'}`}
                                     />
                                     <input
                                         value={item.justification}
                                         onChange={e => update(i, 'justification', e.target.value)}
-                                        placeholder="Justification (optional)"
+                                        placeholder={tr("Justification (optional)")}
                                         className="text-sm border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400"
                                     />
                                 </div>
@@ -423,12 +424,12 @@ function Step4({ items, onChange, rowErrors }) {
                     onClick={add}
                     className="flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700 border border-blue-200 hover:border-blue-400 bg-blue-50 hover:bg-blue-100 px-4 py-2.5 rounded-xl transition-colors"
                 >
-                    <DollarSign size={15} /> Add Budget Item
+                    <DollarSign size={15} /> {tr("Add Budget Item")}
                 </button>
                 {items.length > 0 && (
                     <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5">
                         <span className="text-xs text-gray-500">{items.length} item{items.length !== 1 ? 's' : ''} · Total</span>
-                        <span className="text-sm font-bold text-gray-900">ETB {Number(total).toLocaleString()}</span>
+                        <span className="text-sm font-bold text-gray-900">{tr("ETB :total", { total: Number(total).toLocaleString() })}</span>
                     </div>
                 )}
             </div>
@@ -477,13 +478,13 @@ function StepSection({ number, title, status, onEdit, children }) {
                     </div>
                     {statusIcon}
                     <div>
-                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">Step {number}</p>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest leading-none">{tr("Step :number", { number: number })}</p>
                         <p className="text-sm font-semibold text-gray-800 mt-0.5 leading-none">{title}</p>
                     </div>
                 </div>
                 {onEdit && (
                     <button onClick={onEdit} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors">
-                        <Pencil size={11} /> Edit
+                        <Pencil size={11} /> {tr("Edit")}
                     </button>
                 )}
             </div>
@@ -544,8 +545,8 @@ function Step6Preview({ stepData, budgetItems, user, category, selectedCall, onG
                         <CheckCircle2 size={16} className="text-green-600" />
                     </div>
                     <div>
-                        <p className="text-sm font-semibold text-green-800">All sections complete — ready to submit</p>
-                        <p className="text-xs text-green-600 mt-0.5">Review each step below, then proceed to Step 7 to submit.</p>
+                        <p className="text-sm font-semibold text-green-800">{tr("All sections complete — ready to submit")}</p>
+                        <p className="text-xs text-green-600 mt-0.5">{tr("Review each step below, then proceed to Step 7 to submit.")}</p>
                     </div>
                 </div>
             ) : (
@@ -576,11 +577,11 @@ function Step6Preview({ stepData, budgetItems, user, category, selectedCall, onG
             )}
 
             {/* ── Step 1: Basic Info ────────────────────────────────────────── */}
-            <StepSection number={1} title="Basic Info" status={step1Status} onEdit={() => onGoToStep?.(0)}>
+            <StepSection number={1} title={tr("Basic Info")} status={step1Status} onEdit={() => onGoToStep?.(0)}>
                 {/* Title with category accent */}
                 <div className={`border-l-4 ${accentBorder} pl-4 mb-4`}>
                     <h3 className="text-base font-bold text-gray-900 leading-snug">
-                        {d.title?.trim() || <span className="text-red-400 italic font-normal text-sm">No title provided</span>}
+                        {d.title?.trim() || <span className="text-red-400 italic font-normal text-sm">{tr("No title provided")}</span>}
                     </h3>
                     {(selectedCall?.title || selectedCall?.academic_year) && (
                         <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
@@ -598,7 +599,7 @@ function Step6Preview({ stepData, budgetItems, user, category, selectedCall, onG
                     {d.focus_area ? (
                         <span className="text-xs px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100 font-medium">{d.focus_area}</span>
                     ) : (
-                        <span className="text-xs px-2.5 py-1 rounded-full bg-red-50 text-red-500 border border-red-100 font-medium">No focus area</span>
+                        <span className="text-xs px-2.5 py-1 rounded-full bg-red-50 text-red-500 border border-red-100 font-medium">{tr("No focus area")}</span>
                     )}
                     {category === 'research' && d.research_type && (
                         <span className="text-xs px-2.5 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-100 font-medium">{d.research_type}</span>
@@ -609,20 +610,20 @@ function Step6Preview({ stepData, budgetItems, user, category, selectedCall, onG
                         </span>
                     ) : (
                         <span className="text-xs px-2.5 py-1 rounded-full bg-red-50 text-red-500 border border-red-100 font-medium flex items-center gap-1">
-                            <Clock size={10} /> No duration set
+                            <Clock size={10} /> {tr("No duration set")}
                         </span>
                     )}
                 </div>
 
                 {/* Abstract */}
                 <div className="mb-3">
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Abstract</p>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">{tr("Abstract")}</p>
                     <p className="text-sm text-gray-700 leading-relaxed">
-                        {d.abstract?.trim() || <span className="text-red-400 italic">No abstract provided.</span>}
+                        {d.abstract?.trim() || <span className="text-red-400 italic">{tr("No abstract provided.")}</span>}
                     </p>
                     {d.abstract && d.abstract.trim().length < 100 && (
                         <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
-                            <AlertCircle size={11} /> Only {d.abstract.trim().length} of 100 minimum characters
+                            <AlertCircle size={11} /> {tr("Only :trim_count of 100 minimum characters", { trim_count: d.abstract.trim().length })}
                         </p>
                     )}
                 </div>
@@ -630,7 +631,7 @@ function Step6Preview({ stepData, budgetItems, user, category, selectedCall, onG
                 {/* Keywords */}
                 {keywords.length > 0 && (
                     <div>
-                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Keywords</p>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">{tr("Keywords")}</p>
                         <div className="flex flex-wrap gap-1.5">
                             {keywords.map(k => (
                                 <span key={k} className="text-xs px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-600 border border-blue-100">{k}</span>
@@ -641,7 +642,7 @@ function Step6Preview({ stepData, budgetItems, user, category, selectedCall, onG
             </StepSection>
 
             {/* ── Step 2: Principal Investigator ───────────────────────────── */}
-            <StepSection number={2} title="Principal Investigator" status="ok">
+            <StepSection number={2} title={tr("Principal Investigator")} status="ok">
                 <div className="flex items-center gap-4">
                     <div className="w-11 h-11 rounded-full bg-blue-600 flex items-center justify-center text-white text-sm font-bold shrink-0">
                         {getInitials(user?.name)}
@@ -649,16 +650,16 @@ function Step6Preview({ stepData, budgetItems, user, category, selectedCall, onG
                     <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-gray-900">{user?.name ?? '—'}</p>
                         <p className="text-xs text-gray-500">{user?.email}</p>
-                        {user?.employee_id && <p className="text-xs text-gray-400 mt-0.5">ID: {user.employee_id}</p>}
+                        {user?.employee_id && <p className="text-xs text-gray-400 mt-0.5">{tr("ID: :employee_id", { employee_id: user.employee_id })}</p>}
                     </div>
                     <span className="shrink-0 text-xs px-2.5 py-1 rounded-lg bg-blue-50 text-blue-700 font-semibold border border-blue-100">
-                        Principal Investigator
+                        {tr("Principal Investigator")}
                     </span>
                 </div>
             </StepSection>
 
             {/* ── Step 3: Research Team ─────────────────────────────────────── */}
-            <StepSection number={3} title="Research Team" status={step3Status} onEdit={() => onGoToStep?.(2)}>
+            <StepSection number={3} title={tr("Research Team")} status={step3Status} onEdit={() => onGoToStep?.(2)}>
                 <div className="space-y-2">
                     {/* PI row */}
                     <div className="flex items-center gap-3 bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
@@ -670,7 +671,7 @@ function Step6Preview({ stepData, budgetItems, user, category, selectedCall, onG
                             <p className="text-xs text-gray-500 truncate">{user?.email}</p>
                         </div>
                         <div className="shrink-0 text-right">
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold">PI</span>
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 font-semibold">{tr("PI")}</span>
                             <p className="text-xs text-gray-400 mt-0.5">{piContrib.toFixed(0)}%</p>
                         </div>
                     </div>
@@ -678,7 +679,7 @@ function Step6Preview({ stepData, budgetItems, user, category, selectedCall, onG
                     {team.length === 0 ? (
                         <div className="flex items-center gap-2 px-4 py-3 rounded-xl border border-dashed border-red-200 bg-red-50">
                             <AlertCircle size={13} className="text-red-400 shrink-0" />
-                            <p className="text-xs text-red-600">No co-investigators added — required before submission.</p>
+                            <p className="text-xs text-red-600">{tr("No co-investigators added — required before submission.")}</p>
                         </div>
                     ) : team.map(coI => (
                         <div key={coI.user_id} className="flex items-center gap-3 bg-gray-50 border border-gray-100 rounded-xl px-4 py-3">
@@ -691,7 +692,7 @@ function Step6Preview({ stepData, budgetItems, user, category, selectedCall, onG
                                 {coI.college_name && <p className="text-xs text-gray-400 truncate">{coI.college_name}</p>}
                             </div>
                             <div className="shrink-0 text-right">
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-semibold">Co-PI</span>
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-semibold">{tr("Co-PI")}</span>
                                 <p className="text-xs text-gray-400 mt-0.5">{coI.contribution_percentage}%</p>
                             </div>
                         </div>
@@ -710,7 +711,7 @@ function Step6Preview({ stepData, budgetItems, user, category, selectedCall, onG
                                     />
                                 ))}
                             </div>
-                            <p className="text-xs text-gray-400 mt-1.5">{team.length + 1} members · contributions total 100%</p>
+                            <p className="text-xs text-gray-400 mt-1.5">{tr(":team_count members · contributions total 100%", { team_count: team.length + 1 })}</p>
                         </div>
                     )}
                 </div>
@@ -726,7 +727,7 @@ function Step6Preview({ stepData, budgetItems, user, category, selectedCall, onG
                 {budgetItems.length === 0 ? (
                     <div className="flex items-center gap-2 px-4 py-3 rounded-xl border border-dashed border-red-200 bg-red-50">
                         <AlertCircle size={13} className="text-red-400 shrink-0" />
-                        <p className="text-xs text-red-600">No budget items added — required before submission.</p>
+                        <p className="text-xs text-red-600">{tr("No budget items added — required before submission.")}</p>
                     </div>
                 ) : (
                     <div className="space-y-5">
@@ -742,7 +743,7 @@ function Step6Preview({ stepData, budgetItems, user, category, selectedCall, onG
                                             <div className="flex items-center justify-between text-xs mb-1">
                                                 <span className="text-gray-600 font-medium">{cat}</span>
                                                 <span className="text-gray-500">
-                                                    ETB {amount.toLocaleString()}
+                                                    {tr("ETB :amount", { amount: amount.toLocaleString() })}
                                                     <span className="text-gray-400 ml-1">({pct.toFixed(1)}%)</span>
                                                 </span>
                                             </div>
@@ -759,9 +760,9 @@ function Step6Preview({ stepData, budgetItems, user, category, selectedCall, onG
                             <table className="w-full text-sm">
                                 <thead>
                                     <tr className="bg-gray-50 border-b border-gray-100">
-                                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">Category</th>
-                                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">Description</th>
-                                        <th className="text-right px-4 py-2.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">ETB</th>
+                                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">{tr("Category")}</th>
+                                        <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">{tr("Description")}</th>
+                                        <th className="text-right px-4 py-2.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">{tr("ETB")}</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-50">
@@ -797,13 +798,13 @@ function Step6Preview({ stepData, budgetItems, user, category, selectedCall, onG
             </StepSection>
 
             {/* ── Step 5: Documents ─────────────────────────────────────────── */}
-            <StepSection number={5} title="Documents" status={step5Status} onEdit={() => onGoToStep?.(4)}>
+            <StepSection number={5} title={tr("Documents")} status={step5Status} onEdit={() => onGoToStep?.(4)}>
                 <div className="space-y-2">
                     {missingDocs.length > 0 && (
                         <div className="flex items-start gap-2.5 bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-3">
                             <AlertCircle size={14} className="text-red-500 shrink-0 mt-0.5" />
                             <div>
-                                <p className="text-xs font-semibold text-red-700">Required documents missing</p>
+                                <p className="text-xs font-semibold text-red-700">{tr("Required documents missing")}</p>
                                 <p className="text-xs text-red-600 mt-0.5">
                                     {missingDocs.map(dt => dt.label).join(', ')} must be uploaded before submitting.
                                 </p>
@@ -842,7 +843,7 @@ function Step6Preview({ stepData, budgetItems, user, category, selectedCall, onG
                         );
                     })}
                     <p className="text-xs text-gray-400 pt-1">
-                        {docsDone} of {DOC_TYPES.length} uploaded · {docsRequired} required
+                        {tr(":docsDone of :DOC_TYPES_count uploaded · :docsRequired required", { docsDone: docsDone, DOC_TYPES_count: DOC_TYPES.length, docsRequired: docsRequired })}
                     </p>
                 </div>
             </StepSection>
@@ -897,13 +898,13 @@ function Step7Submit({ proposalId, stepData, budgetItems, onSuccess, onGoToStep,
                 <CheckCircle2 size={40} className="text-green-600" />
             </div>
             <div>
-                <h2 className="text-2xl font-bold text-gray-900">Proposal Submitted!</h2>
-                <p className="text-gray-500 mt-1 text-sm">Your proposal has been received and is under review.</p>
+                <h2 className="text-2xl font-bold text-gray-900">{tr("Proposal Submitted!")}</h2>
+                <p className="text-gray-500 mt-1 text-sm">{tr("Your proposal has been received and is under review.")}</p>
             </div>
             <div className="flex justify-center">
                 <TrackerNumberDisplay trackerNumber={tracker} />
             </div>
-            <p className="text-xs text-gray-400">Save your tracker number to follow the status of your application.</p>
+            <p className="text-xs text-gray-400">{tr("Save your tracker number to follow the status of your application.")}</p>
         </div>
     );
 
@@ -920,7 +921,7 @@ function Step7Submit({ proposalId, stepData, budgetItems, onSuccess, onGoToStep,
 
             {/* Checklist */}
             <div className="bg-gray-50 border border-gray-200 rounded-2xl p-5">
-                <p className="text-sm font-semibold text-gray-700 mb-3">Submission Checklist</p>
+                <p className="text-sm font-semibold text-gray-700 mb-3">{tr("Submission Checklist")}</p>
                 <div className="space-y-2">
                     {checks.map(({ label, ok }) => (
                         <div key={label} className={`flex items-center gap-3 text-sm ${ok ? 'text-gray-700' : 'text-red-600'}`}>
@@ -936,7 +937,7 @@ function Step7Submit({ proposalId, stepData, budgetItems, onSuccess, onGoToStep,
 
             {!allOk && (
                 <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-700">
-                    Please go back and complete all required fields before submitting.
+                    {tr("Please go back and complete all required fields before submitting.")}
                 </div>
             )}
 
@@ -950,8 +951,7 @@ function Step7Submit({ proposalId, stepData, budgetItems, onSuccess, onGoToStep,
                     className="mt-0.5 rounded accent-blue-600"
                 />
                 <span className="text-sm text-gray-700">
-                    I confirm that all information provided in this proposal is accurate, complete, and has been approved
-                    by all co-investigators. I understand that false information may result in rejection or withdrawal of funding.
+                    {tr("I confirm that all information provided in this proposal is accurate, complete, and has been approved by all co-investigators. I understand that false information may result in rejection or withdrawal of funding.")}
                 </span>
             </label>
 
@@ -960,7 +960,7 @@ function Step7Submit({ proposalId, stepData, budgetItems, onSuccess, onGoToStep,
                     onClick={onSaveDraft}
                     className="flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl font-semibold text-sm border border-gray-300 text-gray-600 hover:bg-gray-50 transition-colors"
                 >
-                    <Save size={15} /> Save as Draft
+                    <Save size={15} /> {tr("Save as Draft")}
                 </button>
                 <button
                     onClick={submit}
@@ -970,11 +970,11 @@ function Step7Submit({ proposalId, stepData, budgetItems, onSuccess, onGoToStep,
                     {submitting ? (
                         <span className="flex items-center justify-center gap-2">
                             <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                            Submitting Proposal…
+                            {tr("Submitting Proposal…")}
                         </span>
                     ) : (
                         <span className="flex items-center justify-center gap-2">
-                            <Send size={15} /> Submit Proposal
+                            <Send size={15} /> {tr("Submit Proposal")}
                         </span>
                     )}
                 </button>
@@ -1346,8 +1346,8 @@ export default function ProposalCreate() {
                                 <Megaphone size={22} className="text-white" />
                             </div>
                             <div>
-                                <h1 className="text-2xl font-bold text-gray-900">Active Proposal Calls</h1>
-                                <p className="text-sm text-gray-500 mt-0.5">Choose a funding call to start your application.</p>
+                                <h1 className="text-2xl font-bold text-gray-900">{tr("Active Proposal Calls")}</h1>
+                                <p className="text-sm text-gray-500 mt-0.5">{tr("Choose a funding call to start your application.")}</p>
                             </div>
                         </div>
                     </div>
@@ -1361,8 +1361,8 @@ export default function ProposalCreate() {
                             <div className="w-14 h-14 bg-amber-50 rounded-2xl flex items-center justify-center mx-auto mb-4">
                                 <Megaphone size={26} className="text-amber-400" />
                             </div>
-                            <p className="text-gray-700 font-semibold">No active calls right now</p>
-                            <p className="text-sm text-gray-400 mt-1">Check back later or contact your administrator.</p>
+                            <p className="text-gray-700 font-semibold">{tr("No active calls right now")}</p>
+                            <p className="text-sm text-gray-400 mt-1">{tr("Check back later or contact your administrator.")}</p>
                         </div>
                     ) : (
                         <div className={`grid gap-4 ${calls.length > 1 ? 'sm:grid-cols-2' : ''}`}>
@@ -1442,7 +1442,7 @@ export default function ProposalCreate() {
                         <div className="mt-6">
                             <div className="flex items-center gap-2 mb-3">
                                 <LayoutTemplate size={15} className="text-gray-400" />
-                                <p className="text-sm font-semibold text-gray-700">Start from a saved template</p>
+                                <p className="text-sm font-semibold text-gray-700">{tr("Start from a saved template")}</p>
                             </div>
                             <div className="flex flex-wrap gap-2">
                                 {templates.map(t => {
@@ -1465,7 +1465,7 @@ export default function ProposalCreate() {
                                                 type="button"
                                                 onClick={() => deleteTemplate(t.id)}
                                                 className="p-1 text-gray-400 hover:text-red-500 rounded-full hover:bg-red-50"
-                                                title="Delete template"
+                                                title={tr("Delete template")}
                                             >
                                                 <X size={12} />
                                             </button>
@@ -1475,7 +1475,7 @@ export default function ProposalCreate() {
                             </div>
                             {selectedTemplate && (
                                 <p className="text-xs text-blue-600 mt-2">
-                                    "{selectedTemplate.name}" will pre-fill your application when you start.
+                                    {tr("\":name\" will pre-fill your application when you start.", { name: selectedTemplate.name })}
                                 </p>
                             )}
                         </div>
@@ -1487,7 +1487,7 @@ export default function ProposalCreate() {
                     <div className="bg-white/95 backdrop-blur border-t border-gray-200 shadow-xl px-4 py-4">
                         <div className="max-w-4xl mx-auto flex items-center gap-4">
                             <div className="flex-1 min-w-0">
-                                <p className="text-xs text-gray-500">Selected call</p>
+                                <p className="text-xs text-gray-500">{tr("Selected call")}</p>
                                 <p className="text-sm font-semibold text-gray-900 truncate">{selectedCall?.title}</p>
                             </div>
                             <button
@@ -1497,7 +1497,7 @@ export default function ProposalCreate() {
                                 className="shrink-0 flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-xl shadow-sm transition-colors disabled:opacity-60"
                             >
                                 {starting
-                                    ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Starting…</>
+                                    ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> {tr("Starting…")}</>
                                     : <>Start Application <ChevronRight size={15} /></>
                                 }
                             </button>
@@ -1509,7 +1509,7 @@ export default function ProposalCreate() {
                     open={!!limitModal}
                     onClose={() => setLimitModal(null)}
                     message={limitModal}
-                    title="Unable to Start Application"
+                    title={tr("Unable to Start Application")}
                 />
             </AppLayout>
         );
@@ -1531,7 +1531,7 @@ export default function ProposalCreate() {
                     <div className="mb-5 flex items-start gap-3 bg-amber-50 border border-amber-300 rounded-2xl p-4">
                         <AlertCircle size={18} className="text-amber-500 shrink-0 mt-0.5" />
                         <div>
-                            <p className="text-sm font-semibold text-amber-800">Returned for correction</p>
+                            <p className="text-sm font-semibold text-amber-800">{tr("Returned for correction")}</p>
                             <p className="text-sm text-amber-700 mt-0.5">{returnReason}</p>
                         </div>
                     </div>
@@ -1544,7 +1544,7 @@ export default function ProposalCreate() {
                             <Megaphone size={14} className={(CATEGORY_STYLE[selectedCall.category] ?? CATEGORY_STYLE.research).text} />
                         </div>
                         <div className="flex-1 min-w-0">
-                            <p className="text-xs text-gray-400">Applying to</p>
+                            <p className="text-xs text-gray-400">{tr("Applying to")}</p>
                             <p className="text-sm font-semibold text-gray-800 truncate">{selectedCall.title}</p>
                         </div>
                         <span className="text-xs text-gray-400 shrink-0">{selectedCall.academic_year}</span>
@@ -1564,7 +1564,7 @@ export default function ProposalCreate() {
                     <div className="flex-1 min-w-0">
                         {/* Mobile step indicator */}
                         <div className="lg:hidden mb-4 flex items-center gap-3 bg-white border border-gray-200 rounded-xl px-4 py-3">
-                            <span className="text-xs text-gray-400">Step {step + 1} of {STEPS.length}</span>
+                            <span className="text-xs text-gray-400">{tr("Step :step of :STEPS_count", { step: step + 1, STEPS_count: STEPS.length })}</span>
                             <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                                 <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${((step + 1) / STEPS.length) * 100}%` }} />
                             </div>
@@ -1581,7 +1581,7 @@ export default function ProposalCreate() {
                                     </div>
                                     <div>
                                         <div className="flex items-center gap-2">
-                                            <span className="text-xs text-blue-200 font-medium">Step {step + 1} of {STEPS.length}</span>
+                                            <span className="text-xs text-blue-200 font-medium">{tr("Step :step of :STEPS_count", { step: step + 1, STEPS_count: STEPS.length })}</span>
                                         </div>
                                         <h2 className="text-lg font-bold text-white leading-tight">{STEPS[step].label}</h2>
                                         <p className="text-blue-100 text-sm">{STEPS[step].description}</p>
@@ -1603,23 +1603,23 @@ export default function ProposalCreate() {
                                         disabled={step === 0}
                                         className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 disabled:opacity-40 transition-colors"
                                     >
-                                        <ArrowLeft size={15} /> Back
+                                        <ArrowLeft size={15} /> {tr("Back")}
                                     </button>
                                     <a
                                         href="/my-proposals"
                                         className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium border border-gray-300 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
-                                        title="Your progress is saved automatically"
+                                        title={tr("Your progress is saved automatically")}
                                     >
-                                        <Save size={14} /> Save as Draft
+                                        <Save size={14} /> {tr("Save as Draft")}
                                     </a>
                                     {hasSubFeature('workflow.proposal_templates') && (step === 0 || step === 3) && (
                                         <button
                                             type="button"
                                             onClick={() => setShowSaveTemplateModal(true)}
                                             className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium border border-gray-300 rounded-xl text-gray-500 hover:bg-gray-50 transition-colors"
-                                            title="Save this content as a reusable template"
+                                            title={tr("Save this content as a reusable template")}
                                         >
-                                            <LayoutTemplate size={14} /> Save as Template
+                                            <LayoutTemplate size={14} /> {tr("Save as Template")}
                                         </button>
                                     )}
                                 </div>
@@ -1630,8 +1630,8 @@ export default function ProposalCreate() {
                                     className="flex items-center gap-2 px-6 py-2.5 text-sm font-semibold bg-blue-700 text-white rounded-xl hover:bg-blue-800 disabled:opacity-60 shadow-sm transition-colors"
                                 >
                                     {saving
-                                        ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> Saving…</>
-                                        : step === 5 ? <><Send size={14} /> Proceed to Submit</>
+                                        ? <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> {tr("Saving…")}</>
+                                        : step === 5 ? <><Send size={14} /> {tr("Proceed to Submit")}</>
                                         : <>Save & Continue <ChevronRight size={15} /></>
                                     }
                                 </button>
@@ -1667,23 +1667,23 @@ function SaveTemplateModal({ onSave, onClose }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
                 <h2 className="text-base font-semibold text-gray-900 mb-1 flex items-center gap-2">
-                    <LayoutTemplate size={16} className="text-blue-600" /> Save as Template
+                    <LayoutTemplate size={16} className="text-blue-600" /> {tr("Save as Template")}
                 </h2>
                 <p className="text-xs text-gray-500 mb-4">
-                    Save the title, abstract, and budget items you've entered so far as a reusable starting point for future proposals.
+                    {tr("Save the title, abstract, and budget items you've entered so far as a reusable starting point for future proposals.")}
                 </p>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Template Name <span className="text-red-500">*</span>
+                    {tr("Template Name")} <span className="text-red-500">*</span>
                 </label>
                 <input
                     value={name}
                     onChange={e => setName(e.target.value)}
-                    placeholder="e.g. Standard Community Outreach Template"
+                    placeholder={tr("e.g. Standard Community Outreach Template")}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
                     autoFocus
                 />
                 <div className="flex justify-end gap-2">
-                    <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 rounded-lg border border-gray-200 hover:bg-gray-50">Cancel</button>
+                    <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 rounded-lg border border-gray-200 hover:bg-gray-50">{tr("Cancel")}</button>
                     <button onClick={submit} disabled={saving || !name.trim()} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
                         {saving ? 'Saving…' : 'Save Template'}
                     </button>

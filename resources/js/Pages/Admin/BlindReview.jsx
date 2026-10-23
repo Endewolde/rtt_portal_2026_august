@@ -323,9 +323,9 @@ function ReviewerSearchList({ proposalId, selectedId, onSelect, alreadyAssignedI
                                         </div>
                                         <p className="text-xs text-gray-400 truncate">{r.email}</p>
                                         <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-                                            {r.college?.name && (
+                                            {(r.college?.name || r.affiliation) && (
                                                 <span className="flex items-center gap-1 text-[11px] text-gray-500">
-                                                    <Building2 size={10} className="text-gray-300 shrink-0" />{r.college.name}
+                                                    <Building2 size={10} className="text-gray-300 shrink-0" />{r.college?.name ?? r.affiliation}
                                                 </span>
                                             )}
                                             {r.department?.name && (

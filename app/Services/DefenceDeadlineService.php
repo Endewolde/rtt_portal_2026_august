@@ -78,13 +78,20 @@ class DefenceDeadlineService
             'reason' => $reason,
         ]);
 
+        // A repeat request is called out, so approvers see the deadline has moved before.
+        $earlier = $session->deadlineExtensions()->where('id', '!=', $extension->id)->count();
+        $repeat = $earlier > 0
+            ? ' This is request number '.($earlier + 1).' for this defence'
+                .($session->score_deadline_extended_until ? ' — the deadline was already extended to '.$session->score_deadline_extended_until->format(self::DATE_FORMAT) : '').'.'
+            : '';
         $data = [
             'proposal_id' => $proposal->id,
             'tracker_number' => $proposal->tracker_number,
             'title' => $proposal->title,
             'requested_until' => $requestedUntil->toIso8601String(),
+            'sequence' => $earlier + 1,
             'message' => "{$actor->name} requested to extend the open defence score deadline for {$proposal->tracker_number} "
-                ."to {$requestedUntil->format(self::DATE_FORMAT)}. Reason: {$reason}",
+                ."to {$requestedUntil->format(self::DATE_FORMAT)}.{$repeat} Reason: {$reason}",
         ];
         foreach ($this->approversFor($proposal) as $approver) {
             $this->notify($approver, 'defence_extension_requested', $data);

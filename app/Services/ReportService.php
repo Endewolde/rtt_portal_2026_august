@@ -6,11 +6,21 @@ use App\Jobs\GenerateReportJob;
 use App\Models\ReportSnapshot;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class ReportService
 {
     private const SYNC_MAX_MONTHS = 3;
+
+    /** Reports that open live, with filters, instead of being generated first. */
+    public const LIVE_TYPES = [
+        'proposal_count_by_category', 'proposal_count_by_college', 'proposal_trend_by_year', 'approval_rate_by_category',
+        'review_progress_pipeline', 'college_performance', 'reviewer_workload', 'budget_utilization', 'complaint_summary',
+    ];
+
+    /** Live results are cached briefly so filters feel instant without serving stale numbers for long. */
+    private const LIVE_CACHE_SECONDS = 300;
 
     /**
      * Whitelist of report-builder subjects. Dimension/metric/filter SQL fragments live
@@ -128,6 +138,50 @@ class ReportService
     }
 
     /**
+     * A report's current figures for the given filters (academic_year, college_id,
+     * category), served from a short cache.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array{rows: array<int, mixed>, generated_at: string}
+     */
+    public function live(string $type, array $filters, bool $fresh = false): array
+    {
+        if (! in_array($type, self::LIVE_TYPES, true)) {
+            throw new \InvalidArgumentException("Unknown report type: {$type}");
+        }
+
+        $filters = array_filter(array_intersect_key($filters, array_flip(['academic_year', 'college_id', 'category'])));
+        ksort($filters);
+
+        $key = 'report-live:'.$type.':'.md5(json_encode($filters));
+        if ($fresh) {
+            Cache::forget($key);
+        }
+
+        return Cache::remember($key, self::LIVE_CACHE_SECONDS, fn () => [
+            'rows' => array_map(fn ($row) => (array) $row, $this->runReport($type, $filters)),
+            'generated_at' => now()->toIso8601String(),
+        ]);
+    }
+
+    /**
+     * Academic years and colleges the live filters can offer.
+     *
+     * @return array{years: array<int, string>, colleges: array<int, object>}
+     */
+    public function liveFilterOptions(?string $collegeId): array
+    {
+        return [
+            'years' => DB::table('proposals')->whereNull('deleted_at')->whereNotNull('academic_year')
+                ->when($collegeId, fn ($q) => $q->where('college_id', $collegeId))
+                ->distinct()->orderByDesc('academic_year')->pluck('academic_year')->all(),
+            'colleges' => DB::table('colleges')->where('status', 'active')
+                ->when($collegeId, fn ($q) => $q->where('id', $collegeId))
+                ->orderBy('name')->get(['id', 'name'])->all(),
+        ];
+    }
+
+    /**
      * Run a report and return its result array.
      *
      * @throws \InvalidArgumentException for unknown report type
@@ -238,6 +292,9 @@ class ReportService
         if (! empty($filters['college_id'])) {
             $query->where('college_id', $filters['college_id']);
         }
+        if (! empty($filters['category'])) {
+            $query->where('category', $filters['category']);
+        }
 
         return $query->select(
             'category',
@@ -263,8 +320,12 @@ class ReportService
         if (! empty($filters['college_id'])) {
             $query->where('c.id', $filters['college_id']);
         }
+        if (! empty($filters['category'])) {
+            $query->where('p.category', $filters['category']);
+        }
 
         return $query->select(
+            'c.id as college_id',
             'c.name as college_name',
             DB::raw('COUNT(*) as total_proposals'),
             DB::raw("SUM(CASE WHEN p.status IN ('accepted','funded','midterm_evaluation','completed','archived') THEN 1 ELSE 0 END) as accepted"),
@@ -284,6 +345,9 @@ class ReportService
 
         if (! empty($filters['college_id'])) {
             $query->where('college_id', $filters['college_id']);
+        }
+        if (! empty($filters['category'])) {
+            $query->where('category', $filters['category']);
         }
 
         return $query->select(
@@ -312,8 +376,15 @@ class ReportService
         if (! empty($filters['college_id'])) {
             $query->where('p.college_id', $filters['college_id']);
         }
+        if (! empty($filters['academic_year'])) {
+            $query->where('p.academic_year', $filters['academic_year']);
+        }
+        if (! empty($filters['category'])) {
+            $query->where('p.category', $filters['category']);
+        }
 
         return $query->select(
+            'u.id as reviewer_id',
             'u.name as reviewer_name',
             DB::raw('COUNT(*) as total_assigned'),
             DB::raw("SUM(CASE WHEN ra.status = 'submitted' THEN 1 ELSE 0 END) as submitted"),
@@ -331,6 +402,9 @@ class ReportService
         }
         if (! empty($filters['college_id'])) {
             $query->where('college_id', $filters['college_id']);
+        }
+        if (! empty($filters['category'])) {
+            $query->where('category', $filters['category']);
         }
 
         return $query->select(
@@ -355,8 +429,12 @@ class ReportService
         if (! empty($filters['college_id'])) {
             $query->where('ba.college_id', $filters['college_id']);
         }
+        if (! empty($filters['category'])) {
+            $query->where('p.category', $filters['category']);
+        }
 
         return $query->select(
+            'p.id as proposal_id',
             'p.title as proposal_title',
             'p.tracker_number',
             'ba.total_amount as allocated',
@@ -379,6 +457,9 @@ class ReportService
                 if (! empty($filters['academic_year'])) {
                     $join->where('p.academic_year', $filters['academic_year']);
                 }
+                if (! empty($filters['category'])) {
+                    $join->where('p.category', $filters['category']);
+                }
             })
             ->leftJoin('awards as a', 'p.id', '=', 'a.proposal_id');
 
@@ -386,14 +467,26 @@ class ReportService
             $query->where('c.id', $filters['college_id']);
         }
 
+        // Outputs count against the same proposals as the rest of the row: same year and category.
+        $outputs = fn (?string $outputType) => DB::table('research_outputs as ro')
+            ->join('proposals as op', 'op.id', '=', 'ro.proposal_id')
+            ->whereColumn('op.college_id', 'c.id')
+            ->whereNull('op.deleted_at')
+            ->when($filters['academic_year'] ?? null, fn ($q, $year) => $q->where('op.academic_year', $year))
+            ->when($filters['category'] ?? null, fn ($q, $category) => $q->where('op.category', $category))
+            ->when($outputType, fn ($q, $type) => $q->where('ro.output_type', $type))
+            ->selectRaw('COUNT(*)');
+
         return $query->select(
+            'c.id as college_id',
             'c.name as college_name',
             DB::raw('COUNT(DISTINCT p.id) as proposals_submitted'),
             DB::raw("COUNT(DISTINCT CASE WHEN p.status IN ('accepted','funded','midterm_evaluation','completed','archived') THEN p.id END) as proposals_accepted"),
             DB::raw('COALESCE(SUM(DISTINCT a.awarded_amount), 0) as total_awarded'),
-            DB::raw('(SELECT COUNT(*) FROM research_outputs ro WHERE ro.proposal_id IN (SELECT id FROM proposals WHERE college_id = c.id)) as outputs_produced'),
-            DB::raw("(SELECT COUNT(*) FROM research_outputs ro WHERE ro.proposal_id IN (SELECT id FROM proposals WHERE college_id = c.id) AND ro.output_type = 'journal_article') as publications_count")
-        )->groupBy('c.id', 'c.name')->get()->toArray();
+        )
+            ->selectSub($outputs(null), 'outputs_produced')
+            ->selectSub($outputs('journal_article'), 'publications_count')
+            ->groupBy('c.id', 'c.name')->get()->toArray();
     }
 
     private function reviewProgressPipeline(array $filters): array
@@ -411,6 +504,9 @@ class ReportService
         }
         if (! empty($filters['college_id'])) {
             $query->where('college_id', $filters['college_id']);
+        }
+        if (! empty($filters['category'])) {
+            $query->where('category', $filters['category']);
         }
 
         $counts = $query->select('status', DB::raw('COUNT(*) as count'))
@@ -437,8 +533,12 @@ class ReportService
         if (! empty($filters['college_id'])) {
             $query->where('c.id', $filters['college_id']);
         }
+        if (! empty($filters['category'])) {
+            $query->where('p.category', $filters['category']);
+        }
 
         return $query->select(
+            'c.id as college_id',
             'c.name as college_name',
             DB::raw('COUNT(*) as total_complaints'),
             DB::raw("SUM(CASE WHEN co.status IN ('open','under_review','escalated') THEN 1 ELSE 0 END) as unresolved"),

@@ -1,134 +1,458 @@
-import { useState, useEffect } from 'react'
-import { Link, usePage } from '@inertiajs/react'
+import { useState, useEffect, useMemo } from 'react'
+import { Link, router, usePage } from '@inertiajs/react'
 import AppLayout from '../../Layouts/AppLayout'
 import { useToast } from '../../Components/Toast'
 import ViewToggle from '../../Components/ViewToggle'
-import ProposalTable from '../../Components/ProposalTable'
 import { useViewPreference } from '../../hooks/useViewPreference'
 import { useAuth } from '../../hooks/useAuth'
-import { BarChart2, Users, Building, GraduationCap, TrendingUp, Download, FileText, ArrowRight, ChevronLeft, ChevronRight } from 'lucide-react'
+import {
+    FolderKanban, Download, FileText, ArrowRight, ChevronLeft, ChevronRight, ChevronDown, Search, X,
+    Files, Hourglass, Trophy, XCircle, PencilLine, Building2, BookOpen, Users, Activity, Tags,
+    FlaskConical, Handshake, Rocket, Lightbulb, Folder, User, UserRound, Inbox, Loader2, SlidersHorizontal,
+} from 'lucide-react'
 import api from '../../lib/api'
-import { getStatusLabel } from '../../lib/utils'
+import { getStatusLabel, getCategoryLabel } from '../../lib/utils'
 
-// ── Kanban board ──────────────────────────────────────────────────────────────
+// ── Look-ups ──────────────────────────────────────────────────────────────────
 
-const KANBAN_COLUMNS = [
-    { key: 'submitted',           label: 'Submitted',        color: 'bg-blue-500',    light: 'bg-blue-50',    text: 'text-blue-700'    },
-    { key: 'validated',           label: 'Validated',        color: 'bg-indigo-500',  light: 'bg-indigo-50',  text: 'text-indigo-700'  },
-    { key: 'under_blind_review',  label: 'Blind Review',     color: 'bg-yellow-500',  light: 'bg-yellow-50',  text: 'text-yellow-700'  },
-    { key: 'blind_review_passed', label: 'Review Passed',    color: 'bg-orange-500',  light: 'bg-orange-50',  text: 'text-orange-700'  },
-    { key: 'under_open_defence',  label: 'Open Defence',     color: 'bg-purple-500',  light: 'bg-purple-50',  text: 'text-purple-700'  },
-    { key: 'accepted',            label: 'Central Evaluation',       color: 'bg-green-500',   light: 'bg-green-50',   text: 'text-green-700'   },
-    { key: 'funded',              label: 'Funded',           color: 'bg-emerald-600', light: 'bg-emerald-50', text: 'text-emerald-700' },
-    { key: 'completed',           label: 'Completed',        color: 'bg-cyan-600',    light: 'bg-cyan-50',    text: 'text-cyan-700'    },
-    { key: 'rejected',            label: 'Rejected',         color: 'bg-red-500',     light: 'bg-red-50',     text: 'text-red-700'     },
+/** Status groups behind the headline cards — the same statuses the statistics count. */
+const UNDER_REVIEW = 'under_blind_review,under_open_defence,accepted'
+const FUNDED_GROUP = 'funded,midterm_evaluation,completed,archived'
+
+const STATUS_STYLES = {
+    draft:               { dot: 'bg-gray-400',    pill: 'bg-gray-100 text-gray-600 ring-gray-200',          bar: 'bg-gray-400' },
+    submitted:           { dot: 'bg-blue-500',    pill: 'bg-blue-50 text-blue-700 ring-blue-200',           bar: 'bg-blue-500' },
+    validated:           { dot: 'bg-indigo-500',  pill: 'bg-indigo-50 text-indigo-700 ring-indigo-200',     bar: 'bg-indigo-500' },
+    under_blind_review:  { dot: 'bg-amber-500',   pill: 'bg-amber-50 text-amber-700 ring-amber-200',        bar: 'bg-amber-500' },
+    blind_review_passed: { dot: 'bg-orange-500',  pill: 'bg-orange-50 text-orange-700 ring-orange-200',     bar: 'bg-orange-500' },
+    under_open_defence:  { dot: 'bg-violet-500',  pill: 'bg-violet-50 text-violet-700 ring-violet-200',     bar: 'bg-violet-500' },
+    accepted:            { dot: 'bg-teal-500',    pill: 'bg-teal-50 text-teal-700 ring-teal-200',           bar: 'bg-teal-500' },
+    funded:              { dot: 'bg-emerald-500', pill: 'bg-emerald-50 text-emerald-700 ring-emerald-200',  bar: 'bg-emerald-500' },
+    midterm_evaluation:  { dot: 'bg-cyan-500',    pill: 'bg-cyan-50 text-cyan-700 ring-cyan-200',           bar: 'bg-cyan-500' },
+    completed:           { dot: 'bg-sky-600',     pill: 'bg-sky-50 text-sky-700 ring-sky-200',              bar: 'bg-sky-600' },
+    rejected:            { dot: 'bg-red-500',     pill: 'bg-red-50 text-red-700 ring-red-200',              bar: 'bg-red-500' },
+    archived:            { dot: 'bg-slate-500',   pill: 'bg-slate-100 text-slate-600 ring-slate-200',       bar: 'bg-slate-500' },
+}
+const statusStyle = (s) => STATUS_STYLES[s] ?? STATUS_STYLES.draft
+
+const CATEGORY_STYLES = {
+    research:             { icon: FlaskConical, chip: 'bg-blue-50 text-blue-700',     tile: 'bg-blue-100 text-blue-600' },
+    community_engagement: { icon: Handshake,    chip: 'bg-emerald-50 text-emerald-700', tile: 'bg-emerald-100 text-emerald-600' },
+    technology_transfer:  { icon: Rocket,       chip: 'bg-violet-50 text-violet-700', tile: 'bg-violet-100 text-violet-600' },
+    innovation:           { icon: Lightbulb,    chip: 'bg-orange-50 text-orange-700', tile: 'bg-orange-100 text-orange-600' },
+    other:                { icon: Folder,       chip: 'bg-gray-100 text-gray-700',    tile: 'bg-gray-100 text-gray-600' },
+}
+const categoryStyle = (c) => CATEGORY_STYLES[c] ?? CATEGORY_STYLES.other
+
+const STATUS_OPTIONS = [
+    ['draft', 'Draft'], ['submitted', 'Submitted'], ['validated', 'Validated'], ['under_blind_review', 'Blind Review'],
+    ['blind_review_passed', 'Blind Review Passed'], ['under_open_defence', 'Open Defence'], ['accepted', 'Central Evaluation'],
+    ['funded', 'Funded'], ['midterm_evaluation', 'Midterm Evaluation'], ['completed', 'Completed'], ['rejected', 'Rejected'],
 ]
 
-function KanbanBoard({ proposals, loading }) {
-    if (loading) {
-        return (
-            <div className="flex gap-4 overflow-x-auto pb-4">
-                {KANBAN_COLUMNS.slice(0, 5).map(col => (
-                    <div key={col.key} className="shrink-0 w-64 bg-gray-50 rounded-xl p-3 animate-pulse">
-                        <div className="h-5 w-24 bg-gray-200 rounded mb-3" />
-                        {[1, 2].map(i => <div key={i} className="h-20 bg-white rounded-lg mb-2 border border-gray-100" />)}
-                    </div>
-                ))}
-            </div>
-        )
-    }
+const KANBAN_COLUMNS = ['submitted', 'validated', 'under_blind_review', 'blind_review_passed', 'under_open_defence', 'accepted', 'funded', 'completed', 'rejected']
 
-    const grouped = KANBAN_COLUMNS.reduce((acc, col) => {
-        acc[col.key] = proposals.filter(p => p.status === col.key)
-        return acc
-    }, {})
+const STAT_TABS = [
+    { key: 'college',    label: 'Colleges',    icon: Building2 },
+    { key: 'department', label: 'Departments', icon: BookOpen },
+    { key: 'gender',     label: 'Gender',      icon: Users },
+    { key: 'status',     label: 'Status',      icon: Activity },
+    { key: 'category',   label: 'Category',    icon: Tags },
+]
 
-    const activeColumns = KANBAN_COLUMNS.filter(col => grouped[col.key]?.length > 0)
-    const displayCols = activeColumns.length > 0 ? activeColumns : KANBAN_COLUMNS.slice(0, 5)
+const initials = (name = '') => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?'
+const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—')
 
+// ── Small pieces ──────────────────────────────────────────────────────────────
+
+function StatusPill({ status }) {
+    const s = statusStyle(status)
     return (
-        <div className="flex gap-4 overflow-x-auto pb-6 -mx-1 px-1">
-            {displayCols.map(col => {
-                const cards = grouped[col.key] ?? []
-                return (
-                    <div key={col.key} className="shrink-0 w-64 flex flex-col">
-                        <div className={`flex items-center justify-between px-3 py-2 rounded-xl mb-2 ${col.light}`}>
-                            <div className="flex items-center gap-2">
-                                <div className={`h-2 w-2 rounded-full ${col.color}`} />
-                                <span className={`text-xs font-bold ${col.text}`}>{col.label}</span>
-                            </div>
-                            <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${col.color} text-white`}>
-                                {cards.length}
-                            </span>
-                        </div>
-                        <div className="flex flex-col gap-2 min-h-32">
-                            {cards.length === 0 ? (
-                                <div className="flex items-center justify-center h-20 border-2 border-dashed border-gray-200 rounded-xl">
-                                    <p className="text-xs text-gray-300">Empty</p>
-                                </div>
-                            ) : cards.map(p => (
-                                <Link key={p.id} href={`/proposals/${p.id}`}
-                                    className="block bg-white border border-gray-200 rounded-xl p-3 hover:border-indigo-300 hover:shadow-sm transition-all group">
-                                    <div className="flex items-start justify-between gap-2 mb-2">
-                                        <span className="text-[10px] font-mono font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded shrink-0">
-                                            {p.tracker_number}
-                                        </span>
-                                        <ArrowRight size={11} className="text-gray-300 group-hover:text-indigo-400 transition-colors shrink-0 mt-0.5" />
-                                    </div>
-                                    <p className="text-xs font-semibold text-gray-800 line-clamp-2 mb-2">{p.title}</p>
-                                    {p.pi && <p className="text-[10px] text-gray-400 truncate">PI: {p.pi.name}</p>}
-                                    {p.college && <p className="text-[10px] text-gray-400 truncate">{p.college.name}</p>}
-                                </Link>
-                            ))}
-                        </div>
-                    </div>
-                )
-            })}
+        <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${s.pill}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} /> {getStatusLabel(status)}
+        </span>
+    )
+}
+
+function CategoryChip({ category }) {
+    const c = categoryStyle(category)
+    const Icon = c.icon
+    return (
+        <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-md px-2 py-0.5 text-[11px] font-medium ${c.chip}`}>
+            <Icon size={11} /> {getCategoryLabel(category)}
+        </span>
+    )
+}
+
+function PiAvatar({ name }) {
+    return (
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-linear-to-br from-slate-100 to-slate-200 text-[10px] font-bold text-slate-600 ring-1 ring-white">
+            {initials(name)}
+        </span>
+    )
+}
+
+function Kpi({ icon: Icon, label, value, tone, loading, active, onClick, hint }) {
+    return (
+        <button onClick={onClick}
+            className={`group rounded-2xl border bg-white p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md ${active ? 'border-slate-900 ring-1 ring-slate-900' : 'border-gray-200'}`}>
+            <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-gray-500">{label}</span>
+                <span className={`flex h-8 w-8 items-center justify-center rounded-xl ${tone}`}><Icon size={15} /></span>
+            </div>
+            <p className="mt-2 text-2xl font-bold tabular-nums text-gray-900">{loading ? <span className="inline-block h-7 w-12 animate-pulse rounded bg-gray-100 align-middle" /> : value}</p>
+            <p className="mt-0.5 min-h-4 text-[11px] text-gray-400">{hint}</p>
+        </button>
+    )
+}
+
+function Bar({ pct, className = 'bg-indigo-500' }) {
+    return (
+        <div className="h-1.5 overflow-hidden rounded-full bg-gray-100">
+            <div className={`h-full rounded-full transition-all duration-500 ${className}`} style={{ width: `${Math.max(pct, pct > 0 ? 2 : 0)}%` }} />
         </div>
     )
 }
 
-const COLLEGE_COLORS = [
-    { bg: 'bg-blue-500',   light: 'bg-blue-50',   text: 'text-blue-700',   border: 'border-blue-200'   },
-    { bg: 'bg-green-500',  light: 'bg-green-50',  text: 'text-green-700',  border: 'border-green-200'  },
-    { bg: 'bg-purple-500', light: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' },
-    { bg: 'bg-orange-500', light: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200' },
-    { bg: 'bg-teal-500',   light: 'bg-teal-50',   text: 'text-teal-700',   border: 'border-teal-200'   },
-]
-
-const GENDER_CONFIG = {
-    male:          { icon: '👨', label: 'Male',          color: 'bg-blue-500',   light: 'bg-blue-50',   text: 'text-blue-700'   },
-    female:        { icon: '👩', label: 'Female',        color: 'bg-pink-500',   light: 'bg-pink-50',   text: 'text-pink-700'   },
-    other:         { icon: '🧑', label: 'Other',         color: 'bg-purple-500', light: 'bg-purple-50', text: 'text-purple-700' },
-    not_specified: { icon: '❓', label: 'Not Specified', color: 'bg-gray-400',   light: 'bg-gray-50',   text: 'text-gray-600'   },
+function EmptyNote() {
+    return <p className="py-6 text-center text-sm text-gray-400">No data for this selection.</p>
 }
 
-const STATUS_COLORS = {
-    submitted:           'bg-blue-500',
-    validated:           'bg-indigo-500',
-    under_blind_review:  'bg-yellow-500',
-    blind_review_passed: 'bg-orange-500',
-    under_open_defence:  'bg-purple-500',
-    accepted:            'bg-green-500',
-    funded:              'bg-emerald-600',
-    midterm_evaluation:  'bg-teal-500',
-    completed:           'bg-cyan-500',
-    rejected:            'bg-red-500',
-    archived:            'bg-slate-500',
+// ── Insights panel ────────────────────────────────────────────────────────────
+
+function Insights({ stats, loading, tab, onTab }) {
+    const byCollege = stats?.by_college ?? []
+    const maxCollege = Math.max(1, ...byCollege.map((c) => c.total))
+    const byDept = stats?.by_department ?? []
+    const maxDept = Math.max(1, ...byDept.map((d) => d.total))
+    const byGender = stats?.by_gender ?? []
+    const genderTotal = byGender.reduce((s, g) => s + Number(g.total), 0)
+    const byStatus = Object.entries(stats?.by_status ?? {}).sort((a, b) => b[1] - a[1])
+    const statusTotal = byStatus.reduce((s, [, v]) => s + Number(v), 0)
+    const byCategory = Object.entries(stats?.by_category ?? {})
+    const categoryTotal = byCategory.reduce((s, [, v]) => s + Number(v), 0)
+
+    return (
+        <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+            <div className="flex gap-1 overflow-x-auto border-b border-gray-100 px-2 pt-2 [scrollbar-width:none]">
+                {STAT_TABS.map(({ key, label, icon: Icon }) => (
+                    <button key={key} onClick={() => onTab(key)}
+                        className={`relative inline-flex shrink-0 items-center gap-1.5 px-3.5 py-2.5 text-sm font-medium transition ${tab === key ? 'text-slate-900' : 'text-gray-500 hover:text-gray-700'}`}>
+                        <Icon size={14} /> {label}
+                        {tab === key && <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-slate-900" />}
+                    </button>
+                ))}
+            </div>
+
+            <div className="p-4 sm:p-5">
+                {loading ? (
+                    <div className="space-y-3">{[0, 1, 2].map((i) => <div key={i} className="h-10 animate-pulse rounded-lg bg-gray-100" />)}</div>
+                ) : tab === 'college' ? (
+                    byCollege.length === 0 ? <EmptyNote /> : (
+                        <div className="divide-y divide-gray-100">
+                            {byCollege.map((c) => {
+                                const active = c.total - c.funded - c.rejected
+                                const seg = (n) => `${(n / maxCollege) * 100}%`
+                                return (
+                                    <div key={c.id} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:gap-4">
+                                        <div className="flex min-w-0 items-center gap-3 sm:w-72">
+                                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-[10px] font-bold text-white">{c.code}</span>
+                                            <div className="min-w-0">
+                                                <p className="truncate text-sm font-semibold text-gray-900">{c.college_name}</p>
+                                                <p className="text-[11px] text-gray-400">{c.total > 0 ? Math.round((c.funded / c.total) * 100) : 0}% funded</p>
+                                            </div>
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="flex h-2 overflow-hidden rounded-full bg-gray-100">
+                                                <div className="bg-emerald-500" style={{ width: seg(c.funded) }} title={`${c.funded} funded`} />
+                                                <div className="bg-indigo-400" style={{ width: seg(active) }} title={`${active} in progress`} />
+                                                <div className="bg-red-400" style={{ width: seg(c.rejected) }} title={`${c.rejected} rejected`} />
+                                            </div>
+                                            <div className="mt-1.5 flex flex-wrap gap-x-3 text-[11px] text-gray-500">
+                                                <span><span className="font-semibold text-emerald-600">{c.funded}</span> funded</span>
+                                                <span><span className="font-semibold text-indigo-600">{active}</span> in progress</span>
+                                                <span><span className="font-semibold text-red-600">{c.rejected}</span> rejected</span>
+                                            </div>
+                                        </div>
+                                        <p className="text-right text-lg font-bold tabular-nums text-gray-900 sm:w-16">{c.total}</p>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    )
+                ) : tab === 'department' ? (
+                    byDept.length === 0 ? <EmptyNote /> : (
+                        <ol className="space-y-3">
+                            {byDept.map((d, i) => (
+                                <li key={d.id} className="flex items-center gap-3">
+                                    <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold ${i < 3 ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>{i + 1}</span>
+                                    <div className="min-w-0 flex-1">
+                                        <div className="mb-1 flex items-baseline justify-between gap-3">
+                                            <p className="min-w-0 truncate text-sm"><span className="font-medium text-gray-900">{d.department_name}</span> <span className="text-xs text-gray-400">· {d.college_name}</span></p>
+                                            <p className="shrink-0 text-sm font-bold tabular-nums text-gray-800">{d.total}{d.funded > 0 && <span className="ml-1 text-[11px] font-medium text-emerald-600">{d.funded} funded</span>}</p>
+                                        </div>
+                                        <Bar pct={(d.total / maxDept) * 100} />
+                                    </div>
+                                </li>
+                            ))}
+                        </ol>
+                    )
+                ) : tab === 'gender' ? (
+                    byGender.length === 0 ? <EmptyNote /> : (
+                        <>
+                            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                                {byGender.map((g) => {
+                                    const cfg = {
+                                        male: ['Male', User, 'bg-blue-100 text-blue-600', 'bg-blue-500'],
+                                        female: ['Female', UserRound, 'bg-pink-100 text-pink-600', 'bg-pink-500'],
+                                        other: ['Other', Users, 'bg-violet-100 text-violet-600', 'bg-violet-500'],
+                                    }[g.gender] ?? ['Not specified', Users, 'bg-gray-100 text-gray-500', 'bg-gray-400']
+                                    const [label, Icon, tone, bar] = cfg
+                                    const pct = genderTotal > 0 ? Math.round((g.total / genderTotal) * 100) : 0
+                                    return (
+                                        <div key={g.gender} className="rounded-xl border border-gray-200 p-4">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-xs font-medium text-gray-500">{label}</span>
+                                                <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${tone}`}><Icon size={14} /></span>
+                                            </div>
+                                            <p className="mt-1 text-2xl font-bold tabular-nums text-gray-900">{g.total}<span className="ml-1 text-xs font-medium text-gray-400">{pct}%</span></p>
+                                            <div className="mt-2"><Bar pct={pct} className={bar} /></div>
+                                            <p className="mt-2 text-[11px] text-gray-500">{g.total > 0 ? Math.round((g.funded / g.total) * 100) : 0}% funded</p>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                            {(() => {
+                                const male = Number(byGender.find((g) => g.gender === 'male')?.total || 0)
+                                const female = Number(byGender.find((g) => g.gender === 'female')?.total || 0)
+                                const femalePct = male + female > 0 ? Math.round((female / (male + female)) * 100) : 0
+                                const tone = femalePct >= 40 ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : femalePct >= 30 ? 'border-amber-200 bg-amber-50 text-amber-800' : 'border-red-200 bg-red-50 text-red-800'
+                                return (
+                                    <p className={`mt-4 rounded-xl border px-4 py-3 text-sm ${tone}`}>
+                                        <span className="font-semibold">Gender equity:</span> women lead <span className="font-semibold">{femalePct}%</span> of proposals.
+                                        {femalePct >= 40 ? ' A good balance.' : femalePct >= 30 ? ' Consider encouraging more women to apply.' : ' A significant gap — action is recommended.'}
+                                    </p>
+                                )
+                            })()}
+                        </>
+                    )
+                ) : tab === 'status' ? (
+                    byStatus.length === 0 ? <EmptyNote /> : (
+                        <>
+                            <div className="mb-4 flex h-3 overflow-hidden rounded-full bg-gray-100">
+                                {byStatus.map(([s, n]) => <div key={s} className={statusStyle(s).bar} style={{ width: `${(n / statusTotal) * 100}%` }} title={`${getStatusLabel(s)}: ${n}`} />)}
+                            </div>
+                            <div className="grid gap-x-8 gap-y-2.5 sm:grid-cols-2">
+                                {byStatus.map(([s, n]) => (
+                                    <div key={s} className="flex items-center gap-3 text-sm">
+                                        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${statusStyle(s).dot}`} />
+                                        <span className="flex-1 truncate text-gray-700">{getStatusLabel(s)}</span>
+                                        <span className="font-semibold tabular-nums text-gray-900">{n}</span>
+                                        <span className="w-10 text-right text-xs tabular-nums text-gray-400">{statusTotal > 0 ? Math.round((n / statusTotal) * 100) : 0}%</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </>
+                    )
+                ) : (
+                    byCategory.length === 0 ? <EmptyNote /> : (
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                            {byCategory.map(([c, n]) => {
+                                const style = categoryStyle(c)
+                                const Icon = style.icon
+                                return (
+                                    <div key={c} className="flex items-center gap-3 rounded-xl border border-gray-200 p-4">
+                                        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${style.tile}`}><Icon size={18} /></span>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="truncate text-xs font-medium text-gray-500">{getCategoryLabel(c)}</p>
+                                            <p className="text-xl font-bold tabular-nums text-gray-900">{n}<span className="ml-1 text-xs font-medium text-gray-400">{categoryTotal > 0 ? Math.round((n / categoryTotal) * 100) : 0}%</span></p>
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    )
+                )}
+            </div>
+        </div>
+    )
 }
 
-const CATEGORY_CONFIG = {
-    research:             { icon: '🔬', color: 'bg-blue-500',   light: 'bg-blue-50',   text: 'text-blue-700'   },
-    community_engagement: { icon: '🤝', color: 'bg-green-500',  light: 'bg-green-50',  text: 'text-green-700'  },
-    technology_transfer:  { icon: '🚀', color: 'bg-purple-500', light: 'bg-purple-50', text: 'text-purple-700' },
-    innovation:           { icon: '💡', color: 'bg-orange-500', light: 'bg-orange-50', text: 'text-orange-700' },
-    other:                { icon: '📋', color: 'bg-gray-500',   light: 'bg-gray-50',   text: 'text-gray-700'   },
+// ── Views ─────────────────────────────────────────────────────────────────────
+
+function TableView({ proposals }) {
+    return (
+        <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+            <div className="hidden overflow-x-auto md:block">
+                <table className="w-full text-sm">
+                    <thead>
+                        <tr className="border-b border-gray-100 bg-gray-50/80 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                            <th className="px-4 py-3">Proposal</th>
+                            <th className="px-3 py-3">Principal Investigator</th>
+                            <th className="px-3 py-3">College</th>
+                            <th className="px-3 py-3">Status</th>
+                            <th className="px-3 py-3">Submitted</th>
+                            <th className="w-10 px-3 py-3" />
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                        {proposals.map((p) => (
+                            <tr key={p.id} className="group cursor-pointer transition hover:bg-slate-50/70" onClick={() => router.visit(`/proposals/${p.id}`)}>
+                                <td className="max-w-md px-4 py-3">
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-mono text-[11px] font-semibold text-slate-500">{p.tracker_number}</span>
+                                        <CategoryChip category={p.category} />
+                                    </div>
+                                    <Link href={`/proposals/${p.id}`} onClick={(e) => e.stopPropagation()}
+                                        className="mt-1 line-clamp-2 font-medium leading-snug text-gray-900 group-hover:text-indigo-700">
+                                        {p.title}
+                                    </Link>
+                                </td>
+                                <td className="px-3 py-3">
+                                    <div className="flex items-center gap-2">
+                                        <PiAvatar name={p.pi?.name} />
+                                        <span className="max-w-40 truncate text-gray-700">{p.pi?.name ?? '—'}</span>
+                                    </div>
+                                </td>
+                                <td className="max-w-48 truncate px-3 py-3 text-gray-600">{p.college?.name ?? '—'}</td>
+                                <td className="px-3 py-3"><StatusPill status={p.status} /></td>
+                                <td className="whitespace-nowrap px-3 py-3 text-gray-500">{fmtDate(p.submitted_at)}</td>
+                                <td className="px-3 py-3 text-right">
+                                    <ArrowRight size={15} className="inline text-gray-300 transition group-hover:translate-x-0.5 group-hover:text-indigo-500" />
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+
+            {/* Phones */}
+            <ul className="divide-y divide-gray-100 md:hidden">
+                {proposals.map((p) => (
+                    <li key={p.id}>
+                        <Link href={`/proposals/${p.id}`} className="block px-4 py-3.5 active:bg-gray-50">
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="font-mono text-[11px] font-semibold text-slate-500">{p.tracker_number}</span>
+                                <StatusPill status={p.status} />
+                            </div>
+                            <p className="mt-1.5 line-clamp-2 text-sm font-semibold leading-snug text-gray-900">{p.title}</p>
+                            <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
+                                <CategoryChip category={p.category} />
+                                {p.pi?.name && <span className="inline-flex items-center gap-1"><User size={11} /> {p.pi.name}</span>}
+                                {p.college?.name && <span className="inline-flex items-center gap-1"><Building2 size={11} /> {p.college.name}</span>}
+                            </div>
+                        </Link>
+                    </li>
+                ))}
+            </ul>
+        </div>
+    )
 }
+
+function CardView({ proposals }) {
+    return (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {proposals.map((p) => (
+                <Link key={p.id} href={`/proposals/${p.id}`}
+                    className="group relative flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white p-5 transition hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-lg">
+                    <span className={`absolute inset-x-0 top-0 h-1 ${statusStyle(p.status).bar}`} />
+                    <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-[11px] font-semibold text-slate-500">{p.tracker_number}</span>
+                        <StatusPill status={p.status} />
+                    </div>
+                    <h3 className="mt-3 line-clamp-2 font-semibold leading-snug text-gray-900 group-hover:text-indigo-700">{p.title}</h3>
+                    <div className="mt-2"><CategoryChip category={p.category} /></div>
+                    <div className="mt-4 flex items-center gap-2 border-t border-gray-100 pt-3 text-xs text-gray-500">
+                        <PiAvatar name={p.pi?.name} />
+                        <div className="min-w-0 flex-1">
+                            <p className="truncate font-medium text-gray-700">{p.pi?.name ?? '—'}</p>
+                            <p className="truncate text-[11px] text-gray-400">{p.college?.name ?? '—'}</p>
+                        </div>
+                        <span className="shrink-0 text-[11px] text-gray-400">{fmtDate(p.submitted_at)}</span>
+                    </div>
+                </Link>
+            ))}
+        </div>
+    )
+}
+
+function KanbanView({ proposals }) {
+    const grouped = KANBAN_COLUMNS.map((key) => [key, proposals.filter((p) => p.status === key)])
+    const shown = grouped.filter(([, list]) => list.length > 0)
+
+    return (
+        <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-4">
+            {(shown.length ? shown : grouped.slice(0, 5)).map(([key, list]) => (
+                <div key={key} className="flex w-72 shrink-0 flex-col rounded-2xl border border-gray-200 bg-gray-50/70">
+                    <div className="flex items-center justify-between px-3.5 py-3">
+                        <span className="inline-flex items-center gap-2 text-xs font-semibold text-gray-700">
+                            <span className={`h-2 w-2 rounded-full ${statusStyle(key).dot}`} /> {getStatusLabel(key)}
+                        </span>
+                        <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold tabular-nums text-gray-500 ring-1 ring-gray-200">{list.length}</span>
+                    </div>
+                    <div className="flex min-h-24 flex-col gap-2 px-2.5 pb-2.5">
+                        {list.length === 0 ? (
+                            <div className="flex h-20 items-center justify-center rounded-xl border-2 border-dashed border-gray-200 text-xs text-gray-300">Empty</div>
+                        ) : list.map((p) => (
+                            <Link key={p.id} href={`/proposals/${p.id}`}
+                                className="group block rounded-xl border border-gray-200 bg-white p-3 shadow-sm transition hover:border-indigo-300 hover:shadow">
+                                <div className="flex items-center justify-between">
+                                    <span className="font-mono text-[10px] font-semibold text-slate-500">{p.tracker_number}</span>
+                                    <ArrowRight size={12} className="text-gray-300 group-hover:text-indigo-500" />
+                                </div>
+                                <p className="mt-1 line-clamp-2 text-xs font-semibold leading-snug text-gray-800">{p.title}</p>
+                                <div className="mt-2 flex items-center gap-1.5">
+                                    <PiAvatar name={p.pi?.name} />
+                                    <span className="truncate text-[11px] text-gray-500">{p.pi?.name ?? '—'}</span>
+                                </div>
+                            </Link>
+                        ))}
+                    </div>
+                </div>
+            ))}
+        </div>
+    )
+}
+
+function LoadingList({ view }) {
+    if (view === 'card') {
+        return (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {[...Array(6)].map((_, i) => <div key={i} className="h-44 animate-pulse rounded-2xl border border-gray-200 bg-white" />)}
+            </div>
+        )
+    }
+    return (
+        <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+            {[...Array(6)].map((_, i) => (
+                <div key={i} className="flex items-center gap-4 border-b border-gray-100 px-4 py-4 last:border-0">
+                    <div className="flex-1 space-y-2">
+                        <div className="h-3 w-32 animate-pulse rounded bg-gray-100" />
+                        <div className="h-4 w-3/4 animate-pulse rounded bg-gray-100" />
+                    </div>
+                    <div className="hidden h-6 w-28 animate-pulse rounded-full bg-gray-100 md:block" />
+                    <div className="hidden h-4 w-20 animate-pulse rounded bg-gray-100 md:block" />
+                </div>
+            ))}
+        </div>
+    )
+}
+
+/** Page numbers around the current one, with gaps. */
+function pageList(current, last) {
+    const pages = new Set([1, last, current - 1, current, current + 1])
+    const sorted = [...pages].filter((p) => p >= 1 && p <= last).sort((a, b) => a - b)
+    return sorted.flatMap((p, i) => (i > 0 && p - sorted[i - 1] > 1 ? ['…', p] : [p]))
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ProposalIndex() {
-    const { app_settings } = usePage().props
+    const { props: { app_settings }, url } = usePage()
     // current_academic_year is already shared via HandleInertiaRequests — no extra API call needed
     const currentAcademicYear = app_settings?.current_academic_year || ''
+    // Links from reports open the list already filtered (e.g. /proposals?college_id=…&academic_year=…).
+    const linked = new URLSearchParams(url.split('?')[1] ?? '')
 
     const { error } = useToast()
     const { hasPermission, accessScope, user } = useAuth()
@@ -141,51 +465,49 @@ export default function ProposalIndex() {
     const [page, setPage] = useState(1)
     const [loading, setLoading] = useState(true)
     const [statsLoading, setStatsLoading] = useState(true)
-    const [filters, setFilters] = useState({
-        status: '', category: '', college_id: '', academic_year: currentAcademicYear, search: '',
-    })
+    const [filters, setFilters] = useState(() => ({
+        status: linked.get('status') ?? '',
+        category: linked.get('category') ?? '',
+        college_id: linked.get('college_id') ?? '',
+        academic_year: linked.has('academic_year') ? linked.get('academic_year') : currentAcademicYear,
+        search: linked.get('search') ?? '',
+    }))
+    const [searchInput, setSearchInput] = useState(() => linked.get('search') ?? '')
     const [colleges, setColleges] = useState([])
     const [academicYears, setAcademicYears] = useState(currentAcademicYear ? [currentAcademicYear] : [])
     const [showStats, setShowStats] = useState(true)
     const [activeStatTab, setActiveStatTab] = useState('college')
-    const [exporting, setExporting]       = useState(false)
-    const [pdfExporting, setPdfExporting] = useState(false)
+    const [exporting, setExporting] = useState(null)
+    const [exportOpen, setExportOpen] = useState(false)
 
     useEffect(() => {
         if (user && !isAdmin) { window.location.href = '/my-proposals' }
     }, [user, isAdmin])
 
-    // Load college list once
     useEffect(() => {
-        api.get('/colleges').then(res => setColleges(res.data?.data || [])).catch(() => {})
+        api.get('/colleges').then((res) => setColleges(res.data?.data || [])).catch(() => {})
     }, [])
 
-    // Reload stats whenever the academic year filter changes
+    // Search waits for a pause in typing instead of querying on every key.
     useEffect(() => {
-        loadStats(filters.academic_year)
-    }, [filters.academic_year])
+        const t = setTimeout(() => setFilters((p) => (p.search === searchInput.trim() ? p : { ...p, search: searchInput.trim() })), 350)
+        return () => clearTimeout(t)
+    }, [searchInput])
 
-    // A filter change means the current page number may no longer make sense
-    // against the new result set — jump back to page 1.
-    useEffect(() => {
-        setPage(1)
-    }, [filters.status, filters.category, filters.college_id, filters.academic_year, filters.search])
+    useEffect(() => { loadStats(filters.academic_year) }, [filters.academic_year])
 
-    // Reload proposals on any filter or page change
-    useEffect(() => {
-        loadProposals()
-    }, [filters, page])
+    // A filter change means the current page number may no longer make sense.
+    useEffect(() => { setPage(1) }, [filters.status, filters.category, filters.college_id, filters.academic_year, filters.search])
+
+    useEffect(() => { loadProposals() }, [filters, page])
 
     const loadStats = async (academicYear) => {
         setStatsLoading(true)
         try {
-            const params = academicYear ? { academic_year: academicYear } : {}
-            const res = await api.get('/proposals/statistics', { params })
+            const res = await api.get('/proposals/statistics', { params: academicYear ? { academic_year: academicYear } : {} })
             const data = res.data?.data || null
             setStats(data)
-            if (data?.available_years?.length) {
-                setAcademicYears(data.available_years)
-            }
+            if (data?.available_years?.length) setAcademicYears(data.available_years)
         } catch (_) {}
         setStatsLoading(false)
     }
@@ -209,506 +531,209 @@ export default function ProposalIndex() {
         setLoading(false)
     }
 
-    const maxCollegeTotal = Math.max(1, ...(stats?.by_college || []).map(c => c.total))
-
-    const handleExport = async () => {
-        setExporting(true)
+    const download = async (kind) => {
+        setExporting(kind)
+        setExportOpen(false)
         try {
-            const params = new URLSearchParams(
-                Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== ''))
-            )
+            const params = new URLSearchParams(Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '')))
             const token = localStorage.getItem('rtt_token')
-            const res   = await fetch(`/api/v1/reports/proposals/export?${params}`, {
-                headers: { Authorization: `Bearer ${token}` },
-            })
-            if (!res.ok) { error('Export failed. Please try again.'); return }
-            const blob = await res.blob()
-            const url  = URL.createObjectURL(blob)
-            const a    = document.createElement('a')
-            a.href     = url
-            a.download = `proposals_${new Date().toISOString().slice(0, 10)}.xlsx`
+            const url = kind === 'excel' ? `/api/v1/reports/proposals/export?${params}` : `/api/v1/reports/proposals/stats-pdf?${params}`
+            const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+            if (!res.ok) { error(kind === 'excel' ? 'Export failed. Please try again.' : 'PDF generation failed. Please try again.'); return }
+            const blobUrl = URL.createObjectURL(await res.blob())
+            const a = document.createElement('a')
+            a.href = blobUrl
+            a.download = kind === 'excel'
+                ? `proposals_${new Date().toISOString().slice(0, 10)}.xlsx`
+                : `Proposal-Statistics-${new Date().toISOString().slice(0, 10)}.pdf`
             a.click()
-            URL.revokeObjectURL(url)
+            URL.revokeObjectURL(blobUrl)
         } catch (_) {
-            error('Export failed. Please try again.')
+            error('The download failed. Please try again.')
         } finally {
-            setExporting(false)
+            setExporting(null)
         }
     }
 
-    const handlePdfExport = async () => {
-        setPdfExporting(true)
-        try {
-            const params = new URLSearchParams(
-                Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== ''))
-            )
-            const token = localStorage.getItem('rtt_token')
-            const res   = await fetch(`/api/v1/reports/proposals/stats-pdf?${params}`, {
-                headers: { Authorization: `Bearer ${token}` },
-            })
-            if (!res.ok) { error('PDF generation failed. Please try again.'); return }
-            const blob = await res.blob()
-            const url  = URL.createObjectURL(blob)
-            const a    = document.createElement('a')
-            a.href     = url
-            a.download = `Proposal-Statistics-${new Date().toISOString().slice(0, 10)}.pdf`
-            a.click()
-            URL.revokeObjectURL(url)
-        } catch (_) {
-            error('PDF generation failed. Please try again.')
-        } finally {
-            setPdfExporting(false)
-        }
+    const setFilter = (key, value) => setFilters((p) => ({ ...p, [key]: value }))
+    const toggleStatus = (value) => setFilter('status', filters.status === value ? '' : value)
+
+    const activeFilters = useMemo(() => {
+        const list = []
+        if (filters.search) list.push(['search', `“${filters.search}”`])
+        if (filters.status) list.push(['status', filters.status === UNDER_REVIEW ? 'Under review' : filters.status === FUNDED_GROUP ? 'Funded (all stages)' : getStatusLabel(filters.status)])
+        if (filters.category) list.push(['category', getCategoryLabel(filters.category)])
+        if (filters.college_id) list.push(['college_id', colleges.find((c) => String(c.id) === String(filters.college_id))?.name ?? 'College'])
+        return list
+    }, [filters, colleges])
+
+    const clearFilter = (key) => {
+        if (key === 'search') setSearchInput('')
+        setFilter(key, '')
+    }
+    const clearAll = () => {
+        setSearchInput('')
+        setFilters((p) => ({ ...p, status: '', category: '', college_id: '', search: '' }))
     }
 
     if (!isAdmin && user) return null
 
+    const totals = stats?.totals ?? {}
+    const decided = Number(totals.funded || 0) + Number(totals.rejected || 0)
+    const successRate = decided > 0 ? Math.round((Number(totals.funded || 0) / decided) * 100) : null
+    const from = pagination ? (pagination.current_page - 1) * pagination.per_page + 1 : 1
+    const to = pagination ? Math.min(pagination.total, pagination.current_page * pagination.per_page) : proposals.length
+    const selectCls = 'min-w-0 rounded-xl border border-gray-200 bg-white px-3 py-2 text-base sm:text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-200'
+
     return (
         <AppLayout breadcrumb="All Proposals">
-            <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
+            <div className="mx-auto max-w-7xl space-y-5">
 
-                {/* Page header */}
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">All Proposals</h1>
-                        <p className="text-sm text-gray-500 mt-1">
-                            {stats?.totals?.submitted || 0} submitted proposals
-                            {filters.academic_year && <span className="ml-1 text-indigo-500 font-medium">· {filters.academic_year}</span>}
-                        </p>
+                {/* Header */}
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-linear-to-br from-indigo-600 to-violet-600 shadow-sm shadow-indigo-200">
+                            <FolderKanban size={20} className="text-white" />
+                        </div>
+                        <div>
+                            <h1 className="text-xl font-bold text-gray-900 sm:text-2xl">All Proposals</h1>
+                            <p className="mt-0.5 text-sm text-gray-500">
+                                {statsLoading ? 'Loading…' : `${totals.submitted || 0} submitted`}
+                                {filters.academic_year && <span className="font-medium text-indigo-600"> · {filters.academic_year}</span>}
+                            </p>
+                        </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                        <button
-                            onClick={() => setShowStats(!showStats)}
-                            className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50"
-                        >
-                            <BarChart2 size={14} />
-                            <span className="hidden sm:inline">{showStats ? 'Hide' : 'Show'} Stats</span>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <select value={filters.academic_year} onChange={(e) => setFilter('academic_year', e.target.value)}
+                            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-200">
+                            <option value="">All years</option>
+                            {academicYears.map((y) => <option key={y} value={y}>{y}</option>)}
+                        </select>
+                        <button onClick={() => setShowStats((v) => !v)}
+                            className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium transition ${showStats ? 'border-indigo-200 bg-indigo-50 text-indigo-700' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'}`}>
+                            <SlidersHorizontal size={14} /> Insights
                         </button>
-                        <button
-                            onClick={handleExport}
-                            disabled={exporting}
-                            className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50"
-                        >
-                            <Download size={14} /> <span className="hidden sm:inline">{exporting ? 'Exporting…' : 'Export Excel'}</span>
-                        </button>
-                        <button
-                            onClick={handlePdfExport}
-                            disabled={pdfExporting}
-                            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50 transition-colors"
-                        >
-                            <FileText size={14} />
-                            <span className="hidden sm:inline">{pdfExporting ? 'Generating…' : 'PDF Report'}</span>
-                        </button>
-                        <ViewToggle view={view} onChange={setView} />
+                        <div className="relative">
+                            <button onClick={() => setExportOpen((v) => !v)} disabled={!!exporting}
+                                className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3.5 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 disabled:opacity-60">
+                                {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} Export <ChevronDown size={13} />
+                            </button>
+                            {exportOpen && (
+                                <>
+                                    <div className="fixed inset-0 z-20" onClick={() => setExportOpen(false)} />
+                                    <div className="absolute right-0 z-30 mt-2 w-64 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl">
+                                        <p className="border-b border-gray-100 px-4 py-2 text-[11px] text-gray-500">Current filters applied</p>
+                                        {[
+                                            ['excel', Files, 'bg-emerald-50 text-emerald-600', 'Excel list', 'Every proposal matching the filters'],
+                                            ['pdf', FileText, 'bg-red-50 text-red-600', 'PDF statistics report', 'Formatted summary to print or share'],
+                                        ].map(([kind, Icon, tone, label, hint]) => (
+                                            <button key={kind} onClick={() => download(kind)} className="flex w-full items-center gap-3 px-4 py-2.5 text-left hover:bg-gray-50">
+                                                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${tone}`}><Icon size={15} /></span>
+                                                <span>
+                                                    <span className="block text-sm font-medium text-gray-800">{label}</span>
+                                                    <span className="block text-[11px] text-gray-400">{hint}</span>
+                                                </span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </>
+                            )}
+                        </div>
                     </div>
                 </div>
 
-                {/* STATISTICS SECTION */}
-                {showStats && (
-                    <div className="space-y-4">
-
-                        {/* Overall totals */}
-                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                            {[
-                                { label: 'Total Submitted', value: stats?.totals?.submitted || 0,                                           icon: '📄', color: 'blue'   },
-                                { label: 'Under Review',    value: stats?.totals?.under_review || 0,                                        icon: '🔍', color: 'purple' },
-                                { label: 'Funded',          value: stats?.totals?.funded || 0,                                              icon: '🏆', color: 'green'  },
-                                { label: 'Rejected',        value: stats?.totals?.rejected || 0,                                            icon: '❌', color: 'red'    },
-                                { label: 'Draft',           value: stats?.totals?.draft || 0,                                               icon: '✏️', color: 'gray'   },
-                            ].map(stat => (
-                                <div key={stat.label} className="bg-white border border-gray-200 rounded-xl p-4 text-center">
-                                    <div className="text-2xl mb-1">{stat.icon}</div>
-                                    <div className={`text-2xl font-bold text-${stat.color}-600`}>{statsLoading ? '—' : stat.value}</div>
-                                    <div className="text-xs text-gray-500 mt-0.5">{stat.label}</div>
-                                </div>
-                            ))}
-                        </div>
-
-                        {/* Stat tabs */}
-                        <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-                            <div className="flex border-b border-gray-200 overflow-x-auto">
-                                {[
-                                    { key: 'college',    label: '🏛 By College'    },
-                                    { key: 'department', label: '📚 By Department' },
-                                    { key: 'gender',     label: '👥 By Gender'     },
-                                    { key: 'status',     label: '📊 By Status'     },
-                                    { key: 'category',   label: '🏷 By Category'   },
-                                ].map(tab => (
-                                    <button
-                                        key={tab.key}
-                                        onClick={() => setActiveStatTab(tab.key)}
-                                        className={`shrink-0 flex-1 px-4 py-3 text-sm font-medium whitespace-nowrap transition-colors ${
-                                            activeStatTab === tab.key
-                                                ? 'border-b-2 border-blue-600 text-blue-600 bg-blue-50'
-                                                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                                        }`}
-                                    >
-                                        {tab.label}
-                                    </button>
-                                ))}
-                            </div>
-
-                            <div className="p-5">
-
-                                {/* BY COLLEGE */}
-                                {activeStatTab === 'college' && (
-                                    <div className="space-y-3">
-                                        {statsLoading ? (
-                                            <div className="animate-pulse space-y-3">
-                                                {[1, 2, 3].map(i => <div key={i} className="h-16 bg-gray-100 rounded-xl" />)}
-                                            </div>
-                                        ) : (stats?.by_college || []).length === 0 ? (
-                                            <p className="text-gray-400 text-sm text-center py-4">No data for this year.</p>
-                                        ) : (stats?.by_college || []).map((college, i) => {
-                                            const colorSet  = COLLEGE_COLORS[i % COLLEGE_COLORS.length]
-                                            const pct       = Math.round((college.total / maxCollegeTotal) * 100)
-                                            const fundedPct = college.total > 0 ? Math.round((college.funded / college.total) * 100) : 0
-                                            return (
-                                                <div key={college.id} className={`border ${colorSet.border} ${colorSet.light} rounded-xl p-4`}>
-                                                    <div className="flex items-center justify-between gap-3 mb-2">
-                                                        <div className="flex items-center gap-3 min-w-0">
-                                                            <div className={`w-10 h-10 ${colorSet.bg} rounded-xl flex items-center justify-center text-white text-xs font-bold shrink-0`}>
-                                                                {college.code}
-                                                            </div>
-                                                            <div className="min-w-0">
-                                                                <p className={`text-sm font-semibold ${colorSet.text} truncate`}>{college.college_name}</p>
-                                                                <p className="text-xs text-gray-500 truncate">
-                                                                    {college.funded} funded · {college.rejected} rejected · {college.active} active
-                                                                </p>
-                                                            </div>
-                                                        </div>
-                                                        <div className="text-right shrink-0">
-                                                            <span className={`text-2xl font-bold ${colorSet.text}`}>{college.total}</span>
-                                                            <p className="text-xs text-gray-400">proposals</p>
-                                                        </div>
-                                                    </div>
-                                                    <div className="h-2 bg-white/60 rounded-full overflow-hidden">
-                                                        <div className={`h-full ${colorSet.bg} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
-                                                    </div>
-                                                    <div className="flex gap-4 mt-2 text-xs">
-                                                        <span className="text-green-600">✓ {fundedPct}% funded</span>
-                                                        <span className="text-gray-400">{college.total - college.funded - college.rejected} in progress</span>
-                                                    </div>
-                                                </div>
-                                            )
-                                        })}
-                                    </div>
-                                )}
-
-                                {/* BY DEPARTMENT */}
-                                {activeStatTab === 'department' && (
-                                    <div>
-                                        <p className="text-xs text-gray-400 mb-3">Top 10 departments by submissions</p>
-                                        <div className="space-y-2">
-                                            {statsLoading ? (
-                                                <div className="animate-pulse space-y-2">
-                                                    {[1, 2, 3, 4, 5].map(i => <div key={i} className="h-12 bg-gray-100 rounded-lg" />)}
-                                                </div>
-                                            ) : (stats?.by_department || []).length === 0 ? (
-                                                <p className="text-gray-400 text-sm text-center py-4">No data for this year.</p>
-                                            ) : (() => {
-                                                const maxDeptTotal = Math.max(1, ...(stats?.by_department || []).map(d => d.total))
-                                                return (stats?.by_department || []).map((dept, i) => (
-                                                    <div key={dept.id} className="flex items-start gap-3">
-                                                        <span className="w-6 text-xs text-gray-400 text-right shrink-0 mt-0.5">{i + 1}</span>
-                                                        <div className="flex-1 min-w-0">
-                                                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-1 gap-0.5">
-                                                                <div className="min-w-0 truncate">
-                                                                    <span className="text-sm font-medium text-gray-900">{dept.department_name}</span>
-                                                                    <span className="text-xs text-gray-400 ml-2">{dept.college_name}</span>
-                                                                </div>
-                                                                <div className="text-left sm:text-right shrink-0 sm:ml-4">
-                                                                    <span className="text-sm font-bold text-gray-700">{dept.total}</span>
-                                                                    {dept.funded > 0 && (
-                                                                        <span className="text-xs text-green-600 ml-1">({dept.funded} funded)</span>
-                                                                    )}
-                                                                </div>
-                                                            </div>
-                                                            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                                                                <div className="h-full bg-blue-500 rounded-full transition-all duration-500" style={{ width: `${(dept.total / maxDeptTotal) * 100}%` }} />
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                ))
-                                            })()}
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* BY GENDER */}
-                                {activeStatTab === 'gender' && (
-                                    <div>
-                                        {statsLoading ? (
-                                            <div className="animate-pulse grid grid-cols-2 gap-4">
-                                                {[1, 2, 3, 4].map(i => <div key={i} className="h-28 bg-gray-100 rounded-xl" />)}
-                                            </div>
-                                        ) : (stats?.by_gender || []).length === 0 ? (
-                                            <p className="text-gray-400 text-sm text-center py-4">No data for this year.</p>
-                                        ) : (
-                                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                                                {(stats?.by_gender || []).map(g => {
-                                                    const config      = GENDER_CONFIG[g.gender] || GENDER_CONFIG.not_specified
-                                                    const totalGender = (stats?.by_gender || []).reduce((s, x) => s + Number(x.total), 0)
-                                                    const pct         = totalGender > 0 ? Math.round((g.total / totalGender) * 100) : 0
-                                                    const fundedPct   = g.total > 0 ? Math.round((g.funded / g.total) * 100) : 0
-                                                    return (
-                                                        <div key={g.gender} className={`${config.light} border border-gray-200 rounded-2xl p-5 text-center`}>
-                                                            <div className="text-3xl mb-2">{config.icon}</div>
-                                                            <p className={`text-sm font-semibold ${config.text} mb-1`}>{config.label}</p>
-                                                            <p className={`text-3xl font-bold ${config.text}`}>{g.total}</p>
-                                                            <p className="text-xs text-gray-400 mt-1">{pct}% of total</p>
-                                                            <div className="mt-3 h-1.5 bg-white rounded-full overflow-hidden">
-                                                                <div className={`h-full ${config.color} rounded-full`} style={{ width: `${pct}%` }} />
-                                                            </div>
-                                                            {g.funded > 0 && (
-                                                                <p className="text-xs text-green-600 mt-2 font-medium">🏆 {fundedPct}% funded</p>
-                                                            )}
-                                                        </div>
-                                                    )
-                                                })}
-                                            </div>
-                                        )}
-                                        {(stats?.by_gender || []).length > 0 && (() => {
-                                            const male      = stats.by_gender.find(g => g.gender === 'male')?.total || 0
-                                            const female    = stats.by_gender.find(g => g.gender === 'female')?.total || 0
-                                            const total     = Number(male) + Number(female)
-                                            const femalePct = total > 0 ? Math.round((female / total) * 100) : 0
-                                            return (
-                                                <div className={`mt-4 p-4 rounded-xl border text-sm ${
-                                                    femalePct >= 40
-                                                        ? 'bg-green-50 border-green-200 text-green-700'
-                                                        : femalePct >= 30
-                                                        ? 'bg-amber-50 border-amber-200 text-amber-700'
-                                                        : 'bg-red-50 border-red-200 text-red-700'
-                                                }`}>
-                                                    <strong>Gender equity:</strong> Female researchers represent <strong>{femalePct}%</strong> of proposals.
-                                                    {femalePct >= 40 ? ' ✓ Good gender balance.' : femalePct >= 30 ? ' Consider encouraging more female applicants.' : ' Significant gender gap — action recommended.'}
-                                                </div>
-                                            )
-                                        })()}
-                                    </div>
-                                )}
-
-                                {/* BY STATUS */}
-                                {activeStatTab === 'status' && (
-                                    <div className="space-y-2">
-                                        {statsLoading ? (
-                                            <div className="animate-pulse space-y-2">
-                                                {[1, 2, 3].map(i => <div key={i} className="h-10 bg-gray-100 rounded-lg" />)}
-                                            </div>
-                                        ) : Object.entries(stats?.by_status || {}).length === 0 ? (
-                                            <p className="text-gray-400 text-sm text-center py-4">No data for this year.</p>
-                                        ) : Object.entries(stats?.by_status || {})
-                                            .sort((a, b) => b[1] - a[1])
-                                            .map(([status, count]) => {
-                                                const total = Object.values(stats?.by_status || {}).reduce((s, v) => s + Number(v), 0)
-                                                const pct   = total > 0 ? Math.round((count / total) * 100) : 0
-                                                const color = STATUS_COLORS[status] || 'bg-gray-400'
-                                                return (
-                                                    <div key={status} className="flex items-center gap-3">
-                                                        <div className={`w-3 h-3 rounded-full ${color} shrink-0`} />
-                                                        <div className="flex-1">
-                                                            <div className="flex justify-between mb-1">
-                                                                <span className="text-sm text-gray-700 capitalize">{getStatusLabel(status)}</span>
-                                                                <span className="text-sm font-semibold text-gray-900">
-                                                                    {count}
-                                                                    <span className="text-xs text-gray-400 ml-1">({pct}%)</span>
-                                                                </span>
-                                                            </div>
-                                                            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                                                                <div className={`h-full ${color} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                )
-                                            })
-                                        }
-                                    </div>
-                                )}
-
-                                {/* BY CATEGORY */}
-                                {activeStatTab === 'category' && (
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                                        {statsLoading ? (
-                                            <div className="animate-pulse col-span-3 grid grid-cols-3 gap-4">
-                                                {[1, 2, 3].map(i => <div key={i} className="h-24 bg-gray-100 rounded-xl" />)}
-                                            </div>
-                                        ) : Object.entries(stats?.by_category || {}).length === 0 ? (
-                                            <p className="text-gray-400 text-sm text-center py-4 col-span-3">No data for this year.</p>
-                                        ) : Object.entries(stats?.by_category || {}).map(([category, total]) => {
-                                            const config = CATEGORY_CONFIG[category] || { icon: '📋', color: 'bg-gray-500', light: 'bg-gray-50', text: 'text-gray-700' }
-                                            return (
-                                                <div key={category} className={`${config.light} border border-gray-200 rounded-xl p-4 text-center`}>
-                                                    <div className="text-3xl mb-2">{config.icon}</div>
-                                                    <p className={`text-2xl font-bold ${config.text}`}>{total}</p>
-                                                    <p className="text-xs text-gray-500 mt-1 capitalize">{category.replace(/_/g, ' ')}</p>
-                                                </div>
-                                            )
-                                        })}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                )}
-
-                {/* FILTERS */}
-                <div className="bg-white border border-gray-200 rounded-xl p-4">
-                    <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
-                        <input
-                            type="text"
-                            placeholder="Search title or tracker..."
-                            value={filters.search}
-                            onChange={e => setFilters(p => ({ ...p, search: e.target.value }))}
-                            className="col-span-2 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        />
-                        <select
-                            value={filters.academic_year}
-                            onChange={e => setFilters(p => ({ ...p, academic_year: e.target.value }))}
-                            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
-                        >
-                            <option value="">All Years</option>
-                            {academicYears.map(y => (
-                                <option key={y} value={y}>{y}</option>
-                            ))}
-                        </select>
-                        <select
-                            value={filters.status}
-                            onChange={e => setFilters(p => ({ ...p, status: e.target.value }))}
-                            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                            <option value="">All Statuses</option>
-                            <option value="draft">Draft</option>
-                            <option value="submitted">Submitted</option>
-                            <option value="validated">Validated</option>
-                            <option value="under_blind_review">Blind Review</option>
-                            <option value="blind_review_passed">Blind Review Passed</option>
-                            <option value="under_open_defence">Open Defence</option>
-                            <option value="accepted">Central Evaluation</option>
-                            <option value="funded">Funded</option>
-                            <option value="rejected">Rejected</option>
-                            <option value="completed">Completed</option>
-                        </select>
-                        <select
-                            value={filters.category}
-                            onChange={e => setFilters(p => ({ ...p, category: e.target.value }))}
-                            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                            <option value="">All Categories</option>
-                            <option value="research">Research</option>
-                            <option value="community_engagement">Community Engagement</option>
-                            <option value="technology_transfer">Technology Transfer</option>
-                            <option value="innovation">Innovation</option>
-                            <option value="other">Other</option>
-                        </select>
-                        <select
-                            value={filters.college_id}
-                            onChange={e => setFilters(p => ({ ...p, college_id: e.target.value }))}
-                            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                            <option value="">All Colleges</option>
-                            {colleges.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                        </select>
-                    </div>
+                {/* KPIs — click to filter the list */}
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+                    <Kpi icon={Files} label="Submitted" value={totals.submitted || 0} tone="bg-indigo-100 text-indigo-600" loading={statsLoading}
+                        active={!filters.status} onClick={() => setFilter('status', '')} hint={successRate != null ? `${successRate}% success rate` : 'Excludes drafts'} />
+                    <Kpi icon={Hourglass} label="Under review" value={totals.under_review || 0} tone="bg-amber-100 text-amber-600" loading={statsLoading}
+                        active={filters.status === UNDER_REVIEW} onClick={() => toggleStatus(UNDER_REVIEW)} hint="Blind review, defence or central evaluation" />
+                    <Kpi icon={Trophy} label="Funded" value={totals.funded || 0} tone="bg-emerald-100 text-emerald-600" loading={statsLoading}
+                        active={filters.status === FUNDED_GROUP} onClick={() => toggleStatus(FUNDED_GROUP)} hint="Including running and completed" />
+                    <Kpi icon={XCircle} label="Rejected" value={totals.rejected || 0} tone="bg-red-100 text-red-600" loading={statsLoading}
+                        active={filters.status === 'rejected'} onClick={() => toggleStatus('rejected')} hint="Not selected" />
+                    <Kpi icon={PencilLine} label="Drafts" value={totals.draft || 0} tone="bg-gray-100 text-gray-500" loading={statsLoading}
+                        active={filters.status === 'draft'} onClick={() => toggleStatus('draft')} hint="Not yet submitted" />
                 </div>
 
-                {/* PROPOSALS LIST */}
-                {view === 'table' ? (
-                    <ProposalTable
-                        proposals={proposals}
-                        showColumns={['tracker', 'title', 'category', 'pi', 'college', 'status', 'date']}
-                        loading={loading}
-                        emptyMessage="No proposals found matching your filters."
-                        actions={(proposal) => (
-                            <Link
-                                href={`/proposals/${proposal.id}`}
-                                className="px-3 py-1 border border-gray-300 text-gray-700 rounded-lg text-xs font-medium hover:bg-gray-50 transition-colors"
-                            >
-                                View
-                            </Link>
-                        )}
-                    />
-                ) : view === 'kanban' ? (
-                    <KanbanBoard proposals={proposals} loading={loading} />
-                ) : (
-                    <div>
-                        {loading ? (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {[...Array(6)].map((_, i) => (
-                                    <div key={i} className="bg-white border border-gray-200 rounded-xl p-5 animate-pulse">
-                                        <div className="h-4 bg-gray-200 rounded w-24 mb-3" />
-                                        <div className="h-5 bg-gray-200 rounded w-full mb-2" />
-                                        <div className="h-4 bg-gray-200 rounded w-3/4" />
-                                    </div>
-                                ))}
-                            </div>
-                        ) : proposals.length === 0 ? (
-                            <div className="bg-white border border-gray-200 rounded-xl p-12 text-center">
-                                <p className="text-4xl mb-3">📄</p>
-                                <p className="text-gray-500 font-medium">No proposals found.</p>
-                            </div>
-                        ) : (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {proposals.map(proposal => (
-                                    <Link
-                                        key={proposal.id}
-                                        href={`/proposals/${proposal.id}`}
-                                        className="bg-white border border-gray-200 rounded-xl p-5 hover:shadow-md hover:border-blue-300 transition-all group block"
-                                    >
-                                        <div className="flex items-start justify-between mb-2">
-                                            <span className="font-mono text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-                                                {proposal.tracker_number}
-                                            </span>
-                                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                                                proposal.status === 'funded' || proposal.status === 'completed'
-                                                    ? 'bg-green-100 text-green-700'
-                                                    : proposal.status === 'rejected'
-                                                    ? 'bg-red-100 text-red-700'
-                                                    : 'bg-blue-100 text-blue-700'
-                                            }`}>
-                                                {getStatusLabel(proposal.status)}
-                                            </span>
-                                        </div>
-                                        <h3 className="text-sm font-semibold text-gray-900 line-clamp-2 mb-2 group-hover:text-blue-700 transition-colors">
-                                            {proposal.title}
-                                        </h3>
-                                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                                            <span className="capitalize">{proposal.category?.replace(/_/g, ' ')}</span>
-                                            <span>·</span>
-                                            <span>{proposal.college?.name}</span>
-                                        </div>
-                                        {proposal.pi && (
-                                            <p className="text-xs text-gray-400 mt-1">PI: {proposal.pi.name}</p>
-                                        )}
-                                    </Link>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                )}
+                {showStats && <Insights stats={stats} loading={statsLoading} tab={activeStatTab} onTab={setActiveStatTab} />}
 
-                {/* PAGINATION */}
-                {pagination && pagination.last_page > 1 && (
-                    <div className="flex items-center justify-between px-1">
-                        <p className="text-xs text-gray-400">
-                            Page {pagination.current_page} of {pagination.last_page} · {pagination.total}
-                        </p>
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={() => setPage(p => Math.max(1, p - 1))}
-                                disabled={pagination.current_page <= 1}
-                                className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                            >
-                                <ChevronLeft size={13} /> Prev
-                            </button>
-                            <button
-                                onClick={() => setPage(p => Math.min(pagination.last_page, p + 1))}
-                                disabled={pagination.current_page >= pagination.last_page}
-                                className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                            >
-                                Next <ChevronRight size={13} />
-                            </button>
+                {/* Toolbar */}
+                <div className="rounded-2xl border border-gray-200 bg-white p-3">
+                    <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+                        <div className="flex flex-1 items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 focus-within:ring-2 focus-within:ring-indigo-200">
+                            <Search size={15} className="shrink-0 text-gray-400" />
+                            <input value={searchInput} onChange={(e) => setSearchInput(e.target.value)} placeholder="Search by title or tracker number…"
+                                className="w-full bg-transparent text-base focus:outline-none sm:text-sm" />
+                            {searchInput && <button onClick={() => clearFilter('search')} aria-label="Clear search" className="text-gray-400 hover:text-gray-600"><X size={14} /></button>}
                         </div>
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:flex">
+                            <select value={filters.status} onChange={(e) => setFilter('status', e.target.value)} className={selectCls}>
+                                <option value="">All statuses</option>
+                                <option value={UNDER_REVIEW}>Under review (all stages)</option>
+                                <option value={FUNDED_GROUP}>Funded (all stages)</option>
+                                {STATUS_OPTIONS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                            </select>
+                            <select value={filters.category} onChange={(e) => setFilter('category', e.target.value)} className={selectCls}>
+                                <option value="">All categories</option>
+                                {Object.keys(CATEGORY_STYLES).map((c) => <option key={c} value={c}>{getCategoryLabel(c)}</option>)}
+                            </select>
+                            <select value={filters.college_id} onChange={(e) => setFilter('college_id', e.target.value)} className={`${selectCls} col-span-2 sm:col-span-1`}>
+                                <option value="">All colleges</option>
+                                {colleges.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                            </select>
+                        </div>
+                        <div className="flex justify-end"><ViewToggle view={view} onChange={setView} /></div>
+                    </div>
+                    {activeFilters.length > 0 && (
+                        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3">
+                            {activeFilters.map(([key, label]) => (
+                                <span key={key} className="inline-flex items-center gap-1 rounded-full bg-indigo-50 py-1 pl-3 pr-1.5 text-xs font-medium text-indigo-700">
+                                    {label}
+                                    <button onClick={() => clearFilter(key)} aria-label={`Remove ${label}`} className="rounded-full p-0.5 hover:bg-indigo-100"><X size={12} /></button>
+                                </span>
+                            ))}
+                            <button onClick={clearAll} className="text-xs font-medium text-gray-500 hover:text-gray-800">Clear all</button>
+                        </div>
+                    )}
+                </div>
+
+                {/* List */}
+                {loading ? <LoadingList view={view} /> : proposals.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-14 text-center">
+                        <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-gray-50"><Inbox size={22} className="text-gray-400" /></div>
+                        <h3 className="font-semibold text-gray-700">No proposals found</h3>
+                        <p className="mt-1 text-sm text-gray-400">{activeFilters.length ? 'Try a different search or clear the filters.' : 'Nothing has been submitted for this year yet.'}</p>
+                        {activeFilters.length > 0 && <button onClick={clearAll} className="mt-4 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50">Clear filters</button>}
+                    </div>
+                ) : view === 'kanban' ? <KanbanView proposals={proposals} />
+                    : view === 'card' ? <CardView proposals={proposals} />
+                        : <TableView proposals={proposals} />}
+
+                {/* Pagination */}
+                {!loading && pagination && pagination.total > 0 && (
+                    <div className="flex flex-col items-center justify-between gap-3 sm:flex-row">
+                        <p className="text-xs text-gray-500">Showing <span className="font-semibold text-gray-700">{from}–{to}</span> of <span className="font-semibold text-gray-700">{pagination.total}</span></p>
+                        {pagination.last_page > 1 && (
+                            <div className="flex items-center gap-1">
+                                <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={pagination.current_page <= 1} aria-label="Previous page"
+                                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40">
+                                    <ChevronLeft size={15} />
+                                </button>
+                                {pageList(pagination.current_page, pagination.last_page).map((p, i) => p === '…'
+                                    ? <span key={`gap-${i}`} className="px-1 text-xs text-gray-400">…</span>
+                                    : (
+                                        <button key={p} onClick={() => setPage(p)}
+                                            className={`h-8 min-w-8 rounded-lg px-2 text-xs font-semibold tabular-nums ${p === pagination.current_page ? 'bg-slate-900 text-white' : 'border border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                                            {p}
+                                        </button>
+                                    ))}
+                                <button onClick={() => setPage((p) => Math.min(pagination.last_page, p + 1))} disabled={pagination.current_page >= pagination.last_page} aria-label="Next page"
+                                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40">
+                                    <ChevronRight size={15} />
+                                </button>
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

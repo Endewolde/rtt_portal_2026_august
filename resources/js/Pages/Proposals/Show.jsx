@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { translate as tr } from '../../lib/i18n'
 import { usePage, Link, router } from '@inertiajs/react';
 import { UserCheck, Calendar, Award, CheckCircle, RotateCcw, XCircle, ExternalLink, AlertCircle, ChevronDown, ChevronUp, ArrowUpCircle, MessageSquare, PlusCircle, Pencil, Trash2, Building2, Scale, ShieldCheck, Upload, FileText, Eye, Sparkles, RefreshCw, Star, CalendarClock, ClipboardList } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
@@ -37,7 +38,7 @@ function SlaIndicator({ enteredAt, status }) {
     return (
         <div className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-lg bg-red-50 border border-red-200 text-red-700">
             <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
-            Overdue — {daysInStage} days in {getStatusLabel(status)} stage
+            {tr("Overdue — :daysInStage days in :status stage", { daysInStage: daysInStage, status: getStatusLabel(status) })}
         </div>
     );
 }
@@ -82,7 +83,7 @@ function ComplaintLevelCard({ icon: Icon, tone, title, who, count, canFile, avai
                 {canFile && (
                     <button onClick={onFile}
                         className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800">
-                        <PlusCircle size={13} /> File complaint
+                        <PlusCircle size={13} /> {tr("File complaint")}
                     </button>
                 )}
             </div>
@@ -103,7 +104,7 @@ function ComplaintCard({ complaint: c, permissions, expanded, onToggle, onAction
                         <span className="text-xs font-medium text-gray-600">{topicLabel(c)}</span>
                         {c.escalated_from_id && (
                             <span className="inline-flex items-center gap-1 rounded-md bg-orange-50 px-1.5 py-0.5 text-[11px] font-semibold text-orange-700">
-                                <ArrowUpCircle size={10} /> Escalation
+                                <ArrowUpCircle size={10} /> {tr("Escalation")}
                             </span>
                         )}
                     </div>
@@ -127,25 +128,25 @@ function ComplaintCard({ complaint: c, permissions, expanded, onToggle, onAction
                             {canWithdraw && (
                                 <button onClick={() => onAction('withdraw', c)}
                                     className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50">
-                                    <Trash2 size={13} /> Withdraw
+                                    <Trash2 size={13} /> {tr("Withdraw")}
                                 </button>
                             )}
                             {canEdit && (
                                 <button onClick={() => onAction('edit', c)}
                                     className="inline-flex items-center gap-1.5 rounded-xl border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50">
-                                    <Pencil size={13} /> Edit
+                                    <Pencil size={13} /> {tr("Edit")}
                                 </button>
                             )}
                             {canEscalate && (
                                 <button onClick={() => onAction('escalate', c)}
                                     className="inline-flex items-center gap-1.5 rounded-xl bg-orange-500 px-3 py-2 text-xs font-semibold text-white hover:bg-orange-600">
-                                    <ArrowUpCircle size={13} /> Escalate to Level 2
+                                    <ArrowUpCircle size={13} /> {tr("Escalate to Level 2")}
                                 </button>
                             )}
                             {canRespond && (
                                 <button onClick={() => onAction('respond', c)}
                                     className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-800">
-                                    <MessageSquare size={13} /> Respond
+                                    <MessageSquare size={13} /> {tr("Respond")}
                                 </button>
                             )}
                         </div>
@@ -237,12 +238,12 @@ function ComplaintsTab({ proposal, userId, isProposalMember, rejectedVia }) {
     return (
         <div className="space-y-5">
             <div className="grid gap-4 md:grid-cols-2">
-                <ComplaintLevelCard icon={Building2} tone="bg-sky-50 text-sky-700" title="Level 1 · College office"
+                <ComplaintLevelCard icon={Building2} tone="bg-sky-50 text-sky-700" title={tr("Level 1 · College office")}
                     who="Concerns about how the blind review or open defence was conducted"
                     count={collegeCount} canFile={canFileCollege}
                     availability={isProposalMember ? collegeAvailability : 'Filed by the research team'}
                     onFile={() => setFiling('college')} />
-                <ComplaintLevelCard icon={Scale} tone="bg-violet-50 text-violet-700" title="Level 2 · Category director"
+                <ComplaintLevelCard icon={Scale} tone="bg-violet-50 text-violet-700" title={tr("Level 2 · Category director")}
                     who="Post-funding concerns (budget, decisions), and escalated Level 1 complaints"
                     count={officerCount} canFile={canFileOfficer}
                     availability={isProposalMember ? officerAvailability : 'Filed by the research team'}
@@ -252,11 +253,11 @@ function ComplaintsTab({ proposal, userId, isProposalMember, rejectedVia }) {
             <div>
                 <div className="mb-3 flex items-center justify-between">
                     <p className="text-sm font-semibold text-gray-900">
-                        Complaint history <span className="font-normal text-gray-400">({complaints.length})</span>
+                        {tr("Complaint history")} <span className="font-normal text-gray-400">({complaints.length})</span>
                     </p>
                     {awaitingCount > 0 && (
                         <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-700">
-                            {awaitingCount} awaiting a response
+                            {tr(":awaitingCount awaiting a response", { awaitingCount: awaitingCount })}
                         </span>
                     )}
                 </div>
@@ -264,7 +265,7 @@ function ComplaintsTab({ proposal, userId, isProposalMember, rejectedVia }) {
                 {complaints.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-6 py-10 text-center">
                         <ShieldCheck size={26} className="mx-auto text-gray-300" />
-                        <p className="mt-2 text-sm font-medium text-gray-700">No complaints on this proposal</p>
+                        <p className="mt-2 text-sm font-medium text-gray-700">{tr("No complaints on this proposal")}</p>
                         <p className="mx-auto mt-1 max-w-sm text-xs text-gray-500">
                             {isProposalMember
                                 ? 'If something about the review or the funded project seems wrong, you can raise it while the level above is open.'
@@ -301,7 +302,7 @@ function ComplaintsTab({ proposal, userId, isProposalMember, rejectedVia }) {
             )}
             <ConfirmDialog
                 open={action?.type === 'withdraw'}
-                title="Withdraw complaint"
+                title={tr("Withdraw complaint")}
                 description="Withdraw this complaint? It will be removed and can't be restored."
                 confirmLabel={withdrawing ? 'Withdrawing…' : 'Withdraw'}
                 confirmVariant="danger"
@@ -320,15 +321,15 @@ function ActionButtons({ proposal, onAction, onProcessDefenceResult, can, canRej
         <div className="flex flex-wrap gap-2">
             <button onClick={() => onAction('approve')}
                 className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700">
-                <CheckCircle size={15} /> Approve
+                <CheckCircle size={15} /> {tr("Approve")}
             </button>
             <button onClick={() => onAction('return')}
                 className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-yellow-500 text-white rounded-lg hover:bg-yellow-600">
-                <RotateCcw size={15} /> Return for Correction
+                <RotateCcw size={15} /> {tr("Return for Correction")}
             </button>
             <button onClick={() => onAction('reject')}
                 className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700">
-                <XCircle size={15} /> Reject
+                <XCircle size={15} /> {tr("Reject")}
             </button>
         </div>
     );
@@ -338,19 +339,19 @@ function ActionButtons({ proposal, onAction, onProcessDefenceResult, can, canRej
             {can.assignReviewers && (
                 <Link href={`/proposals/${id}/assign-reviewers`}
                     className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-blue-700 text-white rounded-lg hover:bg-blue-800">
-                    <UserCheck size={15} /> Assign Reviewers
+                    <UserCheck size={15} /> {tr("Assign Reviewers")}
                 </Link>
             )}
             {canRejectBlindReview && (
                 <button onClick={() => onAction('reject')}
                     className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700">
-                    <XCircle size={15} /> Reject
+                    <XCircle size={15} /> {tr("Reject")}
                 </button>
             )}
             {canReportMistakenApproval && !hasOpenReport && (
                 <button onClick={() => onAction('report_mistaken_approval')}
                     className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-amber-500 text-white rounded-lg hover:bg-amber-600">
-                    <AlertCircle size={15} /> Report Mistaken Approval
+                    <AlertCircle size={15} /> {tr("Report Mistaken Approval")}
                 </button>
             )}
         </div>
@@ -361,13 +362,13 @@ function ActionButtons({ proposal, onAction, onProcessDefenceResult, can, canRej
             {canRejectBlindReview && (
                 <button onClick={() => onAction('reject_blind_review')}
                     className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700">
-                    <XCircle size={15} /> Reject From Blind Review
+                    <XCircle size={15} /> {tr("Reject From Blind Review")}
                 </button>
             )}
             {canReportMistakenApproval && !hasOpenReport && (
                 <button onClick={() => onAction('report_mistaken_approval')}
                     className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-amber-500 text-white rounded-lg hover:bg-amber-600">
-                    <AlertCircle size={15} /> Report Mistaken Approval
+                    <AlertCircle size={15} /> {tr("Report Mistaken Approval")}
                 </button>
             )}
         </div>
@@ -378,19 +379,19 @@ function ActionButtons({ proposal, onAction, onProcessDefenceResult, can, canRej
             {can.manageReviews && (
                 <Link href={`/proposals/${id}/defence`}
                     className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-purple-700 text-white rounded-lg hover:bg-purple-800">
-                    <Calendar size={15} /> Schedule Open Defence
+                    <Calendar size={15} /> {tr("Schedule Open Defence")}
                 </Link>
             )}
             {canRejectBlindReview && (
                 <button onClick={() => onAction('reject_blind_review')}
                     className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-red-600 text-white rounded-lg hover:bg-red-700">
-                    <XCircle size={15} /> Reject
+                    <XCircle size={15} /> {tr("Reject")}
                 </button>
             )}
             {canReportMistakenApproval && !hasOpenReport && (
                 <button onClick={() => onAction('report_mistaken_approval')}
                     className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-amber-500 text-white rounded-lg hover:bg-amber-600">
-                    <AlertCircle size={15} /> Report Mistaken Approval
+                    <AlertCircle size={15} /> {tr("Report Mistaken Approval")}
                 </button>
             )}
         </div>
@@ -401,21 +402,21 @@ function ActionButtons({ proposal, onAction, onProcessDefenceResult, can, canRej
             onClick={onProcessDefenceResult}
             className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
         >
-            <Award size={15} /> Process Defence Result
+            <Award size={15} /> {tr("Process Defence Result")}
         </button>
     );
 
     if (can.decideFunding && status === 'accepted') return (
         <Link href={`/proposals/${id}/award`}
             className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-emerald-700 text-white rounded-lg hover:bg-emerald-800">
-            <Award size={15} /> Generate Award
+            <Award size={15} /> {tr("Generate Award")}
         </Link>
     );
 
     if (status === 'rejected' && canRejectBlindReview) return (
         <button onClick={() => onAction('reopen')}
             className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">
-            <RotateCcw size={15} /> Reopen for Reconsideration
+            <RotateCcw size={15} /> {tr("Reopen for Reconsideration")}
         </button>
     );
 
@@ -482,21 +483,21 @@ function DocumentsTab({ proposalId, documents, userId, isPI, isDraft, hideIdenti
             {/* Upload section — PI only */}
             {isPI && (
                 <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
-                    <p className="text-sm font-semibold text-blue-800">Share a file with your College Officer</p>
+                    <p className="text-sm font-semibold text-blue-800">{tr("Share a file with your College Officer")}</p>
                     <div className="flex flex-wrap gap-3 items-end">
                         <div>
-                            <label className="block text-xs text-blue-700 mb-1">Document type</label>
+                            <label className="block text-xs text-blue-700 mb-1">{tr("Document type")}</label>
                             <select
                                 value={docType}
                                 onChange={e => setDocType(e.target.value)}
                                 className="border border-blue-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                             >
-                                <option value="shared_document">Shared by PI</option>
-                                <option value="supporting_document">Supporting Document</option>
-                                <option value="budget_spreadsheet">Budget Spreadsheet</option>
-                                <option value="pi_cv">PI CV</option>
+                                <option value="shared_document">{tr("Shared by PI")}</option>
+                                <option value="supporting_document">{tr("Supporting Document")}</option>
+                                <option value="budget_spreadsheet">{tr("Budget Spreadsheet")}</option>
+                                <option value="pi_cv">{tr("PI CV")}</option>
                                 {showEthicalClearanceOption && (
-                                    <option value="ethical_clearance_certificate">Ethical Clearance Certificate</option>
+                                    <option value="ethical_clearance_certificate">{tr("Ethical Clearance Certificate")}</option>
                                 )}
                             </select>
                         </div>
@@ -518,7 +519,7 @@ function DocumentsTab({ proposalId, documents, userId, isPI, isDraft, hideIdenti
                             ) : (
                                 <div className="flex items-center justify-center gap-2 text-blue-600">
                                     <Upload size={14} />
-                                    <span className="text-sm">Click to select file</span>
+                                    <span className="text-sm">{tr("Click to select file")}</span>
                                 </div>
                             )}
                         </div>
@@ -540,14 +541,14 @@ function DocumentsTab({ proposalId, documents, userId, isPI, isDraft, hideIdenti
                 <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3.5">
                     <span className="text-amber-500 text-base mt-0.5">🔒</span>
                     <p className="text-sm text-amber-800">
-                        This proposal has been submitted — documents can no longer be removed.
+                        {tr("This proposal has been submitted — documents can no longer be removed.")}
                     </p>
                 </div>
             )}
 
             {/* Document list — grouped by type, current version first, older versions collapsed */}
             {documents.length === 0 ? (
-                <p className="text-sm text-gray-400">No documents uploaded yet.</p>
+                <p className="text-sm text-gray-400">{tr("No documents uploaded yet.")}</p>
             ) : (
                 <div className="space-y-4">
                     {Object.entries(
@@ -578,12 +579,12 @@ function DocumentsTab({ proposalId, documents, userId, isPI, isDraft, hideIdenti
                                                 )}
                                                 {!hideIdentity && doc.uploaded_by?.name && (
                                                     <span className="text-xs text-gray-400">
-                                                        by {doc.uploaded_by.name}
+                                                        {tr("by :name", { name: doc.uploaded_by.name })}
                                                     </span>
                                                 )}
                                                 {doc.file_size && (
                                                     <span className="text-xs text-gray-400">
-                                                        {(doc.file_size / 1024 / 1024).toFixed(2)} MB
+                                                        {tr(":file_size MB", { file_size: (doc.file_size / 1024 / 1024).toFixed(2) })}
                                                     </span>
                                                 )}
                                                 {doc.created_at && (
@@ -603,7 +604,7 @@ function DocumentsTab({ proposalId, documents, userId, isPI, isDraft, hideIdenti
                                             ).catch(() => toastError('Download failed.'))}
                                             className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
                                         >
-                                            <ExternalLink size={12} /> Download
+                                            <ExternalLink size={12} /> {tr("Download")}
                                         </button>
                                         {isOwner && isDraft && (
                                             <button
@@ -669,21 +670,21 @@ function AppealModal({ proposal, onSave, onClose }) {
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
-                <h2 className="text-base font-semibold text-gray-900 mb-1">Request Reconsideration</h2>
+                <h2 className="text-base font-semibold text-gray-900 mb-1">{tr("Request Reconsideration")}</h2>
                 <p className="text-xs text-gray-500 mb-4 font-mono">{proposal.tracker_number}</p>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Reason for Appeal <span className="text-red-500">*</span>
-                    <span className="ml-1 font-normal text-gray-400">(min 20 characters)</span>
+                    {tr("Reason for Appeal")} <span className="text-red-500">*</span>
+                    <span className="ml-1 font-normal text-gray-400">{tr("(min 20 characters)")}</span>
                 </label>
                 <textarea
                     value={reason}
                     onChange={e => setReason(e.target.value)}
                     rows={5}
-                    placeholder="Explain why you believe this proposal should be reconsidered..."
+                    placeholder={tr("Explain why you believe this proposal should be reconsidered...")}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4 resize-none"
                 />
                 <div className="flex justify-end gap-2">
-                    <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 rounded-lg border border-gray-200 hover:bg-gray-50">Cancel</button>
+                    <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 rounded-lg border border-gray-200 hover:bg-gray-50">{tr("Cancel")}</button>
                     <button onClick={submit} disabled={saving} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
                         {saving ? 'Submitting…' : 'Submit Appeal'}
                     </button>
@@ -719,23 +720,23 @@ function EthicalClearanceModal({ proposal, onSave, onClose }) {
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
-                <h2 className="text-base font-semibold text-gray-900 mb-1">Submit Ethical Clearance for Verification</h2>
+                <h2 className="text-base font-semibold text-gray-900 mb-1">{tr("Submit Ethical Clearance for Verification")}</h2>
                 <p className="text-xs text-gray-500 mb-4 font-mono">{proposal.tracker_number}</p>
                 <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
-                    Upload your certificate in the Documents tab (type "Ethical Clearance Certificate") before submitting here.
+                    {tr("Upload your certificate in the Documents tab (type \"Ethical Clearance Certificate\") before submitting here.")}
                 </p>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Certificate / Reference Number <span className="text-red-500">*</span>
+                    {tr("Certificate / Reference Number")} <span className="text-red-500">*</span>
                 </label>
                 <input
                     type="text"
                     value={clearanceNumber}
                     onChange={e => setClearanceNumber(e.target.value)}
-                    placeholder="e.g. IRB-2026-0042"
+                    placeholder={tr("e.g. IRB-2026-0042")}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
                 />
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Expiry Date <span className="text-red-500">*</span>
+                    {tr("Expiry Date")} <span className="text-red-500">*</span>
                 </label>
                 <input
                     type="date"
@@ -745,7 +746,7 @@ function EthicalClearanceModal({ proposal, onSave, onClose }) {
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
                 />
                 <div className="flex justify-end gap-2">
-                    <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 rounded-lg border border-gray-200 hover:bg-gray-50">Cancel</button>
+                    <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 rounded-lg border border-gray-200 hover:bg-gray-50">{tr("Cancel")}</button>
                     <button onClick={submit} disabled={saving} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
                         {saving ? 'Submitting…' : 'Submit for Verification'}
                     </button>
@@ -781,10 +782,10 @@ function ExtensionModal({ proposal, onSave, onClose }) {
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
-                <h2 className="text-base font-semibold text-gray-900 mb-1">Request a Deadline Extension</h2>
+                <h2 className="text-base font-semibold text-gray-900 mb-1">{tr("Request a Deadline Extension")}</h2>
                 <p className="text-xs text-gray-500 mb-4 font-mono">{proposal.tracker_number}</p>
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                    I need until <span className="text-red-500">*</span>
+                    {tr("I need until")} <span className="text-red-500">*</span>
                 </label>
                 <input
                     type="datetime-local"
@@ -794,18 +795,18 @@ function ExtensionModal({ proposal, onSave, onClose }) {
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4"
                 />
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Reason <span className="text-red-500">*</span>
-                    <span className="ml-1 font-normal text-gray-400">(min 20 characters)</span>
+                    {tr("Reason")} <span className="text-red-500">*</span>
+                    <span className="ml-1 font-normal text-gray-400">{tr("(min 20 characters)")}</span>
                 </label>
                 <textarea
                     value={reason}
                     onChange={e => setReason(e.target.value)}
                     rows={5}
-                    placeholder="Explain why you need more time…"
+                    placeholder={tr("Explain why you need more time…")}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4 resize-none"
                 />
                 <div className="flex justify-end gap-2">
-                    <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 rounded-lg border border-gray-200 hover:bg-gray-50">Cancel</button>
+                    <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 rounded-lg border border-gray-200 hover:bg-gray-50">{tr("Cancel")}</button>
                     <button onClick={submit} disabled={saving} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
                         {saving ? 'Submitting…' : 'Submit Request'}
                     </button>
@@ -859,24 +860,24 @@ function BudgetRevisionModal({ proposal, onSave, onClose }) {
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
-                <h2 className="text-base font-semibold text-gray-900 mb-1">Request a Budget Revision</h2>
+                <h2 className="text-base font-semibold text-gray-900 mb-1">{tr("Request a Budget Revision")}</h2>
                 <p className="text-xs text-gray-500 mb-4 font-mono">{proposal.tracker_number}</p>
 
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Reason <span className="text-red-500">*</span>
-                    <span className="ml-1 font-normal text-gray-400">(min 20 characters)</span>
+                    {tr("Reason")} <span className="text-red-500">*</span>
+                    <span className="ml-1 font-normal text-gray-400">{tr("(min 20 characters)")}</span>
                 </label>
                 <textarea
                     value={reason}
                     onChange={e => setReason(e.target.value)}
                     rows={3}
-                    placeholder="Explain why the budget needs to change…"
+                    placeholder={tr("Explain why the budget needs to change…")}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4 resize-none"
                 />
 
                 <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-medium text-gray-700">Revised Budget Items <span className="text-red-500">*</span></p>
-                    <button onClick={addItem} className="text-xs font-semibold text-blue-600 hover:text-blue-700">+ Add Item</button>
+                    <p className="text-xs font-medium text-gray-700">{tr("Revised Budget Items")} <span className="text-red-500">*</span></p>
+                    <button onClick={addItem} className="text-xs font-semibold text-blue-600 hover:text-blue-700">{tr("+ Add Item")}</button>
                 </div>
 
                 <div className="space-y-3 mb-4">
@@ -884,40 +885,40 @@ function BudgetRevisionModal({ proposal, onSave, onClose }) {
                         <div key={idx} className="border border-gray-200 rounded-xl p-3 space-y-2">
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 <input
-                                    type="text" placeholder="Category" value={it.category}
+                                    type="text" placeholder={tr("Category")} value={it.category}
                                     onChange={e => updateItem(idx, 'category', e.target.value)}
                                     className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 />
                                 <input
-                                    type="number" placeholder="Amount" value={it.amount} min="0"
+                                    type="number" placeholder={tr("Amount")} value={it.amount} min="0"
                                     onChange={e => updateItem(idx, 'amount', e.target.value)}
                                     className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 />
                             </div>
                             <input
-                                type="text" placeholder="Item description" value={it.item_description}
+                                type="text" placeholder={tr("Item description")} value={it.item_description}
                                 onChange={e => updateItem(idx, 'item_description', e.target.value)}
                                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                             />
                             <div className="flex gap-2">
                                 <input
-                                    type="text" placeholder="Justification (optional)" value={it.justification}
+                                    type="text" placeholder={tr("Justification (optional)")} value={it.justification}
                                     onChange={e => updateItem(idx, 'justification', e.target.value)}
                                     className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 />
-                                <button onClick={() => removeItem(idx)} className="px-3 text-xs text-red-500 hover:text-red-700 shrink-0">Remove</button>
+                                <button onClick={() => removeItem(idx)} className="px-3 text-xs text-red-500 hover:text-red-700 shrink-0">{tr("Remove")}</button>
                             </div>
                         </div>
                     ))}
                 </div>
 
                 <div className="flex items-center justify-between border-t border-gray-100 pt-3 mb-4">
-                    <span className="text-sm font-semibold text-gray-700">New Total</span>
+                    <span className="text-sm font-semibold text-gray-700">{tr("New Total")}</span>
                     <span className="text-sm font-bold text-gray-900">{formatCurrency(total)}</span>
                 </div>
 
                 <div className="flex justify-end gap-2">
-                    <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 rounded-lg border border-gray-200 hover:bg-gray-50">Cancel</button>
+                    <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 rounded-lg border border-gray-200 hover:bg-gray-50">{tr("Cancel")}</button>
                     <button onClick={submit} disabled={saving} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
                         {saving ? 'Submitting…' : 'Submit Request'}
                     </button>
@@ -957,12 +958,12 @@ function NoCostExtensionModal({ proposal, onSave, onClose }) {
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
-                <h2 className="text-base font-semibold text-gray-900 mb-1">Request a No-Cost Extension</h2>
+                <h2 className="text-base font-semibold text-gray-900 mb-1">{tr("Request a No-Cost Extension")}</h2>
                 <p className="text-xs text-gray-500 mb-4 font-mono">{proposal.tracker_number}</p>
-                <p className="text-xs text-gray-500 mb-4">Current project duration: <strong>{proposal.duration_months} months</strong></p>
+                <p className="text-xs text-gray-500 mb-4">{tr("Current project duration:")} <strong>{tr(":duration_months months", { duration_months: proposal.duration_months })}</strong></p>
 
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                    New Total Duration (months) <span className="text-red-500">*</span>
+                    {tr("New Total Duration (months)")} <span className="text-red-500">*</span>
                 </label>
                 <input
                     type="number"
@@ -974,18 +975,18 @@ function NoCostExtensionModal({ proposal, onSave, onClose }) {
                 />
 
                 <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Reason <span className="text-red-500">*</span>
-                    <span className="ml-1 font-normal text-gray-400">(min 20 characters)</span>
+                    {tr("Reason")} <span className="text-red-500">*</span>
+                    <span className="ml-1 font-normal text-gray-400">{tr("(min 20 characters)")}</span>
                 </label>
                 <textarea
                     value={reason}
                     onChange={e => setReason(e.target.value)}
                     rows={5}
-                    placeholder="Explain why more time is needed to complete this project…"
+                    placeholder={tr("Explain why more time is needed to complete this project…")}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4 resize-none"
                 />
                 <div className="flex justify-end gap-2">
-                    <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 rounded-lg border border-gray-200 hover:bg-gray-50">Cancel</button>
+                    <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 rounded-lg border border-gray-200 hover:bg-gray-50">{tr("Cancel")}</button>
                     <button onClick={submit} disabled={saving} className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
                         {saving ? 'Submitting…' : 'Submit Request'}
                     </button>
@@ -1075,7 +1076,7 @@ function AiScorePanel({ proposalId }) {
                 <div className="flex items-center gap-2">
                     {generating && <RefreshCw size={12} className="animate-spin text-violet-500" />}
                     {!score && !loading && !generating && (
-                        <span className="text-[11px] font-semibold text-violet-600">Score now →</span>
+                        <span className="text-[11px] font-semibold text-violet-600">{tr("Score now →")}</span>
                     )}
                     {score && !generating && (open ? <ChevronUp size={13} className="text-violet-500" /> : <ChevronDown size={13} className="text-violet-500" />)}
                 </div>
@@ -1118,19 +1119,19 @@ function AiScorePanel({ proposalId }) {
                     </div>
                     {score.strengths && (
                         <div>
-                            <p className="text-[10px] font-semibold text-green-700 uppercase tracking-wide mb-1">Strengths</p>
+                            <p className="text-[10px] font-semibold text-green-700 uppercase tracking-wide mb-1">{tr("Strengths")}</p>
                             <p className="text-xs text-gray-600">{score.strengths}</p>
                         </div>
                     )}
                     {score.weaknesses && (
                         <div>
-                            <p className="text-[10px] font-semibold text-red-600 uppercase tracking-wide mb-1">Weaknesses</p>
+                            <p className="text-[10px] font-semibold text-red-600 uppercase tracking-wide mb-1">{tr("Weaknesses")}</p>
                             <p className="text-xs text-gray-600">{score.weaknesses}</p>
                         </div>
                     )}
                     {score.recommendations && (
                         <div>
-                            <p className="text-[10px] font-semibold text-amber-700 uppercase tracking-wide mb-1">Recommendations</p>
+                            <p className="text-[10px] font-semibold text-amber-700 uppercase tracking-wide mb-1">{tr("Recommendations")}</p>
                             <p className="text-xs text-gray-600">{score.recommendations}</p>
                         </div>
                     )}
@@ -1147,7 +1148,7 @@ function AiScorePanel({ proposalId }) {
                     <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5">
                         <AlertCircle size={14} className="text-red-500 shrink-0 mt-0.5" />
                         <div className="min-w-0">
-                            <p className="text-xs font-semibold text-red-700">AI scoring failed</p>
+                            <p className="text-xs font-semibold text-red-700">{tr("AI scoring failed")}</p>
                             <p className="text-xs text-red-600 mt-0.5 wrap-break-word">{score.error_message ?? 'Check server logs for details.'}</p>
                         </div>
                     </div>
@@ -1169,7 +1170,7 @@ function CorrectionsNotice({ corrections, canApply, applying, onApply }) {
         return (
             <div className="flex items-center gap-2 rounded-lg border border-green-200 bg-green-50 px-3 py-2">
                 <CheckCircle size={12} className="text-green-600 shrink-0" />
-                <p className="text-[11px] text-green-700">Recorded decisions match the current thresholds — nothing to correct.</p>
+                <p className="text-[11px] text-green-700">{tr("Recorded decisions match the current thresholds — nothing to correct.")}</p>
             </div>
         );
     }
@@ -1180,7 +1181,7 @@ function CorrectionsNotice({ corrections, canApply, applying, onApply }) {
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 space-y-2">
             <div className="flex items-start gap-2">
                 <AlertCircle size={13} className="text-amber-600 mt-0.5 shrink-0" />
-                <p className="text-xs font-semibold text-amber-800">Recorded decision differs from the recalculated result</p>
+                <p className="text-xs font-semibold text-amber-800">{tr("Recorded decision differs from the recalculated result")}</p>
             </div>
             <ul className="space-y-1.5 pl-5">
                 {corrections.map((c) => (
@@ -1189,7 +1190,7 @@ function CorrectionsNotice({ corrections, canApply, applying, onApply }) {
                         {c.issue === 'wrongly_passed' ? 'passed, but now falls below the threshold' : 'rejected, but now clears the threshold'}
                         {' '}({c.score}) — <span className="font-semibold">{c.change.replace('accepted', 'central evaluation').replace('blind_review_passed', 'blind review passed')}</span>
                         {!c.applicable && c.reason && (
-                            <span className="block text-amber-700/80 italic">Cannot be applied here: {c.reason}.</span>
+                            <span className="block text-amber-700/80 italic">{tr("Cannot be applied here: :reason.", { reason: c.reason })}</span>
                         )}
                     </li>
                 ))}
@@ -1239,7 +1240,7 @@ function ScoreMeter({ label, score, max, threshold, passes, note }) {
 function PhaseResult({ phase, snapshot }) {
     if (phase === 'blind_review') {
         if (!snapshot.blind) {
-            return <p className="text-xs text-gray-400 italic">No submitted blind review scores yet.</p>;
+            return <p className="text-xs text-gray-400 italic">{tr("No submitted blind review scores yet.")}</p>;
         }
         return (
             <ScoreMeter
@@ -1253,7 +1254,7 @@ function PhaseResult({ phase, snapshot }) {
     }
 
     if (!snapshot.defence) {
-        return <p className="text-xs text-gray-400 italic">No submitted open defence scores yet.</p>;
+        return <p className="text-xs text-gray-400 italic">{tr("No submitted open defence scores yet.")}</p>;
     }
 
     return (
@@ -1320,9 +1321,9 @@ function RecalculatePanel({ proposalId, proposalStatus, onDecisionChanged }) {
     return (
         <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-4 space-y-3">
             <div>
-                <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">Verify Current Scores</p>
+                <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">{tr("Verify Current Scores")}</p>
                 <p className="text-xs text-gray-400 mt-0.5">
-                    Recomputes a phase live against the current threshold settings and evaluation criteria. Scores are capped at each phase's maximum.
+                    {tr("Recomputes a phase live against the current threshold settings and evaluation criteria. Scores are capped at each phase's maximum.")}
                 </p>
             </div>
 
@@ -1356,7 +1357,7 @@ function RecalculatePanel({ proposalId, proposalStatus, onDecisionChanged }) {
                     />
 
                     <p className="text-[10px] text-gray-400">
-                        {PHASE_LABELS[phase]} · Current proposal status: <span className="font-semibold text-gray-600">{getStatusLabel(snapshot.proposal_status ?? proposalStatus)}</span>
+                        {tr(":phase · Current proposal status:", { phase: PHASE_LABELS[phase] })} <span className="font-semibold text-gray-600">{getStatusLabel(snapshot.proposal_status ?? proposalStatus)}</span>
                         {' · '}Recalculated {formatDate(snapshot.recalculated_at)}
                     </p>
                 </div>
@@ -1393,8 +1394,8 @@ function ReviewResultsTab({ proposalId, isVisible, isStaff, proposalStatus, onDe
             <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3.5">
                 <span className="text-amber-500 text-base mt-0.5">🔒</span>
                 <div>
-                    <p className="text-sm font-semibold text-amber-700">Review results are not visible to your role</p>
-                    <p className="text-xs text-amber-600 mt-0.5">Review outcomes are shared with the proposal team after the review phase is complete.</p>
+                    <p className="text-sm font-semibold text-amber-700">{tr("Review results are not visible to your role")}</p>
+                    <p className="text-xs text-amber-600 mt-0.5">{tr("Review outcomes are shared with the proposal team after the review phase is complete.")}</p>
                 </div>
             </div>
         );
@@ -1405,8 +1406,8 @@ function ReviewResultsTab({ proposalId, isVisible, isStaff, proposalStatus, onDe
             <div className="flex items-start gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3.5">
                 <span className="text-blue-500 text-base mt-0.5">ℹ️</span>
                 <div>
-                    <p className="text-sm font-semibold text-blue-700">Review in progress</p>
-                    <p className="text-xs text-blue-600 mt-0.5">Review results will be available once the blind review phase is complete.</p>
+                    <p className="text-sm font-semibold text-blue-700">{tr("Review in progress")}</p>
+                    <p className="text-xs text-blue-600 mt-0.5">{tr("Review results will be available once the blind review phase is complete.")}</p>
                 </div>
             </div>
         );
@@ -1421,7 +1422,7 @@ function ReviewResultsTab({ proposalId, isVisible, isStaff, proposalStatus, onDe
     }
 
     if (!results || results.total_reviews === 0) {
-        return <p className="text-sm text-gray-400">No review results available yet.</p>;
+        return <p className="text-sm text-gray-400">{tr("No review results available yet.")}</p>;
     }
 
     const { total_reviews, submitted_reviews, scores, reviews } = results;
@@ -1435,25 +1436,25 @@ function ReviewResultsTab({ proposalId, isVisible, isStaff, proposalStatus, onDe
             <div className="grid grid-cols-3 gap-3">
                 <div className="bg-gray-50 rounded-xl px-4 py-3 text-center">
                     <p className="text-2xl font-bold text-gray-800 tabular-nums">{submitted_reviews}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">Reviews Submitted</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{tr("Reviews Submitted")}</p>
                 </div>
                 <div className="bg-gray-50 rounded-xl px-4 py-3 text-center">
                     <p className="text-2xl font-bold text-gray-800 tabular-nums">{total_reviews}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">Total Assigned</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{tr("Total Assigned")}</p>
                 </div>
                 {scores?.combined != null ? (
                     <div className="bg-indigo-50 rounded-xl px-4 py-3 text-center">
                         <p className="text-2xl font-bold text-indigo-700 tabular-nums">{fmt(outOf100(scores.combined, scores.combined_max))}<span className="text-base font-semibold text-indigo-400">/100</span></p>
-                        <p className="text-xs text-indigo-500 mt-0.5">Combined (Blind + Defence)</p>
+                        <p className="text-xs text-indigo-500 mt-0.5">{tr("Combined (Blind + Defence)")}</p>
                         <p className="text-[11px] text-indigo-400 mt-0.5 tabular-nums">
-                            Blind {fmt(scores.blind?.score)}/{fmt(scores.blind?.max)} + Defence {fmt(scores.defence?.score)}/{fmt(scores.defence?.max)}
+                            {tr("Blind :score/:max + Defence :score2/:max2", { score: fmt(scores.blind?.score), max: fmt(scores.blind?.max), score2: fmt(scores.defence?.score), max2: fmt(scores.defence?.max) })}
                         </p>
                     </div>
                 ) : scores?.blind != null && (
                     <div className="bg-indigo-50 rounded-xl px-4 py-3 text-center">
                         <p className="text-2xl font-bold text-indigo-700 tabular-nums">{fmt(scores.blind.score)}<span className="text-base font-semibold text-indigo-400">/{fmt(scores.blind.max)}</span></p>
-                        <p className="text-xs text-indigo-500 mt-0.5">Blind Review Score</p>
-                        <p className="text-[11px] text-indigo-400 mt-0.5">Combined score after the open defence</p>
+                        <p className="text-xs text-indigo-500 mt-0.5">{tr("Blind Review Score")}</p>
+                        <p className="text-[11px] text-indigo-400 mt-0.5">{tr("Combined score after the open defence")}</p>
                     </div>
                 )}
             </div>
@@ -1463,11 +1464,15 @@ function ReviewResultsTab({ proposalId, isVisible, isStaff, proposalStatus, onDe
             {/* Per-review cards (anonymized) */}
             {reviews.length > 0 && (
                 <div className="space-y-3">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Review Feedback</p>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{tr("Review Feedback")}</p>
                     {reviews.map((rv, i) => (
                         <div key={i} className="border border-gray-200 rounded-xl overflow-hidden">
                             <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-100">
-                                <span className="text-xs font-semibold text-gray-600">Reviewer {i + 1}</span>
+                                <span className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-gray-600">
+                                    {tr("Reviewer :i", { i: i + 1 })}
+                                    {rv.second_opinion && <span className="rounded-full bg-indigo-50 px-1.5 py-px text-[10px] font-semibold text-indigo-700">{tr("Second opinion")}</span>}
+                                    {rv.set_aside && <span className="rounded-full bg-gray-200 px-1.5 py-px text-[10px] font-semibold text-gray-600" title={tr("Furthest from the other scores after a second opinion — not counted in the blind review score.")}>{tr("Set aside")}</span>}
+                                </span>
                                 {rv.overall_score != null && (
                                     <span className="text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-full">
                                         {rv.overall_score}{rv.overall_max != null ? `/${rv.overall_max}` : ''}
@@ -1574,7 +1579,7 @@ function ContractUploadSection({ proposal, onUploaded }) {
                 {/* Header row */}
                 <div className="flex items-center justify-between">
                     <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide flex items-center gap-1.5">
-                        <FileText size={13} /> Research Contract
+                        <FileText size={13} /> {tr("Research Contract")}
                     </p>
                     <div className="flex items-center gap-2">
                         {canReplace && (
@@ -1601,14 +1606,14 @@ function ContractUploadSection({ proposal, onUploaded }) {
                 {status === 'approved' && (
                     <div className="flex items-center gap-2 text-sm text-emerald-700">
                         <CheckCircle size={14} />
-                        <span>Contract approved on {formatDate(proposal.contract_signed_at)}. You may now submit your budget request.</span>
+                        <span>{tr("Contract approved on :contract_signed_at. You may now submit your budget request.", { contract_signed_at: formatDate(proposal.contract_signed_at) })}</span>
                     </div>
                 )}
 
                 {status === 'pending' && (
                     <div className="flex items-center gap-2 text-sm text-blue-700">
                         <Upload size={14} className="shrink-0" />
-                        <span>Contract submitted and under review. You will be notified once approved.</span>
+                        <span>{tr("Contract submitted and under review. You will be notified once approved.")}</span>
                     </div>
                 )}
 
@@ -1616,7 +1621,7 @@ function ContractUploadSection({ proposal, onUploaded }) {
                     <div className="flex items-start gap-2 text-sm text-red-700">
                         <AlertCircle size={14} className="shrink-0 mt-0.5" />
                         <div>
-                            <p className="font-medium">Contract was returned for correction.</p>
+                            <p className="font-medium">{tr("Contract was returned for correction.")}</p>
                             {proposal.contract_rejection_reason && (
                                 <p className="text-xs text-red-600 mt-0.5">{proposal.contract_rejection_reason}</p>
                             )}
@@ -1627,7 +1632,7 @@ function ContractUploadSection({ proposal, onUploaded }) {
                 {!status && (
                     <div className="space-y-2">
                         <p className="text-sm text-gray-600">
-                            Please upload the signed research contract (PDF). An officer will review and approve it before you can submit your first budget request.
+                            {tr("Please upload the signed research contract (PDF). An officer will review and approve it before you can submit your first budget request.")}
                         </p>
                         <button onClick={() => fileRef.current?.click()} disabled={uploading}
                             className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50">
@@ -1644,7 +1649,7 @@ function ContractUploadSection({ proposal, onUploaded }) {
                     <iframe
                         src={pdfUrl}
                         className="w-full h-96 block"
-                        title="Submitted contract"
+                        title={tr("Submitted contract")}
                     />
                 </div>
             )}
@@ -1800,7 +1805,7 @@ export default function ProposalShow() {
     );
 
     if (!proposal) return (
-        <AppLayout breadcrumb="Proposal"><p className="text-gray-500">Proposal not found.</p></AppLayout>
+        <AppLayout breadcrumb="Proposal"><p className="text-gray-500">{tr("Proposal not found.")}</p></AppLayout>
     );
 
     const budgets   = proposal.budgets   ?? [];
@@ -1841,14 +1846,14 @@ export default function ProposalShow() {
                             )}
                             <h1 className="text-xl font-bold text-gray-900">{proposal.title ?? 'Untitled Draft'}</h1>
                             <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
-                                <span><strong>Category:</strong> {getCategoryLabel(proposal.category)}</span>
-                                <span><strong>College:</strong> {proposal.college?.name ?? '—'}</span>
-                                <span><strong>Year:</strong> {proposal.academic_year ?? '—'}</span>
-                                <span><strong>Submitted:</strong> {formatDate(proposal.submitted_at)}</span>
+                                <span><strong>{tr("Category:")}</strong> {getCategoryLabel(proposal.category)}</span>
+                                <span><strong>{tr("College:")}</strong> {proposal.college?.name ?? '—'}</span>
+                                <span><strong>{tr("Year:")}</strong> {proposal.academic_year ?? '—'}</span>
+                                <span><strong>{tr("Submitted:")}</strong> {formatDate(proposal.submitted_at)}</span>
                                 {hasSubFeature('workflow.ethical_clearance') && proposal.ethical_clearance_required && (
                                     <span className="inline-flex items-center gap-1 text-amber-700 font-medium">
                                         <span className="h-1.5 w-1.5 rounded-full bg-amber-500 inline-block" />
-                                        EC: {proposal.ethical_clearance_number || 'Clearance Required'}
+                                        {tr("EC: :Required", { Required: proposal.ethical_clearance_number || 'Clearance Required' })}
                                     </span>
                                 )}
                             </div>
@@ -1864,7 +1869,7 @@ export default function ProposalShow() {
                         <div className="mt-4 space-y-3">
                             {proposal.rejection_reason && (
                                 <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3">
-                                    <p className="text-sm font-semibold text-red-800 mb-1">Rejection Reason</p>
+                                    <p className="text-sm font-semibold text-red-800 mb-1">{tr("Rejection Reason")}</p>
                                     <p className="text-sm text-red-700">{proposal.rejection_reason}</p>
                                 </div>
                             )}
@@ -1883,13 +1888,12 @@ export default function ProposalShow() {
                                             onClick={() => setShowAppealModal(true)}
                                             className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
                                         >
-                                            <RotateCcw size={14} /> Request Reconsideration
+                                            <RotateCcw size={14} /> {tr("Request Reconsideration")}
                                         </button>
                                     </div>
                                 ) : ['fail_blind_review', 'fail_defence'].includes(rejectedVia) && (
                                     <p className="text-xs text-gray-400 italic text-right">
-                                        This proposal was rejected for not meeting the review score threshold —
-                                        use the Complaints tab to raise a concern about that review.
+                                        {tr("This proposal was rejected for not meeting the review score threshold — use the Complaints tab to raise a concern about that review.")}
                                     </p>
                                 )
                             )}
@@ -1901,11 +1905,9 @@ export default function ProposalShow() {
                                 <ClipboardList size={18} />
                             </div>
                             <div className="min-w-0">
-                                <p className="text-sm font-semibold text-sky-900">In Central Evaluation</p>
+                                <p className="text-sm font-semibold text-sky-900">{tr("In Central Evaluation")}</p>
                                 <p className="mt-0.5 text-sm leading-relaxed text-sky-800/80">
-                                    This proposal has passed both the Blind Review and Open Defence phases and is now with the
-                                    Central Evaluation Committee. A separate notification will follow once the final funding
-                                    decision has been made.
+                                    {tr("This proposal has passed both the Blind Review and Open Defence phases and is now with the Central Evaluation Committee. A separate notification will follow once the final funding decision has been made.")}
                                 </p>
                             </div>
                         </div>
@@ -1920,7 +1922,7 @@ export default function ProposalShow() {
                                         Deadline Extension {extension.status === 'pending' ? 'Pending Review' : extension.status === 'approved' ? 'Approved' : 'Denied'}
                                     </p>
                                     {extension.status === 'approved' && extension.granted_until && (
-                                        <p className="text-sm text-gray-700">You may now submit until <strong>{formatDate(extension.granted_until)}</strong>.</p>
+                                        <p className="text-sm text-gray-700">{tr("You may now submit until")} <strong>{formatDate(extension.granted_until)}</strong>.</p>
                                     )}
                                     {extension.resolution_notes && <p className="text-sm text-gray-600 mt-1">{extension.resolution_notes}</p>}
                                     {canRequestExtension && extension.status !== 'pending' && (
@@ -1929,7 +1931,7 @@ export default function ProposalShow() {
                                                 onClick={() => setShowExtensionModal(true)}
                                                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
                                             >
-                                                <CalendarClock size={14} /> Request Another Extension
+                                                <CalendarClock size={14} /> {tr("Request Another Extension")}
                                             </button>
                                         </div>
                                     )}
@@ -1945,7 +1947,7 @@ export default function ProposalShow() {
                                         onClick={() => setShowExtensionModal(true)}
                                         className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shrink-0"
                                     >
-                                        <CalendarClock size={14} /> Request Extension
+                                        <CalendarClock size={14} /> {tr("Request Extension")}
                                     </button>
                                 </div>
                             )}
@@ -1981,7 +1983,7 @@ export default function ProposalShow() {
                                                     <CalendarClock size={14} /> {labels[ecStatus] ?? labels.pending}
                                                 </p>
                                                 {ecStatus === 'approved' && proposal.ethical_clearance_expiry && (
-                                                    <p className="text-sm mt-1">Valid until <strong>{formatDate(proposal.ethical_clearance_expiry)}</strong></p>
+                                                    <p className="text-sm mt-1">{tr("Valid until")} <strong>{formatDate(proposal.ethical_clearance_expiry)}</strong></p>
                                                 )}
                                                 {ecStatus === 'rejected' && proposal.ethical_clearance_rejection_reason && (
                                                     <p className="text-sm mt-1">{proposal.ethical_clearance_rejection_reason}</p>
@@ -2006,11 +2008,11 @@ export default function ProposalShow() {
                         <div className="mt-4 rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3">
                             <div className="flex flex-wrap items-center gap-6">
                                 <div>
-                                    <p className="text-xs font-medium text-emerald-600 uppercase">Grant Reference</p>
+                                    <p className="text-xs font-medium text-emerald-600 uppercase">{tr("Grant Reference")}</p>
                                     <p className="text-sm font-bold text-emerald-800 font-mono">{proposal.award.grant_reference}</p>
                                 </div>
                                 <div>
-                                    <p className="text-xs font-medium text-emerald-600 uppercase">Awarded Amount</p>
+                                    <p className="text-xs font-medium text-emerald-600 uppercase">{tr("Awarded Amount")}</p>
                                     <p className="text-sm font-bold text-emerald-800">{formatCurrency(proposal.award.awarded_amount)}</p>
                                 </div>
                             </div>
@@ -2049,7 +2051,7 @@ export default function ProposalShow() {
                                                     <p className="text-sm mt-1">{budgetRevision.resolution_notes}</p>
                                                 )}
                                                 {!brStatus && (
-                                                    <p className="text-sm mt-1">Request a revision to your budget line items — an officer will review it.</p>
+                                                    <p className="text-sm mt-1">{tr("Request a revision to your budget line items — an officer will review it.")}</p>
                                                 )}
                                             </div>
                                             {canRequest && (
@@ -2091,13 +2093,13 @@ export default function ProposalShow() {
                                                     <CalendarClock size={14} /> {nceStatus ? labels[nceStatus] : 'Need more time to complete this project?'}
                                                 </p>
                                                 {nceStatus === 'approved' && (
-                                                    <p className="text-sm mt-1">Project duration extended to <strong>{noCostExtension.requested_duration_months} months</strong>.</p>
+                                                    <p className="text-sm mt-1">{tr("Project duration extended to")} <strong>{tr(":requested_duration_months months", { requested_duration_months: noCostExtension.requested_duration_months })}</strong>.</p>
                                                 )}
                                                 {nceStatus === 'denied' && noCostExtension?.resolution_notes && (
                                                     <p className="text-sm mt-1">{noCostExtension.resolution_notes}</p>
                                                 )}
                                                 {!nceStatus && (
-                                                    <p className="text-sm mt-1">Request more time to complete the project at no additional cost — an officer will review it.</p>
+                                                    <p className="text-sm mt-1">{tr("Request more time to complete the project at no additional cost — an officer will review it.")}</p>
                                                 )}
                                             </div>
                                             {canRequest && (
@@ -2133,7 +2135,7 @@ export default function ProposalShow() {
                     )}
 
                     {proposal.status === 'under_blind_review' && (isAdmin || isOfficer) && (
-                        <ReviewDisagreementPanel proposal={proposal} canDecide={canRejectBlindReview} onDecided={load} />
+                        <ReviewDisagreementPanel proposal={proposal} canDecide={canRejectBlindReview} canInvite={can.manageReviews || canRejectBlindReview} onDecided={load} />
                     )}
 
                     {/* Approval reports — college officer flagged this as possibly mistakenly approved */}
@@ -2176,7 +2178,7 @@ export default function ProposalShow() {
                                                 )}
                                                 {r.status === 'open' && r.reported_by?.id === user?.id && proposal.status !== 'validated' && (
                                                     <p className="text-xs text-gray-500 mt-1.5">
-                                                        This report can no longer be cancelled — the proposal has already been acted on and is now {getStatusLabel(proposal.status)}.
+                                                        {tr("This report can no longer be cancelled — the proposal has already been acted on and is now :status.", { status: getStatusLabel(proposal.status) })}
                                                     </p>
                                                 )}
                                                 {r.status === 'withdrawn' && (
@@ -2252,7 +2254,7 @@ export default function ProposalShow() {
 
                     <ConfirmDialog
                         open={!!confirmWithdrawReport}
-                        title="Cancel this report?"
+                        title={tr("Cancel this report?")}
                         description="Your mistaken-approval report will be withdrawn and the proposal will return to the stage it was at before you reported it. The central office and category officer will be told no action is needed."
                         confirmLabel="Cancel Report"
                         cancelLabel="Keep Report"
@@ -2309,13 +2311,13 @@ export default function ProposalShow() {
                             <div className="space-y-4 text-sm text-gray-700">
                                 {proposal.abstract && (
                                     <div>
-                                        <p className="font-semibold text-gray-800 mb-1">Abstract</p>
+                                        <p className="font-semibold text-gray-800 mb-1">{tr("Abstract")}</p>
                                         <p className="leading-relaxed">{proposal.abstract}</p>
                                     </div>
                                 )}
                                 {proposal.keywords && (
                                     <div>
-                                        <p className="font-semibold text-gray-800 mb-1">Keywords</p>
+                                        <p className="font-semibold text-gray-800 mb-1">{tr("Keywords")}</p>
                                         <p className="text-gray-500">{proposal.keywords}</p>
                                     </div>
                                 )}
@@ -2343,13 +2345,13 @@ export default function ProposalShow() {
                                     <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3.5">
                                         <span className="text-amber-500 text-base mt-0.5">🔒</span>
                                         <div>
-                                            <p className="text-sm font-semibold text-amber-700">Member information is not visible to your role</p>
-                                            <p className="text-xs text-amber-600 mt-0.5">Team identity is concealed during blind and open defence review to preserve evaluation integrity.</p>
+                                            <p className="text-sm font-semibold text-amber-700">{tr("Member information is not visible to your role")}</p>
+                                            <p className="text-xs text-amber-600 mt-0.5">{tr("Team identity is concealed during blind and open defence review to preserve evaluation integrity.")}</p>
                                         </div>
                                     </div>
                                 )
                             : members.length === 0
-                                ? <p className="text-sm text-gray-400">No team members on record.</p>
+                                ? <p className="text-sm text-gray-400">{tr("No team members on record.")}</p>
                                 : (
                                     <>
                                         <div className="hidden sm:block overflow-x-auto">
@@ -2389,7 +2391,7 @@ export default function ProposalShow() {
                                                         </span>
                                                     </div>
                                                     <p className="text-xs text-gray-500 truncate">{m.user?.email ?? '—'}</p>
-                                                    <p className="text-xs text-gray-600 mt-1">Contribution: {m.contribution_percentage}%</p>
+                                                    <p className="text-xs text-gray-600 mt-1">{tr("Contribution: :contribution_percentage%", { contribution_percentage: m.contribution_percentage })}</p>
                                                 </div>
                                             ))}
                                         </div>
@@ -2399,7 +2401,7 @@ export default function ProposalShow() {
 
                         {activeTab === 'Budget' && (
                             budgets.length === 0
-                                ? <p className="text-sm text-gray-400">No budget items on record.</p>
+                                ? <p className="text-sm text-gray-400">{tr("No budget items on record.")}</p>
                                 : (
                                     <div className="space-y-3">
                                         <div className="hidden sm:block overflow-x-auto">
@@ -2423,7 +2425,7 @@ export default function ProposalShow() {
                                                 </tbody>
                                                 <tfoot className="bg-gray-50 border-t border-gray-200">
                                                     <tr>
-                                                        <td colSpan={2} className="px-4 py-2 text-sm font-semibold text-gray-700">Total</td>
+                                                        <td colSpan={2} className="px-4 py-2 text-sm font-semibold text-gray-700">{tr("Total")}</td>
                                                         <td className="px-4 py-2 text-sm font-bold text-gray-900">{formatCurrency(budgetTotal)}</td>
                                                         <td />
                                                     </tr>
@@ -2444,7 +2446,7 @@ export default function ProposalShow() {
                                                 </div>
                                             ))}
                                             <div className="flex items-center justify-between border-t border-gray-200 pt-2 px-1">
-                                                <span className="text-sm font-semibold text-gray-700">Total</span>
+                                                <span className="text-sm font-semibold text-gray-700">{tr("Total")}</span>
                                                 <span className="text-sm font-bold text-gray-900">{formatCurrency(budgetTotal)}</span>
                                             </div>
                                         </div>
@@ -2470,8 +2472,8 @@ export default function ProposalShow() {
                                 <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3.5">
                                     <span className="text-amber-500 text-base mt-0.5">🔒</span>
                                     <div>
-                                        <p className="text-sm font-semibold text-amber-700">Submission history is not visible to your role</p>
-                                        <p className="text-xs text-amber-600 mt-0.5">Activity logs are concealed during blind and open defence review to preserve evaluation integrity.</p>
+                                        <p className="text-sm font-semibold text-amber-700">{tr("Submission history is not visible to your role")}</p>
+                                        <p className="text-xs text-amber-600 mt-0.5">{tr("Activity logs are concealed during blind and open defence review to preserve evaluation integrity.")}</p>
                                     </div>
                                 </div>
                             ) : (
@@ -2517,19 +2519,19 @@ export default function ProposalShow() {
                     <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
                         <h2 className="text-base font-semibold mb-3">
                             {dialog === 'reopen' ? 'Reopen for Reconsideration'
-                                : <span className="capitalize">{dialog} Proposal</span>}
+                                : <span className="capitalize">{tr(":dialog Proposal", { dialog: dialog })}</span>}
                         </h2>
                         {dialog === 'reopen' && (
                             <p className="text-xs text-gray-500 mb-3">
-                                This returns the proposal to whichever stage it was rejected from, so it can be re-decided — e.g. after correcting threshold settings. Already-submitted review scores are preserved.
+                                {tr("This returns the proposal to whichever stage it was rejected from, so it can be re-decided — e.g. after correcting threshold settings. Already-submitted review scores are preserved.")}
                             </p>
                         )}
                         <textarea value={reason} onChange={(e) => setReason(e.target.value)}
-                            placeholder="Reason (required)…" rows={3}
+                            placeholder={tr("Reason (required)…")} rows={3}
                             className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 mb-4 focus:outline-none resize-none focus:ring-2 focus:ring-blue-500" />
                         <div className="flex justify-end gap-3">
                             <button onClick={() => { setDialog(null); setReason(''); }}
-                                className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+                                className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">{tr("Cancel")}</button>
                             <button onClick={confirmAction} disabled={submitting}
                                 className={`px-4 py-2 text-sm font-medium rounded-lg text-white disabled:opacity-60 ${
                                     dialog === 'reopen' ? 'bg-indigo-600 hover:bg-indigo-700'
@@ -2546,18 +2548,18 @@ export default function ProposalShow() {
             {dialog === 'approve' && (
                 <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm">
-                        <h2 className="text-base font-semibold mb-2">Approve Proposal</h2>
+                        <h2 className="text-base font-semibold mb-2">{tr("Approve Proposal")}</h2>
                         <p className="text-sm text-gray-500 mb-5">
-                            Approving will move this proposal to <strong>Validated</strong> status. Continue?
+                            {tr("Approving will move this proposal to")} <strong>{tr("Validated")}</strong> {tr("status. Continue?")}
                         </p>
                         {proposal.anonymity_status === 'issues' && (
                             <p className="-mt-2 mb-5 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                                The anonymity check found identifying details in this proposal. Reviewers may be able to tell who wrote it.
+                                {tr("The anonymity check found identifying details in this proposal. Reviewers may be able to tell who wrote it.")}
                             </p>
                         )}
                         <div className="flex justify-end gap-3">
                             <button onClick={() => setDialog(null)}
-                                className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</button>
+                                className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">{tr("Cancel")}</button>
                             <button onClick={confirmAction} disabled={submitting}
                                 className="px-4 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-60">
                                 {submitting ? 'Processing…' : 'Approve'}

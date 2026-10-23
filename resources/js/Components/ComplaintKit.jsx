@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { translate as tr } from '../lib/i18n'
 import {
     MessageSquare, ArrowUpCircle, Pencil, X, Clock, CheckCircle2, XCircle, RotateCcw,
     FileText, Hourglass, Timer, Building2, Scale, Send, ShieldCheck, Wallet, Gavel, HelpCircle,
@@ -159,7 +160,7 @@ export function ComplaintTimeline({ complaint }) {
                     </p>
                 </TimelineItem>
             ) : awaiting ? (
-                <TimelineItem icon={Hourglass} tone="bg-amber-100 text-amber-700" title="Awaiting a response"
+                <TimelineItem icon={Hourglass} tone="bg-amber-100 text-amber-700" title={tr("Awaiting a response")}
                     meta={`${plural(daysBetween(complaint.created_at), 'day')} so far`} last>
                     <p className="text-xs text-gray-500">
                         {complaint.level === 'college'
@@ -170,9 +171,9 @@ export function ComplaintTimeline({ complaint }) {
             ) : null}
 
             {escalated && (
-                <TimelineItem icon={ArrowUpCircle} tone="bg-orange-100 text-orange-700" title="Escalated to Level 2"
+                <TimelineItem icon={ArrowUpCircle} tone="bg-orange-100 text-orange-700" title={tr("Escalated to Level 2")}
                     meta={formatDate(complaint.updated_at)} last>
-                    <p className="text-xs text-gray-500">The complainant asked the category director to review this outcome. It continues as a new Level 2 complaint.</p>
+                    <p className="text-xs text-gray-500">{tr("The complainant asked the category director to review this outcome. It continues as a new Level 2 complaint.")}</p>
                 </TimelineItem>
             )}
         </ol>
@@ -203,7 +204,7 @@ export function ModalShell({ title, subtitle, icon: Icon, iconTone, onClose, chi
                             {subtitle && <p className="mt-0.5 truncate text-xs text-gray-500">{subtitle}</p>}
                         </div>
                     </div>
-                    <button onClick={onClose} aria-label="Close" className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+                    <button onClick={onClose} aria-label={tr("Close")} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
                         <X size={16} />
                     </button>
                 </div>
@@ -226,7 +227,7 @@ function CharCount({ value, min }) {
 function ModalButtons({ onClose, onSubmit, disabled, busy, label, busyLabel, tone = 'bg-slate-900 hover:bg-slate-800', icon: Icon }) {
     return (
         <>
-            <button onClick={onClose} className="flex-1 rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
+            <button onClick={onClose} className="flex-1 rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">{tr("Cancel")}</button>
             <button onClick={onSubmit} disabled={disabled || busy}
                 className={`inline-flex flex-1 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50 ${tone}`}>
                 {Icon && <Icon size={14} />} {busy ? busyLabel : label}
@@ -279,7 +280,7 @@ export function FileComplaintModal({ proposal, level, stage, onSave, onClose }) 
                 label="Submit complaint" busyLabel="Submitting…" icon={Send} />}>
             {isOfficer && (
                 <fieldset>
-                    <legend className="mb-1.5 text-xs font-semibold text-gray-700">What is it about?</legend>
+                    <legend className="mb-1.5 text-xs font-semibold text-gray-700">{tr("What is it about?")}</legend>
                     <div className="grid gap-2 sm:grid-cols-3">
                         {COMPLAINT_TYPES.map(t => (
                             <label key={t.value}
@@ -297,18 +298,18 @@ export function FileComplaintModal({ proposal, level, stage, onSave, onClose }) 
 
             <div>
                 <label htmlFor="file-complaint" className="mb-1.5 block text-xs font-semibold text-gray-700">
-                    Describe your complaint <span className="text-red-500">*</span>
+                    {tr("Describe your complaint")} <span className="text-red-500">*</span>
                 </label>
                 <textarea id="file-complaint" value={description} onChange={e => setDescription(e.target.value)} rows={7}
                     className="w-full resize-none rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
-                    placeholder="What happened, when it happened, and what outcome you are asking for…" />
+                    placeholder={tr("What happened, when it happened, and what outcome you are asking for…")} />
                 <CharCount value={description} min={min} />
             </div>
 
             <ul className="space-y-1 rounded-xl bg-gray-50 px-4 py-3 text-xs text-gray-600">
-                <li>• Be specific: name the review, score, decision or payment concerned.</li>
-                <li>• Stick to facts — the officer sees your name and this text.</li>
-                <li>• You'll be notified of the response, and can edit or withdraw until it's answered.</li>
+                <li>{tr("• Be specific: name the review, score, decision or payment concerned.")}</li>
+                <li>{tr("• Stick to facts — the officer sees your name and this text.")}</li>
+                <li>{tr("• You'll be notified of the response, and can edit or withdraw until it's answered.")}</li>
             </ul>
         </ModalShell>
     );
@@ -337,20 +338,20 @@ export function RespondModal({ complaint, onSave, onClose }) {
     };
 
     return (
-        <ModalShell title="Respond to complaint"
+        <ModalShell title={tr("Respond to complaint")}
             subtitle={`${complaint.proposal?.tracker_number ?? ''} · filed by ${complaint.complainant?.name ?? 'the researcher'}`}
             icon={MessageSquare} iconTone="bg-slate-900 text-white" onClose={onClose}
             footer={<ModalButtons onClose={onClose} onSubmit={submit} disabled={response.trim().length < min} busy={saving}
                 label="Send response" busyLabel="Sending…" icon={Send} />}>
             <div>
-                <p className="mb-1.5 text-xs font-semibold text-gray-500">Complaint</p>
+                <p className="mb-1.5 text-xs font-semibold text-gray-500">{tr("Complaint")}</p>
                 <p className="max-h-36 overflow-y-auto whitespace-pre-wrap rounded-xl border border-gray-100 bg-gray-50 p-3 text-xs leading-relaxed text-gray-700">
                     {complaint.description}
                 </p>
             </div>
 
             <fieldset>
-                <legend className="mb-1.5 text-xs font-semibold text-gray-700">Outcome</legend>
+                <legend className="mb-1.5 text-xs font-semibold text-gray-700">{tr("Outcome")}</legend>
                 <div className="grid gap-2 sm:grid-cols-2">
                     {RESOLUTIONS.map(opt => (
                         <label key={opt.value}
@@ -369,17 +370,17 @@ export function RespondModal({ complaint, onSave, onClose }) {
 
             <div>
                 <label htmlFor="complaint-response" className="mb-1.5 block text-xs font-semibold text-gray-700">
-                    Response to the complainant <span className="text-red-500">*</span>
+                    {tr("Response to the complainant")} <span className="text-red-500">*</span>
                 </label>
                 <textarea id="complaint-response" value={response} onChange={e => setResponse(e.target.value)} rows={6}
                     className="w-full resize-none rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-500"
-                    placeholder="Explain what you reviewed, what you decided and why…" />
+                    placeholder={tr("Explain what you reviewed, what you decided and why…")} />
                 <CharCount value={response} min={min} />
             </div>
 
             <p className="flex items-start gap-2 rounded-xl bg-blue-50 px-3 py-2.5 text-xs text-blue-700">
                 <ShieldCheck size={14} className="mt-px shrink-0" />
-                The complainant is notified and sees your name and response. This closes the complaint.
+                {tr("The complainant is notified and sees your name and response. This closes the complaint.")}
             </p>
         </ModalShell>
     );
@@ -402,26 +403,26 @@ export function EscalateModal({ complaint, onSave, onClose }) {
     };
 
     return (
-        <ModalShell title="Escalate to Level 2" subtitle={complaint.proposal?.tracker_number}
+        <ModalShell title={tr("Escalate to Level 2")} subtitle={complaint.proposal?.tracker_number}
             icon={ArrowUpCircle} iconTone="bg-orange-100 text-orange-600" onClose={onClose}
             footer={<ModalButtons onClose={onClose} onSubmit={submit} disabled={description.trim().length < min} busy={saving}
                 label="Escalate complaint" busyLabel="Escalating…" tone="bg-orange-500 hover:bg-orange-600" />}>
             <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-relaxed text-amber-800">
-                The director responsible for your proposal's category (Research, Community or Technology) will review the college office's decision.
+                {tr("The director responsible for your proposal's category (Research, Community or Technology) will review the college office's decision.")}
             </p>
             {complaint.response && (
                 <div>
-                    <p className="mb-1.5 text-xs font-semibold text-gray-500">College office response</p>
+                    <p className="mb-1.5 text-xs font-semibold text-gray-500">{tr("College office response")}</p>
                     <p className="max-h-32 overflow-y-auto whitespace-pre-wrap rounded-xl border border-gray-100 bg-gray-50 p-3 text-xs leading-relaxed text-gray-700">{complaint.response}</p>
                 </div>
             )}
             <div>
                 <label htmlFor="escalate-reason" className="mb-1.5 block text-xs font-semibold text-gray-700">
-                    Why are you not satisfied? <span className="text-red-500">*</span>
+                    {tr("Why are you not satisfied?")} <span className="text-red-500">*</span>
                 </label>
                 <textarea id="escalate-reason" value={description} onChange={e => setDescription(e.target.value)} rows={5}
                     className="w-full resize-none rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    placeholder="Explain what the college office's decision missed…" />
+                    placeholder={tr("Explain what the college office's decision missed…")} />
                 <CharCount value={description} min={min} />
             </div>
         </ModalShell>
@@ -445,13 +446,13 @@ export function EditModal({ complaint, onSave, onClose }) {
     };
 
     return (
-        <ModalShell title="Edit complaint" subtitle={complaint.proposal?.tracker_number}
+        <ModalShell title={tr("Edit complaint")} subtitle={complaint.proposal?.tracker_number}
             icon={Pencil} iconTone="bg-blue-100 text-blue-700" onClose={onClose}
             footer={<ModalButtons onClose={onClose} onSubmit={submit} disabled={description.trim().length < min} busy={saving}
                 label="Save changes" busyLabel="Saving…" />}>
             <div>
                 <label htmlFor="edit-description" className="mb-1.5 block text-xs font-semibold text-gray-700">
-                    Description <span className="text-red-500">*</span>
+                    {tr("Description")} <span className="text-red-500">*</span>
                 </label>
                 <textarea id="edit-description" value={description} onChange={e => setDescription(e.target.value)} rows={8}
                     className="w-full resize-none rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />

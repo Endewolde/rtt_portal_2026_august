@@ -1,6 +1,7 @@
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { format, parseISO } from 'date-fns';
+import { translate } from './i18n';
 
 export function cn(...inputs) {
     return twMerge(clsx(inputs));
@@ -69,7 +70,7 @@ export function getStatusLabel(status) {
         archived: 'Archived',
         rejected: 'Rejected',
     };
-    return map[status] ?? status;
+    return translate(map[status] ?? status);
 }
 
 export function getCategoryLabel(category) {
@@ -80,7 +81,7 @@ export function getCategoryLabel(category) {
         innovation: 'Innovation',
         other: 'Other',
     };
-    return map[category] ?? category;
+    return translate(map[category] ?? category);
 }
 
 export function timeAgo(date) {
