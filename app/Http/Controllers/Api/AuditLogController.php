@@ -4,42 +4,69 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
+use App\Models\Proposal;
 use App\Models\User;
+use App\Support\AuditPresenter;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AuditLogController extends Controller
 {
-    /** Category-to-event-prefix map, shared by index()'s stats and the category filter. */
-    private const CATEGORY_PREFIXES = [
-        'auth' => ['user.login', 'user.logout', 'user.registered', 'user.impersonation', 'user.session'],
-        'proposals' => ['proposal'],
-        'people' => ['user.created', 'user.updated', 'user.deleted', 'user.status', 'user.role', 'user.roles', 'user.bulk', 'user.imported', 'role'],
-        'finance' => ['budget', 'award', 'settlement', 'disbursement'],
-        'system' => ['setting', 'feature', 'college', 'department', 'repository', 'thematic'],
-        'monitoring' => ['midterm', 'completion', 'research'],
+    /**
+     * Each tab is a set of event patterns (SQL LIKE). A pattern without a wildcard
+     * matches as a prefix, so "proposal" covers proposal.created, proposal.approved…
+     */
+    private const CATEGORIES = [
+        'auth' => ['user.login', 'user.logout', 'user.registered', 'user.impersonation', 'user.session', 'user.2fa', 'user.password', 'user.account_locked'],
+        'security' => ['%.denied', 'user.login_failed', 'user.login_blocked', 'user.account_locked', 'user.2fa_failed', 'user.impersonation', 'role.permissions'],
+        'data' => ['%.exported', '%.downloaded'],
+        'proposals' => ['proposal', 'review', 'defence', 'appeal', 'validation', 'abstract', 'conference'],
+        'people' => ['user.created', 'user.updated', 'user.deleted', 'user.status', 'user.role', 'user.roles', 'user.bulk', 'user.imported', 'user.super_admin', 'role'],
+        'finance' => ['budget', 'award', 'settlement', 'disbursement', 'funding', 'external_fund', 'call_college_budget'],
+        'system' => ['setting', 'feature', 'college', 'department', 'repository', 'thematic', 'programme', 'integration'],
+        'monitoring' => ['midterm', 'completion', 'research', 'ongoing', 'no_cost', 'deadline_extension'],
     ];
 
     /**
-     * Shared filtering — event/actor/type/date-range/search/category — used by
-     * both index() and export() so the two never drift out of sync (an export
-     * that silently included different rows than what the screen shows would
-     * be worse than no export at all).
+     * Super-admin activity is recorded like everyone else's but, by design, kept out
+     * of this screen and its export for every viewer (super admins included).
      */
-    private function filteredQuery(Request $request)
+    private function visible(Request $request): Builder
     {
-        $excludeSuperAdmin = function ($q) {
-            $q->whereNull('actor_id')
-                ->orWhereHas('actor', fn ($a) => $a->whereDoesntHave('roles', fn ($r) => $r->where('name', 'super_admin')));
-        };
+        return AuditLog::query()->where(fn ($q) => $q->whereNull('actor_id')
+            ->orWhereHas('actor', fn ($a) => $a->whereDoesntHave('roles', fn ($r) => $r->where('name', 'super_admin'))));
+    }
 
-        $query = AuditLog::with(['actor:id,name,email,avatar', 'actor.roles:id,name'])
-            ->orderByDesc('created_at')
-            ->where($excludeSuperAdmin);
+    /** @param  list<string>  $patterns */
+    private function matchingEvents(Builder $query, array $patterns): Builder
+    {
+        return $query->where(function ($q) use ($patterns) {
+            foreach ($patterns as $pattern) {
+                $q->orWhere('event', 'like', str_contains($pattern, '%') ? $pattern : "{$pattern}%");
+            }
+        });
+    }
+
+    /**
+     * Shared filtering for the list and the export, so a download always holds
+     * exactly the rows on screen.
+     */
+    private function filteredQuery(Request $request): Builder
+    {
+        $query = $this->visible($request)
+            ->with(['actor:id,name,email,avatar', 'actor.roles:id,name'])
+            ->orderByDesc('created_at');
 
         if ($event = $request->query('event')) {
             $query->where('event', $event);
+        }
+
+        // "proposal" → every proposal.* event
+        if ($resource = $request->query('resource')) {
+            $query->where('event', 'like', $resource.'.%');
         }
 
         if ($actorId = $request->query('actor_id')) {
@@ -50,6 +77,10 @@ class AuditLogController extends Controller
             $query->where('auditable_type', 'like', '%'.$type.'%');
         }
 
+        if ($recordId = $request->query('auditable_id')) {
+            $query->where('auditable_id', $recordId);
+        }
+
         if ($from = $request->query('date_from')) {
             $query->whereDate('created_at', '>=', $from);
         }
@@ -58,25 +89,24 @@ class AuditLogController extends Controller
             $query->whereDate('created_at', '<=', $to);
         }
 
-        if ($q = $request->query('q')) {
+        if ($q = trim((string) $request->query('q'))) {
             $query->where(function ($sub) use ($q) {
                 $sub->where('ip_address', 'like', "%{$q}%")
                     ->orWhere('event', 'like', "%{$q}%")
+                    ->orWhere('auditable_id', $q)
+                    ->orWhere('url', 'like', "%{$q}%")
+                    ->orWhere('new_values', 'like', "%{$q}%")
+                    // Typing a proposal title or a person finds everything done to them too.
+                    ->orWhereIn('auditable_id', Proposal::withTrashed()->where('title', 'like', "%{$q}%")->limit(200)->pluck('id'))
+                    ->orWhereIn('auditable_id', User::withTrashed()->where(fn ($u) => $u->where('name', 'like', "%{$q}%")->orWhere('email', 'like', "%{$q}%"))->limit(200)->pluck('id'))
                     ->orWhereHas('actor', fn ($a) => $a
                         ->where('name', 'like', "%{$q}%")
                         ->orWhere('email', 'like', "%{$q}%"));
             });
         }
 
-        if ($category = $request->query('category')) {
-            $prefixes = self::CATEGORY_PREFIXES[$category] ?? [];
-            if ($prefixes) {
-                $query->where(function ($q) use ($prefixes) {
-                    foreach ($prefixes as $prefix) {
-                        $q->orWhere('event', 'like', "{$prefix}%");
-                    }
-                });
-            }
+        if (($category = $request->query('category')) && isset(self::CATEGORIES[$category])) {
+            $this->matchingEvents($query, self::CATEGORIES[$category]);
         }
 
         return $query;
@@ -88,100 +118,96 @@ class AuditLogController extends Controller
             return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
         }
 
-        $excludeSuperAdmin = function ($q) {
-            $q->whereNull('actor_id')
-                ->orWhereHas('actor', fn ($a) => $a->whereDoesntHave('roles', fn ($r) => $r->where('name', 'super_admin')));
-        };
+        $perPage = in_array((int) $request->query('per_page'), [25, 50, 100], true) ? (int) $request->query('per_page') : 50;
 
-        $query = $this->filteredQuery($request);
+        // Last 30 days, with the same visibility as the list.
+        $recent = fn () => $this->visible($request)->where('created_at', '>=', now()->subDays(30));
 
-        // per_page: caller may request 25, 50, or 100; default 50
-        $perPage = min((int) ($request->query('per_page', 50)), 100);
-
-        $categoryPrefixes = self::CATEGORY_PREFIXES;
-
-        // Lightweight stats (last 30 days, excluding super_admin)
-        $statsBase = AuditLog::where('created_at', '>=', now()->subDays(30))
-            ->where(fn ($q) => $q->whereNull('actor_id')
-                ->orWhereHas('actor', fn ($a) => $a->whereDoesntHave('roles', fn ($r) => $r->where('name', 'super_admin'))));
-
-        $topActors = (clone $statsBase)
-            ->whereNotNull('actor_id')
+        $top = $recent()->whereNotNull('actor_id')
             ->selectRaw('actor_id, COUNT(*) as total')
             ->groupBy('actor_id')
             ->orderByDesc('total')
             ->limit(5)
-            ->get()
-            ->map(function ($row) {
-                $user = User::select('id', 'name', 'email', 'avatar')
-                    ->with('roles:id,name')
-                    ->find($row->actor_id);
+            ->get();
+        $people = User::select('id', 'name', 'email', 'avatar')->with('roles:id,name')
+            ->whereIn('id', $top->pluck('actor_id'))->get()->keyBy('id');
 
-                return ['user' => $user, 'total' => $row->total];
-            });
+        $byEvent = $recent()->selectRaw('event, COUNT(*) as count')->groupBy('event')->orderByDesc('count')->pluck('count', 'event');
 
         $stats = [
-            'today' => (clone $statsBase)->whereDate('created_at', today())->count(),
-            'this_week' => (clone $statsBase)->where('created_at', '>=', now()->startOfWeek())->count(),
-            'unique_actors' => (clone $statsBase)->whereNotNull('actor_id')->distinct('actor_id')->count('actor_id'),
-            'by_event' => (clone $statsBase)
-                ->selectRaw('event, COUNT(*) as count')
-                ->groupBy('event')
-                ->orderByDesc('count')
-                ->pluck('count', 'event'),
-            'top_actors' => $topActors,
-            'by_category' => collect($categoryPrefixes)->map(function ($prefixes) use ($statsBase) {
-                return (clone $statsBase)->where(function ($q) use ($prefixes) {
-                    foreach ($prefixes as $p) {
-                        $q->orWhere('event', 'like', "{$p}%");
-                    }
-                })->count();
-            }),
+            'today' => $recent()->whereDate('created_at', today())->count(),
+            'this_week' => $recent()->where('created_at', '>=', now()->startOfWeek())->count(),
+            'total_30d' => (int) $byEvent->sum(),
+            'unique_actors' => $recent()->whereNotNull('actor_id')->distinct('actor_id')->count('actor_id'),
+            'denied_30d' => $this->matchingEvents($recent(), ['%.denied'])->count(),
+            'failed_logins_30d' => $this->matchingEvents($recent(), ['user.login_failed', 'user.2fa_failed', 'user.account_locked'])->count(),
+            'exports_30d' => $this->matchingEvents($recent(), self::CATEGORIES['data'])->count(),
+            'by_event' => $byEvent,
+            // For the "type of record" filter: proposal, user, setting…
+            'resources' => $byEvent->keys()->map(fn ($e) => explode('.', $e)[0])->unique()->sort()->values(),
+            'top_actors' => $top->map(fn ($row) => ['user' => $people->get($row->actor_id), 'total' => (int) $row->total])
+                ->filter(fn ($row) => $row['user'])->values(),
+            'by_category' => collect(self::CATEGORIES)->map(fn ($patterns) => $this->matchingEvents($recent(), $patterns)->count()),
         ];
 
+        $actor = $request->query('actor_id')
+            ? User::withTrashed()->select('id', 'name', 'email', 'avatar', 'last_login_at')->with('roles:id,name')->find($request->query('actor_id'))
+            : null;
+
+        $page = $this->filteredQuery($request)->paginate($perPage);
+        (new AuditPresenter)->present($page->getCollection());
+
         return response()->json([
-            'data' => $query->paginate($perPage),
+            'data' => $page,
             'message' => 'Audit logs retrieved.',
             'errors' => [],
-            'meta' => ['stats' => $stats],
+            'meta' => [
+                'stats' => $stats,
+                'actor' => $actor,
+                'includes_super_admins' => false,
+            ],
         ]);
     }
 
-    /** CSV export of the audit log — same filters and same super_admin exclusion as index(). */
+    /**
+     * CSV of the filtered log. The export itself is recorded (audit_logs.exported)
+     * by the audit middleware, like every other export.
+     */
     public function export(Request $request): StreamedResponse
     {
-        if (! $request->user()?->can('audit_logs.view_any')) {
-            abort(403, 'Forbidden.');
-        }
+        abort_unless($request->user()?->can('audit_logs.view_any'), 403, 'Forbidden.');
 
-        $logs = $this->filteredQuery($request)->get();
+        $query = $this->filteredQuery($request);
 
-        $headers = [
-            'Content-Type' => 'text/csv; charset=UTF-8',
-            'Content-Disposition' => 'attachment; filename="audit_log_export_'.date('Y-m-d').'.csv"',
-            'Cache-Control' => 'no-cache',
-        ];
-
-        return response()->stream(function () use ($logs) {
+        return response()->streamDownload(function () use ($query) {
             $handle = fopen('php://output', 'w');
             fwrite($handle, "\xEF\xBB\xBF");
+            fputcsv($handle, ['When', 'Who', 'Email', 'What happened', 'Record', 'Details', 'Outcome', 'Event', 'IP Address', 'Device']);
 
-            fputcsv($handle, ['Timestamp', 'Event', 'Actor', 'Actor Email', 'Model', 'Record ID', 'IP Address', 'User Agent']);
-
-            foreach ($logs as $log) {
-                fputcsv($handle, [
-                    $log->created_at?->format('Y-m-d H:i:s'),
-                    $log->event,
-                    $log->actor?->name ?? 'System',
-                    $log->actor?->email ?? '',
-                    class_basename($log->auditable_type ?? ''),
-                    $log->auditable_id,
-                    $log->ip_address,
-                    $log->user_agent,
-                ]);
-            }
+            // Streamed in batches so a large log never has to fit in memory; each batch is
+            // translated into names and plain language like the screen.
+            $query->chunk(500, function ($batch) use ($handle): void {
+                (new AuditPresenter)->present($batch);
+                foreach ($batch as $log) {
+                    fputcsv($handle, [
+                        $log->created_at?->format('Y-m-d H:i:s'),
+                        $log->actor?->name ?? 'System',
+                        $log->actor?->email ?? '',
+                        $log->description,
+                        trim(Str::ucfirst($log->subject['type']).' '.($log->subject['name'] ?? '')),
+                        collect($log->changes)->map(fn ($c) => $c['field'].': '.($c['from'] !== null ? $c['from'].' → ' : '').($c['to'] ?? '—'))->implode(' | '),
+                        $log->status_code,
+                        $log->event,
+                        $log->ip_address,
+                        $log->user_agent,
+                    ]);
+                }
+            });
 
             fclose($handle);
-        }, 200, $headers);
+        }, 'audit_log_'.now()->format('Y-m-d_His').'.csv', [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Cache-Control' => 'no-cache',
+        ]);
     }
 }

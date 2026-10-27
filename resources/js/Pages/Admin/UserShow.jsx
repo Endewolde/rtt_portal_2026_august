@@ -20,6 +20,57 @@ import { formatDate, formatDateTime, formatCurrency, cn, getStatusLabel } from '
 import { roleLabel, rememberRoleLabels } from '../../lib/roles';
 
 // ── CONSTANTS ─────────────────────────────────────────────────────────────────
+const DARK_ROLE_COLORS = {
+    admin:              'bg-rose-500/15 text-rose-300 border border-rose-500/25',
+    super_admin:        'bg-rose-500/20 text-rose-200 border border-rose-400/30',
+    central_officer:    'bg-orange-500/15 text-orange-300 border border-orange-500/25',
+    college_officer:    'bg-teal-500/15 text-teal-300 border border-teal-500/25',
+    finance_officer:    'bg-amber-500/15 text-amber-300 border border-amber-500/25',
+    research_officer:   'bg-indigo-500/15 text-indigo-300 border border-indigo-500/25',
+    community_officer:  'bg-pink-500/15 text-pink-300 border border-pink-500/25',
+    technology_officer: 'bg-violet-500/15 text-violet-300 border border-violet-500/25',
+    support_officer:    'bg-sky-500/15 text-sky-300 border border-sky-500/25',
+    staff:              'bg-white/8 text-zinc-300 border border-white/12',
+    guest:              'bg-white/5 text-zinc-400 border border-white/8',
+};
+const PROPOSAL_STATUS_COLORS = {
+    draft:              'bg-gray-100 text-gray-500',
+    submitted:          'bg-blue-50 text-blue-700',
+    validated:          'bg-cyan-50 text-cyan-700',
+    under_blind_review: 'bg-purple-50 text-purple-700',
+    accepted:           'bg-indigo-50 text-indigo-700',
+    funded:             'bg-emerald-50 text-emerald-700',
+    midterm_evaluation: 'bg-yellow-50 text-yellow-700',
+    completed:          'bg-green-50 text-green-700',
+    archived:           'bg-gray-100 text-gray-400',
+    rejected:           'bg-red-50 text-red-600',
+};
+const AVATAR_GRADIENTS = [
+    ['from-blue-500', 'to-indigo-600'],
+    ['from-violet-500', 'to-purple-600'],
+    ['from-emerald-500', 'to-teal-600'],
+    ['from-orange-500', 'to-amber-600'],
+    ['from-pink-500', 'to-rose-600'],
+    ['from-cyan-500', 'to-sky-600'],
+];
+const ACTIVE_STATUSES = [
+    'submitted', 'validated', 'under_blind_review', 'blind_review_passed',
+    'accepted', 'funded', 'midterm_evaluation',
+];
+const TABS = [
+    { id: 'overview',  label: 'Overview',    icon: TrendingUp },
+    { id: 'timeline',  label: 'Timeline',    icon: Activity   },
+    { id: 'proposals', label: 'Proposals',   icon: FileText   },
+    { id: 'reviews',   label: 'Reviews',     icon: Star       },
+    { id: 'finance',   label: 'Finance',     icon: DollarSign },
+    { id: 'admin',     label: 'Admin & Log', icon: Database   },
+];
+const KPI_ACCENT = {
+    indigo: 'bg-indigo-500', amber:  'bg-amber-400',  green: 'bg-emerald-500',
+    teal:   'bg-teal-500',   rose:   'bg-rose-500',   blue:  'bg-blue-500',
+    purple: 'bg-violet-500', gray:   'bg-gray-300',   orange: 'bg-orange-500',
+};
+
 // ── ANIMATED COUNTER ──────────────────────────────────────────────────────────
 function useCountUp(target, duration = 900) {
     const [value, setValue] = useState(0);

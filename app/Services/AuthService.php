@@ -7,6 +7,7 @@ use App\Models\AppSetting;
 use App\Models\EmailLog;
 use App\Models\NotificationPreference;
 use App\Models\User;
+use App\Support\AuditLogger;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -95,6 +96,7 @@ class AuthService
         // otherwise a misconfigured SSO provider could lock every admin out at once.
         $passwordLoginDisabled = AppSetting::where('key', 'password_login_enabled')->value('value') === 'false';
         if ($passwordLoginDisabled && ! $user?->hasRole('super_admin')) {
+            $this->auditSignIn('user.login_blocked', $user, $credentials['email'], 'Password sign-in is turned off');
             throw ValidationException::withMessages([
                 'email' => ['Password login is currently disabled. Please sign in with your organization account.'],
             ]);
@@ -105,6 +107,7 @@ class AuthService
         // attacker who eventually guesses right.
         if ($user && $user->locked_until && $user->locked_until->isFuture()) {
             $minutesLeft = max(1, now()->diffInMinutes($user->locked_until, false));
+            $this->auditSignIn('user.login_blocked', $user, $credentials['email'], 'Account is locked');
             throw ValidationException::withMessages([
                 'email' => ["Too many failed login attempts. Try again in {$minutesLeft} minute(s)."],
             ]);
@@ -114,6 +117,7 @@ class AuthService
             if ($user) {
                 $this->registerFailedLoginAttempt($user);
             }
+            $this->auditSignIn('user.login_failed', $user, $credentials['email'], $user ? 'Wrong password' : 'No account with this email');
 
             throw ValidationException::withMessages([
                 'email' => ['The provided credentials are incorrect.'],
@@ -154,6 +158,16 @@ class AuthService
         return $this->issueToken($user);
     }
 
+    /** Sign-in problems are security events: the auditor sees each one, even for unknown emails. */
+    private function auditSignIn(string $event, ?User $user, string $email, string $reason): void
+    {
+        AuditLogger::log($event, 'User', $user?->id ?? 'unknown', $user?->id, null, [
+            'target_name' => $user?->name ?? $email,
+            'email' => $email,
+            'reason' => $reason,
+        ], 401);
+    }
+
     /**
      * Increment the failed-login counter and lock the account for
      * self::LOCKOUT_MINUTES once self::MAX_FAILED_LOGIN_ATTEMPTS is reached.
@@ -168,6 +182,10 @@ class AuthService
                 ? now()->addMinutes(self::LOCKOUT_MINUTES)
                 : null,
         ]);
+
+        if ($attempts === self::MAX_FAILED_LOGIN_ATTEMPTS) {
+            $this->auditSignIn('user.account_locked', $user, $user->email, 'Locked for '.self::LOCKOUT_MINUTES." minutes after {$attempts} failed attempts");
+        }
     }
 
     /**
@@ -245,6 +263,7 @@ class AuthService
         $cached = Cache::get("2fa_code:{$userId}");
 
         if (! $cached || ! hash_equals($cached, $code)) {
+            $this->auditSignIn('user.2fa_failed', $user, $user->email, 'Wrong verification code');
             throw ValidationException::withMessages([
                 'code' => ['The verification code is incorrect.'],
             ]);

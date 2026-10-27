@@ -11,6 +11,7 @@ use App\Models\FeedbackSubmission;
 use App\Models\User;
 use App\Services\AuthService;
 use App\Services\SubscriptionService;
+use App\Support\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -292,6 +293,8 @@ class AuthController extends Controller
                 $user->name,
                 'Reset Your Password — RTT Platform'
             );
+
+            AuditLogger::log('user.password_reset_requested', 'User', $user->id, null, null, ['target_name' => $user->name, 'email' => $user->email], 200);
         }
 
         return response()->json([
@@ -345,6 +348,8 @@ class AuthController extends Controller
 
         $user->update(['password' => Hash::make($request->password)]);
         $user->tokens()->delete(); // Invalidate all existing sessions
+
+        AuditLogger::log('user.password_reset', 'User', $user->id, $user->id, null, ['target_name' => $user->name, 'sessions_signed_out' => true], 200);
 
         DB::table('password_reset_tokens')->where('email', $request->email)->delete();
 

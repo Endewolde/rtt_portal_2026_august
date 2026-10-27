@@ -2,10 +2,10 @@
 
 namespace App\Http\Middleware;
 
+use App\Support\AuditLogger;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -15,7 +15,7 @@ class AuditCrudMiddleware
         'auth/login', 'auth/logout', 'auth/register',
         'auth/forgot-password', 'auth/reset-password',
         'auth/2fa', 'auth/avatar', 'auth/telegram',
-        'health', 'audit-logs',
+        'health',
         'notifications', 'settings/clear-cache',
         'settings/upload-editor-image',
         'system-monitor/preferences',
@@ -28,11 +28,6 @@ class AuditCrudMiddleware
         // same event name — a same-second duplicate that displaces the real one
         // whenever the log is queried "latest first".
         'users',
-    ];
-
-    private const SENSITIVE_FIELDS = [
-        'password', 'password_confirmation', 'token', 'secret',
-        'current_password', 'new_password',
     ];
 
     // Map URI path segments → human-readable resource label
@@ -63,7 +58,15 @@ class AuditCrudMiddleware
         'repository' => 'Repository',
         'appeals' => 'Appeal',
         'validation' => 'Validation',
+        'conferences' => 'Conference',
+        'abstracts' => 'ConferenceAbstract',
+        'funding-rounds' => 'FundingRound',
+        'programmes' => 'Programme',
+        'ongoing-proposals' => 'Proposal',
     ];
+
+    /** Path prefixes that only group routes and say nothing about the record. */
+    private const NAMESPACES = ['admin', 'reviewer', 'my', 'me'];
 
     // Map HTTP method + terminal action segment → verb
     private const ACTION_VERBS = [
@@ -121,58 +124,72 @@ class AuditCrudMiddleware
         'funding' => 'funding_changed',
     ];
 
+    /** Read requests that take data away (files, exports) are recorded too. */
+    private const DATA_OUT_SEGMENTS = [
+        'export' => 'exported', 'exports' => 'exported', 'csv' => 'exported', 'excel' => 'exported',
+        'download' => 'downloaded', 'pdf' => 'downloaded', 'print' => 'downloaded', 'backup' => 'downloaded',
+    ];
+
     public function handle(Request $request, Closure $next): Response
     {
         $response = $next($request);
 
+        try {
+            $this->record($request, $response);
+        } catch (\Throwable $e) {
+            // The audit trail must never break the action itself.
+            report($e);
+        }
+
+        return $response;
+    }
+
+    private function record(Request $request, Response $response): void
+    {
         $method = strtoupper($request->method());
+        $status = $response->getStatusCode();
+        $path = preg_replace('#^api/v1/#', '', ltrim($request->path(), '/'));
+        $mutating = in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'], true);
+        $lastSegment = Str::lower((string) Str::of($path)->explode('/')->last());
+        $dataOut = $method === 'GET' ? (self::DATA_OUT_SEGMENTS[$lastSegment] ?? null) : null;
 
-        // Only log mutating operations
-        if (! in_array($method, ['POST', 'PUT', 'PATCH', 'DELETE'])) {
-            return $response;
+        // What is worth keeping: changes that went through, changes that were refused
+        // for lack of permission, and data that left the system.
+        $denied = $mutating && $status === 403;
+        if (! ($mutating && $status < 400) && ! $denied && ! ($dataOut && $status < 400)) {
+            return;
         }
 
-        // Skip non-successful responses (4xx/5xx)
-        $statusCode = $response->getStatusCode();
-        if ($statusCode >= 400) {
-            return $response;
-        }
-
-        $path = ltrim($request->path(), '/');
-        $path = preg_replace('#^api/v1/#', '', $path);
-
-        // Skip noisy or sensitive paths
         foreach (self::SKIP_PATHS as $skip) {
-            if (str_starts_with($path, $skip)) {
-                return $response;
+            if (str_starts_with($path, $skip) && ! $denied && ! $dataOut) {
+                return;
             }
-        }
-
-        $actor = $request->user();
-        if (! $actor) {
-            return $response;
         }
 
         [$resource, $resourceId, $action] = $this->parseRoute($path, $method, $request);
 
-        $event = $this->buildEvent($resource, $action, $method);
+        $event = match (true) {
+            $denied => Str::snake($resource).'.denied',
+            $dataOut !== null => Str::snake($resource).'.'.$dataOut,
+            default => $this->buildEvent($resource, $action, $method),
+        };
 
-        $newValues = $this->filterBody($request->except(self::SENSITIVE_FIELDS));
+        $newValues = $mutating
+            ? $this->filterBody($request->except(AuditLogger::SENSITIVE_FIELDS))
+            : ($request->query() ? $this->filterBody($request->query()) : null);
 
-        DB::table('audit_logs')->insert([
-            'id' => Str::uuid()->toString(),
-            'auditable_type' => $resource,
-            'auditable_id' => $resourceId ?? 'system',
-            'event' => $event,
-            'actor_id' => $actor->id,
-            'old_values' => null,
-            'new_values' => $newValues ? json_encode($newValues) : null,
-            'ip_address' => $request->ip() ?? '127.0.0.1',
-            'user_agent' => $request->userAgent() ?? '',
-            'created_at' => now(),
-        ]);
+        if ($denied) {
+            $newValues = ['attempted' => $this->buildEvent($resource, $action, $method)] + ($newValues ?? []);
+        }
 
-        return $response;
+        AuditLogger::log(
+            event: $event,
+            auditableType: $resource,
+            auditableId: $resourceId ?? 'system',
+            actorId: $request->user()?->id,
+            newValues: $newValues,
+            statusCode: $status,
+        );
     }
 
     private function parseRoute(string $path, string $method, Request $request): array
@@ -184,9 +201,12 @@ class AuditCrudMiddleware
         $actions = [];
         $uuidPattern = '/^[0-9a-f\-]{36}$|^\d+$/i';
 
-        foreach ($segments as $seg) {
+        foreach ($segments as $i => $seg) {
+            if ($i === 0 && in_array($seg, self::NAMESPACES, true) && count($segments) > 1) {
+                continue;
+            }
             if (preg_match($uuidPattern, $seg)) {
-                $resourceId = $seg;
+                $resourceId ??= $seg;
             } elseif (isset(self::RESOURCE_MAP[$seg])) {
                 if ($resource === 'Unknown') {
                     $resource = self::RESOURCE_MAP[$seg];
@@ -202,8 +222,9 @@ class AuditCrudMiddleware
         $action = end($actions) ?: null;
 
         // Fallback: use the first segment as resource label
-        if ($resource === 'Unknown' && ! empty($segments[0])) {
-            $resource = Str::studly(str_replace('-', '_', $segments[0]));
+        $first = in_array($segments[0] ?? '', self::NAMESPACES, true) && isset($segments[1]) ? $segments[1] : ($segments[0] ?? '');
+        if ($resource === 'Unknown' && $first !== '') {
+            $resource = Str::studly(str_replace('-', '_', $first));
         }
 
         return [$resource, $resourceId, $action];

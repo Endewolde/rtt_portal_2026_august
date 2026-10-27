@@ -10,6 +10,7 @@ use App\Models\ConferenceRegistration;
 use App\Models\ConferenceSession;
 use App\Models\ConferenceSpeaker;
 use App\Models\User;
+use App\Support\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -488,6 +489,10 @@ class ConferenceController extends Controller
             return response()->json(['message' => $result, 'errors' => []], 422);
         }
         $reg = $result;
+
+        AuditLogger::log('conference.registration_created', 'Conference', $conference->id, $request->user()?->id, null, [
+            'target_name' => $reg->name, 'email' => $reg->email, 'conference' => $conference->title,
+        ], 201);
 
         // Send confirmation to registrant
         $this->sendRegistrationConfirmation($conference, $reg);

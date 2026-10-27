@@ -8,10 +8,11 @@ import {
     DollarSign, Award, FileText, Star, Zap, TrendingUp,
     Database, Building2, BookOpen, FlaskConical, GitBranch,
     BadgeCheck, RotateCcw, UserX, MessageSquare, PlayCircle,
-    Package, Radio, ChevronDown,
+    Package, Radio, ChevronDown, ShieldAlert, KeyRound, Copy, Check,
 } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import { get } from '../../lib/api';
+import { downloadFile } from '../../lib/download';
 import { cn, timeAgo } from '../../lib/utils';
 import { roleLabel } from '../../lib/roles';
 
@@ -42,6 +43,10 @@ const RESOURCE_CONFIG = {
     external_fund:        { color: '#06b6d4', bg: 'bg-cyan-500',    soft: 'bg-cyan-50 text-cyan-700',        border: 'border-l-cyan-400',    icon: Globe        },
     report:               { color: '#9333ea', bg: 'bg-purple-600',  soft: 'bg-purple-50 text-purple-800',    border: 'border-l-purple-500',  icon: BarChart2    },
     defence_session:      { color: '#1d4ed8', bg: 'bg-blue-700',    soft: 'bg-blue-50 text-blue-800',        border: 'border-l-blue-600',    icon: GitBranch    },
+    abstract:             { color: '#7c3aed', bg: 'bg-violet-600',  soft: 'bg-violet-50 text-violet-800',    border: 'border-l-violet-500',  icon: BookOpen     },
+    conference:           { color: '#4f46e5', bg: 'bg-indigo-600',  soft: 'bg-indigo-50 text-indigo-800',    border: 'border-l-indigo-500',  icon: CalendarDays },
+    funding_round:        { color: '#15803d', bg: 'bg-green-700',   soft: 'bg-green-50 text-green-800',      border: 'border-l-green-600',   icon: DollarSign   },
+    audit_logs:           { color: '#334155', bg: 'bg-slate-700',   soft: 'bg-slate-100 text-slate-700',     border: 'border-l-slate-500',   icon: Activity     },
     appeal:               { color: '#dc2626', bg: 'bg-red-600',     soft: 'bg-red-50 text-red-800',          border: 'border-l-red-500',     icon: RotateCcw    },
 };
 
@@ -85,7 +90,18 @@ const ACTION_ICONS = {
     funding_changed:      DollarSign,
     central_decision:     BadgeCheck,
     result_processed:     CheckCircle,
+    denied:               ShieldAlert,
+    downloaded:           Download,
+    login_failed:         ShieldAlert,
+    login_blocked:        Lock,
+    account_locked:       Lock,
+    '2fa_failed':         ShieldAlert,
+    password_reset:       KeyRound,
+    password_reset_requested: KeyRound,
 };
+
+/** Events that point at a possible problem get a red edge, whatever the record type. */
+const isAlert = (event = '') => /\.(denied|login_failed|login_blocked|account_locked|2fa_failed)$/.test(event);
 
 const DEFAULT_RESOURCE_CONFIG = { color: '#6b7280', bg: 'bg-gray-400', soft: 'bg-gray-100 text-gray-600', border: 'border-l-gray-300', icon: Activity };
 
@@ -93,7 +109,9 @@ const DEFAULT_RESOURCE_CONFIG = { color: '#6b7280', bg: 'bg-gray-400', soft: 'bg
 
 const CATEGORIES = [
     { id: 'all',        label: 'All Activity',    icon: Activity,    color: '#6366f1' },
-    { id: 'auth',       label: 'Auth & Access',   icon: LogIn,       color: '#3b82f6' },
+    { id: 'auth',       label: 'Sign-in',         icon: LogIn,       color: '#3b82f6' },
+    { id: 'security',   label: 'Security',        icon: ShieldAlert, color: '#dc2626' },
+    { id: 'data',       label: 'Data access',     icon: Download,    color: '#0f766e' },
     { id: 'proposals',  label: 'Proposals',       icon: FileText,    color: '#8b5cf6' },
     { id: 'people',     label: 'People & Roles',  icon: Users,       color: '#10b981' },
     { id: 'finance',    label: 'Finance',         icon: DollarSign,  color: '#f59e0b' },
@@ -207,7 +225,25 @@ function eventSummary(log) {
         'complaint.escalated':        `${actor} escalated a complaint`,
     };
 
+    Object.assign(explicit, {
+        'user.login_failed':          `Failed sign-in for ${target ?? nv.email ?? 'an account'}${nv.reason ? ` — ${nv.reason.toLowerCase()}` : ''}`,
+        'user.login_blocked':         `Sign-in blocked for ${target ?? nv.email ?? 'an account'}${nv.reason ? ` — ${nv.reason.toLowerCase()}` : ''}`,
+        'user.account_locked':        `Account locked — ${target ?? nv.email}${nv.reason ? ` (${nv.reason.toLowerCase()})` : ''}`,
+        'user.2fa_failed':            `Wrong verification code entered for ${target ?? 'an account'}`,
+        'user.password_reset_requested': `Password reset link sent to ${target ?? nv.email ?? 'a user'}`,
+        'user.password_reset':        `${actor} reset their password (all sessions signed out)`,
+        'abstract.submitted':         `${nv.submitter ?? 'Someone'} submitted an abstract${targetSuffix}`,
+        'abstract.resubmitted':       `${nv.submitter ?? 'Someone'} resubmitted a revised abstract${targetSuffix}`,
+        'abstract.draft_saved':       `${nv.submitter ?? 'Someone'} saved an abstract draft${targetSuffix}`,
+        'abstract.withdrawn':         `${nv.submitter ?? 'The submitter'} withdrew an abstract${targetSuffix}`,
+        'conference.registration_created': `${target ?? 'Someone'} registered for ${nv.conference ?? 'a conference'}`,
+        'audit_logs.exported':        `${actor} exported the audit log`,
+    });
+
     if (explicit[log.event]) return explicit[log.event];
+    if (action === 'denied') return `${actor} was refused: ${humanize(nv.attempted ?? `${resource} change`)}`;
+    if (action === 'exported') return `${actor} exported ${humanize(resource).toLowerCase()} data`;
+    if (action === 'downloaded') return `${actor} downloaded a ${humanize(resource).toLowerCase()} file`;
 
     // Fallback: auto-generate from event string
     const rLabel = humanize(resource);
@@ -318,14 +354,56 @@ function ChangeDiff({ oldValues, newValues }) {
     );
 }
 
+// ─── Readable changes (names, not IDs) ────────────────────────────────────────
+
+function ReadableChanges({ changes }) {
+    if (!changes?.length) return <p className="text-xs text-gray-400 italic">No further details were recorded.</p>;
+    return (
+        <dl className="divide-y divide-gray-100 rounded-xl border border-gray-100 bg-white overflow-hidden">
+            {changes.map((c, i) => (
+                <div key={i} className="grid grid-cols-1 sm:grid-cols-[170px_1fr] gap-1 sm:gap-4 px-3.5 py-2.5 text-xs">
+                    <dt className="font-semibold text-gray-500">{c.field}</dt>
+                    <dd className="min-w-0 text-gray-800 break-words whitespace-pre-line">
+                        {c.from != null ? (
+                            <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
+                                <span className="text-red-600 line-through decoration-red-300">{c.from}</span>
+                                <ChevronRight size={12} className="text-gray-400 shrink-0" />
+                                <span className="font-medium text-emerald-700">{c.to ?? '(cleared)'}</span>
+                            </span>
+                        ) : (c.to ?? '—')}
+                    </dd>
+                </div>
+            ))}
+        </dl>
+    );
+}
+
 // ─── Log entry card ───────────────────────────────────────────────────────────
 
-function LogEntry({ log, expanded, onToggle }) {
-    const cfg    = getEventConfig(log.event);
+function CopyId({ value }) {
+    const [done, setDone] = useState(false);
+    if (!value || value === 'system' || value === 'unknown') return <span className="font-mono text-gray-500">{value ?? '—'}</span>;
+    return (
+        <button type="button" title="Copy" onClick={() => { navigator.clipboard?.writeText(value); setDone(true); setTimeout(() => setDone(false), 1500); }}
+            className="inline-flex items-center gap-1 font-mono text-gray-700 hover:text-indigo-700 break-all text-left">
+            {value} {done ? <Check size={10} className="text-emerald-600 shrink-0" /> : <Copy size={10} className="text-gray-400 shrink-0" />}
+        </button>
+    );
+}
+
+const STATUS_TONE = (code) => !code ? 'bg-gray-100 text-gray-600'
+    : code >= 400 ? 'bg-red-100 text-red-700'
+    : 'bg-emerald-100 text-emerald-700';
+
+function LogEntry({ log, expanded, onToggle, onActor }) {
+    const alert  = isAlert(log.event);
+    const cfg    = alert ? { ...getEventConfig(log.event), border: 'border-l-red-500', bg: 'bg-red-500', color: '#dc2626', soft: 'bg-red-50 text-red-700' } : getEventConfig(log.event);
     const { resource, action } = getEventParts(log.event);
     const ActionIcon = getActionIcon(action);
     const ResourceIcon = cfg.icon;
     const hasDiff = !!(log.old_values || log.new_values);
+    const hasDetails = hasDiff || !!log.url || !!log.user_agent || (log.changes?.length ?? 0) > 0;
+    const [technical, setTechnical] = useState(false);
     const ua      = parseUA(log.user_agent);
     const ts      = new Date(log.created_at);
     const primaryRole = log.actor?.roles?.[0]?.name;
@@ -363,8 +441,14 @@ function LogEntry({ log, expanded, onToggle }) {
 
                     {/* Summary */}
                     <p className="text-sm font-semibold text-gray-800 leading-snug mb-2.5">
-                        {eventSummary(log)}
+                        {log.description ?? eventSummary(log)}
                     </p>
+
+                    {log.subject?.name && (
+                        <p className="-mt-1.5 mb-2.5 text-xs text-gray-500">
+                            <span className="capitalize">{log.subject.type}</span>: <span className="font-medium text-gray-700">{log.subject.name}</span>
+                        </p>
+                    )}
 
                     {/* Actor + meta */}
                     <div className="flex items-center gap-3 flex-wrap">
@@ -379,7 +463,9 @@ function LogEntry({ log, expanded, onToggle }) {
                                         {initials(log.actor.name)}
                                     </div>
                                 )}
-                                <span className="text-xs font-semibold text-gray-700">{log.actor.name}</span>
+                                <button type="button" onClick={() => onActor?.(log.actor)} title="Show everything this person did"
+                                    className="text-xs font-semibold text-gray-700 hover:text-indigo-700 hover:underline">{log.actor.name}</button>
+                                {log.actor.email && <span className="hidden sm:inline text-[11px] text-gray-400">{log.actor.email}</span>}
                                 {primaryRole && (
                                     <span className={cn('text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md', roleColor(primaryRole))}>
                                         {roleLabel(log.actor.roles[0])}
@@ -387,7 +473,7 @@ function LogEntry({ log, expanded, onToggle }) {
                                 )}
                             </div>
                         ) : (
-                            <span className="flex items-center gap-1 text-xs text-gray-400 italic">System</span>
+                            <span className="flex items-center gap-1 text-xs text-gray-400 italic">{log.user_agent === 'console' ? 'System (scheduled task)' : 'Not signed in'}</span>
                         )}
 
                         {log.ip_address && (
@@ -415,7 +501,7 @@ function LogEntry({ log, expanded, onToggle }) {
                         </span>
                     </div>
 
-                    {hasDiff && (
+                    {hasDetails && (
                         <button onClick={onToggle}
                             className={cn(
                                 'flex items-center gap-1 text-[10px] font-semibold px-2 py-1 rounded-lg transition-all',
@@ -432,12 +518,34 @@ function LogEntry({ log, expanded, onToggle }) {
             </div>
 
             {/* Expanded diff */}
-            {expanded && hasDiff && (
-                <div className="border-t border-gray-100 bg-gray-50/60 px-5 py-4">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-3 flex items-center gap-1.5">
-                        <Database size={10} /> Payload
-                    </p>
-                    <ChangeDiff oldValues={log.old_values} newValues={log.new_values} />
+            {expanded && hasDetails && (
+                <div className="border-t border-gray-100 bg-gray-50/60 px-4 sm:px-5 py-4 space-y-4">
+                    <div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">What was done</p>
+                        <ReadableChanges changes={log.changes} />
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-500">
+                        <span><Clock size={10} className="inline -mt-0.5 mr-1" />{ts.toLocaleString('en-GB', { dateStyle: 'full', timeStyle: 'medium' })}</span>
+                        {log.status_code && (
+                            <span className={cn('font-semibold px-1.5 py-0.5 rounded', STATUS_TONE(log.status_code))}>
+                                {log.status_code >= 400 ? 'Not allowed / failed' : 'Completed'}
+                            </span>
+                        )}
+                        <button type="button" onClick={() => setTechnical(v => !v)} className="ml-auto font-semibold text-gray-400 hover:text-gray-700">
+                            {technical ? 'Hide technical details' : 'Technical details'}
+                        </button>
+                    </div>
+
+                    {technical && (
+                        <dl className="grid grid-cols-1 gap-y-1.5 text-[11px] text-gray-500 rounded-xl bg-white border border-gray-100 p-3">
+                            {log.url && <div className="flex gap-2"><dt className="w-16 shrink-0 text-gray-400">Request</dt><dd className="font-mono break-all">{log.method} {log.url} {log.status_code ? `→ ${log.status_code}` : ''}</dd></div>}
+                            <div className="flex gap-2"><dt className="w-16 shrink-0 text-gray-400">Event</dt><dd className="font-mono">{log.event}</dd></div>
+                            <div className="flex gap-2"><dt className="w-16 shrink-0 text-gray-400">Record</dt><dd><CopyId value={log.auditable_id} /></dd></div>
+                            {log.ip_address && <div className="flex gap-2"><dt className="w-16 shrink-0 text-gray-400">IP</dt><dd className="font-mono">{log.ip_address}</dd></div>}
+                            {log.user_agent && log.user_agent !== 'console' && <div className="flex gap-2"><dt className="w-16 shrink-0 text-gray-400">Device</dt><dd className="break-all">{log.user_agent}</dd></div>}
+                        </dl>
+                    )}
                 </div>
             )}
         </div>
@@ -538,21 +646,35 @@ export default function AdminAuditLogs() {
     const [expandedId, setExpandedId] = useState(null);
     const [category,   setCategory]   = useState('all');
     const [liveRefresh,setLiveRefresh]= useState(false);
-    const [filters,    setFilters]    = useState({ q: '', date_from: '', date_to: '' });
+    const [filters,    setFilters]    = useState({ q: '', date_from: '', date_to: '', resource: '', actor_id: '' });
+    const [actorName,  setActorName]  = useState('');
+    const [person,     setPerson]     = useState(null);
+    const [loadError,  setLoadError]  = useState('');
+    const [exporting,  setExporting]  = useState(false);
+    const [seesSuper,  setSeesSuper]  = useState(true);
     const [search,     setSearch]     = useState('');
     const searchTimer = useRef(null);
     const liveTimer   = useRef(null);
 
+    /** The filters as query parameters — shared by the list and the export. */
+    const queryParams = () => Object.fromEntries(Object.entries({
+        ...filters,
+        ...(category !== 'all' ? { category } : {}),
+    }).filter(([, v]) => v !== '' && v != null));
+
+    const exportCsv = async () => {
+        setExporting(true);
+        try {
+            await downloadFile(`/audit-logs/export?${new URLSearchParams(queryParams())}`, `audit_log_${new Date().toISOString().slice(0, 10)}.csv`);
+        } catch {}
+        setExporting(false);
+    };
+
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const params = {
-                ...filters,
-                page,
-                per_page: perPage,
-                ...(category !== 'all' ? { category } : {}),
-            };
-            const r = await get('/audit-logs', params);
+            const r = await get('/audit-logs', { ...queryParams(), page, per_page: perPage });
+            setLoadError('');
             const paginator = r.data;
             setLogs(paginator?.data ?? []);
             if (paginator?.total != null) {
@@ -566,7 +688,12 @@ export default function AdminAuditLogs() {
                 });
             }
             if (r.meta?.stats) setStats(r.meta.stats);
-        } catch {}
+            if (r.meta?.actor?.name) setActorName(r.meta.actor.name);
+            setPerson(r.meta?.actor ?? null);
+            setSeesSuper(!!r.meta?.includes_super_admins);
+        } catch (e) {
+            setLoadError(e?.response?.status === 403 ? 'You do not have permission to view the audit log.' : 'The audit log could not be loaded. Try again.');
+        }
         setLoading(false);
     }, [filters, page, perPage, category]);
 
@@ -592,8 +719,9 @@ export default function AdminAuditLogs() {
     };
 
     const setFilter = (key, val) => { setFilters(f => ({ ...f, [key]: val })); setPage(1); };
-    const clearFilters = () => { setFilters({ q: '', date_from: '', date_to: '' }); setSearch(''); setPage(1); };
-    const hasFilters = filters.q || filters.date_from || filters.date_to;
+    const clearFilters = () => { setFilters({ q: '', date_from: '', date_to: '', resource: '', actor_id: '' }); setActorName(''); setSearch(''); setPage(1); };
+    const hasFilters = filters.q || filters.date_from || filters.date_to || filters.resource || filters.actor_id;
+    const filterByActor = (actor) => { setActorName(actor.name); setFilters(f => ({ ...f, actor_id: actor.id })); setPage(1); window.scrollTo({ top: 0, behavior: 'smooth' }); };
 
     const changeCategory = (id) => { setCategory(id); setPage(1); setExpandedId(null); };
 
@@ -606,7 +734,7 @@ export default function AdminAuditLogs() {
         return acc;
     }, {});
 
-    const totalEvents = stats ? Object.values(stats.by_event ?? {}).reduce((a, b) => a + b, 0) : 0;
+    const totalEvents = stats?.total_30d ?? 0;
 
     return (
         <AppLayout breadcrumb="Audit Logs">
@@ -623,17 +751,22 @@ export default function AdminAuditLogs() {
 
                         {/* Left: title + stats */}
                         <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between mb-5">
+                            <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
                                 <div className="flex items-center gap-3">
                                     <div className="h-11 w-11 rounded-2xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center">
                                         <Activity size={20} className="text-indigo-300" />
                                     </div>
                                     <div>
                                         <h1 className="text-lg font-extrabold text-white tracking-tight">Activity Audit Log</h1>
-                                        <p className="text-xs text-white/40 mt-0.5">Every CRUD operation across all modules</p>
+                                        <p className="text-xs text-white/50 mt-0.5">Every change, refused attempt, sign-in problem and export</p>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <button onClick={exportCsv} disabled={exporting}
+                                        className="flex items-center gap-1.5 text-xs font-semibold text-slate-900 bg-white hover:bg-indigo-50 px-3 py-1.5 rounded-xl transition-all disabled:opacity-60">
+                                        <Download size={11} className={exporting ? 'animate-bounce' : ''} />
+                                        {exporting ? 'Exporting…' : 'Export CSV'}
+                                    </button>
                                     {/* Live refresh toggle */}
                                     <button onClick={() => setLiveRefresh(v => !v)}
                                         className={cn(
@@ -660,8 +793,8 @@ export default function AdminAuditLogs() {
                                 {[
                                     { label: "Today",        value: stats?.today,         icon: CalendarDays, color: '#818cf8' },
                                     { label: "This week",    value: stats?.this_week,     icon: TrendingUp,   color: '#34d399' },
-                                    { label: "Active users", value: stats?.unique_actors, icon: Users,        color: '#fb923c' },
-                                    { label: "Total events", value: meta?.total,          icon: BarChart2,    color: '#a78bfa' },
+                                    { label: "Refused (30d)", value: stats?.denied_30d,   icon: ShieldAlert,  color: '#f87171' },
+                                    { label: "Failed sign-ins (30d)", value: stats?.failed_logins_30d, icon: Lock, color: '#fb923c' },
                                 ].map(s => (
                                     <div key={s.label} className="bg-white/5 rounded-2xl px-4 py-3 border border-white/10 flex items-center gap-3">
                                         <div className="h-8 w-8 rounded-xl flex items-center justify-center shrink-0"
@@ -672,7 +805,7 @@ export default function AdminAuditLogs() {
                                             <p className="text-lg font-extrabold text-white tabular-nums leading-none">
                                                 {s.value?.toLocaleString() ?? '—'}
                                             </p>
-                                            <p className="text-[10px] text-white/40 mt-0.5">{s.label}</p>
+                                            <p className="text-[10px] text-white/50 mt-0.5">{s.label}</p>
                                         </div>
                                     </div>
                                 ))}
@@ -705,14 +838,14 @@ export default function AdminAuditLogs() {
                         return (
                             <button key={cat.id} onClick={() => changeCategory(cat.id)}
                                 className={cn(
-                                    'flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex-1 justify-center',
+                                    'flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all flex-1 justify-center shrink-0',
                                     active
                                         ? 'text-white shadow-sm'
                                         : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'
                                 )}
                                 style={active ? { backgroundColor: cat.color } : {}}>
                                 <cat.icon size={12} />
-                                <span className="hidden sm:inline">{cat.label}</span>
+                                <span className={active ? 'inline' : 'hidden md:inline'}>{cat.label}</span>
                                 {count > 0 && (
                                     <span className={cn(
                                         'text-[9px] font-bold px-1.5 py-0.5 rounded-full tabular-nums',
@@ -730,7 +863,7 @@ export default function AdminAuditLogs() {
                         <Filter size={13} className="text-gray-300 shrink-0" />
 
                         {/* Search */}
-                        <div className="relative flex-1 min-w-56">
+                        <div className="relative flex-1 min-w-full sm:min-w-56">
                             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                             {search && (
                                 <button onClick={() => handleSearch('')}
@@ -739,13 +872,13 @@ export default function AdminAuditLogs() {
                                 </button>
                             )}
                             <input value={search} onChange={e => handleSearch(e.target.value)}
-                                placeholder="Search by name, email, IP, or event…"
+                                placeholder="Search a person, email, proposal title, or action…"
                                 className="w-full pl-8 pr-8 py-2 text-sm border border-gray-200 rounded-xl bg-gray-50
                                            focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400/30 focus:border-indigo-300 transition-all" />
                         </div>
 
                         {/* Date range */}
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
                             <CalendarDays size={12} className="text-gray-400 shrink-0" />
                             <input type="date" value={filters.date_from}
                                 onChange={e => setFilter('date_from', e.target.value)}
@@ -755,6 +888,21 @@ export default function AdminAuditLogs() {
                                 onChange={e => setFilter('date_to', e.target.value)}
                                 className="py-2 px-3 text-sm border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400/30 transition-all" />
                         </div>
+
+                        {/* Type of record */}
+                        <select value={filters.resource} onChange={e => setFilter('resource', e.target.value)}
+                            className="py-2 px-3 text-sm border border-gray-200 rounded-xl bg-gray-50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400/30 transition-all">
+                            <option value="">All record types</option>
+                            {(stats?.resources ?? []).map(r => <option key={r} value={r}>{humanize(r)}</option>)}
+                        </select>
+
+                        {filters.actor_id && (
+                            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 pl-3 pr-1.5 py-1.5 rounded-xl">
+                                <Users size={12} /> {actorName || 'One person'}
+                                <button onClick={() => { setActorName(''); setFilter('actor_id', ''); }} aria-label="Show everyone"
+                                    className="p-0.5 rounded-md hover:bg-indigo-100"><X size={12} /></button>
+                            </span>
+                        )}
 
                         {/* Per page */}
                         <div className="flex items-center gap-2">
@@ -776,8 +924,45 @@ export default function AdminAuditLogs() {
                     </div>
                 </div>
 
+                {filters.actor_id && person && (
+                    <div className="flex flex-wrap items-center gap-4 bg-white border border-indigo-100 rounded-2xl px-4 sm:px-5 py-4 shadow-xs">
+                        {person.avatar
+                            ? <img src={person.avatar} alt="" className="h-12 w-12 rounded-full object-cover ring-2 ring-indigo-100" />
+                            : <div className="h-12 w-12 rounded-full bg-indigo-100 flex items-center justify-center text-sm font-extrabold text-indigo-600">{initials(person.name)}</div>}
+                        <div className="flex-1 min-w-0">
+                            <p className="text-[11px] font-semibold uppercase tracking-wider text-indigo-500">Everything done by</p>
+                            <p className="text-base font-bold text-gray-900 truncate">{person.name}</p>
+                            <p className="text-xs text-gray-500 truncate">
+                                {person.email}{person.roles?.[0] ? ` · ${roleLabel(person.roles[0])}` : ''}
+                                {person.last_login_at ? ` · last signed in ${timeAgo(person.last_login_at)}` : ''}
+                            </p>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-2xl font-extrabold text-gray-900 tabular-nums">{meta?.total?.toLocaleString() ?? '—'}</p>
+                            <p className="text-[11px] text-gray-500">{meta?.total === 1 ? 'action' : 'actions'} recorded</p>
+                        </div>
+                        <button onClick={() => { setActorName(''); setFilter('actor_id', ''); }}
+                            className="w-full sm:w-auto text-xs font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 rounded-xl px-3 py-2">
+                            Show everyone
+                        </button>
+                    </div>
+                )}
+
+                {!seesSuper && (
+                    <p className="flex items-center gap-2 text-xs text-gray-500 bg-white border border-gray-100 rounded-xl px-3.5 py-2.5">
+                        <Shield size={13} className="text-gray-400 shrink-0" />
+                        Super-administrator activity is recorded, but by design is not shown on this screen or in its export.
+                    </p>
+                )}
+
                 {/* ── Timeline ──────────────────────────────────────────────── */}
-                {loading ? (
+                {loadError ? (
+                    <div className="flex flex-col items-center justify-center py-20 text-center">
+                        <div className="h-14 w-14 rounded-2xl bg-red-50 flex items-center justify-center mb-3"><AlertCircle size={24} className="text-red-500" /></div>
+                        <p className="text-sm font-semibold text-gray-700">{loadError}</p>
+                        <button onClick={load} className="mt-4 text-xs font-semibold text-indigo-600 hover:text-indigo-700 px-4 py-2 rounded-xl border border-indigo-200 hover:bg-indigo-50">Try again</button>
+                    </div>
+                ) : loading ? (
                     <div className="space-y-3">
                         {[...Array(6)].map((_, i) => (
                             <div key={i} className="bg-white rounded-2xl border border-gray-100 border-l-[3px] border-l-gray-200 p-4">
@@ -830,9 +1015,10 @@ export default function AdminAuditLogs() {
                                     {dayLogs.map(log => (
                                         <div key={log.id} className="relative">
                                             {/* Rail dot */}
-                                            <div className="absolute -left-5.25 top-4 h-2.5 w-2.5 rounded-full border-2 border-white ring-1 ring-gray-200 bg-gray-300" />
+                                            <div className={cn('absolute -left-5.25 top-4 h-2.5 w-2.5 rounded-full border-2 border-white ring-1', isAlert(log.event) ? 'ring-red-200 bg-red-500' : 'ring-gray-200 bg-gray-300')} />
                                             <LogEntry
                                                 log={log}
+                                                onActor={filterByActor}
                                                 expanded={expandedId === log.id}
                                                 onToggle={() => setExpandedId(expandedId === log.id ? null : log.id)}
                                             />
@@ -845,6 +1031,7 @@ export default function AdminAuditLogs() {
                 )}
 
                 {/* ── Pagination ────────────────────────────────────────────── */}
+                {stats && <p className="text-[11px] text-gray-400 text-center">Tab counts cover the last 30 days; the list itself goes back to the beginning.</p>}
                 <Pagination meta={meta} page={page} onChange={p => { setPage(p); setExpandedId(null); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
             </div>
         </AppLayout>

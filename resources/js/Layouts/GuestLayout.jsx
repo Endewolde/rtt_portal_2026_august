@@ -51,7 +51,7 @@ export default function GuestLayout({
     const brand           = { logo: systemLogo, name: systemName, tagline: systemTagline, width: logoW, height: logoH };
 
     return (
-        <div className="min-h-dvh bg-slate-50 lg:flex">
+        <div className="min-h-dvh bg-slate-50 flex flex-col lg:flex-row">
 
             {/* ── Desktop: brand panel ─────────────────────────────────────── */}
             <aside className="hidden lg:flex lg:w-[46%] xl:w-[44%] relative overflow-hidden flex-col justify-between p-10 xl:p-14 text-white shrink-0"

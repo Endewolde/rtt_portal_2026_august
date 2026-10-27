@@ -18,6 +18,9 @@ const CARD = 'bg-white rounded-3xl border border-gray-100 shadow-xl shadow-slate
 const PRIMARY = `w-full h-12 inline-flex items-center justify-center gap-2 rounded-xl text-[15px] font-semibold text-white
     bg-linear-to-br from-teal-600 to-teal-700 shadow-lg shadow-teal-700/25 hover:from-teal-500 hover:to-teal-700
     active:scale-[0.99] transition disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100`;
+const SSO_MAIN = `flex items-center justify-center gap-3 h-14 w-full rounded-2xl border border-gray-200 bg-white px-4
+    text-[15px] font-semibold text-gray-900 shadow-md shadow-slate-900/5 ring-1 ring-black/[0.02]
+    hover:border-gray-300 hover:shadow-lg active:scale-[0.99] transition`;
 const SSO = `flex items-center justify-center gap-2.5 h-12 w-full rounded-xl border border-gray-200 bg-white px-4
     text-sm font-semibold text-gray-800 shadow-sm hover:border-gray-300 hover:bg-gray-50 active:bg-gray-100 transition`;
 
@@ -55,6 +58,11 @@ export default function Login() {
     const ssoEnabled          = googleSsoEnabled || microsoftSsoEnabled;
     const selfRegistration    = app_settings?.self_registration !== 'false';
     const passwordLoginEnabled = app_settings?.password_login_enabled !== 'false';
+    const ssoOnly             = ssoEnabled && !passwordLoginEnabled;
+    const emailDomain         = (app_settings?.registration_email_domain ?? '').replace(/^@/, '');
+    const ssoAccountName      = googleSsoEnabled && microsoftSsoEnabled
+        ? 'institutional Google or Microsoft account'
+        : microsoftSsoEnabled ? 'Microsoft work or school account' : 'Google account';
     const ssoError   = new URLSearchParams(window.location.search).get('sso_error');
 
     const [serverError,     setServerError]     = useState(ssoError || '');
@@ -270,7 +278,9 @@ export default function Login() {
                 <div className="mb-6">
                     <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Sign in</h1>
                     <p className="mt-1 text-sm text-gray-500">
-                        {ssoEnabled && passwordLoginEnabled ? 'Use your institution account or your email.' : 'Good to see you again.'}
+                        {ssoOnly
+                            ? `Use your ${ssoAccountName} — no separate password needed.`
+                            : ssoEnabled ? 'Use your institution account or your email.' : 'Good to see you again.'}
                     </p>
                 </div>
 
@@ -284,8 +294,9 @@ export default function Login() {
                 {/* Single sign-on */}
                 {ssoEnabled && (
                     <div className="grid gap-2.5">
+                        {/* With one way in, the button is the whole page — make it the obvious action. */}
                         {googleSsoEnabled && (
-                            <a href="/auth/oauth/google" className={SSO}>
+                            <a href="/auth/oauth/google" className={ssoOnly ? SSO_MAIN : SSO}>
                                 <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" aria-hidden="true">
                                     <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
                                     <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
@@ -296,7 +307,7 @@ export default function Login() {
                             </a>
                         )}
                         {microsoftSsoEnabled && (
-                            <a href="/auth/oauth/microsoft" className={SSO}>
+                            <a href="/auth/oauth/microsoft" className={ssoOnly ? SSO_MAIN : SSO}>
                                 <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" aria-hidden="true">
                                     <path d="M11.4 2H2v9.4h9.4V2z" fill="#F25022"/>
                                     <path d="M22 2h-9.4v9.4H22V2z" fill="#7FBA00"/>
@@ -307,6 +318,19 @@ export default function Login() {
                             </a>
                         )}
                     </div>
+                )}
+
+                {ssoOnly && (
+                    <ul className="mt-5 space-y-2.5 rounded-2xl bg-slate-50 px-4 py-3.5 text-[13px] text-gray-600">
+                        <li className="flex items-start gap-2.5">
+                            <Mail size={15} className="mt-0.5 shrink-0 text-teal-600" />
+                            <span>Sign in with your university email{emailDomain ? <> (<span className="font-medium text-gray-800">…@{emailDomain}</span>)</> : ''}.</span>
+                        </li>
+                        <li className="flex items-start gap-2.5">
+                            <ShieldCheck size={15} className="mt-0.5 shrink-0 text-teal-600" />
+                            <span>Your password is checked by your institution, never stored here.</span>
+                        </li>
+                    </ul>
                 )}
 
                 {ssoEnabled && passwordLoginEnabled && (

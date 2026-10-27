@@ -8,6 +8,7 @@ use App\Models\AppSetting;
 use App\Models\Conference;
 use App\Models\ConferenceAbstract;
 use App\Models\User;
+use App\Support\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -94,6 +95,15 @@ class AbstractController extends Controller
             $abstract->update(['file_path' => Storage::url($path)]);
         }
 
+        AuditLogger::log(
+            match (true) {
+                $status === 'draft' => 'abstract.draft_saved', $wasRevision => 'abstract.resubmitted', default => 'abstract.submitted'
+            },
+            'ConferenceAbstract', $abstract->id, $request->user()?->id, null,
+            ['target_name' => $abstract->title, 'submitter' => $abstract->submitter_name, 'email' => $abstract->submitter_email, 'conference' => $conference->title],
+            $revisionToken ? 200 : 201,
+        );
+
         if ($status === 'submitted') {
             if ($wasRevision) {
                 // The revised version is reviewed afresh by the same reviewers.
@@ -132,7 +142,11 @@ class AbstractController extends Controller
             ->whereIn('status', ['draft', 'submitted', 'under_review', 'revision_requested'])
             ->firstOrFail();
 
+        $previous = $abstract->status;
         $abstract->update(['status' => 'withdrawn']);
+
+        AuditLogger::log('abstract.withdrawn', 'ConferenceAbstract', $abstract->id, null,
+            ['status' => $previous], ['status' => 'withdrawn', 'target_name' => $abstract->title, 'submitter' => $abstract->submitter_name], 200);
 
         return response()->json(['message' => 'Your abstract has been withdrawn.', 'errors' => []]);
     }

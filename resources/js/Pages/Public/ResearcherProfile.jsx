@@ -75,11 +75,19 @@ export default function ResearcherProfile({ slug }) {
                             </div>
                         </header>
 
-                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                            <Stat label="Funded projects" value={profile.stats.projects} />
-                            <Stat label="As principal investigator" value={profile.stats.as_pi} />
-                            <Stat label="Ongoing" value={profile.stats.ongoing} />
-                            <Stat label="Research outputs" value={profile.stats.outputs} />
+                        <div className="space-y-2">
+                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                                <Stat label="Funded projects" value={profile.stats.projects} />
+                                <Stat label="Led as principal investigator" value={profile.stats.as_pi} />
+                                <Stat label="Ongoing now" value={profile.stats.ongoing} />
+                                <Stat label="Verified research outputs" value={profile.stats.outputs} />
+                            </div>
+                            {/* Proposals still under review are private, so a new researcher can show zeros here. */}
+                            <p className="text-xs text-gray-400">
+                                {profile.stats.projects === 0
+                                    ? 'Projects appear here once they are funded. Proposals still in review are not shown publicly.'
+                                    : 'Counts include funded projects only; outputs appear once the college has verified them.'}
+                            </p>
                         </div>
 
                         {profile.themes.length > 0 && (
@@ -93,7 +101,7 @@ export default function ResearcherProfile({ slug }) {
 
                         <section className="rounded-2xl border border-gray-100 bg-white p-5">
                             <h2 className="mb-3 flex items-center gap-2 text-sm font-bold text-gray-900"><FolderOpen size={15} className="text-indigo-500" /> Projects</h2>
-                            {profile.projects.length === 0 ? <p className="text-sm text-gray-500">No funded projects yet.</p> : (
+                            {profile.projects.length === 0 ? <p className="text-sm text-gray-500">No funded projects yet. Projects are listed here from the moment they are funded.</p> : (
                                 <ul className="divide-y divide-gray-100">
                                     {profile.projects.map(p => (
                                         <li key={p.tracker_number} className="flex flex-col gap-1 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
