@@ -7,6 +7,7 @@ use App\Jobs\SendEmailNotificationJob;
 use App\Models\Proposal;
 use App\Models\ProposalAppeal;
 use App\Models\User;
+use App\Services\ProgressReportService;
 use App\Services\WorkflowService;
 use App\Support\AuditLogger;
 use Illuminate\Http\JsonResponse;
@@ -23,6 +24,11 @@ class ProposalAppealController extends Controller
         $request->validate(['reason' => 'required|string|min:20|max:2000']);
 
         $proposal = Proposal::findOrFail($proposalId);
+
+        // Only the proposal's own research team may ask for reconsideration.
+        if (! app(ProgressReportService::class)->isTeamMember($proposal, $request->user())) {
+            return response()->json(['message' => 'Only the research team can appeal this decision.'], 403);
+        }
 
         if ($proposal->status !== 'rejected') {
             return response()->json(['message' => 'Only rejected proposals can be appealed.'], 422);
@@ -59,17 +65,23 @@ class ProposalAppealController extends Controller
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
-        $appeals = ProposalAppeal::with([
-            'proposal:id,tracker_number,title,category,college_id',
+        // Every appeal within the officer's scope (a director sees their programme,
+        // a college its own), newest first; the page filters and counts them.
+        $query = ProposalAppeal::with([
+            'proposal:id,tracker_number,title,category,college_id,pi_user_id,academic_year,status,rejection_reason',
             'proposal.college:id,name',
             'submittedBy:id,name,email',
             'resolvedBy:id,name',
         ])
             ->when($request->status, fn ($q, $s) => $q->where('status', $s))
-            ->orderByDesc('created_at')
-            ->paginate(20);
+            ->orderByDesc('created_at');
+        $request->user()->accessScope()->constrainThrough($query, 'proposal');
+        $appeals = $query->limit(500)->get();
 
-        return response()->json(['data' => $appeals]);
+        return response()->json([
+            'data' => $appeals,
+            'meta' => ['counts' => $appeals->countBy('status')],
+        ]);
     }
 
     /** Admin approves or denies an appeal. */
@@ -86,35 +98,41 @@ class ProposalAppealController extends Controller
 
         $appeal = ProposalAppeal::with('proposal')->findOrFail($id);
 
+        if (! $appeal->proposal || ! $request->user()->accessScope()->covers($appeal->proposal->college_id, $appeal->proposal->category)) {
+            return response()->json(['message' => 'This appeal is outside your area.'], 403);
+        }
+
         if ($appeal->status !== 'pending') {
             return response()->json(['message' => 'This appeal has already been resolved.'], 422);
         }
 
-        $appeal->update([
-            'status' => $request->decision,
-            'resolved_by' => $request->user()->id,
-            'resolution_notes' => $request->resolution_notes,
-            'resolved_at' => now(),
-        ]);
-
-        if ($request->decision === 'approved') {
-            // Reopen the proposal to draft so PI can resubmit
-            \DB::table('proposals')
-                ->where('id', $appeal->proposal_id)
-                ->update(['status' => 'draft', 'rejection_reason' => null, 'updated_at' => now()]);
-
-            \DB::table('workflow_logs')->insert([
-                'id' => \Str::uuid(),
-                'proposal_id' => $appeal->proposal_id,
-                'from_stage' => 'rejected',
-                'action' => 'appeal_approved',
-                'to_stage' => 'draft',
-                'actor_id' => $request->user()->id,
-                'notes' => $request->resolution_notes,
-                'metadata' => json_encode(['appeal_id' => $appeal->id]),
-                'created_at' => now(),
+        \DB::transaction(function () use ($appeal, $request) {
+            $appeal->update([
+                'status' => $request->decision,
+                'resolved_by' => $request->user()->id,
+                'resolution_notes' => $request->resolution_notes,
+                'resolved_at' => now(),
             ]);
-        }
+
+            if ($request->decision === 'approved') {
+                // Reopen the proposal to draft so PI can resubmit
+                \DB::table('proposals')
+                    ->where('id', $appeal->proposal_id)
+                    ->update(['status' => 'draft', 'rejection_reason' => null, 'updated_at' => now()]);
+
+                \DB::table('workflow_logs')->insert([
+                    'id' => \Str::uuid(),
+                    'proposal_id' => $appeal->proposal_id,
+                    'from_stage' => 'rejected',
+                    'action' => 'appeal_approved',
+                    'to_stage' => 'draft',
+                    'actor_id' => $request->user()->id,
+                    'notes' => $request->resolution_notes,
+                    'metadata' => json_encode(['appeal_id' => $appeal->id]),
+                    'created_at' => now(),
+                ]);
+            }
+        });
 
         // Notify the PI of the decision
         $proposal = $appeal->proposal->load('pi');
@@ -142,18 +160,9 @@ class ProposalAppealController extends Controller
 
     private function notifyOfficers(Proposal $proposal, User $submitter): void
     {
-        $roleMap = [
-            'research' => 'research_officer',
-            'community_engagement' => 'community_officer',
-            'technology_transfer' => 'technology_officer',
-        ];
-        $role = $roleMap[$proposal->category] ?? null;
-        if (! $role) {
-            return;
-        }
-
-        $officers = User::role($role)->where('status', 'active')->get()
-            ->merge(User::customRoleHolders('appeals.resolve', $proposal->college_id, $proposal->category))->unique('id');
+        // Everyone who may decide it: the central office and the programme's director,
+        // built-in or custom roles alike.
+        $officers = User::whoCan('appeals.resolve', $proposal->college_id, $proposal->category);
         foreach ($officers as $officer) {
             try {
                 SendEmailNotificationJob::deliver($officer, 'appeal_submitted', [

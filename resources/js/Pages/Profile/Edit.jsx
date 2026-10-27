@@ -565,6 +565,13 @@ function NotificationPreferencesSection() {
                 disabled={saving}
                 onChange={() => save({ inapp_enabled: !prefs.inapp_enabled })}
             />
+            <ToggleRow
+                label="SMS Notifications"
+                hint="Get a text message for the most important events (awards, decisions, review assignments) — uses the phone number on your profile"
+                checked={prefs.sms_enabled !== false}
+                disabled={saving}
+                onChange={() => save({ sms_enabled: prefs.sms_enabled === false })}
+            />
 
             <div className="pt-4 border-t border-gray-100">
                 <p className="text-sm font-semibold text-gray-800 mb-1">{tr("Email Frequency")}</p>

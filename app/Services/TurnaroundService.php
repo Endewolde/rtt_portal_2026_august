@@ -7,6 +7,8 @@ use App\Jobs\StoreInAppNotificationJob;
 use App\Models\Proposal;
 use App\Models\ReviewAssignment;
 use App\Models\User;
+use App\Support\AuditLogger;
+use App\Support\Programmes;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -32,12 +34,6 @@ class TurnaroundService
         'blind_review_passed' => ['label' => 'Awaiting defence', 'target' => 14, 'owner' => 'defence_schedulers'],
         'under_open_defence' => ['label' => 'Open defence', 'target' => 7, 'owner' => 'reviewers'],
         'accepted' => ['label' => 'Central evaluation', 'target' => 14, 'owner' => 'central'],
-    ];
-
-    private const DIRECTOR_ROLES = [
-        'research' => 'research_officer',
-        'community_engagement' => 'community_officer',
-        'technology_transfer' => 'technology_officer',
     ];
 
     private const REMINDER_COOLDOWN_HOURS = 24;
@@ -115,6 +111,70 @@ class TurnaroundService
         Cache::put($key, $until->toIso8601String(), $until);
 
         return ['sent' => $recipients->count(), 'cooldown_until' => null];
+    }
+
+    /**
+     * The daily sweep: every proposal past its stage target reminds whoever has to act
+     * (at most every three days), and one left at twice the target is escalated to the
+     * central office (at most weekly).
+     *
+     * @return array{reminded: int, escalated: int}
+     */
+    public function sweepOverdue(): array
+    {
+        $reminded = 0;
+        $escalated = 0;
+
+        Proposal::whereIn('status', array_keys(self::STAGES))->whereNotNull('status_entered_at')->get()
+            ->each(function (Proposal $proposal) use (&$reminded, &$escalated) {
+                $stage = self::STAGES[$proposal->status];
+                $days = $this->daysInStage($proposal);
+                if ($days <= $stage['target']) {
+                    return;
+                }
+
+                $data = [
+                    'proposal_id' => $proposal->id,
+                    'tracker_number' => $proposal->tracker_number,
+                    'title' => $proposal->title,
+                ];
+
+                $remindKey = "turnaround-auto:{$proposal->id}:{$proposal->status}";
+                if (! Cache::has($remindKey)) {
+                    $this->notifyAll($this->responsible($proposal, $stage['owner']), 'stage_reminder', $data + [
+                        'message' => "{$proposal->tracker_number} has been at \"{$stage['label']}\" for {$days} days (target {$stage['target']}). Please take the next step.",
+                    ]);
+                    Cache::put($remindKey, true, now()->addDays(3));
+                    $reminded++;
+                }
+
+                $escalateKey = "turnaround-escalated:{$proposal->id}:{$proposal->status}";
+                if ($days >= 2 * $stage['target'] && ! Cache::has($escalateKey)) {
+                    $office = User::role(['central_officer', 'admin'])->where('status', 'active')->get();
+                    $this->notifyAll($office, 'stage_escalation', $data + [
+                        'message' => "{$proposal->tracker_number} has been at \"{$stage['label']}\" for {$days} days — twice its {$stage['target']}-day target. "
+                            .'The people responsible have been reminded; it may need the central office to step in.',
+                    ]);
+                    AuditLogger::log('stage.escalated', Proposal::class, $proposal->id, $office->first()?->id ?? $proposal->pi_user_id, null, ['stage' => $proposal->status, 'days' => $days]);
+                    Cache::put($escalateKey, true, now()->addDays(7));
+                    $escalated++;
+                }
+            });
+
+        return ['reminded' => $reminded, 'escalated' => $escalated];
+    }
+
+    /** @param Collection<int, User> $users */
+    private function notifyAll(Collection $users, string $event, array $data): void
+    {
+        foreach ($users as $user) {
+            try {
+                StoreInAppNotificationJob::dispatchSync($user->id, $event, $data);
+                SendEmailNotificationJob::deliver($user, $event, $data);
+            } catch (\Throwable $e) {
+                Log::error("{$event} failed for {$user->id}: {$e->getMessage()}");
+            }
+        }
     }
 
     /** @param array{academic_year?: string|null, college_id?: string|null, category?: string|null} $filters */
@@ -294,8 +354,8 @@ class TurnaroundService
     /** @return Collection<int, User> */
     private function responsible(Proposal $proposal, string $owner): Collection
     {
-        $active = fn (string $role) => User::role($role)->where('status', 'active');
-        $director = self::DIRECTOR_ROLES[$proposal->category] ?? null;
+        $active = fn (string|array $role) => User::role($role)->where('status', 'active');
+        $director = Programmes::directorRoles($proposal->category);
 
         $users = match ($owner) {
             'validators', 'central' => $active('central_officer')->get()

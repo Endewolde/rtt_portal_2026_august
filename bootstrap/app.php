@@ -5,6 +5,7 @@ use App\Exceptions\ConflictingReviewerException;
 use App\Exceptions\InvalidScoreException;
 use App\Exceptions\UnauthorizedResolutionException;
 use App\Exceptions\UnauthorizedReviewException;
+use App\Http\Middleware\AuthenticateApiKey;
 use App\Http\Middleware\EnsureCategoryScope;
 use App\Http\Middleware\EnsureCollegeScope;
 use App\Http\Middleware\EnsureFeatureEnabled;
@@ -41,6 +42,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'category.scope' => EnsureCategoryScope::class,
             'user.active' => EnsureUserIsActive::class,
             'feature' => EnsureFeatureEnabled::class,
+            'api.key' => AuthenticateApiKey::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

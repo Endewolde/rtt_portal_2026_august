@@ -2,6 +2,7 @@
 
 namespace App\Exports;
 
+use App\Support\Terms;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
@@ -36,7 +37,7 @@ class ProjectsAtRiskWarningsSheet implements FromCollection, ShouldAutoSize, Wit
 
     public function headings(): array
     {
-        return ['Tracker Number', 'Title', 'PI', 'College', 'Warning', 'Severity', 'Details'];
+        return ['Tracker Number', 'Title', 'PI', Terms::college(), 'Warning', 'Severity', 'Details'];
     }
 
     public function styles(Worksheet $sheet): array

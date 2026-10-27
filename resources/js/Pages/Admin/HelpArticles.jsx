@@ -185,11 +185,11 @@ export default function HelpArticles() {
                     <div className="overflow-x-auto rounded-2xl border border-gray-200 bg-white">
                         <table className="w-full min-w-170 text-sm">
                             <thead className="bg-gray-50 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                                <tr><th className="px-4 py-2.5">Article</th><th className="px-3 py-2.5">Category</th><th className="px-3 py-2.5">Audience</th><th className="px-3 py-2.5 text-right">Read</th><th className="px-3 py-2.5 text-right">👍 / 👎</th><th className="px-4 py-2.5" /></tr>
+                                <tr><th className="px-4 py-2.5 w-10 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">#</th><th className="px-4 py-2.5">Article</th><th className="px-3 py-2.5">Category</th><th className="px-3 py-2.5">Audience</th><th className="px-3 py-2.5 text-right">Read</th><th className="px-3 py-2.5 text-right">👍 / 👎</th><th className="px-4 py-2.5" /></tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {articles.map((a) => (
-                                    <tr key={a.id} className={a.is_published ? '' : 'opacity-50'}>
+                                {articles.map((a, rowIdx) => (
+                                    <tr key={a.id} className={a.is_published ? '' : 'opacity-50'}><td className="px-4 py-3 w-10 text-xs font-medium tabular-nums text-gray-400">{rowIdx + 1}</td>
                                         <td className="px-4 py-3"><p className="font-medium text-gray-900">{a.title}</p><p className="line-clamp-1 text-xs text-gray-500">{a.summary}</p></td>
                                         <td className="px-3 py-3 text-gray-600">{a.category}</td>
                                         <td className="px-3 py-3 text-xs text-gray-500">{a.roles?.length ? `${a.roles.length} role${a.roles.length === 1 ? '' : 's'}` : 'Everyone'}{!a.is_published && ' · hidden'}</td>

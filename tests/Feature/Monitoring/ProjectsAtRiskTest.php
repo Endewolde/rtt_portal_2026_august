@@ -13,6 +13,7 @@ use App\Models\ProposalCall;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
 uses(RefreshDatabase::class);
@@ -201,4 +202,40 @@ test('researchers cannot download the list', function () {
     $pi->assignRole('pi');
 
     $this->actingAs($pi, 'sanctum')->getJson('/api/v1/projects-at-risk/export?format=xlsx')->assertForbidden();
+});
+
+test('the research team sees their running project health, and outsiders do not', function () {
+    $late = rk_project($this, 400);
+
+    $this->actingAs(User::find($late->pi_user_id), 'sanctum')
+        ->getJson("/api/v1/proposals/{$late->id}/health")
+        ->assertOk()
+        ->assertJsonPath('data.level', 'high')
+        ->assertJsonPath('data.signals.0.key', 'past_end');
+
+    $stranger = User::factory()->create();
+    $stranger->assignRole('pi');
+    $this->actingAs($stranger, 'sanctum')->getJson("/api/v1/proposals/{$late->id}/health")->assertForbidden();
+});
+
+test('a project that is not running has no health card', function () {
+    $done = rk_project($this, 30, ['status' => 'completed']);
+
+    $this->actingAs($this->central, 'sanctum')->getJson("/api/v1/proposals/{$done->id}/health")->assertOk()->assertJsonPath('data', null);
+});
+
+test('the weekly digest reaches monitors in scope and the PI of each high-risk project', function () {
+    $late = rk_project($this, 400);
+    rk_project($this, 90);
+    $otherCollege = College::create(['name' => 'Far College', 'code' => 'RF'.rand(10000, 99999)]);
+    $farOfficer = User::factory()->create(['college_id' => $otherCollege->id]);
+    $farOfficer->assignRole('college_officer');
+
+    $this->artisan('rtt:risk-digest')->assertSuccessful();
+
+    $digest = DB::table('notifications')->where('notifiable_id', $this->central->id)->where('type', 'risk_digest')->first();
+    expect($digest)->not->toBeNull()
+        ->and(json_decode($digest->data, true)['message'])->toContain($late->tracker_number)
+        ->and(DB::table('notifications')->where('notifiable_id', $late->pi_user_id)->where('type', 'project_health_warning')->exists())->toBeTrue()
+        ->and(DB::table('notifications')->where('notifiable_id', $farOfficer->id)->exists())->toBeFalse();
 });

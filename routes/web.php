@@ -51,6 +51,7 @@ Route::get('/verify-email', fn () => Inertia::render('Auth/VerifyEmail'));
 // ── Protected (auth handled client-side via useAuth hook) ────────────────────
 Route::get('/dashboard', fn () => Inertia::render('Dashboard/Index'));
 Route::get('/researcher-hub', fn () => Inertia::render('ResearcherHub/Index'));
+Route::get('/mentorship', fn () => Inertia::render('ResearcherHub/Mentorship'));
 Route::get('/proposals', fn () => Inertia::render('Proposals/Index'));
 Route::get('/proposals/create', fn () => Inertia::render('Proposals/Create'));
 Route::get('/proposals/{id}', fn () => Inertia::render('Proposals/Show'));
@@ -99,6 +100,8 @@ Route::get('/admin/completed-archive', fn () => Inertia::render('Admin/Completed
 Route::get('/admin/review-assignment/{id}', fn () => Inertia::render('Admin/ReviewAssignment'));
 Route::get('/reports', fn () => Inertia::render('Reports/Index'));
 Route::get('/reports/builder', fn () => Inertia::render('Reports/Builder'));
+Route::get('/admin/programmes', fn () => Inertia::render('Admin/Programmes'));
+Route::get('/admin/integrations', fn () => Inertia::render('Admin/Integrations'));
 Route::get('/admin/analytics', fn () => Inertia::render('Admin/Analytics'))->name('admin.analytics');
 Route::get('/admin/login-notices', fn () => Inertia::render('Admin/LoginNotices'));
 Route::get('/admin/faqs', fn () => Inertia::render('Admin/Faqs'));

@@ -1140,7 +1140,14 @@ class UserController extends Controller
         }
 
         $oldRoles = $user->getRoleNames()->values()->toArray();
-        $user->syncRoles($request->roles);
+        // Only add and remove what changed, so roles the user keeps keep their
+        // assignment time and the newly given role becomes their latest.
+        foreach (array_diff($oldRoles, $request->roles) as $removed) {
+            $user->removeRole($removed);
+        }
+        if ($added = array_values(array_diff($request->roles, $oldRoles))) {
+            $user->assignRole($added);
+        }
 
         DB::table('audit_logs')->insert([
             'id' => Str::uuid()->toString(),
@@ -1214,6 +1221,61 @@ class UserController extends Controller
     }
 
     /** Complete 360° profile — aggregates every relationship this user has across the system. */
+    /**
+     * The quick look shown when hovering a user on the Users page: who they are,
+     * where they sit, what they can do and what they have been doing.
+     */
+    public function card(Request $request, string $id): JsonResponse
+    {
+        if (! $request->user()?->can('users.view_any')) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
+        }
+
+        $user = User::with(['college:id,name', 'department:id,name', 'roles:id,name,label'])->findOrFail($id);
+        $led = Proposal::where('pi_user_id', $user->id)->selectRaw('status, COUNT(*) as n')->groupBy('status')->pluck('n', 'status');
+        $reviews = DB::table('review_assignments')->where('reviewer_id', $user->id)->selectRaw('status, COUNT(*) as n')->groupBy('status')->pluck('n', 'status');
+
+        return response()->json([
+            'data' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'title' => $user->title,
+                'email' => $user->email,
+                'phone' => $user->phone,
+                'gender' => $user->gender,
+                'employee_id' => $user->employee_id,
+                'status' => $user->status,
+                'avatar' => $user->avatar,
+                'roles' => $user->roles->map(fn ($r) => $r->label ?: Str::headline($r->name))->values(),
+                'college' => $user->college?->name,
+                'department' => $user->department?->name,
+                'affiliation' => $user->affiliation,
+                'expertise' => $user->expertise,
+                'orcid' => $user->orcid,
+                'email_verified' => (bool) $user->email_verified_at,
+                'two_factor' => (bool) $user->two_factor_enabled,
+                'locked' => $user->locked_until && $user->locked_until->isFuture(),
+                'registration_method' => $user->registration_method,
+                'joined_at' => $user->created_at?->toDateString(),
+                'last_login_at' => $user->last_login_at?->toIso8601String(),
+                'last_activity_at' => $user->last_activity_at?->toIso8601String(),
+                'mentor_available' => (bool) $user->mentor_available,
+                'activity' => [
+                    'proposals' => (int) $led->sum(),
+                    'funded' => (int) collect(['funded', 'midterm_evaluation', 'completed', 'archived'])->sum(fn ($s) => $led[$s] ?? 0),
+                    'in_review' => (int) collect(['submitted', 'validated', 'under_blind_review', 'blind_review_passed', 'under_open_defence', 'accepted'])->sum(fn ($s) => $led[$s] ?? 0),
+                    'drafts' => (int) ($led['draft'] ?? 0),
+                    'team_of' => DB::table('proposal_members')->where('user_id', $user->id)->where('status', 'active')->where('role', '!=', 'pi')->count(),
+                    'reviews' => (int) $reviews->sum(),
+                    'reviews_done' => (int) ($reviews['submitted'] ?? 0),
+                    'reviews_open' => (int) $reviews->except(['submitted', 'declined', 'cancelled'])->sum(),
+                ],
+            ],
+            'message' => '',
+            'errors' => [],
+        ]);
+    }
+
     public function profile360(string $id, User360Service $service): JsonResponse
     {
         $user = User::with(['college', 'department', 'roles'])->findOrFail($id);

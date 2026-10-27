@@ -8,6 +8,7 @@ import { PageHeader, Select, RefreshButton, StatCard, Panel, EmptyState, StatSke
 import { useToast } from '../../Components/Toast'
 import { get } from '../../lib/api'
 import { getStatusLabel, getCategoryLabel } from '../../lib/utils'
+import { term } from '../../lib/terms'
 
 const STATUS_COLOR = {
     submitted: '#6366f1', validated: '#3b82f6', under_blind_review: '#8b5cf6', blind_review_passed: '#06b6d4',
@@ -63,8 +64,8 @@ export default function CollegeDashboard() {
             <InsightsNav />
             <div className="mx-auto max-w-7xl space-y-6">
                 <PageHeader icon={Building2} color="sky" title="College Research Dashboard" description="Proposals from researchers in your college — departments, stages, categories and gender.">
-                    <Select label="Academic year" value={year} onChange={setYear}>
-                        <option value="">All academic years</option>
+                    <Select label={term('academic_year')} value={year} onChange={setYear}>
+                        <option value="">All {term('academic_year', { plural: true, lower: true })}</option>
                         {years.map((y) => <option key={y} value={y}>{y}</option>)}
                     </Select>
                     <RefreshButton onClick={load} loading={loading} />

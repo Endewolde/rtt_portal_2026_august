@@ -16,6 +16,8 @@ import api, { get, put } from '../../lib/api';
 import { formatDate, cn } from '../../lib/utils';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../Components/Toast';
+import UserHover from '../../Components/UserHover';
+import { roleLabel, rememberRoleLabels } from '../../lib/roles';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -139,7 +141,7 @@ function RoleBadge({ role }) {
     const name = typeof role === 'string' ? role : role.name;
     return (
         <span className={cn('text-xs font-medium px-2.5 py-1 rounded-full', ROLE_COLORS[name] ?? ROLE_COLORS.guest)}>
-            {ROLE_LABELS[name] ?? name}
+            {roleLabel(role)}
         </span>
     );
 }
@@ -361,7 +363,7 @@ function UserFormModal({ title, initial, colleges, allRoles, onSave, onClose }) 
                                         if (!groupRoles.length) return null;
                                         return (
                                             <optgroup key={group.label} label={group.label}>
-                                                {groupRoles.map(r => <option key={r} value={r}>{ROLE_LABELS[r] ?? r.replace(/_/g, ' ')}</option>)}
+                                                {groupRoles.map(r => <option key={r} value={r}>{roleLabel(r)}</option>)}
                                             </optgroup>
                                         );
                                     })}
@@ -371,7 +373,7 @@ function UserFormModal({ title, initial, colleges, allRoles, onSave, onClose }) 
                                         if (!custom.length) return null;
                                         return (
                                             <optgroup label="Custom">
-                                                {custom.map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+                                                {custom.map(r => <option key={r} value={r}>{roleLabel(r)}</option>)}
                                             </optgroup>
                                         );
                                     })()}
@@ -584,7 +586,7 @@ function AssignRolesModal({ user, allRoles, onSave, onClose }) {
                                         className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 shrink-0" />
                                     <div className="flex-1 min-w-0">
                                         <span className={cn('text-sm font-medium', isOn ? 'text-indigo-700' : 'text-gray-700')}>
-                                            {ROLE_LABELS[role] ?? role.replace(/_/g, ' ')}
+                                            {roleLabel(role)}
                                         </span>
                                     </div>
                                     {isOn && (
@@ -687,7 +689,7 @@ function BulkAssignRoleModal({ count, allRoles, onSave, onClose }) {
                                 return (
                                     <optgroup key={group.label} label={group.label}>
                                         {groupRoles.map(r => (
-                                            <option key={r} value={r}>{ROLE_LABELS[r] ?? r.replace(/_/g, ' ')}</option>
+                                            <option key={r} value={r}>{roleLabel(r)}</option>
                                         ))}
                                     </optgroup>
                                 );
@@ -698,7 +700,7 @@ function BulkAssignRoleModal({ count, allRoles, onSave, onClose }) {
                                 if (!custom.length) return null;
                                 return (
                                     <optgroup label="Custom">
-                                        {custom.map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
+                                        {custom.map(r => <option key={r} value={r}>{roleLabel(r)}</option>)}
                                     </optgroup>
                                 );
                             })()}
@@ -708,7 +710,7 @@ function BulkAssignRoleModal({ count, allRoles, onSave, onClose }) {
                         <div className="flex items-center gap-2 bg-indigo-50 border border-indigo-100 rounded-xl px-3 py-2">
                             <ShieldCheck size={13} className="text-indigo-500 shrink-0" />
                             <span className="text-xs text-indigo-700">
-                                All {count} user{count !== 1 ? 's' : ''} will be set to <strong>{ROLE_LABELS[role] ?? role}</strong>
+                                All {count} user{count !== 1 ? 's' : ''} will be set to <strong>{roleLabel(role)}</strong>
                             </span>
                         </div>
                     )}
@@ -1110,7 +1112,7 @@ function ImportModal({ onClose, onDone }) {
                                     <div className="overflow-x-auto rounded-xl" style={{ border: '1px solid #f1f5f9' }}>
                                         <table className="min-w-full text-xs">
                                             <thead>
-                                                <tr style={{ background: '#f8fafc', borderBottom: '1px solid #f1f5f9' }}>
+                                                <tr style={{ background: '#f8fafc', borderBottom: '1px solid #f1f5f9' }}><th className="px-3 py-2.5 w-10 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">#</th>
                                                     {preview.headers.map((h, i) => (
                                                         <th key={i} className="px-3 py-2.5 text-left font-semibold text-gray-500 whitespace-nowrap">{h}</th>
                                                     ))}
@@ -1118,7 +1120,7 @@ function ImportModal({ onClose, onDone }) {
                                             </thead>
                                             <tbody>
                                                 {preview.rows.map((row, ri) => (
-                                                    <tr key={ri} className={ri % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}>
+                                                    <tr key={ri} className={ri % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}><td className="px-3 py-2 w-10 text-xs font-medium tabular-nums text-gray-400">{ri + 1}</td>
                                                         {row.map((cell, ci) => (
                                                             <td key={ci} className="px-3 py-2 text-gray-700 whitespace-nowrap" style={{ maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                                                 {cell || <span className="text-gray-300">—</span>}
@@ -1366,6 +1368,7 @@ export default function AdminUsers() {
     useEffect(() => {
         api.get('/colleges').then(r => setColleges(r.data?.data ?? [])).catch(() => {});
         api.get('/roles').then(r => {
+            rememberRoleLabels(r.data?.data ?? []);
             const names = (r.data?.data ?? []).map(ro => ro.name).filter(n => n !== 'super_admin');
             if (names.length) setAllRoles(names);
         }).catch(() => {});
@@ -1646,7 +1649,7 @@ export default function AdminUsers() {
                             className="py-2 pl-3 pr-7 text-sm border border-gray-200 rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 transition-all text-gray-700">
                             <option value="">All Roles</option>
                             <option value="guest">Guest (No Role)</option>
-                            {allRoles.filter(r => r !== 'super_admin').map(r => <option key={r} value={r}>{ROLE_LABELS[r] ?? r}</option>)}
+                            {allRoles.filter(r => r !== 'super_admin').map(r => <option key={r} value={r}>{roleLabel(r)}</option>)}
                         </select>
 
                         <select value={statusFilter} onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
@@ -1797,10 +1800,10 @@ export default function AdminUsers() {
                                                 />
                                                 {/* User */}
                                                 <div className="flex items-center gap-3 min-w-0">
-                                                    <Avatar user={u} />
+                                                    <UserHover id={u.id}><Avatar user={u} /></UserHover>
                                                     <div className="min-w-0">
                                                         <p className="text-sm font-semibold text-gray-900 truncate leading-snug">
-                                                            {u.name}
+                                                            <UserHover id={u.id} className="hover:text-indigo-700">{u.name}</UserHover>
                                                         </p>
                                                         <p className="text-xs text-gray-400 truncate">{u.email}</p>
                                                     </div>
@@ -1883,11 +1886,11 @@ export default function AdminUsers() {
                                                     onChange={() => toggleOne(u.id)}
                                                     aria-label={`Select ${u.name}`}
                                                 />
-                                                <Avatar user={u} />
+                                                <UserHover id={u.id}><Avatar user={u} /></UserHover>
                                                 <div className="flex-1 min-w-0">
                                                     <div className="flex items-start justify-between gap-2">
                                                         <div className="min-w-0">
-                                                            <p className="text-sm font-semibold text-gray-900 truncate leading-snug">{u.name}</p>
+                                                            <p className="text-sm font-semibold text-gray-900 truncate leading-snug"><UserHover id={u.id} className="hover:text-indigo-700">{u.name}</UserHover></p>
                                                             <p className="text-xs text-gray-400 truncate">{u.email}</p>
                                                         </div>
                                                         <RowMenu

@@ -119,6 +119,7 @@ class NotificationController extends Controller
         $validated = $request->validate([
             'email_enabled' => ['sometimes', 'boolean'],
             'inapp_enabled' => ['sometimes', 'boolean'],
+            'sms_enabled' => ['sometimes', 'boolean'],
             'digest_frequency' => ['sometimes', 'in:realtime,daily,weekly'],
         ]);
 

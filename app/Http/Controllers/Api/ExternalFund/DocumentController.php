@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\ExternalFundApplication;
 use App\Models\ExternalFundAward;
 use App\Models\ExternalFundDocument;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -15,9 +16,10 @@ class DocumentController extends Controller
 {
     public function index(Request $request, string $ownerId): JsonResponse
     {
-        // Try application first, then award
-        $owner = ExternalFundApplication::find($ownerId)
-            ?? ExternalFundAward::findOrFail($ownerId);
+        $owner = $this->owner($ownerId);
+        if (! $owner->isVisibleTo($request->user())) {
+            return response()->json(['message' => 'Forbidden.'], 403);
+        }
 
         $documents = $owner->documents()
             ->with('uploadedBy:id,name')
@@ -29,15 +31,17 @@ class DocumentController extends Controller
 
     public function store(Request $request, string $ownerId): JsonResponse
     {
+        $owner = $this->owner($ownerId);
+        if (! $this->canUpload($request->user(), $owner)) {
+            return response()->json(['message' => 'Forbidden.'], 403);
+        }
+
         $request->validate([
-            'file' => 'required|file|max:20480',
+            'file' => 'required|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,csv,txt,jpg,jpeg,png,zip|max:20480',
             'title' => 'required|string|max:255',
             'type' => 'required|in:proposal,budget,contract,ethics,invoice,report,mou,other',
             'description' => 'nullable|string|max:500',
         ]);
-
-        $owner = ExternalFundApplication::find($ownerId)
-            ?? ExternalFundAward::findOrFail($ownerId);
 
         $file = $request->file('file');
         $storedPath = $file->store("external-funds/{$ownerId}/documents", 'private');
@@ -63,9 +67,10 @@ class DocumentController extends Controller
         ], 201);
     }
 
-    public function download(string $id): StreamedResponse
+    public function download(Request $request, string $id): StreamedResponse
     {
-        $document = ExternalFundDocument::findOrFail($id);
+        $document = ExternalFundDocument::with('documentable')->findOrFail($id);
+        abort_unless($document->documentable?->isVisibleTo($request->user()), 403);
 
         abort_unless(Storage::disk('private')->exists($document->stored_path), 404, 'File not found.');
 
@@ -83,5 +88,22 @@ class DocumentController extends Controller
         $document->delete();
 
         return response()->json(['data' => null, 'message' => 'Document deleted.', 'errors' => [], 'meta' => []]);
+    }
+
+    /** Documents hang off either an application or an award. */
+    private function owner(string $id): ExternalFundApplication|ExternalFundAward
+    {
+        return ExternalFundApplication::find($id) ?? ExternalFundAward::with('application')->findOrFail($id);
+    }
+
+    /** The office uploads anywhere; the PI adds files to their own application (or its award). */
+    private function canUpload(User $user, ExternalFundApplication|ExternalFundAward $owner): bool
+    {
+        if ($user->can('external_funds.manage') || $user->can('external_funds.expenditure')) {
+            return true;
+        }
+        $application = $owner instanceof ExternalFundAward ? $owner->application : $owner;
+
+        return $application && ($application->created_by === $user->id || $application->pi_user_id === $user->id);
     }
 }

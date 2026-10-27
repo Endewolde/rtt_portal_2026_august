@@ -4,13 +4,13 @@ import { Link } from '@inertiajs/react';
 import {
     Trophy, Beaker, DollarSign, Clock,
     RefreshCw, Building2, Users, ChevronRight, AlertTriangle,
-    FileText, Calendar, Hash, BadgeCheck,
+    FileText, Calendar, Hash, BadgeCheck, Check, History, FileSignature, ArrowRight, Wallet,
 } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import StatusBadge from '../../Components/StatusBadge';
 import api from '../../lib/api';
 import { useToast } from '../../Components/Toast';
-import { formatCurrency, getCategoryLabel } from '../../lib/utils';
+import { formatCurrency, formatDate, getCategoryLabel } from '../../lib/utils';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -70,11 +70,48 @@ function SectionHeader({ icon: Icon, title, count, description, color }) {
 
 // ─── Funded Proposal Card ─────────────────────────────────────────────────────
 
-function FundedCard({ proposal }) {
+/** The one thing to do next, with a button when the PI can act on it. */
+function NextStep({ proposal, step }) {
+    if (!step) return null;
+    const urgent = step.action === 'upload_contract';
+    const href = step.action === 'upload_contract' ? `/proposals/${proposal.id}` : step.action === 'budget_request' ? `/budget-requests?proposal_id=${proposal.id}` : null;
+    return (
+        <div className={`mt-3 flex flex-col gap-2 rounded-xl px-3.5 py-2.5 text-xs sm:flex-row sm:items-center sm:justify-between ${urgent ? 'bg-amber-50 text-amber-900 ring-1 ring-amber-200' : 'bg-indigo-50 text-indigo-900 ring-1 ring-indigo-100'}`}>
+            <span className="flex items-start gap-2">
+                {urgent ? <FileSignature size={14} className="mt-0.5 shrink-0" /> : <ArrowRight size={14} className="mt-0.5 shrink-0" />}
+                <span><b>{tr("Next step")}:</b> {tr(step.label)}</span>
+            </span>
+            {href && (
+                <Link href={href} className={`inline-flex shrink-0 items-center justify-center gap-1 rounded-lg px-3 py-1.5 font-semibold text-white ${urgent ? 'bg-amber-500 hover:bg-amber-600' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
+                    {step.action === 'upload_contract' ? tr("Upload contract") : tr("Request budget")} <ChevronRight size={12} />
+                </Link>
+            )}
+        </div>
+    );
+}
+
+/** Award → contract → payments → midterm → completion, with dates. */
+function AwardTimeline({ steps }) {
+    const lastDone = steps.reduce((i, s, n) => (s.at ? n : i), -1);
+    return (
+        <ol className="mt-3 grid gap-2 sm:grid-cols-3 lg:grid-cols-6">
+            {steps.map((s, i) => (
+                <li key={s.key} className={`rounded-lg px-2.5 py-2 text-[11px] ring-1 ${s.at ? 'bg-emerald-50 ring-emerald-100' : i === lastDone + 1 ? 'bg-amber-50 ring-amber-200' : 'bg-gray-50 ring-gray-100'}`}>
+                    <p className={`flex items-center gap-1 font-semibold ${s.at ? 'text-emerald-800' : i === lastDone + 1 ? 'text-amber-800' : 'text-gray-400'}`}>
+                        {s.at && <Check size={11} />} {tr(s.label)}
+                    </p>
+                    <p className="mt-0.5 tabular-nums text-gray-500">{s.at ? formatDate(s.at) : i === lastDone + 1 ? tr('Next') : '—'}</p>
+                </li>
+            ))}
+        </ol>
+    );
+}
+
+function FundedCard({ proposal, info }) {
+    const [showTimeline, setShowTimeline] = useState(false);
     const ac         = accent(proposal.category);
     const awarded    = proposal.award?.awarded_amount;
     const grantRef   = proposal.award?.grant_reference;
-    const budgetUsed = proposal.budget_total ?? 0;
 
     return (
         <div className={`bg-white border border-gray-200 rounded-2xl overflow-hidden hover:shadow-md hover:border-emerald-300 transition-all`}>
@@ -128,32 +165,38 @@ function FundedCard({ proposal }) {
                         )}
                     </div>
 
-                    {/* Budget bar */}
-                    {awarded && budgetUsed > 0 && (
+                    {/* Money: paid to the project, verified as spent, still to come */}
+                    {info && info.awarded > 0 && (
                         <div className="mt-3">
-                            <div className="flex items-center justify-between mb-1">
-                                <span className="text-[11px] text-gray-400">{tr("Budget utilisation")}</span>
-                                <span className="text-[11px] font-semibold text-gray-600">
-                                    {formatCurrency(budgetUsed)} / {formatCurrency(awarded)}
-                                </span>
+                            <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                                <span className="font-semibold text-gray-700">{tr(":pct% paid to your project", { pct: Math.round((info.disbursed / info.awarded) * 100) })}</span>
+                                <span className="tabular-nums text-gray-500">{formatCurrency(info.disbursed)} {tr("paid")} · {formatCurrency(info.settled)} {tr("settled")} · <b className="text-gray-700">{formatCurrency(info.to_pay)} {tr("still to come")}</b></span>
                             </div>
-                            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                                <div
-                                    className="h-full bg-emerald-500 rounded-full transition-all"
-                                    style={{ width: `${Math.min((budgetUsed / awarded) * 100, 100)}%` }}
-                                />
+                            <div className="relative h-2 overflow-hidden rounded-full bg-gray-100">
+                                <div className="absolute inset-y-0 left-0 rounded-full bg-emerald-300" style={{ width: `${Math.min(100, (info.disbursed / info.awarded) * 100)}%` }} />
+                                <div className="absolute inset-y-0 left-0 rounded-full bg-emerald-600" style={{ width: `${Math.min(100, (info.settled / info.awarded) * 100)}%` }} />
                             </div>
                         </div>
                     )}
+                    {info && <NextStep proposal={proposal} step={info.next_step} />}
+                    {showTimeline && info && <AwardTimeline steps={info.timeline} />}
                 </div>
             </div>
 
             {/* Footer */}
-            <div className="px-5 py-3 border-t border-gray-100 bg-emerald-50/40 flex items-center justify-between">
-                <Link href={`/proposals/${proposal.id}`}
-                    className="text-xs text-gray-400 hover:text-gray-600 font-medium transition-colors flex items-center gap-1">
-                    <FileText size={12} /> {tr("View Details")}
-                </Link>
+            <div className="px-5 py-3 border-t border-gray-100 bg-emerald-50/40 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-3">
+                    <Link href={`/proposals/${proposal.id}`}
+                        className="text-xs text-gray-500 hover:text-gray-700 font-medium transition-colors flex items-center gap-1">
+                        <FileText size={12} /> {tr("View Details")}
+                    </Link>
+                    {info && (
+                        <button onClick={() => setShowTimeline((v) => !v)} aria-expanded={showTimeline}
+                            className={`flex items-center gap-1 text-xs font-medium transition-colors ${showTimeline ? 'text-indigo-700' : 'text-gray-500 hover:text-gray-700'}`}>
+                            <History size={12} /> {tr("Timeline")}
+                        </button>
+                    )}
+                </div>
 
                 <Link
                     href={`/budget-requests?proposal_id=${proposal.id}`}
@@ -246,23 +289,30 @@ export default function MyResearch() {
     const { error } = useToast();
     const [proposals, setProposals] = useState([]);
     const [loading, setLoading]     = useState(true);
+    const [awards, setAwards]       = useState({});
 
     const load = async () => {
         setLoading(true);
         try {
-            const res = await api.get('/proposals/my');
+            const [res, mine] = await Promise.all([
+                api.get('/proposals/my'),
+                api.get('/my-awards').catch(() => null),
+            ]);
             setProposals(res.data?.data ?? []);
+            setAwards(Object.fromEntries((mine?.data?.data ?? []).map((a) => [a.id, a])));
         } catch { error('Failed to load your proposals.'); }
         setLoading(false);
     };
 
     useEffect(() => { load(); }, []);
 
-    const funded    = proposals.filter(p => p.status === 'funded');
+    // Running projects: funded, and those in their midterm evaluation.
+    const funded    = proposals.filter(p => ['funded', 'midterm_evaluation'].includes(p.status));
     const completed = proposals.filter(p => ['completed', 'archived'].includes(p.status));
 
     const totalAwarded = [...funded, ...completed].reduce((s, p) => s + (p.award?.awarded_amount ?? 0), 0);
-    const totalBudget  = funded.reduce((s, p) => s + (p.budget_total ?? 0), 0);
+    const totalPaid    = Object.values(awards).reduce((s, a) => s + (a.disbursed ?? 0), 0);
+    const actionsDue   = Object.values(awards).filter((a) => a.next_step?.action).length;
 
     return (
         <AppLayout breadcrumb="Funded Proposals">
@@ -291,7 +341,7 @@ export default function MyResearch() {
                         <StatCard icon={Trophy}       label="Funded Proposals"   value={funded.length}    color="emerald" />
                         <StatCard icon={BadgeCheck}   label="Completed Projects" value={completed.length} color="blue"    />
                         <StatCard icon={DollarSign}   label="Total Awarded"      value={formatCurrency(totalAwarded)} sub="across all grants" color="violet" />
-                        <StatCard icon={FileText}     label="Budget Allocated"   value={formatCurrency(totalBudget)}  sub="from funded proposals" color="gray" />
+                        <StatCard icon={Wallet}       label="Paid to you so far" value={formatCurrency(totalPaid)}  sub={actionsDue ? `${actionsDue} project${actionsDue === 1 ? '' : 's'} need your action` : 'across all grants'} color="gray" />
                     </div>
                 )}
 
@@ -333,7 +383,7 @@ export default function MyResearch() {
                                 />
                             ) : (
                                 <div className="space-y-3">
-                                    {funded.map(p => <FundedCard key={p.id} proposal={p} />)}
+                                    {funded.map(p => <FundedCard key={p.id} proposal={p} info={awards[p.id]} />)}
                                 </div>
                             )}
                         </div>

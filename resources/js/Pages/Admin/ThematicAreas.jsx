@@ -254,6 +254,7 @@ function AreaRow({ area, idx, isSuperAdmin, onEdit, onDelete, onToggle }) {
     return (
         <>
             <tr className={`hover:bg-indigo-50/40 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
+                <td className="px-5 py-4 w-10 text-xs font-medium tabular-nums text-gray-400">{idx + 1}</td>
                 <td className="px-5 py-4">
                     <div className="flex items-center gap-3">
                         <div
@@ -332,7 +333,7 @@ function AreaRow({ area, idx, isSuperAdmin, onEdit, onDelete, onToggle }) {
             {/* Expanded sub-topics */}
             {expanded && topics.length > 0 && (
                 <tr className="bg-indigo-50/60">
-                    <td colSpan={6} className="px-8 py-4">
+                    <td colSpan={7} className="px-8 py-4">
                         <ol className="list-decimal list-inside space-y-1">
                             {topics.filter(t => t?.trim()).map((t, i) => (
                                 <li key={i} className="text-sm text-gray-700 leading-relaxed">
@@ -528,7 +529,7 @@ export default function AdminThematicAreas() {
                             <table className="min-w-full">
                                 <thead>
                                     <tr className="bg-linear-to-r from-indigo-600 to-indigo-700">
-                                        {['Area', 'Description', 'Sub-topics', 'Sort', 'Status', ''].map(h => (
+                                        {['#', 'Area', 'Description', 'Sub-topics', 'Sort', 'Status', ''].map(h => (
                                             <th key={h} className="px-5 py-3.5 text-left text-xs font-semibold text-indigo-100 uppercase tracking-wide">{h}</th>
                                         ))}
                                     </tr>

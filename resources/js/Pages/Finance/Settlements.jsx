@@ -1,986 +1,595 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import AppLayout from '../../Layouts/AppLayout'
-import { useToast } from '../../Components/Toast'
-import { useConfirm } from '../../hooks/useConfirm'
-import ViewToggle from '../../Components/ViewToggle'
-import { useViewPreference } from '../../hooks/useViewPreference'
-import { downloadFile } from '../../lib/download'
-import { CheckCircle, FileText, Upload, X, ChevronRight, Shield } from 'lucide-react'
-import api from '../../lib/api'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Link } from '@inertiajs/react';
+import {
+    CheckCircle2, FileText, Upload, X, Shield, Search, Building2, Landmark, Send, Lock, Flag,
+    Eye, EyeOff, Download, Loader2, Receipt, Wallet, Clock, ArrowRight, User, PiggyBank,
+} from 'lucide-react';
+import AppLayout from '../../Layouts/AppLayout';
+import ViewToggle from '../../Components/ViewToggle';
+import { PageHeader, StatCard, Panel, EmptyState, Select, RefreshButton, StatSkeletons, Skeleton, DataTable } from '../../Components/Insights/Kit';
+import { useToast } from '../../Components/Toast';
+import { useConfirm } from '../../hooks/useConfirm';
+import { useAuth } from '../../hooks/useAuth';
+import { useViewPreference } from '../../hooks/useViewPreference';
+import { downloadFile } from '../../lib/download';
+import { formatCurrency, formatDate } from '../../lib/utils';
+import { programmeLabel, programmeColor } from '../../lib/programmes';
+import { currency, term } from '../../lib/terms';
+import ProposalHover from '../../Components/Finance/ProposalHover';
+import DownloadMenu from '../../Components/Finance/DownloadMenu';
+import ClearButton from '../../Components/Finance/ClearButton';
+import api from '../../lib/api';
 
-const STATUS_CONFIG = {
-    submitted:        { label: 'Submitted',        color: 'bg-blue-100 text-blue-700',   icon: '📤', step: 1 },
-    college_verified: { label: 'College Verified', color: 'bg-purple-100 text-purple-700', icon: '🏛', step: 2 },
-    finance_verified: { label: 'Finance Verified', color: 'bg-green-100 text-green-700', icon: '✅', step: 3 },
+const STATUS = {
+    submitted:        { label: 'Awaiting college',  cls: 'bg-sky-50 text-sky-700 ring-sky-200' },
+    college_verified: { label: 'Awaiting finance',  cls: 'bg-indigo-50 text-indigo-700 ring-indigo-200' },
+    finance_verified: { label: 'Finalized',         cls: 'bg-emerald-50 text-emerald-700 ring-emerald-200' },
+};
+
+const money = (v) => parseFloat(v ?? 0) || 0;
+
+function ProgrammeChip({ category }) {
+    if (!category) return null;
+    const color = programmeColor(category);
+    return (
+        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ backgroundColor: `${color}14`, color }}>
+            <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} /> {programmeLabel(category)}
+        </span>
+    );
 }
 
-export default function Settlements() {
-    const { success, error } = useToast()
-    const { confirm, Dialog } = useConfirm()
-    const [view, setView] = useViewPreference('settlements', 'card')
-    const [activeTab, setActiveTab] = useState('pending')
-    const [settlements, setSettlements] = useState([])
-    const [pendingRequests, setPendingRequests] = useState([])
-    const [stats, setStats] = useState(null)
-    const [loading, setLoading] = useState(true)
-    const [showSubmitModal, setShowSubmitModal] = useState(false)
-    const [selectedRequest, setSelectedRequest] = useState(null)
+function StatusBadge({ status }) {
+    const s = STATUS[status] ?? STATUS.submitted;
+    return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${s.cls}`}>{s.label}</span>;
+}
 
-    const user = (() => { try { return JSON.parse(localStorage.getItem('rtt_user') || '{}') } catch { return {} } })()
-    const roles = (user.roles || []).map(r => typeof r === 'string' ? r : r.name)
-    const isPI = roles.some(r => ['pi', 'staff'].includes(r))
-    const isCollegeOfficer = roles.some(r => ['college_officer'].includes(r))
-    const isFinance = roles.some(r => ['super_admin', 'admin', 'central_officer', 'finance_officer',
-        'research_officer', 'community_officer', 'technology_officer'].includes(r))
-
-    useEffect(() => {
-        loadAll()
-    }, [])
-
-    const loadAll = async () => {
-        setLoading(true)
-        try {
-            const promises = [
-                api.get('/settlements'),
-                api.get('/settlements/stats'),
-            ]
-            if (isPI || isCollegeOfficer) {
-                promises.push(api.get('/settlements/pending'))
-            } else {
-                promises.push(Promise.resolve({ data: { data: [] } }))
-            }
-
-            const [settleRes, statsRes, pendingRes] = await Promise.all(promises)
-            setSettlements(settleRes.data?.data || [])
-            setStats(statsRes.data?.data || {})
-            setPendingRequests(pendingRes.data?.data || [])
-
-            if ((isPI || isCollegeOfficer) && (pendingRes.data?.data || []).length > 0) {
-                setActiveTab('pending')
-            } else if (isFinance) {
-                setActiveTab('pending_finance')
-            } else {
-                setActiveTab('all')
-            }
-        } catch {
-            error('Failed to load settlements.')
-        }
-        setLoading(false)
-    }
-
-    const pendingCollegeVerification = settlements.filter(s => s.status === 'submitted')
-    const pendingFinanceVerification = settlements.filter(s => s.status === 'college_verified')
-
-    // Returns true when all finalized settlement totals meet or exceed the proposal's awarded budget
-    const isBudgetExhausted = (settlement) => {
-        const awarded = parseFloat(settlement.budget_request?.proposal?.award?.awarded_amount || 0)
-        if (awarded <= 0) return false
-        const proposalId = settlement.budget_request?.proposal?.id
-        const totalSpent = settlements
-            .filter(s => s.status === 'finance_verified' && s.budget_request?.proposal?.id === proposalId)
-            .reduce((sum, s) => sum + parseFloat(s.total_spent || 0), 0)
-        return totalSpent >= awarded
-    }
-
-    const TABS = [
-        { key: 'pending',         label: '📋 Submit Settlement',  count: pendingRequests.length,            show: isPI || isCollegeOfficer },
-        { key: 'pending_college', label: '🏛 Verify (College)',   count: pendingCollegeVerification.length, show: isCollegeOfficer || isFinance },
-        { key: 'pending_finance', label: '✅ Finalize (Finance)',  count: pendingFinanceVerification.length, show: isFinance },
-        { key: 'all',             label: '📊 All Settlements',    count: settlements.length,                show: true },
-    ].filter(t => t.show)
-
+/** Submitted → college verified → finance verified, with who did each step. */
+function Steps({ settlement }) {
+    const steps = [
+        { label: 'Submitted', icon: Send, done: true, by: settlement.submitted_by?.name, at: settlement.created_at },
+        { label: 'College verified', icon: Building2, done: !!settlement.college_verified_at, by: settlement.college_verified_by_user?.name, at: settlement.college_verified_at },
+        { label: 'Finance finalized', icon: Landmark, done: !!settlement.finance_verified_at, by: settlement.finance_verified_by_user?.name, at: settlement.finance_verified_at },
+    ];
+    const current = steps.findIndex((s) => !s.done);
     return (
-        <AppLayout>
-            <div className="p-6 max-w-7xl mx-auto space-y-6">
+        <ol className="grid grid-cols-3 gap-2">
+            {steps.map((s, i) => {
+                const Icon = s.icon;
+                return (
+                    <li key={s.label} className={`rounded-xl border px-3 py-2 ${s.done ? 'border-emerald-200 bg-emerald-50/60' : i === current ? 'border-indigo-200 bg-indigo-50/60' : 'border-gray-200 bg-white'}`}>
+                        <p className={`flex items-center gap-1.5 text-[11px] font-semibold ${s.done ? 'text-emerald-700' : i === current ? 'text-indigo-700' : 'text-gray-400'}`}>
+                            {s.done ? <CheckCircle2 size={12} /> : <Icon size={12} />} {s.label}
+                        </p>
+                        <p className="mt-0.5 truncate text-[11px] text-gray-500">{s.done ? [s.by, s.at && formatDate(s.at)].filter(Boolean).join(' · ') || '—' : i === current ? 'Waiting' : '—'}</p>
+                    </li>
+                );
+            })}
+        </ol>
+    );
+}
 
-                {/* Header */}
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                            <Shield size={24} className="text-blue-600" />
-                            Settlements
-                        </h1>
-                        <p className="text-sm text-gray-500 mt-1">Expense reporting and settlement management</p>
-                    </div>
-                    <ViewToggle view={view} onChange={setView} />
-                </div>
-
-                {/* Workflow diagram */}
-                <div className="bg-white border border-gray-200 rounded-xl p-4">
-                    <p className="text-xs font-semibold text-gray-500 uppercase mb-3">Settlement Process</p>
-                    <div className="flex items-center gap-2 overflow-x-auto">
-                        {[
-                            { label: 'PI Submits',          desc: 'Expense report + amounts', icon: '📤' },
-                            { label: 'College Verifies',    desc: 'College Officer reviews',  icon: '🏛' },
-                            { label: 'Finance Finalizes',   desc: 'Finance closes the round', icon: '✅' },
-                            { label: 'Next Round Unlocked', desc: 'PI can submit Round N+1',  icon: '🔓' },
-                        ].map((s, i) => (
-                            <div key={s.label} className="flex items-center gap-2 shrink-0">
-                                <div className="text-center">
-                                    <div className="w-10 h-10 rounded-full bg-blue-100 border-2 border-blue-300
-                                                    flex items-center justify-center text-lg mx-auto mb-1">
-                                        {s.icon}
-                                    </div>
-                                    <p className="text-xs font-semibold text-blue-700">{s.label}</p>
-                                    <p className="text-xs text-gray-400">{s.desc}</p>
-                                </div>
-                                {i < 3 && <ChevronRight size={16} className="text-gray-300 shrink-0" />}
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Stats */}
-                {stats && (
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                        {[
-                            { label: 'Total Settlements', value: stats.total || 0,            icon: '📊', color: 'text-blue-600'   },
-                            { label: 'Awaiting College',  value: stats.submitted || 0,         icon: '🏛', color: 'text-yellow-600' },
-                            { label: 'Awaiting Finance',  value: stats.college_verified || 0,  icon: '💼', color: 'text-purple-600' },
-                            { label: 'Finalized',         value: stats.finance_verified || 0,  icon: '✅', color: 'text-green-600'  },
-                        ].map(stat => (
-                            <div key={stat.label} className="bg-white border border-gray-200 rounded-xl p-4 text-center">
-                                <div className="text-2xl mb-1">{stat.icon}</div>
-                                <div className={`text-2xl font-bold ${stat.color}`}>{stat.value}</div>
-                                <div className="text-xs text-gray-500 mt-0.5">{stat.label}</div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-
-                {/* Tabs */}
-                <div className="flex flex-wrap gap-1 border-b border-gray-200">
-                    {TABS.map(tab => (
-                        <button
-                            key={tab.key}
-                            onClick={() => setActiveTab(tab.key)}
-                            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium
-                                        border-b-2 transition-colors whitespace-nowrap ${
-                                activeTab === tab.key
-                                    ? 'border-blue-600 text-blue-600'
-                                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                            }`}
-                        >
-                            {tab.label}
-                            {tab.count > 0 && (
-                                <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
-                                    activeTab === tab.key ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
-                                }`}>
-                                    {tab.count}
-                                </span>
-                            )}
-                        </button>
-                    ))}
-                </div>
-
-                {loading ? (
-                    <div className="flex justify-center py-12">
-                        <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                    </div>
-                ) : (
-                    <>
-                        {activeTab === 'pending' && (
-                            <div className="space-y-4">
-                                {pendingRequests.length === 0 ? (
-                                    <EmptyState
-                                        icon="🧾"
-                                        title="No settlements pending"
-                                        message="All disbursed funds have been settled or no funds have been disbursed yet."
-                                    />
-                                ) : (
-                                    pendingRequests.map(request => (
-                                        <PendingSettlementCard
-                                            key={request.id}
-                                            request={request}
-                                            onSubmit={() => { setSelectedRequest(request); setShowSubmitModal(true) }}
-                                        />
-                                    ))
-                                )}
-                            </div>
-                        )}
-
-                        {activeTab === 'pending_college' && (
-                            <div className="space-y-4">
-                                {pendingCollegeVerification.length === 0 ? (
-                                    <EmptyState
-                                        icon="🏛"
-                                        title="No settlements awaiting college verification"
-                                        message="Settlements submitted by PIs will appear here."
-                                    />
-                                ) : (
-                                    pendingCollegeVerification.map(settlement => (
-                                        <SettlementCard
-                                            key={settlement.id}
-                                            settlement={settlement}
-                                            onRefresh={loadAll}
-                                            canVerifyCollege={isCollegeOfficer || isFinance}
-                                            canVerifyFinance={false}
-                                            budgetExhausted={isBudgetExhausted(settlement)}
-                                        />
-                                    ))
-                                )}
-                            </div>
-                        )}
-
-                        {activeTab === 'pending_finance' && (
-                            <div className="space-y-4">
-                                {pendingFinanceVerification.length === 0 ? (
-                                    <EmptyState
-                                        icon="💼"
-                                        title="No settlements awaiting finance verification"
-                                        message="College-verified settlements will appear here."
-                                    />
-                                ) : (
-                                    pendingFinanceVerification.map(settlement => (
-                                        <SettlementCard
-                                            key={settlement.id}
-                                            settlement={settlement}
-                                            onRefresh={loadAll}
-                                            canVerifyCollege={false}
-                                            canVerifyFinance={isFinance}
-                                            budgetExhausted={isBudgetExhausted(settlement)}
-                                        />
-                                    ))
-                                )}
-                            </div>
-                        )}
-
-                        {activeTab === 'all' && (
-                            view === 'table' ? (
-                                <SettlementsTable settlements={settlements} />
-                            ) : (
-                                <div className="space-y-3">
-                                    {settlements.length === 0 ? (
-                                        <EmptyState icon="📊" title="No settlements yet" message="" />
-                                    ) : (
-                                        settlements.map(settlement => (
-                                            <SettlementCard
-                                                key={settlement.id}
-                                                settlement={settlement}
-                                                onRefresh={loadAll}
-                                                canVerifyCollege={isCollegeOfficer || isFinance}
-                                                canVerifyFinance={isFinance}
-                                                budgetExhausted={isBudgetExhausted(settlement)}
-                                            />
-                                        ))
-                                    )}
-                                </div>
-                            )
-                        )}
-                    </>
-                )}
-
-                {showSubmitModal && selectedRequest && (
-                    <SubmitSettlementModal
-                        request={selectedRequest}
-                        onClose={() => { setShowSubmitModal(false); setSelectedRequest(null) }}
-                        onSuccess={() => { setShowSubmitModal(false); setSelectedRequest(null); loadAll() }}
-                    />
-                )}
-
-                <Dialog />
+function SpendBar({ approved, spent, unspent }) {
+    const base = Math.max(approved, spent + unspent, 1);
+    return (
+        <div>
+            <div className="flex h-2.5 gap-0.5 overflow-hidden rounded-full bg-gray-100">
+                <div className="h-full rounded-l-full bg-indigo-500" style={{ width: `${(spent / base) * 100}%` }} />
+                {unspent > 0 && <div className="h-full bg-amber-400" style={{ width: `${(unspent / base) * 100}%` }} />}
             </div>
-        </AppLayout>
-    )
-}
-
-function EmptyState({ icon, title, message }) {
-    return (
-        <div className="bg-white border border-gray-200 rounded-xl p-12 text-center">
-            <div className="text-4xl mb-3">{icon}</div>
-            <h3 className="text-gray-600 font-medium mb-1">{title}</h3>
-            {message && <p className="text-sm text-gray-400">{message}</p>}
+            <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                <div><p className="text-gray-500">Approved</p><p className="font-bold tabular-nums text-gray-900">{formatCurrency(approved)}</p></div>
+                <div><p className="flex items-center gap-1 text-gray-500"><span className="h-2 w-2 rounded-full bg-indigo-500" /> Spent</p><p className="font-bold tabular-nums text-indigo-700">{formatCurrency(spent)}</p></div>
+                <div><p className="flex items-center gap-1 text-gray-500"><span className="h-2 w-2 rounded-full bg-amber-400" /> Unspent</p><p className={`font-bold tabular-nums ${unspent > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>{formatCurrency(unspent)}</p></div>
+            </div>
         </div>
-    )
+    );
 }
 
-function PendingSettlementCard({ request, onSubmit }) {
-    const totalDisbursed = parseFloat(request.total_disbursed || 0)
+// ─── Waiting to be settled ────────────────────────────────────────────────────
 
+function ToSettleCard({ request, canSettle, onSettle }) {
+    const paid = money(request.total_disbursed);
     return (
-        <div className="bg-blue-50/30 border border-blue-200 rounded-xl p-5">
-            <div className="flex items-start justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                        <span className="font-mono text-xs font-bold text-blue-600 bg-blue-50
-                                         px-2 py-0.5 rounded border border-blue-200">
-                            {request.proposal?.tracker_number}
-                        </span>
-                        <span className="text-xs bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full font-medium">
-                            Round {request.funding_round}
-                        </span>
-                        <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
-                            💳 Disbursed
-                        </span>
-                    </div>
-                    <h3 className="text-sm font-semibold text-gray-900 truncate">{request.proposal?.title}</h3>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                        {request.proposal?.college?.name} · PI: {request.proposal?.pi?.name}
-                    </p>
-                    <div className="mt-2 flex gap-4 text-sm">
-                        <div>
-                            <span className="text-xs text-gray-500">Approved Budget</span>
-                            <p className="font-bold text-gray-900">
-                                ETB {parseFloat(request.total_amount || 0).toLocaleString()}
-                            </p>
-                        </div>
-                        <div>
-                            <span className="text-xs text-gray-500">Total Disbursed</span>
-                            <p className="font-bold text-green-700">ETB {totalDisbursed.toLocaleString()}</p>
-                        </div>
-                    </div>
+        <article className="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-white p-4 transition hover:shadow-md sm:flex-row sm:items-center">
+            <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-1.5">
+                    <ProposalHover id={request.proposal?.id} className="font-mono text-xs font-bold text-indigo-600">{request.proposal?.tracker_number}</ProposalHover>
+                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-600">Round {request.funding_round}</span>
+                    <ProgrammeChip category={request.proposal?.category} />
+                    <span className="rounded-full bg-teal-50 px-2 py-0.5 text-[11px] font-semibold text-teal-700 ring-1 ring-teal-200">Paid out</span>
                 </div>
-                <div className="shrink-0">
-                    <button
-                        onClick={onSubmit}
-                        className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white
-                                   rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-                    >
-                        <FileText size={14} />
-                        Submit Settlement
+                <p className="mt-1.5 line-clamp-1 text-sm font-semibold text-gray-900"><ProposalHover id={request.proposal?.id}>{request.proposal?.title}</ProposalHover></p>
+                <p className="mt-0.5 flex flex-wrap gap-x-3 text-xs text-gray-500">
+                    {request.proposal?.pi?.name && <span className="inline-flex items-center gap-1"><User size={11} /> {request.proposal.pi.name}</span>}
+                    {request.proposal?.college?.name && <span className="inline-flex items-center gap-1"><Building2 size={11} /> {request.proposal.college.name}</span>}
+                </p>
+            </div>
+            <div className="flex items-center justify-between gap-4 sm:justify-end">
+                <div className="sm:text-right">
+                    <p className="text-[11px] text-gray-500">Received</p>
+                    <p className="text-lg font-bold tabular-nums text-gray-900">{formatCurrency(paid)}</p>
+                </div>
+                {canSettle ? (
+                    <button onClick={onSettle} className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
+                        <Receipt size={14} /> Settle
                     </button>
-                </div>
+                ) : (
+                    <span className="rounded-xl bg-gray-100 px-3 py-2 text-xs font-medium text-gray-500">Waiting for the team</span>
+                )}
             </div>
-        </div>
-    )
+        </article>
+    );
 }
 
-function SettlementCard({ settlement, onRefresh, canVerifyCollege, canVerifyFinance, budgetExhausted = false }) {
-    const { success, error } = useToast()
-    const { confirm, Dialog } = useConfirm()
-    const [verifying, setVerifying]   = useState(false)
-    // 'college' | 'finance' | null — which inline notes form is open
-    const [noteMode, setNoteMode]     = useState(null)
-    const [noteText, setNoteText]     = useState('')
-    // PDF viewer
-    const [pdfUrl, setPdfUrl]         = useState(null)
-    const [pdfLoading, setPdfLoading] = useState(false)
-    const [pdfOpen, setPdfOpen]       = useState(false)
+// ─── A settlement ─────────────────────────────────────────────────────────────
 
-    const statusConf = STATUS_CONFIG[settlement.status] || STATUS_CONFIG.submitted
+function SettlementCard({ settlement, can, budgetExhausted, onRefresh }) {
+    const { success, error } = useToast();
+    const { confirm, Dialog } = useConfirm();
+    const [busy, setBusy] = useState(false);
+    const [noteMode, setNoteMode] = useState(null);
+    const [noteText, setNoteText] = useState('');
+    const [pdfUrl, setPdfUrl] = useState(null);
+    const [pdfOpen, setPdfOpen] = useState(false);
+    const [pdfLoading, setPdfLoading] = useState(false);
 
-    // Revoke blob URL when card unmounts to avoid memory leaks
-    useEffect(() => () => { if (pdfUrl) URL.revokeObjectURL(pdfUrl) }, [pdfUrl])
+    useEffect(() => () => { if (pdfUrl) URL.revokeObjectURL(pdfUrl); }, [pdfUrl]);
+
+    const proposal = settlement.budget_request?.proposal;
+    const request = settlement.budget_request;
+    const midtermDone = (proposal?.midterm_evaluations ?? []).some((e) => ['scored', 'completed'].includes(e.status));
 
     const togglePdf = useCallback(async () => {
-        if (pdfOpen) { setPdfOpen(false); return }
-        if (pdfUrl)  { setPdfOpen(true);  return }
-        setPdfLoading(true)
+        if (pdfOpen) { setPdfOpen(false); return; }
+        if (pdfUrl) { setPdfOpen(true); return; }
+        setPdfLoading(true);
         try {
-            const res = await api.get(`/settlements/${settlement.id}/download-report`, { responseType: 'blob' })
-            const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }))
-            setPdfUrl(url)
-            setPdfOpen(true)
+            const res = await api.get(`/settlements/${settlement.id}/download-report`, { responseType: 'blob' });
+            setPdfUrl(URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' })));
+            setPdfOpen(true);
         } catch {
-            error('Failed to load expense report.')
+            error('The expense report could not be opened.');
         }
-        setPdfLoading(false)
-    }, [pdfOpen, pdfUrl, settlement.id])
+        setPdfLoading(false);
+    }, [pdfOpen, pdfUrl, settlement.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const submitCollegeVerify = async () => {
-        setVerifying(true)
+    const verify = async () => {
+        setBusy(true);
         try {
-            await api.post(`/settlements/${settlement.id}/verify`, { notes: noteText })
-            success('Settlement verified by college.')
-            setNoteMode(null); setNoteText('')
-            onRefresh()
-        } catch (e) {
-            error(e.response?.data?.message || 'Failed to verify.')
-        }
-        setVerifying(false)
-    }
+            await api.post(`/settlements/${settlement.id}/verify`, { notes: noteText });
+            success('Verified for the college and sent to finance.');
+            setNoteMode(null); setNoteText('');
+            onRefresh();
+        } catch (e) { error(e.response?.data?.message || 'The settlement could not be verified.'); }
+        setBusy(false);
+    };
 
-    const submitFinanceFinalize = async () => {
-        const ok = await confirm({
-            title: 'Finalize Settlement?',
-            description: 'This will close this funding round and allow the PI to submit the next round.',
-            confirmLabel: 'Finalize',
-        })
-        if (!ok) return
-        setVerifying(true)
+    const finalize = async () => {
+        const ok = await confirm({ title: 'Finalize this settlement?', description: 'This closes the funding round; the team can then request the next one.', confirmLabel: 'Finalize' });
+        if (!ok) return;
+        setBusy(true);
         try {
-            await api.post(`/settlements/${settlement.id}/finalize`, { notes: noteText })
-            success('Settlement finalized. Next round is now available for the PI.')
-            setNoteMode(null); setNoteText('')
-            onRefresh()
-        } catch (e) {
-            error(e.response?.data?.message || 'Failed to finalize.')
-        }
-        setVerifying(false)
-    }
+            await api.post(`/settlements/${settlement.id}/finalize`, { notes: noteText });
+            success('Settlement finalized. The next round is open to the team.');
+            setNoteMode(null); setNoteText('');
+            onRefresh();
+        } catch (e) { error(e.response?.data?.message || 'The settlement could not be finalized.'); }
+        setBusy(false);
+    };
 
-    const proposal     = settlement.budget_request?.proposal
-    const budgetRequest = settlement.budget_request
+    const canCollege = can.college && settlement.status === 'submitted';
+    const canFinance = can.finance && settlement.status === 'college_verified';
+    const yourTurn = (canCollege && midtermDone) || canFinance;
 
     return (
-        <div className={`bg-white border rounded-xl p-5 transition-all hover:shadow-sm ${
-            settlement.status === 'finance_verified' ? 'border-green-200' :
-            settlement.status === 'college_verified' ? 'border-purple-200' :
-            'border-gray-200'
-        }`}>
-            {/* Header */}
-            <div className="flex items-start justify-between gap-4 mb-4">
-                <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 mb-1">
-                        <span className="font-mono text-xs font-bold text-blue-600 bg-blue-50
-                                         px-2 py-0.5 rounded border border-blue-200">
-                            {proposal?.tracker_number}
-                        </span>
-                        <span className="text-xs text-gray-400">Round {budgetRequest?.funding_round}</span>
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusConf.color}`}>
-                            {statusConf.icon} {statusConf.label}
-                        </span>
-                    </div>
-                    <h3 className="text-sm font-semibold text-gray-900 truncate">{proposal?.title}</h3>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                        {proposal?.college?.name} · PI: {proposal?.pi?.name}
-                    </p>
-                </div>
-            </div>
-
-            {/* Progress timeline */}
-            <div className="flex items-center gap-2 mb-4">
-                {[
-                    { step: 1, label: 'Submitted',        done: true,                             actor: settlement.submitted_by?.name },
-                    { step: 2, label: 'College Verified', done: !!settlement.college_verified_at, actor: settlement.college_verified_by_user?.name },
-                    { step: 3, label: 'Finance Verified', done: !!settlement.finance_verified_at, actor: settlement.finance_verified_by_user?.name },
-                ].map((s, i) => (
-                    <div key={s.step} className="flex items-center gap-2 flex-1">
-                        <div className="flex flex-col items-center">
-                            <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
-                                s.done ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-400'
-                            }`}>
-                                {s.done ? '✓' : s.step}
-                            </div>
-                            <p className="text-xs text-center text-gray-500 mt-1 leading-tight">{s.label}</p>
-                            {s.actor && <p className="text-xs text-center text-gray-400">{s.actor}</p>}
+        <article className={`overflow-hidden rounded-2xl border bg-white ${yourTurn ? 'border-indigo-200 ring-1 ring-indigo-100' : 'border-gray-200'}`}>
+            <div className="space-y-4 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            <ProposalHover id={proposal?.id}><Link href={`/proposals/${proposal?.id}`} className="font-mono text-xs font-bold text-indigo-600">{proposal?.tracker_number}</Link></ProposalHover>
+                            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-600">Round {request?.funding_round}</span>
+                            <ProgrammeChip category={proposal?.category} />
+                            <StatusBadge status={settlement.status} />
+                            {yourTurn && <span className="rounded-full bg-indigo-600 px-2 py-0.5 text-[11px] font-semibold text-white">Your turn</span>}
                         </div>
-                        {i < 2 && (
-                            <div className={`flex-1 h-0.5 mb-6 ${s.done ? 'bg-green-400' : 'bg-gray-200'}`} />
-                        )}
+                        <p className="mt-1.5 line-clamp-1 text-sm font-semibold text-gray-900"><ProposalHover id={proposal?.id}>{proposal?.title}</ProposalHover></p>
+                        <p className="mt-0.5 text-xs text-gray-500">{[proposal?.pi?.name, proposal?.college?.name].filter(Boolean).join(' · ')}</p>
                     </div>
-                ))}
-            </div>
+                </div>
 
-            {/* Financial summary */}
-            <div className="grid grid-cols-1 gap-3 mb-4 sm:grid-cols-3">
-                <div className="bg-gray-50 rounded-lg p-3 text-center">
-                    <p className="text-xs text-gray-500">Approved</p>
-                    <p className="text-sm font-bold text-gray-900">
-                        ETB {parseFloat(budgetRequest?.total_amount || 0).toLocaleString()}
+                <Steps settlement={settlement} />
+                <SpendBar approved={money(request?.total_amount)} spent={money(settlement.total_spent)} unspent={money(settlement.unspent_amount)} />
+
+                {money(settlement.unspent_amount) > 0 && settlement.status !== 'finance_verified' && (
+                    <p className="flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                        <PiggyBank size={13} className="shrink-0" /> {formatCurrency(settlement.unspent_amount)} unspent is due back to the institution.
                     </p>
-                </div>
-                <div className="bg-blue-50 rounded-lg p-3 text-center">
-                    <p className="text-xs text-gray-500">Total Spent</p>
-                    <p className="text-sm font-bold text-blue-700">
-                        ETB {parseFloat(settlement.total_spent || 0).toLocaleString()}
-                    </p>
-                </div>
-                <div className={`rounded-lg p-3 text-center ${
-                    parseFloat(settlement.unspent_amount || 0) > 0 ? 'bg-amber-50' : 'bg-green-50'
-                }`}>
-                    <p className="text-xs text-gray-500">Unspent</p>
-                    <p className={`text-sm font-bold ${
-                        parseFloat(settlement.unspent_amount || 0) > 0 ? 'text-amber-700' : 'text-green-700'
-                    }`}>
-                        ETB {parseFloat(settlement.unspent_amount || 0).toLocaleString()}
-                    </p>
-                </div>
-            </div>
+                )}
 
-            {/* Saved notes */}
-            {settlement.college_notes && (
-                <div className="mb-3 p-3 bg-purple-50 border border-purple-200 rounded-lg">
-                    <p className="text-xs font-semibold text-purple-700 mb-0.5">College Notes:</p>
-                    <p className="text-xs text-purple-600">{settlement.college_notes}</p>
-                </div>
-            )}
-            {settlement.finance_notes && (
-                <div className="mb-3 p-3 bg-green-50 border border-green-200 rounded-lg">
-                    <p className="text-xs font-semibold text-green-700 mb-0.5">Finance Notes:</p>
-                    <p className="text-xs text-green-600">{settlement.finance_notes}</p>
-                </div>
-            )}
-
-            {/* Expense report — view + download */}
-            {settlement.expense_report_path && (
-                <div className="mb-3">
-                    <div className="flex items-center gap-3">
-                        <FileText size={14} className="text-blue-500 shrink-0" />
-                        <span className="text-xs text-gray-500">Expense Report</span>
-                        <button
-                            onClick={togglePdf}
-                            disabled={pdfLoading}
-                            className="text-xs text-blue-600 hover:underline disabled:opacity-50"
-                        >
-                            {pdfLoading ? 'Loading…' : pdfOpen ? 'Hide' : 'View'}
-                        </button>
-                        <span className="text-gray-300">|</span>
-                        <button
-                            onClick={() => downloadFile(
-                                `/settlements/${settlement.id}/download-report`,
-                                'expense-report.pdf'
-                            ).catch(() => {})}
-                            className="text-xs text-blue-600 hover:underline"
-                        >
-                            Download
-                        </button>
-                    </div>
-
-                    {pdfOpen && pdfUrl && (
-                        <div className="mt-2 border border-gray-200 rounded-lg overflow-hidden">
-                            <iframe
-                                src={pdfUrl}
-                                title="Expense Report"
-                                className="w-full h-96"
-                            />
-                        </div>
-                    )}
-                </div>
-            )}
-
-            {/* Actions */}
-            <div className="pt-2 border-t border-gray-100 space-y-3">
-                <div className="flex flex-wrap gap-2 items-center">
-                    {(() => {
-                        const midtermEvals = settlement.budget_request?.proposal?.midterm_evaluations ?? []
-                        const midtermReported = midtermEvals.some(e =>
-                            ['scored', 'completed'].includes(e.status)
-                        )
-
-                        return (
-                            <>
-                                {/* Step 1 — College Verify */}
-                                {canVerifyCollege && settlement.status === 'submitted' && noteMode !== 'college' && (
-                                    midtermReported ? (
-                                        <button
-                                            onClick={() => { setNoteMode('college'); setNoteText('') }}
-                                            className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm
-                                                       font-medium hover:bg-purple-700"
-                                        >
-                                            🏛 Verify (College)
-                                        </button>
-                                    ) : (
-                                        <div title="Mid-Term M&E meeting must be held and scored first"
-                                            className="flex items-center gap-1.5 px-4 py-2 bg-amber-50 border
-                                                       border-amber-200 text-amber-700 rounded-lg text-sm font-medium
-                                                       cursor-not-allowed select-none">
-                                            🔒 College Verify — awaiting Mid-Term M&E scoring
-                                        </div>
-                                    )
-                                )}
-
-                                {/* Step 2 — Finance Finalize (active only after college verified) */}
-                                {canVerifyFinance && settlement.status === 'college_verified' && noteMode !== 'finance' && (
-                                    <button
-                                        onClick={() => { setNoteMode('finance'); setNoteText('') }}
-                                        className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm
-                                                   font-medium hover:bg-green-700"
-                                    >
-                                        ✅ Finalize (Finance)
-                                    </button>
-                                )}
-
-                                {/* Finance step locked — waiting for college */}
-                                {canVerifyFinance && settlement.status === 'submitted' && (
-                                    <div title="College must verify before Finance can finalize"
-                                        className="flex items-center gap-1.5 px-4 py-2 bg-gray-100 text-gray-400
-                                                   rounded-lg text-sm font-medium cursor-not-allowed select-none">
-                                        🔒 Finalize (Finance) — awaiting college verification
-                                    </div>
-                                )}
-                            </>
-                        )
-                    })()}
-
-                    {settlement.status === 'finance_verified' && (
-                        budgetExhausted ? (
-                            <div className="flex items-center gap-1.5 px-4 py-2 bg-amber-50 border
-                                            border-amber-300 text-amber-800 rounded-lg text-sm font-semibold">
-                                🏁 Settlement Complete — No More Budget Request is needed
-                            </div>
-                        ) : (
-                            <div className="flex items-center gap-1.5 px-4 py-2 bg-green-50 border
-                                            border-green-200 text-green-700 rounded-lg text-sm font-medium">
-                                <CheckCircle size={14} />
-                                Settlement Complete — Next Round Available
-                            </div>
-                        )
-                    )}
-                </div>
-
-                {/* Inline notes form — college verify */}
-                {noteMode === 'college' && (
-                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 space-y-2">
-                        <label className="block text-xs font-semibold text-purple-700">
-                            Verification notes (optional)
-                        </label>
-                        <textarea
-                            autoFocus
-                            rows={3}
-                            value={noteText}
-                            onChange={e => setNoteText(e.target.value)}
-                            placeholder="Add any notes about this verification…"
-                            className="w-full text-sm border border-purple-300 rounded-lg px-3 py-2
-                                       focus:outline-none focus:ring-2 focus:ring-purple-400 resize-none"
-                        />
-                        <div className="flex gap-2 justify-end">
-                            <button
-                                onClick={() => { setNoteMode(null); setNoteText('') }}
-                                className="px-3 py-1.5 text-xs text-gray-600 border border-gray-300
-                                           rounded-lg hover:bg-gray-50"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={submitCollegeVerify}
-                                disabled={verifying}
-                                className="px-3 py-1.5 text-xs bg-purple-600 text-white rounded-lg
-                                           font-medium hover:bg-purple-700 disabled:opacity-50"
-                            >
-                                {verifying ? 'Verifying…' : 'Confirm Verify'}
-                            </button>
-                        </div>
+                {(settlement.college_notes || settlement.finance_notes) && (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                        {settlement.college_notes && <div className="rounded-xl bg-sky-50 px-3 py-2"><p className="text-[11px] font-semibold text-sky-700">College notes</p><p className="text-xs text-sky-900">{settlement.college_notes}</p></div>}
+                        {settlement.finance_notes && <div className="rounded-xl bg-emerald-50 px-3 py-2"><p className="text-[11px] font-semibold text-emerald-700">Finance notes</p><p className="text-xs text-emerald-900">{settlement.finance_notes}</p></div>}
                     </div>
                 )}
 
-                {/* Inline notes form — finance finalize */}
-                {noteMode === 'finance' && (
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-3 space-y-2">
-                        <label className="block text-xs font-semibold text-green-700">
-                            Finance notes (optional)
-                        </label>
-                        <textarea
-                            autoFocus
-                            rows={3}
-                            value={noteText}
-                            onChange={e => setNoteText(e.target.value)}
-                            placeholder="Add any notes about this finalization…"
-                            className="w-full text-sm border border-green-300 rounded-lg px-3 py-2
-                                       focus:outline-none focus:ring-2 focus:ring-green-400 resize-none"
-                        />
-                        <div className="flex gap-2 justify-end">
-                            <button
-                                onClick={() => { setNoteMode(null); setNoteText('') }}
-                                className="px-3 py-1.5 text-xs text-gray-600 border border-gray-300
-                                           rounded-lg hover:bg-gray-50"
-                            >
-                                Cancel
+                {settlement.expense_report_path ? (
+                    <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-700"><FileText size={14} className="text-indigo-500" /> Expense report</span>
+                            <button onClick={togglePdf} disabled={pdfLoading} className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-indigo-600 hover:bg-indigo-50 disabled:opacity-50">
+                                {pdfLoading ? <Loader2 size={12} className="animate-spin" /> : pdfOpen ? <EyeOff size={12} /> : <Eye size={12} />} {pdfOpen ? 'Hide' : 'View'}
                             </button>
-                            <button
-                                onClick={submitFinanceFinalize}
-                                disabled={verifying}
-                                className="px-3 py-1.5 text-xs bg-green-600 text-white rounded-lg
-                                           font-medium hover:bg-green-700 disabled:opacity-50"
-                            >
-                                {verifying ? 'Finalizing…' : 'Confirm Finalize'}
+                            <button onClick={() => downloadFile(`/settlements/${settlement.id}/download-report`, 'expense-report.pdf').catch(() => error('The report could not be downloaded.'))}
+                                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-indigo-600 hover:bg-indigo-50">
+                                <Download size={12} /> Download
+                            </button>
+                        </div>
+                        {pdfOpen && pdfUrl && <iframe src={pdfUrl} title="Expense report" className="mt-2 h-96 w-full rounded-xl border border-gray-200" />}
+                    </div>
+                ) : (
+                    <p className="text-xs text-gray-400">No expense report attached.</p>
+                )}
+            </div>
+
+            <div className="space-y-3 border-t border-gray-100 bg-gray-50/60 px-4 py-3">
+                <div className="flex flex-wrap items-center gap-2">
+                    {canCollege && noteMode !== 'college' && (midtermDone ? (
+                        <button onClick={() => { setNoteMode('college'); setNoteText(''); }} className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700">
+                            <Building2 size={12} /> Verify for the college
+                        </button>
+                    ) : (
+                        <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800 ring-1 ring-amber-200" title="The midterm evaluation must be held and scored first">
+                            <Lock size={12} /> Waits for the midterm evaluation score
+                        </span>
+                    ))}
+                    {canFinance && noteMode !== 'finance' && (
+                        <button onClick={() => { setNoteMode('finance'); setNoteText(''); }} className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">
+                            <Landmark size={12} /> Finalize for finance
+                        </button>
+                    )}
+                    {can.finance && settlement.status === 'submitted' && (
+                        <span className="inline-flex items-center gap-1.5 rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-500"><Lock size={12} /> Finance step opens after the college verifies</span>
+                    )}
+                    {settlement.status === 'finance_verified' && (
+                        <span className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold ${budgetExhausted ? 'bg-slate-100 text-slate-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                            {budgetExhausted ? <><Flag size={12} /> Settled — the whole award is used</> : <><CheckCircle2 size={12} /> Settled — the next round is open</>}
+                        </span>
+                    )}
+                    {settlement.status !== 'finance_verified' && !canCollege && !canFinance && !can.finance && (
+                        <span className="inline-flex items-center gap-1.5 text-xs text-gray-500"><Clock size={12} /> {settlement.status === 'submitted' ? 'With the college for verification' : 'With finance to finalize'}</span>
+                    )}
+                </div>
+
+                {noteMode && (
+                    <div className="space-y-2 rounded-xl border border-gray-200 bg-white p-3">
+                        <label className="block text-xs font-semibold text-gray-700">{noteMode === 'college' ? 'Verification notes' : 'Finance notes'} <span className="font-normal text-gray-400">(optional)</span></label>
+                        <textarea autoFocus rows={3} value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Anything the team or finance should know…"
+                            className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-base focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 sm:text-sm" />
+                        <div className="flex justify-end gap-2">
+                            <button onClick={() => { setNoteMode(null); setNoteText(''); }} className="rounded-lg px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-100">Cancel</button>
+                            <button onClick={noteMode === 'college' ? verify : finalize} disabled={busy}
+                                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50 ${noteMode === 'college' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-emerald-600 hover:bg-emerald-700'}`}>
+                                {busy && <Loader2 size={12} className="animate-spin" />} {noteMode === 'college' ? 'Confirm verification' : 'Finalize'}
                             </button>
                         </div>
                     </div>
                 )}
             </div>
             <Dialog />
-        </div>
-    )
+        </article>
+    );
 }
 
-function SettlementsTable({ settlements }) {
-    const fmtDate = (d) => d
-        ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-        : '—'
+// ─── Settle ───────────────────────────────────────────────────────────────────
 
-    return (
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-            <div className="hidden sm:block overflow-x-auto">
-                <table className="w-full text-sm">
-                    <thead className="bg-gray-50 border-b border-gray-200">
-                        <tr>
-                            <th className="px-4 py-3 text-xs font-semibold text-gray-400 uppercase w-10">#</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Proposal</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Round</th>
-                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Approved</th>
-                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Spent</th>
-                            <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Unspent</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Status</th>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Submitted</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                        {settlements.map((s, i) => {
-                            const statusConf = STATUS_CONFIG[s.status] || STATUS_CONFIG.submitted
-                            return (
-                                <tr key={s.id} className="hover:bg-gray-50">
-                                    <td className="px-4 py-3 text-xs font-medium text-gray-400 tabular-nums w-10">{i + 1}</td>
-                                    <td className="px-4 py-3">
-                                        <p className="font-mono text-xs text-blue-600 font-bold">
-                                            {s.budget_request?.proposal?.tracker_number}
-                                        </p>
-                                        <p className="text-xs text-gray-500 truncate max-w-xs">
-                                            {s.budget_request?.proposal?.title}
-                                        </p>
-                                    </td>
-                                    <td className="px-4 py-3 text-center text-xs font-bold text-gray-500">
-                                        Round {s.budget_request?.funding_round}
-                                    </td>
-                                    <td className="px-4 py-3 text-right text-sm font-semibold text-gray-900">
-                                        ETB {parseFloat(s.budget_request?.total_amount || 0).toLocaleString()}
-                                    </td>
-                                    <td className="px-4 py-3 text-right text-sm font-semibold text-blue-700">
-                                        ETB {parseFloat(s.total_spent || 0).toLocaleString()}
-                                    </td>
-                                    <td className={`px-4 py-3 text-right text-sm font-semibold ${
-                                        parseFloat(s.unspent_amount || 0) > 0 ? 'text-amber-600' : 'text-green-600'
-                                    }`}>
-                                        ETB {parseFloat(s.unspent_amount || 0).toLocaleString()}
-                                    </td>
-                                    <td className="px-4 py-3">
-                                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusConf.color}`}>
-                                            {statusConf.icon} {statusConf.label}
-                                        </span>
-                                    </td>
-                                    <td className="px-4 py-3 text-xs text-gray-500">
-                                        {fmtDate(s.created_at)}
-                                    </td>
-                                </tr>
-                            )
-                        })}
-                    </tbody>
-                </table>
-            </div>
+function SettleModal({ request, onClose, onSuccess }) {
+    const { success, error } = useToast();
+    const received = money(request.total_disbursed || request.total_amount);
+    const [spent, setSpent] = useState(String(received || ''));
+    const [file, setFile] = useState(null);
+    const [submitting, setSubmitting] = useState(false);
+    const fileRef = useRef(null);
 
-            {/* Mobile: stacked cards */}
-            <div className="sm:hidden divide-y divide-gray-100">
-                {settlements.map(s => {
-                    const statusConf = STATUS_CONFIG[s.status] || STATUS_CONFIG.submitted
-                    return (
-                        <div key={s.id} className="px-4 py-3">
-                            <div className="flex items-center justify-between gap-2 mb-1">
-                                <p className="font-mono text-xs text-blue-600 font-bold">
-                                    {s.budget_request?.proposal?.tracker_number}
-                                </p>
-                                <span className={`text-xs px-2 py-1 rounded-full font-medium ${statusConf.color}`}>
-                                    {statusConf.icon} {statusConf.label}
-                                </span>
-                            </div>
-                            <p className="text-xs text-gray-600 mb-2">{s.budget_request?.proposal?.title}</p>
-                            <div className="grid grid-cols-1 gap-2 text-xs mb-1.5 sm:grid-cols-3">
-                                <div>
-                                    <p className="text-gray-400">Approved</p>
-                                    <p className="font-semibold text-gray-900">ETB {parseFloat(s.budget_request?.total_amount || 0).toLocaleString()}</p>
-                                </div>
-                                <div>
-                                    <p className="text-gray-400">Spent</p>
-                                    <p className="font-semibold text-blue-700">ETB {parseFloat(s.total_spent || 0).toLocaleString()}</p>
-                                </div>
-                                <div>
-                                    <p className="text-gray-400">Unspent</p>
-                                    <p className={`font-semibold ${parseFloat(s.unspent_amount || 0) > 0 ? 'text-amber-600' : 'text-green-600'}`}>
-                                        ETB {parseFloat(s.unspent_amount || 0).toLocaleString()}
-                                    </p>
-                                </div>
-                            </div>
-                            <p className="text-[11px] text-gray-400">Round {s.budget_request?.funding_round} · Submitted {fmtDate(s.created_at)}</p>
-                        </div>
-                    )
-                })}
-            </div>
-        </div>
-    )
-}
+    const spentValue = parseFloat(spent) || 0;
+    const unspent = Math.max(0, received - spentValue);
+    const over = spentValue > received;
 
-function SubmitSettlementModal({ request, onClose, onSuccess }) {
-    const { success, error } = useToast()
-    const [form, setForm] = useState({
-        total_spent:    String(request.total_disbursed || request.total_amount || ''),
-        unspent_amount: '0',
-    })
-    const [file, setFile] = useState(null)
-    const [submitting, setSubmitting] = useState(false)
-    const fileRef = useRef(null)
-
-    const totalDisbursed = parseFloat(request.total_disbursed || request.total_amount || 0)
-
-    useEffect(() => {
-        const spent = parseFloat(form.total_spent) || 0
-        const unspent = Math.max(0, totalDisbursed - spent)
-        setForm(p => ({ ...p, unspent_amount: unspent.toFixed(2) }))
-    }, [form.total_spent])
-
-    const handleSubmit = async () => {
-        if (!form.total_spent || parseFloat(form.total_spent) < 0) {
-            error('Please enter total amount spent.')
-            return
-        }
-        if (parseFloat(form.total_spent) > totalDisbursed) {
-            error('Amount spent cannot exceed total disbursed.')
-            return
-        }
-
-        setSubmitting(true)
+    const submit = async () => {
+        if (spent === '' || spentValue < 0) return error('Enter how much was spent.');
+        if (over) return error('Spending can’t be more than what was received.');
+        setSubmitting(true);
         try {
-            const res = await api.post('/settlements', {
-                budget_request_id: request.id,
-                total_spent:       parseFloat(form.total_spent),
-                unspent_amount:    parseFloat(form.unspent_amount),
-            })
-
-            const settlementId = res.data?.data?.id
-
-            if (file && settlementId) {
-                const fd = new FormData()
-                fd.append('file', file)
-                await api.post(`/settlements/${settlementId}/upload-report`, fd, {
-                    headers: { 'Content-Type': 'multipart/form-data' },
-                })
+            const res = await api.post('/settlements', { budget_request_id: request.id, total_spent: spentValue, unspent_amount: Number(unspent.toFixed(2)) });
+            const id = res.data?.data?.id;
+            if (file && id) {
+                const fd = new FormData();
+                fd.append('file', file);
+                await api.post(`/settlements/${id}/upload-report`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
             }
-
-            success('Settlement submitted successfully. Awaiting college verification.')
-            onSuccess()
+            success('Settlement submitted. The college will verify it next.');
+            onSuccess();
         } catch (e) {
-            error(e.response?.data?.message || 'Failed to submit settlement.')
+            error(e.response?.data?.message || 'The settlement could not be submitted.');
         }
-        setSubmitting(false)
-    }
-
-    const totalApproved = parseFloat(request.total_amount || 0)
+        setSubmitting(false);
+    };
 
     return (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg">
-
-                {/* Header */}
-                <div className="bg-linear-to-r from-blue-600 to-indigo-600 rounded-t-2xl px-6 py-5">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h2 className="text-lg font-bold text-white">Submit Settlement</h2>
-                            <p className="text-blue-100 text-xs mt-1">
-                                {request.proposal?.tracker_number} · Round {request.funding_round}
-                            </p>
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 backdrop-blur-sm sm:items-center sm:p-4">
+            <div role="dialog" aria-modal="true" className="flex max-h-[94vh] w-full max-w-lg flex-col rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
+                <div className="flex items-start justify-between gap-3 border-b border-gray-100 px-6 py-4">
+                    <div className="flex min-w-0 items-center gap-3">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600"><Receipt size={18} /></span>
+                        <div className="min-w-0">
+                            <h2 className="text-lg font-bold text-gray-900">Settle spending</h2>
+                            <p className="truncate text-xs text-gray-500">{request.proposal?.tracker_number} · Round {request.funding_round}</p>
                         </div>
-                        <button onClick={onClose} className="text-white/70 hover:text-white">
-                            <X size={20} />
+                    </div>
+                    <button onClick={onClose} aria-label="Close" className="rounded-lg p-1 text-gray-400 hover:bg-gray-100"><X size={16} /></button>
+                </div>
+
+                <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
+                    <div className="grid grid-cols-2 gap-2 rounded-xl bg-gray-50 p-3 text-center">
+                        <div><p className="text-[11px] text-gray-500">Approved</p><p className="text-sm font-bold tabular-nums text-gray-900">{formatCurrency(request.total_amount)}</p></div>
+                        <div><p className="text-[11px] text-gray-500">Received</p><p className="text-sm font-bold tabular-nums text-teal-700">{formatCurrency(received)}</p></div>
+                    </div>
+
+                    <label className="block">
+                        <span className="mb-1 block text-sm font-medium text-gray-700">Total spent ({currency()})</span>
+                        <input type="number" min="0" step="0.01" value={spent} onChange={(e) => setSpent(e.target.value)}
+                            className={`w-full rounded-xl border px-4 py-3 text-xl font-bold tabular-nums focus:outline-none focus:ring-2 ${over ? 'border-red-300 bg-red-50 text-red-700 focus:ring-red-100' : 'border-gray-200 focus:border-indigo-400 focus:ring-indigo-100'}`} />
+                    </label>
+
+                    <div className={`flex items-center justify-between rounded-xl px-4 py-3 ${unspent > 0 ? 'bg-amber-50 text-amber-800' : 'bg-emerald-50 text-emerald-800'}`}>
+                        <span className="text-sm">{unspent > 0 ? 'Unspent — to be returned' : 'Everything received was spent'}</span>
+                        <span className="text-lg font-bold tabular-nums">{formatCurrency(unspent)}</span>
+                    </div>
+
+                    <div>
+                        <p className="mb-1 text-sm font-medium text-gray-700">Expense report (PDF) <span className="font-normal text-gray-400">· recommended</span></p>
+                        <button type="button" onClick={() => fileRef.current?.click()}
+                            className={`flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed px-4 py-5 text-sm transition ${file ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : 'border-gray-200 text-gray-500 hover:border-indigo-300 hover:bg-indigo-50'}`}>
+                            {file ? <><FileText size={16} /> <span className="truncate font-medium">{file.name}</span></> : <><Upload size={16} /> Choose the receipts / expense report (max 10 MB)</>}
                         </button>
+                        {file && <button type="button" onClick={() => { setFile(null); if (fileRef.current) fileRef.current.value = ''; }} className="mt-1 text-xs font-medium text-gray-500 hover:text-red-600">Remove file</button>}
+                        <input ref={fileRef} type="file" accept=".pdf" className="hidden" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
                     </div>
                 </div>
 
-                <div className="p-6 space-y-5">
-
-                    {/* Budget reference */}
-                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-4">
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <p className="text-xs text-gray-500">Approved Budget</p>
-                                <p className="text-lg font-bold text-gray-900">
-                                    ETB {totalApproved.toLocaleString()}
-                                </p>
-                            </div>
-                            <div>
-                                <p className="text-xs text-gray-500">Total Disbursed</p>
-                                <p className="text-lg font-bold text-green-700">
-                                    ETB {totalDisbursed.toLocaleString()}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Total spent */}
-                    <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-1">
-                            Total Amount Spent (ETB) <span className="text-red-500">*</span>
-                        </label>
-                        <input
-                            type="number"
-                            min="0"
-                            max={totalDisbursed}
-                            step="0.01"
-                            value={form.total_spent}
-                            onChange={e => setForm(p => ({ ...p, total_spent: e.target.value }))}
-                            className="w-full border border-gray-300 rounded-xl px-4 py-3 text-lg
-                                       font-bold focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            placeholder="0.00"
-                        />
-                    </div>
-
-                    {/* Unspent (auto-calculated) */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Unspent Amount (auto-calculated)
-                        </label>
-                        <div className={`w-full border rounded-xl px-4 py-3 text-lg font-bold ${
-                            parseFloat(form.unspent_amount) > 0
-                                ? 'border-amber-300 bg-amber-50 text-amber-700'
-                                : 'border-green-300 bg-green-50 text-green-700'
-                        }`}>
-                            ETB {parseFloat(form.unspent_amount || 0).toLocaleString()}
-                        </div>
-                        {parseFloat(form.unspent_amount) > 0 && (
-                            <p className="text-xs text-amber-600 mt-1">
-                                ⚠️ Unspent funds must be returned to the university.
-                            </p>
-                        )}
-                    </div>
-
-                    {/* Expense report upload */}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Expense Report (PDF) — Recommended
-                        </label>
-                        <div
-                            className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer
-                                        transition-colors ${
-                                file ? 'border-green-400 bg-green-50' : 'border-gray-300 hover:border-blue-400'
-                            }`}
-                            onClick={() => fileRef.current?.click()}
-                        >
-                            {file ? (
-                                <div className="flex items-center justify-center gap-2">
-                                    <FileText size={16} className="text-green-500" />
-                                    <span className="text-sm text-green-700 font-medium">{file.name}</span>
-                                    <button
-                                        type="button"
-                                        onClick={e => { e.stopPropagation(); setFile(null) }}
-                                        className="text-red-400 hover:text-red-600"
-                                    >
-                                        <X size={14} />
-                                    </button>
-                                </div>
-                            ) : (
-                                <div>
-                                    <Upload size={20} className="mx-auto text-gray-400 mb-1" />
-                                    <p className="text-sm text-gray-500">Click to upload expense report (PDF)</p>
-                                    <p className="text-xs text-gray-400">Max 10MB</p>
-                                </div>
-                            )}
-                        </div>
-                        <input
-                            ref={fileRef}
-                            type="file"
-                            accept=".pdf"
-                            className="hidden"
-                            onChange={e => setFile(e.target.files[0] || null)}
-                        />
-                    </div>
-                </div>
-
-                {/* Footer */}
-                <div className="flex gap-3 px-6 pb-6">
-                    <button
-                        onClick={onClose}
-                        className="flex-1 px-4 py-3 border border-gray-300 rounded-xl text-sm
-                                   text-gray-700 hover:bg-gray-50 font-medium"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        onClick={handleSubmit}
-                        disabled={submitting}
-                        className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-xl text-sm
-                                   font-bold hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                    >
-                        {submitting ? 'Submitting...' : 'Submit Settlement'}
+                <div className="flex gap-3 border-t border-gray-100 px-6 py-4">
+                    <button onClick={onClose} className="flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50">Cancel</button>
+                    <button onClick={submit} disabled={submitting || over}
+                        className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">
+                        {submitting && <Loader2 size={14} className="animate-spin" />} Submit settlement
                     </button>
                 </div>
             </div>
         </div>
-    )
+    );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
+export default function Settlements() {
+    const { error } = useToast();
+    const { user, hasPermission, accessScope } = useAuth();
+    const [view, setView] = useViewPreference('settlements', 'card');
+    const [tab, setTab] = useState(null);
+    const [settlements, setSettlements] = useState(null);
+    const [toSettle, setToSettle] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [settling, setSettling] = useState(null);
+    const [search, setSearch] = useState('');
+    const [programme, setProgramme] = useState('');
+    const [college, setCollege] = useState('');
+    const [round, setRound] = useState('');
+
+    const can = {
+        college: hasPermission('settlements.verify_college'),
+        finance: hasPermission('settlements.verify_finance'),
+    };
+    // Only the project's own team settles it; officers just see what is outstanding.
+    const canSettle = (r) => accessScope.type === 'own' || r.proposal?.pi_user_id === user?.id;
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        try {
+            const [s, p] = await Promise.all([api.get('/settlements'), api.get('/settlements/pending')]);
+            const list = s.data?.data ?? [];
+            const pending = p.data?.data ?? [];
+            setSettlements(list);
+            setToSettle(pending);
+            setTab((current) => current ?? (
+                pending.some(canSettle) ? 'settle'
+                    : can.college && list.some((x) => x.status === 'submitted') ? 'college'
+                    : can.finance && list.some((x) => x.status === 'college_verified') ? 'finance'
+                    : 'all'));
+        } catch {
+            setSettlements((v) => v ?? []);
+            error('Could not load settlements.');
+        }
+        setLoading(false);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    useEffect(() => { load(); }, [load]);
+
+    const all = settlements ?? [];
+    const q = search.trim().toLowerCase();
+    const matches = (p, r) => (!programme || p?.category === programme)
+        && (!college || p?.college_id === college)
+        && (!round || String(r) === round)
+        && (!q || [p?.tracker_number, p?.title, p?.pi?.name].some((v) => v?.toLowerCase().includes(q)));
+    const projects = [...toSettle.map((r) => r.proposal), ...all.map((x) => x.budget_request?.proposal)].filter(Boolean);
+    const colleges = [...new Map(projects.filter((p) => p.college).map((p) => [p.college_id, p.college.name])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+    const usedProgrammes = [...new Set(projects.map((p) => p.category).filter(Boolean))];
+    const rounds = [...new Set([...toSettle.map((r) => r.funding_round), ...all.map((x) => x.budget_request?.funding_round)].filter(Boolean))].sort((a, b) => a - b);
+    const filtersOn = !!(search || programme || college || round);
+    const clearFilters = () => { setSearch(''); setProgramme(''); setCollege(''); setRound(''); };
+    const list = all.filter((s) => matches(s.budget_request?.proposal, s.budget_request?.funding_round));
+    const pending = toSettle.filter((r) => matches(r.proposal, r.funding_round));
+
+    // Has every finalized settlement of a project used up its whole award?
+    const exhausted = useMemo(() => {
+        const spent = new Map();
+        const award = new Map();
+        all.forEach((s) => {
+            const p = s.budget_request?.proposal;
+            if (!p) return;
+            award.set(p.id, money(p.award?.awarded_amount));
+            if (s.status === 'finance_verified') spent.set(p.id, (spent.get(p.id) ?? 0) + money(s.total_spent));
+        });
+        return (id) => (award.get(id) ?? 0) > 0 && (spent.get(id) ?? 0) >= award.get(id);
+    }, [all]);
+
+    const tabs = [
+        { key: 'settle', label: 'To settle', count: pending.length },
+        { key: 'college', label: 'College review', count: list.filter((s) => s.status === 'submitted').length },
+        { key: 'finance', label: 'Finance review', count: list.filter((s) => s.status === 'college_verified').length },
+        { key: 'done', label: 'Finalized', count: list.filter((s) => s.status === 'finance_verified').length },
+        { key: 'all', label: 'All', count: list.length },
+    ];
+    const shown = tab === 'college' ? list.filter((s) => s.status === 'submitted')
+        : tab === 'finance' ? list.filter((s) => s.status === 'college_verified')
+        : tab === 'done' ? list.filter((s) => s.status === 'finance_verified')
+        : list;
+
+    const unspentDue = all.filter((s) => s.status !== 'finance_verified').reduce((sum, s) => sum + money(s.unspent_amount), 0);
+    const settledSpent = all.filter((s) => s.status === 'finance_verified').reduce((sum, s) => sum + money(s.total_spent), 0);
+
+    const columns = [
+        { key: 'proj', label: 'Project', render: (s) => (
+            <div className="min-w-0">
+                <ProposalHover id={s.budget_request?.proposal?.id} className="font-mono text-xs font-bold text-indigo-600">{s.budget_request?.proposal?.tracker_number}</ProposalHover>
+                <p className="max-w-64 truncate text-xs text-gray-500">{s.budget_request?.proposal?.title}</p>
+            </div>
+        ) },
+        { key: 'round', label: 'Round', render: (s) => <span className="text-xs">{s.budget_request?.funding_round}</span> },
+        { key: 'approved', label: 'Approved', align: 'right', render: (s) => formatCurrency(s.budget_request?.total_amount) },
+        { key: 'spent', label: 'Spent', align: 'right', render: (s) => <span className="font-semibold text-indigo-700">{formatCurrency(s.total_spent)}</span> },
+        { key: 'unspent', label: 'Unspent', align: 'right', render: (s) => <span className={money(s.unspent_amount) > 0 ? 'font-semibold text-amber-700' : 'text-emerald-700'}>{formatCurrency(s.unspent_amount)}</span> },
+        { key: 'status', label: 'Status', render: (s) => <StatusBadge status={s.status} /> },
+        { key: 'date', label: 'Submitted', render: (s) => <span className="text-xs text-gray-500">{formatDate(s.created_at)}</span> },
+    ];
+
+    return (
+        <AppLayout breadcrumb="Settlements">
+            <div className="mx-auto max-w-6xl space-y-5">
+                <PageHeader icon={Shield} color="violet" title="Settlements"
+                    description="Account for each round’s spending. Once finance finalizes it, the next round opens.">
+                    {tab !== 'settle' && <ViewToggle view={view} onChange={setView} />}
+                    {tab === 'settle' ? (
+                        <DownloadMenu filename="to-settle" title="Waiting to be settled" columns={[
+                            { label: 'Tracker', value: (r) => r.proposal?.tracker_number },
+                            { label: 'Title', value: (r) => r.proposal?.title },
+                            { label: 'PI', value: (r) => r.proposal?.pi?.name },
+                            { label: term('college'), value: (r) => r.proposal?.college?.name },
+                            { label: 'Round', value: (r) => r.funding_round },
+                            { label: 'Approved', value: (r) => money(r.total_amount) },
+                            { label: 'Received', value: (r) => money(r.total_disbursed) },
+                        ]} rows={pending} />
+                    ) : (
+                        <DownloadMenu filename="settlements" title="Settlements" subtitle={tabs.find((t) => t.key === tab)?.label} columns={[
+                            { label: 'Tracker', value: (x) => x.budget_request?.proposal?.tracker_number },
+                            { label: 'Title', value: (x) => x.budget_request?.proposal?.title },
+                            { label: 'PI', value: (x) => x.budget_request?.proposal?.pi?.name },
+                            { label: term('college'), value: (x) => x.budget_request?.proposal?.college?.name },
+                            { label: 'Round', value: (x) => x.budget_request?.funding_round },
+                            { label: 'Approved', value: (x) => money(x.budget_request?.total_amount) },
+                            { label: 'Spent', value: (x) => money(x.total_spent) },
+                            { label: 'Unspent', value: (x) => money(x.unspent_amount) },
+                            { label: 'Status', value: (x) => STATUS[x.status]?.label ?? x.status },
+                            { label: 'Submitted', value: (x) => (x.created_at ? formatDate(x.created_at) : '') },
+                            { label: 'College verified', value: (x) => (x.college_verified_at ? formatDate(x.college_verified_at) : '') },
+                            { label: 'Finance finalized', value: (x) => (x.finance_verified_at ? formatDate(x.finance_verified_at) : '') },
+                        ]} rows={shown} />
+                    )}
+                    <RefreshButton onClick={load} loading={loading} />
+                </PageHeader>
+
+                {settlements === null ? <StatSkeletons /> : (
+                    <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                        <StatCard icon={Wallet} color="amber" label="Waiting to be settled" value={toSettle.length} hint={`${formatCurrency(toSettle.reduce((s, r) => s + money(r.total_disbursed), 0))} paid out`} />
+                        <StatCard icon={Building2} color="sky" label="With the college" value={all.filter((s) => s.status === 'submitted').length} hint="To verify" />
+                        <StatCard icon={Landmark} color="indigo" label="With finance" value={all.filter((s) => s.status === 'college_verified').length} hint="To finalize" />
+                        <StatCard icon={CheckCircle2} color="emerald" label="Finalized" value={all.filter((s) => s.status === 'finance_verified').length}
+                            hint={unspentDue > 0 ? `${formatCurrency(unspentDue)} unspent still open` : `${formatCurrency(settledSpent)} accounted for`} hintTone={unspentDue > 0 ? 'text-amber-600 font-medium' : undefined} />
+                    </div>
+                )}
+
+                <div className="flex items-center gap-2 overflow-x-auto rounded-2xl border border-gray-200 bg-white px-4 py-3 text-xs text-gray-500">
+                    {[['Team settles', Receipt], ['College verifies', Building2], ['Finance finalizes', Landmark], ['Next round opens', Flag]].map(([label, Icon], i, arr) => (
+                        <span key={label} className="inline-flex shrink-0 items-center gap-2">
+                            <span className="inline-flex items-center gap-1.5 font-medium text-gray-700"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-violet-50 text-violet-600"><Icon size={12} /></span>{label}</span>
+                            {i < arr.length - 1 && <ArrowRight size={12} className="text-gray-300" />}
+                        </span>
+                    ))}
+                </div>
+
+                <div className="space-y-3 rounded-2xl border border-gray-200 bg-white p-3">
+                    <div className="flex flex-col gap-2 lg:flex-row">
+                        <label className="relative min-w-0 flex-1">
+                            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search tracker number, title or PI…"
+                                className="w-full rounded-xl border border-gray-200 py-2 pl-9 pr-3 text-base focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100 sm:text-sm" />
+                        </label>
+                        <div className="grid grid-cols-2 gap-2 sm:flex">
+                            {usedProgrammes.length > 1 && (
+                                <Select label="Programme" value={programme} onChange={setProgramme} className="sm:w-44">
+                                    <option value="">All programmes</option>
+                                    {usedProgrammes.map((k) => <option key={k} value={k}>{programmeLabel(k)}</option>)}
+                                </Select>
+                            )}
+                            {colleges.length > 1 && (
+                                <Select label={term('college')} value={college} onChange={setCollege} className="sm:w-44">
+                                    <option value="">All {term('college', { plural: true, lower: true })}</option>
+                                    {colleges.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+                                </Select>
+                            )}
+                            {rounds.length > 1 && (
+                                <Select label="Round" value={round} onChange={setRound} className="sm:w-32">
+                                    <option value="">All rounds</option>
+                                    {rounds.map((n) => <option key={n} value={String(n)}>Round {n}</option>)}
+                                </Select>
+                            )}
+                            {filtersOn && <ClearButton onClick={clearFilters} />}
+                        </div>
+                    </div>
+                    <div className="-mx-1 flex gap-1 overflow-x-auto px-1">
+                        {tabs.map((t) => (
+                            <button key={t.key} onClick={() => setTab(t.key)}
+                                className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${tab === t.key ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
+                                {t.label}
+                                <span className={`rounded-full px-1.5 text-[11px] tabular-nums ${tab === t.key ? 'bg-white/20' : 'bg-gray-100 text-gray-500'}`}>{t.count}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {settlements === null ? (
+                    <div className="space-y-3">{[0, 1].map((i) => <Skeleton key={i} className="h-64 rounded-2xl" />)}</div>
+                ) : tab === 'settle' ? (
+                    pending.length === 0 ? (
+                        <Panel bodyClassName="p-0"><EmptyState icon={Receipt} title="Nothing to settle" text="Requests show here once their money is paid out, until the team settles them." /></Panel>
+                    ) : (
+                        <div className="space-y-3">{pending.map((r) => <ToSettleCard key={r.id} request={r} canSettle={canSettle(r)} onSettle={() => setSettling(r)} />)}</div>
+                    )
+                ) : shown.length === 0 ? (
+                    <Panel bodyClassName="p-0">
+                        <EmptyState icon={Shield} title={q ? 'Nothing matches' : tab === 'college' ? 'Nothing for the college to verify' : tab === 'finance' ? 'Nothing for finance to finalize' : 'No settlements yet'}
+                            text={q ? 'Try another search.' : 'Settlements appear here once teams account for their spending.'} />
+                    </Panel>
+                ) : view === 'table' ? (
+                    <Panel bodyClassName="p-0"><DataTable columns={columns} rows={shown} rowKey={(s) => s.id} minWidth={820} /></Panel>
+                ) : (
+                    <div className="grid gap-3 xl:grid-cols-2">
+                        {shown.map((s) => <SettlementCard key={s.id} settlement={s} can={can} budgetExhausted={exhausted(s.budget_request?.proposal?.id)} onRefresh={load} />)}
+                    </div>
+                )}
+            </div>
+
+            {settling && <SettleModal request={settling} onClose={() => setSettling(null)} onSuccess={() => { setSettling(null); load(); }} />}
+        </AppLayout>
+    );
 }

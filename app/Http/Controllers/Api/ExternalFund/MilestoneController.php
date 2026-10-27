@@ -12,7 +12,10 @@ class MilestoneController extends Controller
 {
     public function index(Request $request, string $awardId): JsonResponse
     {
-        $award = ExternalFundAward::findOrFail($awardId);
+        $award = ExternalFundAward::with('application')->findOrFail($awardId);
+        if (! $award->isVisibleTo($request->user())) {
+            return response()->json(['message' => 'Forbidden.'], 403);
+        }
         $milestones = $award->milestones()->orderBy('due_date')->get();
 
         return response()->json(['data' => $milestones, 'message' => '', 'errors' => [], 'meta' => []]);
@@ -30,7 +33,7 @@ class MilestoneController extends Controller
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
             'due_date' => 'required|date',
-            'status' => 'sometimes|in:pending,in_progress,completed,overdue',
+            'status' => 'sometimes|in:pending,in_progress,completed',
         ]);
 
         $data['award_id'] = $award->id;
@@ -51,12 +54,15 @@ class MilestoneController extends Controller
             'title' => 'sometimes|string|max:255',
             'description' => 'nullable|string',
             'due_date' => 'sometimes|date',
-            'status' => 'sometimes|in:pending,in_progress,completed,overdue',
+            'status' => 'sometimes|in:pending,in_progress,completed',
             'completed_at' => 'nullable|date',
         ]);
 
         if (($data['status'] ?? null) === 'completed' && ! $milestone->completed_at) {
             $data['completed_at'] = now();
+        }
+        if (isset($data['status']) && $data['status'] !== 'completed') {
+            $data['completed_at'] = null;
         }
 
         $milestone->update($data);

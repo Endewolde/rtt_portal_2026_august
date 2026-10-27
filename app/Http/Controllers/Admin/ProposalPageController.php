@@ -81,16 +81,9 @@ class ProposalPageController extends Controller
             $statsBase->where('proposals.college_id', $user->college_id);
         }
 
-        $officerCategoryMap = [
-            'research_officer' => 'research',
-            'community_officer' => 'community_engagement',
-            'technology_officer' => 'technology_transfer',
-        ];
-        foreach ($officerCategoryMap as $role => $category) {
-            if ($user->hasRole($role)) {
-                $statsBase->where('proposals.category', $category);
-                break;
-            }
+        // Directors see their own programme(s) — built-in or custom programme-scoped roles.
+        if ($user->accessScope()->isCategory() && $user->accessScope()->categories) {
+            $statsBase->whereIn('proposals.category', $user->accessScope()->categories);
         }
 
         $byStatus = (clone $statsBase)

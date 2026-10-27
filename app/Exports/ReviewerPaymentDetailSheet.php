@@ -3,6 +3,7 @@
 namespace App\Exports;
 
 use App\Models\ReviewAssignment;
+use App\Support\Terms;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
@@ -55,7 +56,7 @@ class ReviewerPaymentDetailSheet implements FromCollection, ShouldAutoSize, With
         return [
             ['Reviewer payment report — '.$this->scopeLabel.' — generated '.now()->format('d M Y H:i')],
             [
-                'Reviewer Name', 'Proposal Title', 'Review Type', 'Review Status', 'College',
+                'Reviewer Name', 'Proposal Title', 'Review Type', 'Review Status', Terms::college(),
                 'Total Reviews Completed', 'Total Reviews Not Completed',
                 'Tracker Number', 'Reviewer Email', 'Reviewer Type', 'Submitted On',
             ],

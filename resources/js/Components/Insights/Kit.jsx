@@ -145,34 +145,74 @@ export function StatSkeletons({ count = 4 }) {
     );
 }
 
-/** A table that sits flush inside a Panel: quiet header, aligned numbers, row hover. */
-export function DataTable({ columns, rows, rowKey, onRowClick, minWidth = 560, empty }) {
+/**
+ * A table that sits flush inside a Panel: quiet header, a # column, aligned
+ * numbers and row hover. On phones each row becomes a card — the first column as
+ * its heading, the rest as labelled lines, actions (columns without a label) last —
+ * so nothing needs sideways scrolling.
+ */
+export function DataTable({ columns, rows, rowKey, onRowClick, minWidth = 560, empty, numbered = true, startAt = 1 }) {
     if (rows.length === 0) return empty ?? <EmptyState />;
+    const align = (c) => (c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left');
+    const value = (c, row) => (c.render ? c.render(row) : row[c.key]);
+    const [lead, ...rest] = columns;
+    const details = rest.filter((c) => c.label);
+    const actions = rest.filter((c) => !c.label);
+
     return (
-        <div className="overflow-x-auto">
-            <table className="w-full text-sm" style={{ minWidth }}>
-                <thead>
-                    <tr className="border-b border-gray-100 bg-gray-50/80">
-                        {columns.map((c) => (
-                            <th key={c.key} className={`px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-500 ${c.align === 'right' ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left'}`}>
-                                {c.label}
-                            </th>
-                        ))}
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                    {rows.map((row, i) => (
-                        <tr key={rowKey ? rowKey(row) : i} onClick={onRowClick ? () => onRowClick(row) : undefined}
-                            className={`transition-colors hover:bg-indigo-50/30 ${onRowClick ? 'cursor-pointer' : ''}`}>
+        <>
+            <div className="hidden overflow-x-auto sm:block">
+                <table className="w-full text-sm" style={{ minWidth }}>
+                    <thead>
+                        <tr className="border-b border-gray-100 bg-gray-50/80">
+                            {numbered && <th className="w-10 px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">#</th>}
                             {columns.map((c) => (
-                                <td key={c.key} className={`px-4 py-2.5 ${c.align === 'right' ? 'text-right tabular-nums' : c.align === 'center' ? 'text-center' : 'text-left'} ${c.className ?? 'text-gray-700'}`}>
-                                    {c.render ? c.render(row) : row[c.key]}
-                                </td>
+                                <th key={c.key} className={`px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-gray-500 ${align(c)}`}>{c.label}</th>
                             ))}
                         </tr>
-                    ))}
-                </tbody>
-            </table>
-        </div>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                        {rows.map((row, i) => (
+                            <tr key={rowKey ? rowKey(row) : i} onClick={onRowClick ? () => onRowClick(row) : undefined}
+                                className={`transition-colors hover:bg-indigo-50/30 ${onRowClick ? 'cursor-pointer' : ''}`}>
+                                {numbered && <td className="w-10 px-4 py-2.5 text-xs font-medium tabular-nums text-gray-400">{startAt + i}</td>}
+                                {columns.map((c) => (
+                                    <td key={c.key} className={`px-4 py-2.5 ${align(c)} ${c.align === 'right' ? 'tabular-nums' : ''} ${c.className ?? 'text-gray-700'}`}>
+                                        {value(c, row)}
+                                    </td>
+                                ))}
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+
+            <ul className="divide-y divide-gray-100 sm:hidden">
+                {rows.map((row, i) => (
+                    <li key={rowKey ? rowKey(row) : i} onClick={onRowClick ? () => onRowClick(row) : undefined}
+                        className={`px-4 py-3 ${onRowClick ? 'cursor-pointer active:bg-gray-50' : ''}`}>
+                        <div className="flex items-start gap-2.5">
+                            {numbered && <span className="mt-0.5 flex h-5 min-w-5 shrink-0 items-center justify-center rounded-md bg-gray-100 px-1 text-[10px] font-bold tabular-nums text-gray-500">{startAt + i}</span>}
+                            <div className="min-w-0 flex-1 text-sm text-gray-900">{lead && value(lead, row)}</div>
+                        </div>
+                        {details.length > 0 && (
+                            <dl className={`mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs ${numbered ? 'pl-7.5' : ''}`}>
+                                {details.map((c) => (
+                                    <div key={c.key} className="min-w-0">
+                                        <dt className="text-[10px] font-medium uppercase tracking-wide text-gray-400">{c.label}</dt>
+                                        <dd className="truncate text-gray-700">{value(c, row)}</dd>
+                                    </div>
+                                ))}
+                            </dl>
+                        )}
+                        {actions.length > 0 && (
+                            <div className={`mt-2.5 flex flex-wrap justify-end gap-1.5 ${numbered ? 'pl-7.5' : ''}`} onClick={(e) => e.stopPropagation()}>
+                                {actions.map((c) => <div key={c.key}>{value(c, row)}</div>)}
+                            </div>
+                        )}
+                    </li>
+                ))}
+            </ul>
+        </>
     );
 }

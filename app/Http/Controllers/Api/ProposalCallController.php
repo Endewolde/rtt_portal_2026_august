@@ -8,11 +8,16 @@ use App\Models\Proposal;
 use App\Models\ProposalCall;
 use App\Models\User;
 use App\Services\ProposalCallService;
+use App\Support\ApplicationForm;
+use App\Support\Programmes;
+use App\Support\ReviewRoute;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 
 class ProposalCallController extends Controller
 {
@@ -159,7 +164,7 @@ class ProposalCallController extends Controller
 
         $validated = $request->validate([
             'academic_year' => ['required', 'string', 'regex:/^\d{4}-\d{4}$/'],
-            'category' => ['required', 'string', 'max:50'],
+            'category' => ['required', 'string', Rule::in(Programmes::keys(true))],
             'title' => ['required', 'string', 'max:500'],
             'description' => ['nullable', 'string'],
             'eligibility' => ['nullable', 'string'],
@@ -193,7 +198,7 @@ class ProposalCallController extends Controller
             'eligibility' => ['sometimes', 'nullable', 'string'],
             'start_date' => ['sometimes', 'date_format:Y-m-d\TH:i'],
             'end_date' => ['sometimes', 'date_format:Y-m-d\TH:i', 'after:start_date'],
-            'category' => ['sometimes', 'string', 'max:50'],
+            'category' => ['sometimes', 'string', Rule::in(Programmes::keys())],
             'academic_year' => ['sometimes', 'string', 'regex:/^\d{4}-\d{4}$/'],
             'max_proposals_per_pi' => ['sometimes', 'nullable', 'integer', 'min:1'],
             'funding_budget' => ['sometimes', 'nullable', 'numeric', 'min:0', 'max:9999999999999'],
@@ -210,6 +215,105 @@ class ProposalCallController extends Controller
             'message' => 'Proposal call updated.',
             'errors' => [],
         ]);
+    }
+
+    /**
+     * Set the call's own questions and documents (Calls → Application form). Answers
+     * already given to a question that is removed stay on the proposal but are no
+     * longer shown or required.
+     */
+    public function updateApplicationForm(Request $request, string $id): JsonResponse
+    {
+        if (! $request->user()?->can('proposal_calls.update')) {
+            return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
+        }
+
+        $call = ProposalCall::findOrFail($id);
+        $call->update(['application_form' => ApplicationForm::clean($request->validate(ApplicationForm::rules()))]);
+
+        return response()->json([
+            'data' => new ProposalCallResource($call->fresh()),
+            'message' => $call->application_form ? 'Application form saved.' : 'Application form cleared — applicants see only the standard questions.',
+            'errors' => [],
+        ]);
+    }
+
+    /**
+     * The call's review route alongside the organisation's standard pass marks, so
+     * the editor can show what an empty field falls back to.
+     */
+    public function reviewRoute(Request $request, string $id): JsonResponse
+    {
+        if (! $request->user()?->can('proposal_calls.view_any')) {
+            return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
+        }
+
+        $call = ProposalCall::findOrFail($id);
+        $standard = DB::table('threshold_settings')->whereIn('key', ReviewRoute::THRESHOLD_KEYS)->pluck('value', 'key')->map(fn ($v) => (float) $v);
+        $maxPoints = DB::table('evaluation_types')
+            ->join('evaluation_categories', 'evaluation_categories.evaluation_type_id', '=', 'evaluation_types.id')
+            ->where('evaluation_types.proposal_category', $call->category)
+            ->where('evaluation_types.is_active', true)
+            ->where(fn ($q) => $q->where('evaluation_types.name', 'like', 'blind_review%')->orWhere('evaluation_types.name', 'like', 'open_defence%'))
+            ->selectRaw("CASE WHEN evaluation_types.name LIKE 'blind_review%' THEN 'blind' ELSE 'defence' END as phase, SUM(evaluation_categories.weight) as total")
+            ->groupBy('phase')
+            ->pluck('total', 'phase');
+
+        return response()->json([
+            'data' => [
+                'route' => ReviewRoute::for($call),
+                'customised' => $call->review_route !== null,
+                'standard' => $standard,
+                'max_points' => ['blind' => (float) ($maxPoints['blind'] ?? 0), 'defence' => (float) ($maxPoints['defence'] ?? 0)],
+                'proposals_in_review' => $call->proposals()->whereIn('status', ['under_blind_review', 'blind_review_passed', 'under_open_defence'])->count(),
+            ],
+            'message' => '',
+            'errors' => [],
+        ]);
+    }
+
+    /**
+     * Set the call's review route. It applies to decisions not yet made — proposals
+     * already decided keep their recorded outcome.
+     */
+    public function updateReviewRoute(Request $request, string $id): JsonResponse
+    {
+        if (! $request->user()?->can('proposal_calls.update')) {
+            return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
+        }
+
+        $call = ProposalCall::findOrFail($id);
+        $call->update(['review_route' => ReviewRoute::clean($request->validate(ReviewRoute::rules()))]);
+
+        return response()->json([
+            'data' => new ProposalCallResource($call->fresh()),
+            'message' => $call->review_route ? 'Review route saved.' : 'This call now follows the standard review route.',
+            'errors' => [],
+        ]);
+    }
+
+    /** A new draft call started from this one, for the next academic year. */
+    public function copy(Request $request, string $id): JsonResponse
+    {
+        if (! $request->user()?->can('proposal_calls.create')) {
+            return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
+        }
+
+        $source = ProposalCall::findOrFail($id);
+        $validated = $request->validate([
+            'academic_year' => ['nullable', 'string', 'regex:/^\d{4}-\d{4}$/'],
+            'title' => ['nullable', 'string', 'max:500'],
+            'start_date' => ['nullable', 'date'],
+            'end_date' => ['nullable', 'date', 'after:start_date'],
+        ]);
+
+        $call = $this->service->copy($source, array_filter($validated), $request->user());
+
+        return response()->json([
+            'data' => new ProposalCallResource($call),
+            'message' => 'Call copied as a draft. Check the dates and details, then activate it.',
+            'errors' => [],
+        ], 201);
     }
 
     public function activate(Request $request, string $id): JsonResponse

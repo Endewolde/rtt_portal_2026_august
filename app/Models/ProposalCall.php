@@ -33,6 +33,8 @@ class ProposalCall extends Model
         'is_open',
         'max_proposals_per_pi',
         'funding_budget',
+        'application_form',
+        'review_route',
         'created_by',
     ];
 
@@ -41,6 +43,8 @@ class ProposalCall extends Model
         'start_date' => 'datetime',
         'end_date' => 'datetime',
         'funding_budget' => 'decimal:2',
+        'application_form' => 'array',
+        'review_route' => 'array',
     ];
 
     public function scopeActive(Builder $query): Builder

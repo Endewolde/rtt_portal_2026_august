@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Support\Programmes;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 
@@ -48,11 +49,7 @@ class StatsController extends Controller
             ->groupBy('category')
             ->pluck('count', 'category');
 
-        $categoryLabels = [
-            'research' => 'Research',
-            'community_engagement' => 'Community Engagement',
-            'technology_transfer' => 'Technology Transfer',
-        ];
+        $categoryLabels = Programmes::labels();
 
         $validatedByCategoryData = collect(array_keys($categoryLabels))
             ->merge($validatedByCategory->keys())

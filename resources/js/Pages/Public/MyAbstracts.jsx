@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Link } from '@inertiajs/react';
 import {
     Search, Mail, AlertCircle, CalendarDays, ArrowRight, CheckCircle2,
@@ -153,8 +153,8 @@ function AbstractCard({ abstract, onWithdraw }) {
     const handleWithdraw = async () => {
         setWithdrawing(true);
         try {
-            await api.post(`/abstracts/withdraw/${abstract.token}`);
-            onWithdraw(abstract.token);
+            await api.post(`/abstracts/withdraw/${abstract.submission_token}`);
+            onWithdraw(abstract.submission_token);
         } catch {
             // ignore — api.js handles error toasts
         } finally {
@@ -197,9 +197,22 @@ function AbstractCard({ abstract, onWithdraw }) {
                     )}
                 </div>
 
+                {abstract.feedback && (
+                    <div className="mb-3 rounded-xl border border-gray-100 bg-gray-50 px-3.5 py-2.5">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Committee feedback</p>
+                        <p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-gray-700">{abstract.feedback}</p>
+                    </div>
+                )}
+                {['draft', 'revision_requested'].includes(abstract.status) && abstract.conference?.slug && (
+                    <Link href={`/conferences/${abstract.conference.slug}/submit-abstract?token=${abstract.submission_token}`}
+                        className="mb-3 inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700">
+                        {abstract.status === 'draft' ? 'Continue draft' : 'Revise and resubmit'} <ArrowRight size={12} />
+                    </Link>
+                )}
+
                 {/* Footer */}
                 <div className="flex items-center justify-between gap-3 pt-3 border-t border-gray-50">
-                    <TokenButton token={abstract.token} />
+                    <TokenButton token={abstract.submission_token} />
 
                     {canWithdraw && !confirmOpen && (
                         <button
@@ -280,7 +293,7 @@ function ConferenceGroup({ name, slug, abstracts, onWithdraw }) {
             {expanded && (
                 <div className="px-5 pb-5 grid grid-cols-1 md:grid-cols-2 gap-4">
                     {abstracts.map(ab => (
-                        <AbstractCard key={ab.id ?? ab.token} abstract={ab} onWithdraw={onWithdraw} />
+                        <AbstractCard key={ab.id ?? ab.submission_token} abstract={ab} onWithdraw={onWithdraw} />
                     ))}
                 </div>
             )}
@@ -296,19 +309,35 @@ export default function MyAbstracts() {
     const [loading,   setLoading]   = useState(false);
     const [searched,  setSearched]  = useState(false);
     const [error,     setError]     = useState(null);
+    const [sent,      setSent]      = useState(null);
 
+    // Opened from the emailed link: show that address's abstracts.
+    useEffect(() => {
+        const key = new URLSearchParams(window.location.search).get('key');
+        if (!key) return;
+        setLoading(true);
+        get('/abstracts/mine', { key })
+            .then((res) => {
+                setAbstracts(res?.data ?? []);
+                setEmail(res?.meta?.email ?? '');
+                setSearched(true);
+            })
+            .catch((e) => setError(e.response?.data?.message ?? 'This link has expired. Ask for a new one below.'))
+            .finally(() => setLoading(false));
+    }, []);
+
+    // For privacy the list is never shown for a typed address — a link is emailed to it.
     const search = useCallback(async (e) => {
         e.preventDefault();
         if (!email.trim()) return;
         setLoading(true);
         setError(null);
+        setSent(null);
         try {
-            const res = await get('/abstracts/mine', { email: email.trim() });
-            const data = Array.isArray(res) ? res : (res?.data ?? res?.abstracts ?? []);
-            setAbstracts(data);
-            setSearched(true);
-        } catch {
-            setError('Something went wrong. Please check your email and try again.');
+            const res = await api.post('/abstracts/mine/link', { email: email.trim() });
+            setSent(res.data?.message ?? 'Check your inbox for a link to your abstracts.');
+        } catch (e) {
+            setError(e.response?.status === 429 ? 'Too many requests — please wait a few minutes and try again.' : 'Something went wrong. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -316,7 +345,7 @@ export default function MyAbstracts() {
 
     const handleWithdraw = (token) => {
         setAbstracts(prev => prev.map(ab =>
-            ab.token === token ? { ...ab, status: 'withdrawn' } : ab
+            ab.submission_token === token ? { ...ab, status: 'withdrawn' } : ab
         ));
     };
 
@@ -338,7 +367,7 @@ export default function MyAbstracts() {
                         My Submitted Abstracts
                     </h1>
                     <p className="text-indigo-200 text-base max-w-xl mx-auto leading-relaxed">
-                        Enter the email address you used when submitting your abstract(s) to view all your submissions.
+                        Enter the email address you used when submitting — we'll email you a private link to all your submissions.
                     </p>
                 </div>
             </div>
@@ -370,10 +399,16 @@ export default function MyAbstracts() {
                                        disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100"
                         >
                             <Search size={15} />
-                            {loading ? 'Searching…' : 'Find My Abstracts'}
+                            {loading ? 'Sending…' : 'Email me a link'}
                         </button>
                     </form>
 
+                    {sent && (
+                        <div className="flex items-start gap-2 mt-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-sm text-emerald-800">
+                            <CheckCircle2 size={14} className="mt-0.5 shrink-0" />
+                            {sent}
+                        </div>
+                    )}
                     {error && (
                         <div className="flex items-center gap-2 mt-4 p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
                             <AlertCircle size={14} className="shrink-0" />
@@ -452,7 +487,7 @@ export default function MyAbstracts() {
                         <div className="w-16 h-16 rounded-2xl bg-indigo-50 flex items-center justify-center mx-auto mb-4">
                             <Search size={28} className="text-indigo-300" />
                         </div>
-                        <h3 className="text-base font-bold text-gray-700 mb-1">Enter your email to get started</h3>
+                        <h3 className="text-base font-bold text-gray-700 mb-1">Enter your email to get a link</h3>
                         <p className="text-sm text-gray-400 mb-6 max-w-xs mx-auto">
                             All your abstract submissions will appear here, grouped by conference.
                         </p>

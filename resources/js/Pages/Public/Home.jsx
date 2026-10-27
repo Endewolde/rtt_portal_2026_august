@@ -14,6 +14,7 @@ import PublicLayout from '../../Layouts/PublicLayout';
 import { get } from '../../lib/api';
 import { resolveFeatures } from '../../lib/publicFeatures';
 import { useT } from '../../lib/i18n';
+import { SLIDE_DEFAULTS, STEP_DEFAULTS } from '../../lib/publicSite';
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
@@ -355,14 +356,7 @@ function CallCard({ call }) {
 // ─── Platform features ────────────────────────────────────────────────────────
 
 
-const DEFAULT_STEPS = [
-    { title: 'Submit Proposal',      desc: 'Complete the guided wizard with your research details, team, budget, and documents before the call closes.' },
-    { title: 'Validation',           desc: 'The research office checks completeness and eligibility, and an anonymity check protects blind review.' },
-    { title: 'Blind Review',         desc: 'Independent experts score your proposal without knowing who wrote it.' },
-    { title: 'Open Defence',         desc: 'Shortlisted teams present to a panel that scores the presentation on the day.' },
-    { title: 'Central Evaluation',   desc: 'The central committee weighs the combined scores and makes the funding decision.' },
-    { title: 'Funding & Monitoring', desc: 'Funded teams sign a contract, receive their budget, and report progress regularly until completion.' },
-];
+const DEFAULT_STEPS = STEP_DEFAULTS;
 
 // ─── Section heading ──────────────────────────────────────────────────────────
 
@@ -608,19 +602,12 @@ function HeroStatCard({ stat, label, color, icon, inView, secondaryStats, ringPc
 
 const SLIDE_STAT_KEYS   = ['total_proposals', 'funded', 'colleges', 'departments', 'total_proposals', 'funded'];
 const SLIDE_STAT_LABELS = ['Proposals This Year', 'Funded Projects', 'Participating Colleges', 'Departments Engaged', 'Proposals Submitted', 'Funded Projects'];
-const SLIDE_DEFAULT_COLORS = ['', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4'];
-const SLIDE_DEFAULT_ICONS  = ['🔬', '💰', '⚖️', '🏛️', '📊', '🌐'];
-const SLIDE_DEFAULT_EYEBROWS = ['Research Platform', 'Research Funding', 'Peer Evaluation', 'Research Lifecycle', 'Research Impact', 'Global Reach'];
-const SLIDE_DEFAULT_HEADINGS   = ['Accelerate Your', 'Unlock Research', 'Rigorous & Fair', 'End-to-End', 'Measure Your', 'Expand Your'];
-const SLIDE_DEFAULT_HIGHLIGHTS = ['Research Journey', 'Funding Opportunities', 'Peer Review Process', 'Research Support', 'Research Impact', 'Research Network'];
-const SLIDE_DEFAULT_SUBTITLES  = [
-    'Submit proposals, collaborate with peers, and manage grants — all in one platform built for academic excellence.',
-    'Competitive grants, milestone-based disbursements, and award letters to fuel your research ambitions.',
-    'Expert blind review, open defence scoring, and central committee evaluation — transparent and objective.',
-    'From ethics clearance to midterm evaluation and project closure — comprehensive institutional support.',
-    'Track outcomes, measure impact, and showcase your research achievements across the institution.',
-    'Connect with international partners, co-investigators, and funding bodies worldwide.',
-];
+const SLIDE_DEFAULT_COLORS = SLIDE_DEFAULTS.map((d) => d.color);
+const SLIDE_DEFAULT_ICONS = SLIDE_DEFAULTS.map((d) => d.icon);
+const SLIDE_DEFAULT_EYEBROWS = SLIDE_DEFAULTS.map((d) => d.eyebrow);
+const SLIDE_DEFAULT_HEADINGS = SLIDE_DEFAULTS.map((d) => d.heading);
+const SLIDE_DEFAULT_HIGHLIGHTS = SLIDE_DEFAULTS.map((d) => d.highlight);
+const SLIDE_DEFAULT_SUBTITLES  = SLIDE_DEFAULTS.map((d) => d.subtitle);
 
 function HeroSlider({ stats, primaryColor, heroBg, orgName, ctaPrimary, ctaSecondary, s }) {
     const t = useT();

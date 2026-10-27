@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Jobs\GenerateReportJob;
 use App\Models\ReportSnapshot;
 use App\Models\User;
+use App\Support\Sdg;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -17,6 +18,7 @@ class ReportService
     public const LIVE_TYPES = [
         'proposal_count_by_category', 'proposal_count_by_college', 'proposal_trend_by_year', 'approval_rate_by_category',
         'review_progress_pipeline', 'college_performance', 'reviewer_workload', 'budget_utilization', 'complaint_summary',
+        'sdg_alignment',
     ];
 
     /** Live results are cached briefly so filters feel instant without serving stale numbers for long. */
@@ -165,6 +167,28 @@ class ReportService
     }
 
     /**
+     * Filters with the person's college/category scope enforced over whatever was
+     * asked for — the same rule on screen, in exports and in scheduled emails.
+     *
+     * @param  array<string, mixed>  $filters
+     * @return array<string, string>
+     */
+    public function scopedFilters(User $user, array $filters): array
+    {
+        $filters = array_intersect_key($filters, array_flip(['academic_year', 'college_id', 'category']));
+
+        $scope = $user->accessScope();
+        if ($scope->isCollege()) {
+            $filters['college_id'] = $scope->collegeId;
+        }
+        if ($scope->category()) {
+            $filters['category'] = $scope->category();
+        }
+
+        return array_filter($filters);
+    }
+
+    /**
      * Academic years and colleges the live filters can offer.
      *
      * @return array{years: array<int, string>, colleges: array<int, object>}
@@ -198,6 +222,7 @@ class ReportService
             'college_performance' => $this->collegePerformance($filters),
             'review_progress_pipeline' => $this->reviewProgressPipeline($filters),
             'complaint_summary' => $this->complaintSummary($filters),
+            'sdg_alignment' => $this->sdgAlignment($filters),
             'custom_builder' => $this->customBuilder($filters),
             default => throw new \InvalidArgumentException("Unknown report type: {$type}"),
         };
@@ -548,6 +573,44 @@ class ReportService
             DB::raw("SUM(CASE WHEN co.level = 'officer' THEN 1 ELSE 0 END) as level_2_officer"),
             DB::raw('ROUND(AVG(CASE WHEN co.resolved_at IS NOT NULL THEN DATEDIFF(co.resolved_at, co.created_at) END), 1) as avg_resolution_days')
         )->groupBy('c.id', 'c.name')->orderByDesc('total_complaints')->get()->toArray();
+    }
+
+    /**
+     * Per Sustainable Development Goal: proposals tagged with it, how many were
+     * funded and the money awarded to them. A proposal tagged with several goals
+     * counts towards each, so goals do not add up to the number of proposals.
+     */
+    private function sdgAlignment(array $filters): array
+    {
+        $funded = ['funded', 'midterm_evaluation', 'completed', 'archived'];
+
+        $proposals = DB::table('proposals as p')
+            ->leftJoin('awards as a', 'a.proposal_id', '=', 'p.id')
+            ->whereNull('p.deleted_at')
+            ->where('p.status', '!=', 'draft')
+            ->whereNotNull('p.sdgs')
+            ->when($filters['academic_year'] ?? null, fn ($q, $y) => $q->where('p.academic_year', $y))
+            ->when($filters['college_id'] ?? null, fn ($q, $c) => $q->where('p.college_id', $c))
+            ->when($filters['category'] ?? null, fn ($q, $c) => $q->where('p.category', $c))
+            ->get(['p.sdgs', 'p.status', 'a.awarded_amount']);
+
+        $rows = collect(Sdg::GOALS)->map(fn ($goal, $n) => [
+            'sdg' => $n, 'goal' => $goal[0], 'proposals' => 0, 'funded' => 0, 'awarded' => 0.0,
+        ]);
+
+        foreach ($proposals as $p) {
+            foreach (Sdg::clean(json_decode($p->sdgs, true)) as $n) {
+                $row = $rows[$n];
+                $row['proposals']++;
+                if (in_array($p->status, $funded, true)) {
+                    $row['funded']++;
+                    $row['awarded'] += (float) $p->awarded_amount;
+                }
+                $rows[$n] = $row;
+            }
+        }
+
+        return $rows->values()->all();
     }
 
     private function shouldQueue(array $filters): bool

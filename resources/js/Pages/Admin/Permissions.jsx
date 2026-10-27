@@ -142,16 +142,16 @@ export default function Permissions() {
                                         <div className="overflow-x-auto">
                                             <table className="w-full text-sm">
                                                 <thead className="bg-gray-50">
-                                                    <tr>
+                                                    <tr><th className="px-5 py-2 w-10 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">#</th>
                                                         <th className="px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide w-1/2">Permission</th>
                                                         <th className="px-5 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Roles with access</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-gray-50">
-                                                    {perms.map(perm => {
+                                                    {perms.map((perm, rowIdx) => {
                                                         const grantedTo = rolesForPerm(perm.name);
                                                         return (
-                                                            <tr key={perm.id} className="hover:bg-gray-50">
+                                                            <tr key={perm.id} className="hover:bg-gray-50"><td className="px-5 py-3 w-10 text-xs font-medium tabular-nums text-gray-400">{rowIdx + 1}</td>
                                                                 <td className="px-5 py-3">
                                                                     <code className="text-xs bg-gray-100 text-gray-700 px-2 py-0.5 rounded font-mono">
                                                                         {perm.name}

@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ProposalTemplate;
+use App\Support\Programmes;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class ProposalTemplateController extends Controller
 {
@@ -16,7 +18,7 @@ class ProposalTemplateController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:150',
-            'category' => 'required|in:research,community_engagement,technology_transfer',
+            'category' => ['required', Rule::in(Programmes::keys(true))],
             'title' => 'nullable|string|max:255',
             'abstract' => 'nullable|string',
             'keywords' => 'nullable|string|max:500',

@@ -7,8 +7,7 @@ import {
     ClipboardList, CheckCircle2, XCircle,
     AlertTriangle, AlertCircle, Calendar, MessageSquare,
     Users, PenLine, Inbox, Zap, ChevronDown,
-    RotateCcw,
-} from 'lucide-react'
+    RotateCcw, Sparkles } from 'lucide-react'
 import AppLayout from '../../Layouts/AppLayout'
 import { get, post, del } from '../../lib/api'
 import { timeAgo } from '../../lib/utils'
@@ -47,8 +46,19 @@ const TYPE_CFG = {
     data_deletion_reviewed: { icon: AlertTriangle, color: 'blue', label: 'Data Deletion Request', category: 'activity', actionLabel: 'Open Profile', actionUrl: () => '/profile', template: d => d.message || 'Your data deletion request was reviewed' },
     review_certificate_released: { icon: Trophy, color: 'yellow', label: 'Certificate Ready', category: 'activity', actionLabel: 'Open My Reviews', actionUrl: () => '/reviews', template: d => d.message || 'Your certificate of review service is ready' },
     review_certificate_revoked: { icon: AlertTriangle, color: 'red', label: 'Certificate Revoked', category: 'activity', actionLabel: 'Open My Reviews', actionUrl: () => '/reviews', template: d => d.message || 'Your certificate of review service was revoked' },
+    mentorship_requested: { icon: Users, color: 'violet', label: 'Mentorship Request', category: 'action', actionLabel: 'Open Mentorship', actionUrl: () => '/mentorship', template: d => d.message || 'Someone asked you to be their mentor' },
+    mentorship_accepted: { icon: Users, color: 'emerald', label: 'Mentorship Accepted', category: 'activity', actionLabel: 'Open Mentorship', actionUrl: () => '/mentorship', template: d => d.message || 'Your mentorship request was accepted' },
+    mentorship_declined: { icon: Users, color: 'gray', label: 'Mentorship Request', category: 'activity', actionLabel: 'Open Mentorship', actionUrl: () => '/mentorship', template: d => d.message || 'Your mentorship request was declined' },
+    opportunity_match: { icon: Sparkles, color: 'emerald', label: 'Funding Opportunity', category: 'activity', actionLabel: 'See opportunities', actionUrl: () => '/funding-opportunities', template: d => d.message || 'A funding opportunity matches your work' },
+    proposal_message: { icon: MessageSquare, color: 'indigo', label: 'New Message', category: 'action', actionLabel: 'Open Messages', actionUrl: d => d.proposal_id ? `/proposals/${d.proposal_id}?tab=Messages` : '/notifications', template: d => d.message || 'You have a new message about a proposal' },
+    risk_digest: { icon: AlertTriangle, color: 'red', label: 'Projects at Risk', category: 'action', actionLabel: 'Open Projects at Risk', actionUrl: () => '/projects-at-risk?level=high', template: d => d.message || 'Some funded projects need attention' },
+    project_health_warning: { icon: AlertTriangle, color: 'amber', label: 'Project Needs Attention', category: 'action', actionLabel: 'Open Project', actionUrl: d => d.proposal_id ? `/proposals/${d.proposal_id}` : '/my-proposals', template: d => d.message || 'Your project needs attention' },
     review_certificate_withdrawn: { icon: AlertTriangle, color: 'amber', label: 'Certificates Withdrawn', category: 'activity', actionLabel: 'Open My Reviews', actionUrl: () => '/reviews', template: d => d.message || 'Certificates of review service were withdrawn' },
     progress_report_reviewed: { icon: CheckCircle2, color: 'green', label: 'Progress Report Reviewed', category: 'activity', actionLabel: 'Open Reports', actionUrl: d => d.proposal_id ? `/proposals/${d.proposal_id}?tab=Progress` : '/progress-reports', template: d => d.message || 'Progress Report Reviewed' },
+    broadcast:                   { icon: Bell, color: 'indigo', label: 'Announcement', category: 'activity', actionLabel: null, actionUrl: () => '/notifications', template: d => d.title ? `${d.title}${d.message ? ` — ${d.message}` : ''}` : (d.message || 'New announcement') },
+    contract_reminder:           { icon: PenLine, color: 'amber', label: 'Contract Needed', category: 'action', actionLabel: 'Open Proposal', actionUrl: d => d.proposal_id ? `/proposals/${d.proposal_id}` : '/my-research', template: d => d.message || `Upload the signed contract for ${d.tracker_number || 'your project'}` },
+    contract_escalation:         { icon: AlertTriangle, color: 'red', label: 'Contract Overdue', category: 'action', actionLabel: 'Open Awarded', actionUrl: () => '/admin/awarded', template: d => d.message || `The contract for ${d.tracker_number || 'a project'} is long overdue` },
+    stage_escalation:            { icon: AlertTriangle, color: 'red', label: 'Escalation', category: 'action', actionLabel: 'Open Proposal', actionUrl: d => d.proposal_id ? `/proposals/${d.proposal_id}` : '/admin/turnaround', template: d => d.message || `${d.tracker_number || 'A proposal'} is long overdue` },
     stage_reminder:              { icon: AlertTriangle, color: 'amber',  label: 'Action Needed', category: 'action', actionLabel: 'Open Proposal', actionUrl: d => d.proposal_id ? `/proposals/${d.proposal_id}` : '/notifications', template: d => d.message || `${d.tracker_number || 'A proposal'} is waiting on you` },
     review_disagreement:         { icon: AlertTriangle, color: 'amber',  label: 'Reviewers Disagree', category: 'action', actionLabel: 'Open Proposal', actionUrl: d => d.proposal_id ? `/proposals/${d.proposal_id}` : '/admin/blind-review', template: d => d.message || `Blind reviewers disagree on ${d.tracker_number || 'a proposal'}` },
     defence_extension_requested: { icon: Calendar,      color: 'amber',  label: 'Defence Deadline Extension Request', category: 'action', actionLabel: 'Review Request', actionUrl: () => '/admin/defence-extensions', template: d => d.message || `Score deadline extension requested for ${d.tracker_number || 'a proposal'}` },

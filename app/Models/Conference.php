@@ -21,6 +21,9 @@ class Conference extends Model
         'abstract_submission_open', 'abstract_deadline',
     ];
 
+    /** The online join link is for registrants (sent by email) and organisers, not the public. */
+    protected $hidden = ['virtual_link'];
+
     protected $casts = [
         'start_date' => 'datetime',
         'end_date' => 'datetime',

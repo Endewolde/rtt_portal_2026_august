@@ -16,6 +16,8 @@ use App\Models\Proposal;
 use App\Models\ReviewAssignment;
 use App\Models\ReviewScore;
 use App\Models\User;
+use App\Support\Programmes;
+use App\Support\ReviewRoute;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -280,8 +282,13 @@ class ReviewScoreService
      * number. If it isn't configured, that's a real misconfiguration: it's logged and
      * treated as 0 (a fail-safe "no bar set" rather than guessing a business number).
      */
-    private function thresholdValue(string $key): float
+    private function thresholdValue(string $key, ?Proposal $proposal = null): float
     {
+        // A call's own review route can set its own pass mark (raw points, like the standard).
+        if ($proposal && ($own = ReviewRoute::threshold($proposal, $key)) !== null) {
+            return $own;
+        }
+
         $value = DB::table('threshold_settings')->where('key', $key)->value('value');
 
         if ($value === null) {
@@ -361,16 +368,24 @@ class ReviewScoreService
         $combined = ($blind['score'] ?? 0.0) + ($defence['score'] ?? 0.0);
         $combinedMax = ($blind['max'] ?? 0.0) + ($defence['max'] ?? 0.0);
 
-        $blindThreshold = $this->thresholdValue('blind_threshold');
-        $defenceThreshold = $this->thresholdValue('defence_threshold');
-        $combinedThreshold = $this->thresholdValue('combined_threshold');
+        $blindThreshold = $this->thresholdValue('blind_threshold', $proposal);
+        $defenceThreshold = $this->thresholdValue('defence_threshold', $proposal);
+        $combinedThreshold = $this->thresholdValue('combined_threshold', $proposal);
         $mode = $this->combinedDecisionMode();
+
+        // A call without open defence is decided on blind review alone, so the
+        // overall verdict is the blind one against the blind pass mark.
+        $skipsDefence = ReviewRoute::skipsDefence($proposal);
+        if ($skipsDefence) {
+            $combinedThreshold = $blindThreshold;
+        }
 
         $blindPasses = $blind === null ? null : $blind['score'] >= $blindThreshold;
         $defenceBelowThreshold = $defence === null ? null : $defence['score'] < $defenceThreshold;
         $meetsCombinedBar = $defence === null ? null : $combined >= $combinedThreshold;
 
         $combinedPasses = match (true) {
+            $skipsDefence && $defence === null => $blindPasses,
             $defence === null => null,
             $mode === 'strict_all' => ($blindPasses ?? false) && ! $defenceBelowThreshold && $meetsCombinedBar,
             default => $meetsCombinedBar,
@@ -385,6 +400,7 @@ class ReviewScoreService
             'defence_threshold' => $defenceThreshold,
             'combined_threshold' => $combinedThreshold,
             'decision_mode' => $mode,
+            'skips_defence' => $skipsDefence,
             'blind_passes' => $blindPasses,
             'defence_below_threshold' => $defenceBelowThreshold,
             'combined_passes' => $combinedPasses,
@@ -699,6 +715,12 @@ class ReviewScoreService
             return;
         }
 
+        // ...and until the panel is as large as the call's review route asks for.
+        $needed = ReviewRoute::for($proposal)['defence_reviewers'];
+        if ($needed && $defenceAssignments->count() < $needed) {
+            return;
+        }
+
         // ...and until the college officer has confirmed the defence took place, so
         // scores for a defence the team never attended can't decide the proposal.
         $attendance = app(DefenceAttendanceService::class);
@@ -795,7 +817,13 @@ class ReviewScoreService
             return;
         }
 
-        $threshold = $this->thresholdValue('blind_threshold');
+        // The call's review route can ask for a larger panel before anything is decided.
+        $route = ReviewRoute::for($proposal);
+        if ($route['blind_reviewers'] && $assignments->count() < $route['blind_reviewers']) {
+            return;
+        }
+
+        $threshold = $this->thresholdValue('blind_threshold', $proposal);
         $secondOpinionNote = null;
 
         // A second opinion was asked for because the reviewers disagreed, and it is in:
@@ -846,6 +874,17 @@ class ReviewScoreService
                 + ($moderationNote ? ['moderated' => true, 'moderation_note' => $moderationNote] : [])
                 + ($secondOpinionNote ? ['second_opinion' => true] : [])
         );
+
+        // This call has no open defence: go straight on to central evaluation.
+        if ($passes && ! $route['open_defence']) {
+            $this->workflowService->transition(
+                $proposal->fresh(),
+                'skip_defence',
+                $systemActor,
+                "This call's review route has no open defence, so the proposal moves straight to central evaluation on its blind review score ({$scoreLabel}).",
+                ['automatic' => true, 'review_route' => true]
+            );
+        }
     }
 
     /**
@@ -996,11 +1035,7 @@ class ReviewScoreService
             return;
         }
 
-        $directorRole = [
-            'research' => 'research_officer',
-            'community_engagement' => 'community_officer',
-            'technology_transfer' => 'technology_officer',
-        ][$proposal->category] ?? null;
+        $directorRole = Programmes::directorRoles($proposal->category);
 
         $recipients = User::role('central_officer')->where('status', 'active')->get();
         if ($directorRole) {

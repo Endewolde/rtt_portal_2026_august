@@ -9,6 +9,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../Components/Toast';
 import { formatDate, formatDateTime, formatCurrency } from '../../lib/utils';
 import api from '../../lib/api';
+import ProposalHover from '../../Components/Finance/ProposalHover';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -166,9 +167,9 @@ export default function BudgetRequestDetail() {
         if (acting) return;
         setActing(true);
         try {
-            const res = await apiCall();
-            setRequest(res.data?.data ?? res.data);
+            await apiCall();
             success(successMsg);
+            load();
         } catch (e) {
             error(e.response?.data?.message ?? 'Action failed.');
         } finally {
@@ -176,10 +177,12 @@ export default function BudgetRequestDetail() {
         }
     };
 
-    if (loading) return (
+    if (loading && !request) return (
         <AppLayout breadcrumb="Budget Requests / Detail">
-            <div className="flex justify-center py-20">
-                <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+            <div className="mx-auto max-w-4xl space-y-4">
+                <div className="h-20 animate-pulse rounded-2xl bg-gray-100" />
+                <div className="h-24 animate-pulse rounded-2xl bg-gray-100" />
+                <div className="grid gap-4 lg:grid-cols-3"><div className="h-64 animate-pulse rounded-2xl bg-gray-100 lg:col-span-2" /><div className="h-64 animate-pulse rounded-2xl bg-gray-100" /></div>
             </div>
         </AppLayout>
     );
@@ -209,25 +212,44 @@ export default function BudgetRequestDetail() {
             <div className="max-w-4xl mx-auto space-y-5">
 
                 {/* Back + header */}
-                <div className="flex items-center gap-3">
-                    <Link href="/budget-requests"
-                        className="p-2 rounded-xl border border-gray-200 hover:bg-gray-50 text-gray-500">
-                        <ArrowLeft size={16} />
-                    </Link>
-                    <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-mono text-sm font-bold text-blue-600">{request.proposal?.tracker_number}</span>
-                            <span className="text-gray-400 text-sm">Round {request.funding_round}</span>
-                            <StatusBadge status={request.status} size="lg" />
+                <div className="flex flex-col gap-4 rounded-2xl border border-gray-200 bg-white p-5 sm:flex-row sm:items-center">
+                    <div className="flex min-w-0 flex-1 items-start gap-3">
+                        <Link href="/budget-requests" aria-label="Back to budget requests"
+                            className="shrink-0 rounded-xl border border-gray-200 p-2 text-gray-500 hover:bg-gray-50">
+                            <ArrowLeft size={16} />
+                        </Link>
+                        <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <ProposalHover id={request.proposal?.id}><Link href={`/proposals/${request.proposal?.id}`} className="font-mono text-sm font-bold text-indigo-600">{request.proposal?.tracker_number}</Link></ProposalHover>
+                                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-600">Round {request.funding_round}</span>
+                                <StatusBadge status={request.status} size="lg" />
+                            </div>
+                            <p className="mt-1 text-base font-bold text-gray-900">{request.proposal?.title}</p>
                         </div>
-                        <p className="text-base font-bold text-gray-900 truncate mt-0.5">{request.proposal?.title}</p>
+                    </div>
+                    <div className="shrink-0 sm:text-right">
+                        <p className="text-xs text-gray-500">Requested</p>
+                        <p className="text-2xl font-bold tabular-nums text-gray-900">{formatCurrency(request.total_amount)}</p>
                     </div>
                 </div>
+
+                {request.status === 'finance_returned' && request.finance_notes && (
+                    <div className="flex items-start gap-2.5 rounded-2xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-900">
+                        <XCircle size={16} className="mt-0.5 shrink-0" />
+                        <div><p className="font-semibold">Returned by finance</p><p className="text-xs">{request.finance_notes}</p></div>
+                    </div>
+                )}
+                {request.status === 'rejected' && request.rejection_reason && (
+                    <div className="flex items-start gap-2.5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+                        <XCircle size={16} className="mt-0.5 shrink-0" />
+                        <div><p className="font-semibold">Rejected</p><p className="text-xs">{request.rejection_reason}</p></div>
+                    </div>
+                )}
 
                 {/* Timeline */}
                 <div className="bg-white rounded-2xl border border-gray-200 p-5">
                     <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-4">Request Progress</p>
-                    <Timeline status={request.status} />
+                    <div className="-mx-1 overflow-x-auto px-1 pb-1"><div className="min-w-140"><Timeline status={request.status} /></div></div>
                 </div>
 
                 <div className="grid lg:grid-cols-3 gap-5">
@@ -322,7 +344,7 @@ export default function BudgetRequestDetail() {
                             {/* My signature actions */}
                             {canSign && (
                                 <div className="flex gap-2 mt-4 pt-3 border-t border-gray-100">
-                                    <button onClick={() => act('Sign', () => api.post(`/budget-requests/${id}/sign`), 'Signed successfully.')}
+                                    <button onClick={() => act(() => api.post(`/budget-requests/${id}/sign`), 'Signed.')} disabled={acting}
                                         className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700">
                                         <CheckCircle2 size={14} /> Sign Budget Request
                                     </button>
@@ -379,8 +401,8 @@ export default function BudgetRequestDetail() {
                         <div className="bg-white rounded-2xl border border-gray-200 p-5 space-y-3">
                             <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Details</p>
                             {[
-                                ['Submitted by', request.requestedBy?.name],
-                                ['Template',     request.formTemplate?.name],
+                                ['Requested by', request.requested_by?.name],
+                                ['Form',         request.form_template?.name],
                                 ['Funding Round',`Round ${request.funding_round}`],
                                 ['Created',      formatDate(request.created_at)],
                                 ['Submitted',    request.submitted_at ? formatDate(request.submitted_at) : null],

@@ -33,7 +33,7 @@ export default function ForgotPassword() {
     }
 
     if (sent) return (
-        <GuestLayout
+        <GuestLayout card
             panelHeading="Check Your Inbox"
             panelSubtext="A password reset link has been sent if your email is registered with us."
         >
@@ -59,7 +59,7 @@ export default function ForgotPassword() {
     )
 
     return (
-        <GuestLayout
+        <GuestLayout card
             panelHeading="Forgot Password?"
             panelSubtext="No worries — enter your email and we'll send you a link to reset your password."
         >

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { CheckCircle, RotateCcw, XCircle, Clock, ShieldCheck, ShieldAlert, ShieldQuestion, RefreshCw, FileQuestion, X, Ban } from 'lucide-react';
+import { CheckCircle, RotateCcw, XCircle, Clock, ShieldCheck, ShieldAlert, ShieldQuestion, RefreshCw, FileQuestion, X, Ban, Users, Copy } from 'lucide-react';
 import { Link } from '@inertiajs/react';
 import AppLayout from '../../Layouts/AppLayout';
 import WorkflowBreadcrumb from '../../Components/WorkflowBreadcrumb';
@@ -52,7 +52,30 @@ function CountdownTimer({ endDate }) {
     return <p className="text-sm font-semibold text-amber-700">{display}</p>;
 }
 
-function ProposalCard({ proposal, onAction, num, checked, onToggle }) {
+/** Existing funding that overlaps: the PI's running awards, and funded proposals flagged as very similar. */
+function OverlapBadges({ overlap }) {
+    if (!overlap) return null;
+    const running = overlap.pi_running_awards ?? [];
+    const similar = overlap.similar_funded ?? [];
+    if (!running.length && !similar.length) return null;
+    return (
+        <span className="mt-1 flex flex-wrap gap-1.5">
+            {running.length > 0 && (
+                <span title={`PI already leads: ${running.join(', ')}`} className="inline-flex items-center gap-1 rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-semibold text-violet-700 ring-1 ring-violet-200">
+                    <Users size={10} /> PI leads {running.length} running project{running.length === 1 ? '' : 's'}
+                </span>
+            )}
+            {similar.map((s) => (
+                <a key={s.id} href={`/proposals/${s.id}`} target="_blank" rel="noreferrer" title={s.title}
+                    className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700 ring-1 ring-red-200 hover:bg-red-100">
+                    <Copy size={10} /> {Math.round(s.score * 100)}% like funded {s.tracker_number}
+                </a>
+            ))}
+        </span>
+    );
+}
+
+function ProposalCard({ proposal, onAction, num, checked, onToggle, overlap }) {
     return (
         <div className={`bg-white border rounded-xl flex items-stretch overflow-hidden hover:shadow-md transition-all ${
             checked ? 'border-green-300 shadow-sm' : 'border-gray-200'
@@ -83,6 +106,7 @@ function ProposalCard({ proposal, onAction, num, checked, onToggle }) {
                         <p className="text-xs text-gray-500 mt-0.5 truncate">
                             {proposal.pi?.name ?? '—'} · {proposal.college?.name ?? '—'} · {formatDate(proposal.submitted_at)}
                         </p>
+                        <OverlapBadges overlap={overlap} />
                     </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
@@ -158,12 +182,20 @@ export default function ValidationQueue() {
     const [rejectedLoading, setRejectedLoading] = useState(false);
     const [rejectedLoaded, setRejectedLoaded] = useState(false);
 
+    const [overlap, setOverlap] = useState({});
+
     const load = () => {
         setLoading(true);
         get('/proposals/validation-queue')
             .then((r) => {
-                setData(r.data?.data ?? r.data ?? []);
+                const list = r.data?.data ?? r.data ?? [];
+                setData(list);
                 setSelectedIds(new Set());
+                // Overlap with existing funding, fetched after the list so it never slows it down.
+                const ids = list.map((p) => p.id).slice(0, 300);
+                if (ids.length) {
+                    get('/proposal-overlap', { ids }).then((o) => setOverlap(o.data ?? {})).catch(() => {});
+                }
             })
             .catch(() => {})
             .finally(() => setLoading(false));
@@ -462,6 +494,7 @@ export default function ValidationQueue() {
                                                 num={i + 1}
                                                 checked={selectedIds.has(p.id)}
                                                 onToggle={toggleOne}
+                                                overlap={overlap[p.id]}
                                             />
                                         ))}
                                     </div>

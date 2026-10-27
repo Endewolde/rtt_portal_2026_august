@@ -8,6 +8,7 @@ import AppLayout from '../../Layouts/AppLayout';
 import InsightsNav from '../../Components/InsightsNav';
 import { PageHeader, Panel, EmptyState, CHART } from '../../Components/Insights/Kit';
 import { post, get } from '../../lib/api';
+import { programmes } from '../../lib/programmes';
 import { useAuth } from '../../hooks/useAuth';
 import { formatDateTime, getStatusLabel } from '../../lib/utils';
 import {
@@ -15,6 +16,7 @@ import {
     builderLabel, SubjectIcon,
 } from '../../Components/Reports/ReportShared';
 import { useToast } from '../../Components/Toast';
+import { term } from '../../lib/terms';
 
 const STEPS = [
     { n: 1, label: 'Subject' },
@@ -26,11 +28,7 @@ const STEPS = [
 
 const CHART_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#06b6d4'];
 
-const CATEGORY_OPTIONS = [
-    { value: 'research', label: 'Research' },
-    { value: 'community_engagement', label: 'Community Engagement' },
-    { value: 'technology_transfer', label: 'Technology Transfer' },
-];
+const categoryOptions = () => programmes({ includeInactive: true }).map((p) => ({ value: p.key, label: p.name }));
 
 const LEVEL_OPTIONS = [
     { value: 'college', label: 'College (Level 1)' },
@@ -99,7 +97,7 @@ function FilterControl({ subject, filterKey, value, onChange, colleges, lockedCo
         }
         return (
             <select value={value} onChange={e => onChange(e.target.value)} className={SELECT_CLASS}>
-                <option value="">All Colleges</option>
+                <option value="">All {term('college', { plural: true, lower: true })}</option>
                 {colleges.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
         );
@@ -116,7 +114,7 @@ function FilterControl({ subject, filterKey, value, onChange, colleges, lockedCo
         return (
             <select value={value} onChange={e => onChange(e.target.value)} className={SELECT_CLASS}>
                 <option value="">All Categories</option>
-                {CATEGORY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                {categoryOptions().map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
         );
     }

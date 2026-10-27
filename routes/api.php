@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\AssistantController;
 use App\Http\Controllers\Api\AuditLogController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\AwardController;
+use App\Http\Controllers\Api\AwardedProposalController;
 use App\Http\Controllers\Api\BudgetController;
 use App\Http\Controllers\Api\BudgetMilestoneController;
 use App\Http\Controllers\Api\BudgetRevisionController;
@@ -42,15 +43,20 @@ use App\Http\Controllers\Api\ExternalFund\TeamMemberController as EFTeamMemberCo
 use App\Http\Controllers\Api\FaqController;
 use App\Http\Controllers\Api\FeatureController;
 use App\Http\Controllers\Api\FeedbackController;
+use App\Http\Controllers\Api\FundingRoundController;
 use App\Http\Controllers\Api\HealthController;
+use App\Http\Controllers\Api\IntegrationController;
+use App\Http\Controllers\Api\Integrations\IntegrationApiController;
 use App\Http\Controllers\Api\LoginNoticeController;
 use App\Http\Controllers\Api\LookupOptionController;
+use App\Http\Controllers\Api\MentorshipController;
 use App\Http\Controllers\Api\MidtermEvaluationController;
 use App\Http\Controllers\Api\NoCostExtensionController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\OnboardingController;
 use App\Http\Controllers\Api\OngoingProposalsController;
 use App\Http\Controllers\Api\PersonalDataController;
+use App\Http\Controllers\Api\ProgrammeController;
 use App\Http\Controllers\Api\ProgressReportController;
 use App\Http\Controllers\Api\ProjectRiskController;
 use App\Http\Controllers\Api\ProposalAiScoreController;
@@ -59,11 +65,14 @@ use App\Http\Controllers\Api\ProposalApprovalReportController;
 use App\Http\Controllers\Api\ProposalArchiveController;
 use App\Http\Controllers\Api\ProposalCallController;
 use App\Http\Controllers\Api\ProposalController;
+use App\Http\Controllers\Api\ProposalFinanceCardController;
+use App\Http\Controllers\Api\ProposalMessageController;
 use App\Http\Controllers\Api\ProposalPipelineController;
 use App\Http\Controllers\Api\ProposalTemplateController;
 use App\Http\Controllers\Api\ProposalValidationController;
 use App\Http\Controllers\Api\ProposalWizardController;
 use App\Http\Controllers\Api\ReportController;
+use App\Http\Controllers\Api\ReportSubscriptionController;
 use App\Http\Controllers\Api\RepositoryController;
 use App\Http\Controllers\Api\ResearcherHubController;
 use App\Http\Controllers\Api\ResearcherProfileController;
@@ -135,6 +144,7 @@ Route::prefix('v1')->group(function () {
     Route::post('/conferences/{slug}/register', [ConferenceController::class, 'register']);
     // Abstracts — public
     Route::post('/conferences/{slug}/abstracts', [AbstractController::class, 'store']);
+    Route::middleware('throttle:5,10')->post('/abstracts/mine/link', [AbstractController::class, 'requestMine']);
     Route::get('/abstracts/mine', [AbstractController::class, 'mine']);
     Route::get('/abstracts/track/{token}', [AbstractController::class, 'track']);
     Route::post('/abstracts/withdraw/{token}', [AbstractController::class, 'withdraw']);
@@ -193,6 +203,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/users/{id}/impersonate', [UserController::class, 'impersonate']);
         Route::get('/users/{id}/academic-info', [UserController::class, 'academicInfo']);
         Route::get('/users/{id}/proposal-history', [UserController::class, 'proposalHistory']);
+        Route::get('/users/{id}/card', [UserController::class, 'card']);
         Route::get('/users/{id}/profile-360', [UserController::class, 'profile360']);
         Route::get('/users/{id}/activity-timeline', [UserController::class, 'activityTimeline']);
         Route::get('/users/{id}/activity-heatmap', [UserController::class, 'activityHeatmap']);
@@ -202,6 +213,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/roles', [RoleController::class, 'store']);
         Route::put('/roles/{id}', [RoleController::class, 'update']);
         Route::delete('/roles/{id}', [RoleController::class, 'destroy']);
+        Route::get('/roles/{id}/users', [RoleController::class, 'users']);
         Route::get('/roles/{id}/permissions', [RoleController::class, 'permissions']);
         Route::put('/roles/{id}/permissions', [RoleController::class, 'updatePermissions']);
         Route::get('/permissions', [RoleController::class, 'allPermissions']);
@@ -251,12 +263,15 @@ Route::prefix('v1')->group(function () {
         // Registrations
         Route::get('/admin/conferences/{id}/registrations', [ConferenceController::class, 'registrations']);
         Route::get('/admin/conferences/{id}/registrations/export', [ConferenceController::class, 'exportRegistrations']);
+        Route::patch('/admin/conferences/{id}/registrations/{registrationId}', [ConferenceController::class, 'updateRegistration']);
         // Abstracts — admin
         Route::get('/admin/abstracts', [AbstractAdminController::class, 'index']);
+        // export before {id}, or "export" is read as an abstract's id
+        Route::get('/admin/abstracts/export', [AbstractAdminController::class, 'export']);
         Route::get('/admin/abstracts/{id}', [AbstractAdminController::class, 'show']);
         Route::patch('/admin/abstracts/{id}/status', [AbstractAdminController::class, 'updateStatus']);
         Route::post('/admin/abstracts/{id}/assign-reviewer', [AbstractAdminController::class, 'assignReviewer']);
-        Route::get('/admin/abstracts/export', [AbstractAdminController::class, 'export']);
+        Route::delete('/admin/abstracts/{id}/reviewers/{reviewerId}', [AbstractAdminController::class, 'removeReviewer']);
         // Abstracts — reviewer
         Route::post('/admin/abstracts/{id}/next-steps', [AbstractAdminController::class, 'sendNextSteps']);
         Route::get('/reviewer/abstracts', [AbstractAdminController::class, 'reviewerIndex']);
@@ -315,19 +330,27 @@ Route::prefix('v1')->group(function () {
         Route::put('/settings', [SettingsController::class, 'update']);
         Route::get('/settings/app', [SettingsController::class, 'appSettings']);
         Route::put('/settings/app/bulk', [SettingsController::class, 'updateBulk']);
+        Route::put('/settings/public-site', [SettingsController::class, 'updatePublicSite']);
         Route::get('/settings/system-info', [SettingsController::class, 'systemInfo']);
         Route::post('/settings/clear-cache', [SettingsController::class, 'clearCache']);
         Route::post('/settings/toggle-maintenance', [SettingsController::class, 'toggleMaintenance']);
         Route::post('/settings/test-email', [SettingsController::class, 'testEmail']);
+        Route::post('/settings/test-sms', [SettingsController::class, 'testSms']);
         Route::post('/settings/upload-asset', [SettingsController::class, 'uploadAsset']);
         Route::post('/settings/upload-editor-image', [SettingsController::class, 'uploadEditorImage']);
         Route::post('/settings/send-email', [SettingsController::class, 'sendBroadcastEmail']);
+        Route::post('/settings/broadcast/preview', [SettingsController::class, 'previewBroadcast']);
+        Route::get('/settings/broadcasts', [SettingsController::class, 'broadcastHistory']);
         Route::post('/settings/run-backup', [SettingsController::class, 'runBackup']);
         Route::put('/settings/app/{key}', [SettingsController::class, 'updateAppSetting']);
 
         // Proposal Calls — admin actions
         Route::post('/proposal-calls', [ProposalCallController::class, 'store']);
         Route::put('/proposal-calls/{id}', [ProposalCallController::class, 'update']);
+        Route::post('/proposal-calls/{id}/copy', [ProposalCallController::class, 'copy']);
+        Route::put('/proposal-calls/{id}/application-form', [ProposalCallController::class, 'updateApplicationForm']);
+        Route::get('/proposal-calls/{id}/review-route', [ProposalCallController::class, 'reviewRoute']);
+        Route::put('/proposal-calls/{id}/review-route', [ProposalCallController::class, 'updateReviewRoute']);
         Route::post('/proposal-calls/{id}/activate', [ProposalCallController::class, 'activate']);
         Route::post('/proposal-calls/{id}/close', [ProposalCallController::class, 'close']);
         Route::post('/proposal-calls/{id}/reopen', [ProposalCallController::class, 'reopen']);
@@ -536,6 +559,29 @@ Route::prefix('v1')->group(function () {
         // Ongoing proposals — consolidated post-award monitoring view (funded/midterm_evaluation)
         // Projects at risk — running funded projects ranked by the attention they need
         Route::get('/projects-at-risk', [ProjectRiskController::class, 'index']);
+        Route::get('/proposals/{id}/health', [ProjectRiskController::class, 'health']);
+        Route::get('/programmes', [ProgrammeController::class, 'index']);
+        Route::post('/programmes', [ProgrammeController::class, 'store']);
+        Route::put('/programmes/{id}', [ProgrammeController::class, 'update']);
+        Route::delete('/programmes/{id}', [ProgrammeController::class, 'destroy']);
+        Route::get('/integrations', [IntegrationController::class, 'index']);
+        Route::post('/integrations/keys', [IntegrationController::class, 'storeKey']);
+        Route::post('/integrations/keys/{id}/revoke', [IntegrationController::class, 'revokeKey']);
+        Route::post('/integrations/webhooks', [IntegrationController::class, 'storeWebhook']);
+        Route::put('/integrations/webhooks/{id}', [IntegrationController::class, 'updateWebhook']);
+        Route::delete('/integrations/webhooks/{id}', [IntegrationController::class, 'destroyWebhook']);
+        Route::post('/integrations/webhooks/{id}/test', [IntegrationController::class, 'testWebhook']);
+        Route::get('/mentors', [MentorshipController::class, 'mentors']);
+        Route::get('/mentorships', [MentorshipController::class, 'index']);
+        Route::post('/mentorships', [MentorshipController::class, 'store']);
+        Route::put('/mentorships/settings', [MentorshipController::class, 'updateSettings']);
+        Route::post('/mentorships/{id}/respond', [MentorshipController::class, 'respond']);
+        Route::post('/mentorships/{id}/end', [MentorshipController::class, 'end']);
+        Route::get('/proposals/{id}/mentor', [MentorshipController::class, 'forProposal']);
+        Route::get('/proposals/{id}/messages', [ProposalMessageController::class, 'index']);
+        Route::get('/proposals/{id}/messages/unread', [ProposalMessageController::class, 'unread']);
+        Route::post('/proposals/{id}/messages', [ProposalMessageController::class, 'store']);
+        Route::get('/proposal-messages/{id}/attachment', [ProposalMessageController::class, 'attachment']);
         Route::get('/projects-at-risk/export', [ProjectRiskController::class, 'export']);
         Route::get('/ongoing-proposals', [OngoingProposalsController::class, 'index']);
         Route::get('/ongoing-proposals/export', [OngoingProposalsController::class, 'export']);
@@ -549,6 +595,18 @@ Route::prefix('v1')->group(function () {
 
         // Central evaluation
         Route::get('/central-evaluation', [CentralEvaluationController::class, 'index']);
+        Route::get('/funding-rounds/calls', [FundingRoundController::class, 'calls']);
+        Route::get('/funding-rounds/call/{callId}', [FundingRoundController::class, 'draft']);
+        Route::put('/funding-rounds/call/{callId}/budget', [FundingRoundController::class, 'setBudget']);
+        Route::get('/funding-rounds/call/{callId}/allocations', [FundingRoundController::class, 'allocations']);
+        Route::put('/funding-rounds/call/{callId}/allocations', [FundingRoundController::class, 'updateAllocations']);
+        Route::get('/funding-rounds/{id}', [FundingRoundController::class, 'show']);
+        Route::put('/funding-rounds/{id}/items/{itemId}', [FundingRoundController::class, 'updateItem']);
+        Route::put('/funding-rounds/{id}/notes', [FundingRoundController::class, 'updateNotes']);
+        Route::post('/funding-rounds/{id}/auto-fill', [FundingRoundController::class, 'autoFill']);
+        Route::post('/funding-rounds/{id}/publish', [FundingRoundController::class, 'publish']);
+        Route::post('/funding-rounds/{id}/items/{itemId}/promote', [FundingRoundController::class, 'promote']);
+        Route::get('/funding-rounds/{id}/minutes', [FundingRoundController::class, 'minutes']);
         Route::get('/central-evaluation/merit-list', [CentralEvaluationController::class, 'meritList']);
         Route::get('/central-evaluation/pi/{userId}/funding-history', [CentralEvaluationController::class, 'piFundingHistory']);
         Route::post('/proposals/{id}/central/approve', [CentralEvaluationController::class, 'centralApprove']);
@@ -570,11 +628,19 @@ Route::prefix('v1')->group(function () {
 
         // Awards
         Route::get('/proposals/awarded/export', [AwardController::class, 'exportAwarded']);
+        Route::get('/proposals/awarded/insights', [AwardedProposalController::class, 'insights']);
+        Route::get('/proposals/awarded/register', [AwardedProposalController::class, 'register']);
+        Route::post('/proposals/awarded/remind-contracts', [AwardedProposalController::class, 'remindContracts']);
+        Route::get('/proposals/awarded/burn', [AwardedProposalController::class, 'burn']);
+        Route::get('/my-awards', [AwardedProposalController::class, 'mine']);
+        Route::get('/proposal-overlap', [AwardedProposalController::class, 'overlap']);
         Route::post('/proposals/{id}/award', [AwardController::class, 'store']);
         Route::get('/proposals/{id}/award', [AwardController::class, 'show']);
         Route::patch('/proposals/{id}/award', [AwardController::class, 'update']);
         Route::get('/proposals/{id}/award-letter/download', [AwardController::class, 'downloadLetter']);
         Route::post('/awards/approve-letters', [AwardController::class, 'approveLetters']);
+        Route::get('/awards/letter-template', [AwardController::class, 'letterTemplate']);
+        Route::put('/awards/letter-template', [AwardController::class, 'saveLetterTemplate']);
         Route::get('/proposals/{id}/award-details', [AwardController::class, 'show']);
         Route::put('/proposals/{id}/award-details', [AwardController::class, 'update']);
 
@@ -610,6 +676,7 @@ Route::prefix('v1')->group(function () {
             Route::post('/proposals/{id}/budget-requests', [BudgetController::class, 'createRequest']);
             Route::get('/proposals/{id}/budget-requests', [BudgetController::class, 'listRequests']);
             Route::get('/proposals/{id}/budget-summary', [BudgetController::class, 'budgetSummary']);
+            Route::get('/proposals/{id}/finance-card', ProposalFinanceCardController::class);
             Route::post('/budget-requests/{id}/submit', [BudgetController::class, 'submitRequest']);
             Route::post('/budget-requests/{id}/sign', [BudgetController::class, 'sign']);
             Route::post('/budget-requests/{id}/refuse', [BudgetController::class, 'refuse']);
@@ -689,12 +756,15 @@ Route::prefix('v1')->group(function () {
             Route::get('/proposals/{proposal}/ai-score', [ProposalAiScoreController::class, 'show']);
             Route::post('/proposals/{proposal}/ai-score/generate', [ProposalAiScoreController::class, 'generate']);
             Route::get('/proposals/{id}/review-results', [ReviewController::class, 'proposalReviewResults']);
+            Route::post('/review-assignments/{id}/quality', [ReviewController::class, 'rateQuality']);
+            Route::get('/my-review-quality', [ReviewController::class, 'myQuality']);
             Route::get('/proposals/{id}/review-results/recalculate', [ReviewController::class, 'recalculateReviewScore']);
             Route::post('/proposals/{id}/review-results/recalculate/apply', [ReviewController::class, 'applyRecalculatedDecision']);
             Route::get('/proposals/{proposal}/reviewer-suggestions', [ReviewerMatchController::class, 'suggestions']);
             Route::post('/proposals/{proposal}/clone', [ProposalController::class, 'clone']);
 
             // Budget milestones
+            Route::get('/budget-milestones', [BudgetMilestoneController::class, 'overview']);
             Route::get('/proposals/{proposalId}/milestones', [BudgetMilestoneController::class, 'index']);
             Route::post('/proposals/{proposalId}/milestones', [BudgetMilestoneController::class, 'store']);
             Route::put('/proposals/{proposalId}/milestones/{budgetMilestone}', [BudgetMilestoneController::class, 'update']);
@@ -718,6 +788,11 @@ Route::prefix('v1')->group(function () {
             Route::post('/reports/generate', [ReportController::class, 'generate']);
             Route::get('/reports/builder-options', [ReportController::class, 'builderOptions']);
             Route::get('/reports/live-options', [ReportController::class, 'liveOptions']);
+            Route::get('/report-subscriptions', [ReportSubscriptionController::class, 'index']);
+            Route::post('/report-subscriptions', [ReportSubscriptionController::class, 'store']);
+            Route::put('/report-subscriptions/{id}', [ReportSubscriptionController::class, 'update']);
+            Route::delete('/report-subscriptions/{id}', [ReportSubscriptionController::class, 'destroy']);
+            Route::post('/report-subscriptions/{id}/send', [ReportSubscriptionController::class, 'sendNow']);
             Route::get('/reports/live/{type}', [ReportController::class, 'live']);
             Route::get('/reports/live/{type}/export', [ReportController::class, 'liveExport']);
             // Report ids are UUIDs — without the constraint /reports/proposals/export below is caught here.
@@ -751,6 +826,7 @@ Route::prefix('v1')->group(function () {
 
             Route::apiResource('agencies', EFAgencyController::class);
 
+            Route::get('/opportunities/recommended', [EFOpportunityController::class, 'recommended']);
             Route::apiResource('opportunities', EFOpportunityController::class);
 
             Route::apiResource('applications', EFApplicationController::class);
@@ -768,6 +844,7 @@ Route::prefix('v1')->group(function () {
             Route::apiResource('awards', EFAwardController::class);
             Route::get('awards/{id}/expenditures', [EFExpenditureController::class, 'index']);
             Route::post('awards/{id}/expenditures', [EFExpenditureController::class, 'store']);
+            Route::delete('expenditures/{id}', [EFExpenditureController::class, 'destroy']);
             Route::get('awards/{id}/milestones', [EFMilestoneController::class, 'index']);
             Route::post('awards/{id}/milestones', [EFMilestoneController::class, 'store']);
             Route::get('awards/{id}/documents', [EFDocumentController::class, 'index']);
@@ -820,4 +897,13 @@ Route::prefix('v1')->group(function () {
     // The controller authenticates via query ?token= param.
     Route::get('/calendar/export', [CalendarController::class, 'export']);
     Route::get('/calendar/events', [CalendarController::class, 'events']);
+});
+
+// ── Integration API for other systems: read-only, authenticated by API key ─────
+Route::prefix('integrations/v1')->middleware('throttle:120,1')->group(function () {
+    Route::middleware('api.key:proposals')->get('/proposals', [IntegrationApiController::class, 'proposals']);
+    Route::middleware('api.key:proposals')->get('/proposals/{tracker}', [IntegrationApiController::class, 'proposal']);
+    Route::middleware('api.key:awards')->get('/awards', [IntegrationApiController::class, 'awards']);
+    Route::middleware('api.key:outputs')->get('/research-outputs', [IntegrationApiController::class, 'outputs']);
+    Route::middleware('api.key:reports')->get('/reports/{type}', [IntegrationApiController::class, 'report']);
 });

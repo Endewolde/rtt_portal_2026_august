@@ -217,7 +217,7 @@ export default function ReviewCertificates() {
                             <div className="overflow-x-auto">
                                 <table className="w-full min-w-[720px] text-sm">
                                     <thead className="bg-gray-50 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                                        <tr>
+                                        <tr><th className="px-4 py-2.5 w-10 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">#</th>
                                             <th className="px-4 py-2.5">Reviewer</th>
                                             <th className="px-3 py-2.5 text-right">Blind</th>
                                             <th className="px-3 py-2.5 text-right">Defence</th>
@@ -229,8 +229,8 @@ export default function ReviewCertificates() {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100">
-                                        {rows.map((r) => (
-                                            <tr key={r.user_id} className="hover:bg-gray-50/60">
+                                        {rows.map((r, rowIdx) => (
+                                            <tr key={r.user_id} className="hover:bg-gray-50/60"><td className="px-4 py-3 w-10 text-xs font-medium tabular-nums text-gray-400">{rowIdx + 1}</td>
                                                 <td className="px-4 py-3">
                                                     <p className="font-medium text-gray-900">{r.name}</p>
                                                     {r.email && <p className="text-xs text-gray-400">{r.email}</p>}
@@ -263,7 +263,7 @@ export default function ReviewCertificates() {
                                             </tr>
                                         ))}
                                         {rows.length === 0 && (
-                                            <tr><td colSpan={8} className="px-4 py-10 text-center text-sm text-gray-400">No reviewers match your search.</td></tr>
+                                            <tr><td colSpan={9} className="px-4 py-10 text-center text-sm text-gray-400">No reviewers match your search.</td></tr>
                                         )}
                                     </tbody>
                                 </table>

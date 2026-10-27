@@ -381,16 +381,31 @@ td { padding: 7px 10px; border-bottom: 1px solid #f1f5f9; color: #334155; }
 
     <div class="finance-row">
         <div class="finance-block fb-amber">
-            <div class="finance-block-label">Total Allocated (ETB)</div>
+            <div class="finance-block-label">Total Allocated ({{ \App\Support\Terms::currency() }})</div>
             <div class="finance-block-value">{{ number_format($finance['allocated'], 0) }}</div>
         </div>
         <div class="finance-block fb-green">
-            <div class="finance-block-label">Total Disbursed (ETB)</div>
+            <div class="finance-block-label">Total Disbursed ({{ \App\Support\Terms::currency() }})</div>
             <div class="finance-block-value">{{ number_format($finance['disbursed'], 0) }}</div>
         </div>
         <div class="finance-block fb-blue">
-            <div class="finance-block-label">Remaining Balance (ETB)</div>
+            <div class="finance-block-label">Remaining Balance ({{ \App\Support\Terms::currency() }})</div>
             <div class="finance-block-value">{{ number_format($finance['allocated'] - $finance['disbursed'], 0) }}</div>
+        </div>
+    </div>
+
+    <div class="finance-row" style="margin-top: 8px;">
+        <div class="finance-block fb-amber">
+            <div class="finance-block-label">Awarded to Projects ({{ \App\Support\Terms::currency() }})</div>
+            <div class="finance-block-value">{{ number_format($finance['awarded'] ?? 0, 0) }}</div>
+        </div>
+        <div class="finance-block fb-green">
+            <div class="finance-block-label">Spent &amp; Verified ({{ \App\Support\Terms::currency() }})</div>
+            <div class="finance-block-value">{{ number_format($finance['settled'] ?? 0, 0) }}</div>
+        </div>
+        <div class="finance-block fb-blue">
+            <div class="finance-block-label">Paid of Awarded</div>
+            <div class="finance-block-value">{{ $finance['paid_of_awarded'] ?? 0 }}%</div>
         </div>
     </div>
 

@@ -15,6 +15,8 @@ use App\Models\ProposalCall;
 use App\Models\ProposalDocument;
 use App\Models\ProposalMember;
 use App\Models\User;
+use App\Support\ApplicationForm;
+use App\Support\Sdg;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -143,6 +145,12 @@ class ProposalService
                     $updates['title'] = $data['title'] ?? $proposal->title;
                     $updates['abstract'] = $data['abstract'] ?? null;
                     $updates['keywords'] = $data['keywords'] ?? null;
+                    if (array_key_exists('sdgs', $data)) {
+                        $updates['sdgs'] = Sdg::clean($data['sdgs']) ?: null;
+                    }
+                    if (is_array($data['call_answers'] ?? null)) {
+                        $updates['call_answers'] = ApplicationForm::cleanAnswers($proposal->proposalCall?->application_form, $data['call_answers']) ?: null;
+                    }
                     $updates['focus_area'] = $data['focus_area'] ?? null;
                     $updates['duration_months'] = isset($data['duration_months']) && $data['duration_months'] !== ''
                         ? (int) $data['duration_months']
@@ -276,6 +284,13 @@ class ProposalService
         if ($budgetCount === 0) {
             throw new IncompleteProposalException(
                 'Please add at least one budget item before submitting.'
+            );
+        }
+
+        $formProblems = ApplicationForm::problems($proposal);
+        if ($formProblems) {
+            throw new IncompleteProposalException(
+                'This call also asks for: '.implode('; ', $formProblems).'. Please complete them before submitting.'
             );
         }
 

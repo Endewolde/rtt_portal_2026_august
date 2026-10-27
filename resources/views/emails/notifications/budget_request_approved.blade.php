@@ -71,7 +71,7 @@
       <div class="row"><label>{{ __('Funding Round') }}</label><span style="font-weight:600;color:#14532d;">{{ __('Round :round', ['round' => $round_number]) }}</span></div>
       @endif
       @if(!empty($requested_amount))
-      <div class="row"><label>{{ __('Approved Amount') }}</label><span class="amount-highlight">ETB {{ number_format($requested_amount, 2) }}</span></div>
+      <div class="row"><label>{{ __('Approved Amount') }}</label><span class="amount-highlight">{{ \App\Support\Terms::currency() }} {{ number_format($requested_amount, 2) }}</span></div>
       @endif
     </div>
 

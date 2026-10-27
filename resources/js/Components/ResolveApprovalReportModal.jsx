@@ -3,6 +3,7 @@ import { ShieldQuestion, CheckCircle2, XCircle, X, Activity } from 'lucide-react
 import { post } from '../lib/api';
 import { formatDate, getStatusLabel } from '../lib/utils';
 import { useToast } from './Toast';
+import { currency } from '../lib/terms';
 
 const OUTCOMES = {
     approval_stands: {
@@ -138,7 +139,7 @@ export default function ResolveApprovalReportModal({ report, proposal, onClose, 
                     {outcome === 'moved_to_ongoing' && (
                         <div className="grid gap-3 rounded-xl border border-indigo-100 bg-indigo-50/50 p-4 sm:grid-cols-3">
                             <div>
-                                <label className="mb-1.5 block text-xs font-semibold text-gray-700">Amount awarded (ETB) <span className="text-red-500">*</span></label>
+                                <label className="mb-1.5 block text-xs font-semibold text-gray-700">Amount awarded ({currency()}) <span className="text-red-500">*</span></label>
                                 <input type="number" min="0" step="0.01" value={grant.awarded_amount}
                                     onChange={(e) => setGrant(g => ({ ...g, awarded_amount: e.target.value }))}
                                     className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />

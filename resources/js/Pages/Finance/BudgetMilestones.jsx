@@ -1,385 +1,422 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { Link } from '@inertiajs/react';
 import {
-    CheckCircle2, Clock, AlertCircle, Circle, Plus, X,
-    Edit2, Trash2, Loader2, DollarSign, Calendar, ChevronDown, ChevronUp,
-} from 'lucide-react'
-import AppLayout from '../../Layouts/AppLayout'
-import ConfirmDialog from '../../Components/ConfirmDialog'
-import { useAuth } from '../../hooks/useAuth'
-import { useToast } from '../../Components/Toast'
-import { get, post, put, del } from '../../lib/api'
-import { formatDate, formatCurrency, cn } from '../../lib/utils'
+    CheckCircle2, Clock, AlertCircle, Circle, Plus, X, Pencil, Trash2, Loader2, Calendar, ChevronDown,
+    Milestone, Search, Target, CalendarClock, ListChecks, FolderOpen,
+} from 'lucide-react';
+import AppLayout from '../../Layouts/AppLayout';
+import ConfirmDialog from '../../Components/ConfirmDialog';
+import { PageHeader, StatCard, Panel, EmptyState, Select, RefreshButton, StatSkeletons, Skeleton } from '../../Components/Insights/Kit';
+import { useAuth } from '../../hooks/useAuth';
+import { useToast } from '../../Components/Toast';
+import { get, post, put, del } from '../../lib/api';
+import { formatDate, formatCurrency } from '../../lib/utils';
+import { currency, term } from '../../lib/terms';
+import ProposalHover from '../../Components/Finance/ProposalHover';
+import DownloadMenu from '../../Components/Finance/DownloadMenu';
+import ClearButton from '../../Components/Finance/ClearButton';
+import { programmes, programmeLabel, programmeColor } from '../../lib/programmes';
 
-const STATUS_CONFIG = {
-    pending:     { label: 'Pending',     icon: Circle,       cls: 'bg-gray-100 text-gray-600',   bar: 'bg-gray-300'   },
-    in_progress: { label: 'In Progress', icon: Clock,        cls: 'bg-blue-100 text-blue-700',   bar: 'bg-blue-500'   },
-    completed:   { label: 'Completed',   icon: CheckCircle2, cls: 'bg-green-100 text-green-700', bar: 'bg-green-500'  },
-    overdue:     { label: 'Overdue',     icon: AlertCircle,  cls: 'bg-red-100 text-red-700',     bar: 'bg-red-500'    },
-}
+const STATUS = {
+    pending:     { label: 'Not started', icon: Circle,       cls: 'bg-gray-100 text-gray-600' },
+    in_progress: { label: 'In progress', icon: Clock,        cls: 'bg-sky-50 text-sky-700' },
+    completed:   { label: 'Done',        icon: CheckCircle2, cls: 'bg-emerald-50 text-emerald-700' },
+    overdue:     { label: 'Overdue',     icon: AlertCircle,  cls: 'bg-red-50 text-red-700' },
+};
 
-const EMPTY_FORM = { title: '', description: '', amount: '', due_date: '', sort_order: '' }
+const EMPTY = { title: '', description: '', amount: '', due_date: '', status: 'pending' };
+const today = () => new Date(new Date().toDateString());
+const isDone = (m) => m.status === 'completed' || !!m.completed_at;
+const statusOf = (m) => (isDone(m) ? 'completed' : m.due_date && new Date(m.due_date) < today() ? 'overdue' : m.status ?? 'pending');
+const daysUntil = (d) => Math.round((new Date(d) - today()) / 86400000);
+const dateInput = (d) => (d ? String(d).slice(0, 10) : '');
 
-function MilestoneForm({ open, onClose, onSaved, initial, proposalId }) {
-    const [form, setForm] = useState(initial ?? EMPTY_FORM)
-    const [saving, setSaving] = useState(false)
-    const { error } = useToast()
-
-    useEffect(() => { if (open) setForm(initial ?? EMPTY_FORM) }, [open])
+function MilestoneForm({ initial, project, onClose, onSaved }) {
+    const { error } = useToast();
+    const [form, setForm] = useState(initial ? { ...EMPTY, ...initial, amount: initial.amount ?? '', due_date: dateInput(initial.due_date), description: initial.description ?? '' } : EMPTY);
+    const [saving, setSaving] = useState(false);
+    const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+    const inputCls = 'w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 sm:text-sm';
 
     const save = async () => {
-        if (!form.title) { error('Title is required.'); return }
-        setSaving(true)
+        if (!form.title.trim()) return error('Give the milestone a title.');
+        setSaving(true);
+        const payload = { title: form.title.trim(), description: form.description || null, amount: form.amount === '' ? null : Number(form.amount), due_date: form.due_date || null, ...(initial?.id ? { status: form.status } : {}) };
         try {
-            if (initial?.id) {
-                const r = await put(`/proposals/${proposalId}/milestones/${initial.id}`, form)
-                onSaved(r.data?.data)
-            } else {
-                const r = await post(`/proposals/${proposalId}/milestones`, form)
-                onSaved(r.data?.data)
-            }
-            onClose()
+            const r = initial?.id ? await put(`/proposals/${project.id}/milestones/${initial.id}`, payload) : await post(`/proposals/${project.id}/milestones`, payload);
+            onSaved(r.data, !initial?.id);
         } catch (e) {
-            error(e?.response?.data?.message ?? 'Failed to save milestone.')
-        } finally { setSaving(false) }
-    }
+            error(e?.response?.data?.message ?? 'The milestone could not be saved.');
+        }
+        setSaving(false);
+    };
 
-    if (!open) return null
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-                    <h2 className="text-sm font-bold text-gray-900">{initial?.id ? 'Edit Milestone' : 'Add Milestone'}</h2>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={15} /></button>
-                </div>
-                <div className="p-6 space-y-4">
-                    <div>
-                        <label className="block text-xs font-semibold text-gray-600 mb-1">Title *</label>
-                        <input value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))}
-                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                            placeholder="Milestone name" />
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 backdrop-blur-sm sm:items-center sm:p-4">
+            <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
+                <div className="flex items-start justify-between gap-3 border-b border-gray-100 px-6 py-4">
+                    <div className="flex min-w-0 items-center gap-3">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600"><Milestone size={18} /></span>
+                        <div className="min-w-0">
+                            <h2 className="text-lg font-bold text-gray-900">{initial?.id ? 'Edit milestone' : 'New milestone'}</h2>
+                            <p className="truncate text-xs text-gray-500">{project.tracker_number} · {project.title}</p>
+                        </div>
                     </div>
+                    <button onClick={onClose} aria-label="Close" className="rounded-lg p-1 text-gray-400 hover:bg-gray-100"><X size={16} /></button>
+                </div>
+                <div className="space-y-4 px-6 py-5">
+                    <label className="block">
+                        <span className="mb-1 block text-sm font-medium text-gray-700">Title</span>
+                        <input value={form.title} autoFocus onChange={(e) => set('title', e.target.value)} placeholder="e.g. Field data collected" className={inputCls} />
+                    </label>
                     <div className="grid grid-cols-2 gap-3">
-                        <div>
-                            <label className="block text-xs font-semibold text-gray-600 mb-1">Budget Amount</label>
-                            <input type="number" min="0" value={form.amount}
-                                onChange={e => setForm(p => ({ ...p, amount: e.target.value }))}
-                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                                placeholder="0.00" />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-semibold text-gray-600 mb-1">Due Date</label>
-                            <input type="date" value={form.due_date}
-                                onChange={e => setForm(p => ({ ...p, due_date: e.target.value }))}
-                                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                        </div>
+                        <label className="block">
+                            <span className="mb-1 block text-sm font-medium text-gray-700">Budget ({currency()})</span>
+                            <input type="number" min="0" step="0.01" value={form.amount} onChange={(e) => set('amount', e.target.value)} placeholder="Optional" className={`${inputCls} tabular-nums`} />
+                        </label>
+                        <label className="block">
+                            <span className="mb-1 block text-sm font-medium text-gray-700">Due date</span>
+                            <input type="date" value={form.due_date} onChange={(e) => set('due_date', e.target.value)} className={inputCls} />
+                        </label>
                     </div>
-                    <div>
-                        <label className="block text-xs font-semibold text-gray-600 mb-1">Description</label>
-                        <textarea value={form.description} rows={3}
-                            onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
-                            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"
-                            placeholder="Optional details…" />
-                    </div>
+                    {initial?.id && (
+                        <div>
+                            <span className="mb-1 block text-sm font-medium text-gray-700">Status</span>
+                            <div className="grid grid-cols-3 gap-1 rounded-xl bg-gray-100 p-1">
+                                {['pending', 'in_progress', 'completed'].map((k) => (
+                                    <button key={k} type="button" onClick={() => set('status', k)}
+                                        className={`rounded-lg px-2 py-1.5 text-xs font-semibold transition ${form.status === k ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500'}`}>
+                                        {STATUS[k].label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                    <label className="block">
+                        <span className="mb-1 block text-sm font-medium text-gray-700">Description</span>
+                        <textarea rows={3} value={form.description} onChange={(e) => set('description', e.target.value)} placeholder="Optional details" className={`${inputCls} resize-none`} />
+                    </label>
                 </div>
-                <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-100">
-                    <button onClick={onClose} className="px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
-                    <button onClick={save} disabled={saving}
-                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60">
-                        {saving && <Loader2 size={12} className="animate-spin" />}
-                        {initial?.id ? 'Save Changes' : 'Add Milestone'}
+                <div className="flex gap-3 border-t border-gray-100 px-6 py-4">
+                    <button onClick={onClose} className="flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50">Cancel</button>
+                    <button onClick={save} disabled={saving} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">
+                        {saving && <Loader2 size={14} className="animate-spin" />} {initial?.id ? 'Save' : 'Add milestone'}
                     </button>
                 </div>
             </div>
         </div>
-    )
+    );
 }
 
-function MilestoneRow({ milestone, canEdit, onEdit, onDelete, onStatusChange, proposalId }) {
-    const effectiveStatus = milestone.completed_at ? 'completed'
-        : (milestone.due_date && new Date(milestone.due_date) < new Date() && milestone.status !== 'completed') ? 'overdue'
-        : milestone.status
-    const cfg = STATUS_CONFIG[effectiveStatus] ?? STATUS_CONFIG.pending
-    const Icon = cfg.icon
-    const [changing, setChanging] = useState(false)
-
-    const markComplete = async () => {
-        setChanging(true)
-        try {
-            const r = await put(`/proposals/${proposalId}/milestones/${milestone.id}`, {
-                status: milestone.status === 'completed' ? 'pending' : 'completed',
-            })
-            onStatusChange(r.data?.data)
-        } catch {}
-        finally { setChanging(false) }
-    }
+function MilestoneItem({ m, canEdit, busy, onToggle, onEdit, onDelete, last }) {
+    const status = statusOf(m);
+    const cfg = STATUS[status];
+    const Icon = cfg.icon;
+    const due = m.due_date && !isDone(m) ? daysUntil(m.due_date) : null;
 
     return (
-        <div className="flex items-start gap-4 group">
-            {/* timeline dot */}
-            <div className="flex flex-col items-center shrink-0 pt-0.5">
-                <button onClick={markComplete} disabled={!canEdit || changing}
-                    className={cn(
-                        'h-6 w-6 rounded-full border-2 flex items-center justify-center transition-colors shrink-0',
-                        effectiveStatus === 'completed'
-                            ? 'bg-green-500 border-green-500 text-white'
-                            : effectiveStatus === 'overdue'
-                            ? 'border-red-400 bg-red-50'
-                            : 'border-gray-300 bg-white hover:border-indigo-400',
-                        !canEdit && 'cursor-default'
-                    )}>
-                    {changing ? <Loader2 size={10} className="animate-spin text-gray-400" />
-                    : effectiveStatus === 'completed' ? <CheckCircle2 size={12} />
-                    : <span className="h-2 w-2 rounded-full bg-gray-300" />}
-                </button>
-            </div>
-            {/* content */}
-            <div className={cn(
-                'flex-1 border rounded-xl p-4 transition-all',
-                effectiveStatus === 'overdue' ? 'border-red-200 bg-red-50/50'
-                : effectiveStatus === 'completed' ? 'border-green-100 bg-green-50/30'
-                : 'border-gray-100 bg-white group-hover:border-gray-200'
-            )}>
+        <li className="relative flex gap-3 pb-4 last:pb-0">
+            {!last && <span className="absolute left-3.25 top-7 bottom-0 w-px bg-gray-200" />}
+            <button onClick={onToggle} disabled={!canEdit || busy} aria-label={isDone(m) ? 'Mark as not done' : 'Mark as done'}
+                className={`relative z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 transition ${
+                    status === 'completed' ? 'border-emerald-500 bg-emerald-500 text-white'
+                        : status === 'overdue' ? 'border-red-300 bg-red-50 text-red-500'
+                        : 'border-gray-300 bg-white text-gray-300'} ${canEdit ? 'hover:border-emerald-400' : 'cursor-default'}`}>
+                {busy ? <Loader2 size={12} className="animate-spin" /> : status === 'completed' ? <CheckCircle2 size={14} /> : <Icon size={12} />}
+            </button>
+            <div className={`min-w-0 flex-1 rounded-xl border px-3.5 py-2.5 ${status === 'overdue' ? 'border-red-200 bg-red-50/40' : status === 'completed' ? 'border-emerald-100 bg-emerald-50/30' : 'border-gray-200 bg-white'}`}>
                 <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-2 mb-1">
-                            <span className={cn('text-[11px] font-semibold px-2 py-0.5 rounded-full inline-flex items-center gap-1', cfg.cls)}>
-                                <Icon size={9} /> {cfg.label}
-                            </span>
-                            {milestone.amount && (
-                                <span className="text-[11px] text-gray-500 font-medium">{formatCurrency(milestone.amount)}</span>
-                            )}
-                        </div>
-                        <p className={cn('text-sm font-semibold', effectiveStatus === 'completed' ? 'line-through text-gray-400' : 'text-gray-900')}>
-                            {milestone.title}
-                        </p>
-                        {milestone.description && (
-                            <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">{milestone.description}</p>
-                        )}
-                        <div className="flex flex-wrap items-center gap-3 mt-2 text-[11px] text-gray-400">
-                            {milestone.due_date && (
-                                <span className="flex items-center gap-1">
-                                    <Calendar size={10} /> Due {formatDate(milestone.due_date)}
+                    <div className="min-w-0">
+                        <p className={`text-sm font-semibold ${status === 'completed' ? 'text-gray-500 line-through' : 'text-gray-900'}`}>{m.title}</p>
+                        {m.description && <p className="mt-0.5 text-xs leading-relaxed text-gray-500">{m.description}</p>}
+                        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-semibold ${cfg.cls}`}><Icon size={10} /> {cfg.label}</span>
+                            {m.amount != null && m.amount !== '' && <span className="font-semibold tabular-nums text-gray-700">{formatCurrency(m.amount)}</span>}
+                            {m.due_date && (
+                                <span className={`inline-flex items-center gap-1 ${due !== null && due < 0 ? 'font-semibold text-red-600' : due !== null && due <= 14 ? 'font-semibold text-amber-700' : 'text-gray-500'}`}>
+                                    <Calendar size={10} /> {formatDate(m.due_date)}
+                                    {due !== null && (due < 0 ? ` · ${-due} day${due === -1 ? '' : 's'} late` : due === 0 ? ' · today' : due <= 14 ? ` · in ${due} day${due === 1 ? '' : 's'}` : '')}
                                 </span>
                             )}
-                            {milestone.completed_at && (
-                                <span className="flex items-center gap-1 text-green-600">
-                                    <CheckCircle2 size={10} /> Completed {formatDate(milestone.completed_at)}
-                                </span>
-                            )}
+                            {m.completed_at && <span className="text-emerald-700">Done {formatDate(m.completed_at)}</span>}
                         </div>
                     </div>
                     {canEdit && (
-                        <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => onEdit(milestone)}
-                                className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg">
-                                <Edit2 size={12} />
-                            </button>
-                            <button onClick={() => onDelete(milestone)}
-                                className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
-                                <Trash2 size={12} />
-                            </button>
+                        <div className="flex shrink-0 items-center">
+                            <button onClick={onEdit} aria-label={`Edit ${m.title}`} className="rounded-lg p-1.5 text-gray-400 hover:bg-indigo-50 hover:text-indigo-600"><Pencil size={13} /></button>
+                            <button onClick={onDelete} aria-label={`Delete ${m.title}`} className="rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"><Trash2 size={13} /></button>
                         </div>
                     )}
                 </div>
             </div>
-        </div>
-    )
+        </li>
+    );
 }
 
-function ProposalMilestonePanel({ proposal, canEdit }) {
-    const [milestones, setMilestones] = useState([])
-    const [loading, setLoading] = useState(true)
-    const [formOpen, setFormOpen] = useState(false)
-    const [editing, setEditing] = useState(null)
-    const [deleting, setDeleting] = useState(null)
-    const { success, error } = useToast()
+function ProjectPanel({ project, canEdit, onChange, defaultOpen }) {
+    const { success, error } = useToast();
+    const [open, setOpen] = useState(defaultOpen);
+    const [form, setForm] = useState(null);
+    const [deleting, setDeleting] = useState(null);
+    const [busy, setBusy] = useState(null);
+    const list = project.budget_milestones ?? [];
 
-    const load = async () => {
-        setLoading(true)
+    const done = list.filter(isDone).length;
+    const overdue = list.filter((m) => statusOf(m) === 'overdue').length;
+    const planned = list.reduce((s, m) => s + (parseFloat(m.amount) || 0), 0);
+    const reached = list.filter(isDone).reduce((s, m) => s + (parseFloat(m.amount) || 0), 0);
+    const awarded = parseFloat(project.award?.awarded_amount ?? 0);
+    const pct = list.length ? Math.round((done / list.length) * 100) : 0;
+    const color = programmeColor(project.category);
+
+    const replace = (next) => onChange(project.id, next);
+
+    const toggle = async (m) => {
+        setBusy(m.id);
         try {
-            const r = await get(`/proposals/${proposal.id}/milestones`)
-            setMilestones(r.data?.data ?? [])
-        } catch {}
-        finally { setLoading(false) }
-    }
+            const r = await put(`/proposals/${project.id}/milestones/${m.id}`, { status: isDone(m) ? 'pending' : 'completed' });
+            replace(list.map((x) => (x.id === m.id ? r.data : x)));
+        } catch (e) { error(e?.response?.data?.message ?? 'The milestone could not be updated.'); }
+        setBusy(null);
+    };
 
-    useEffect(() => { load() }, [proposal.id])
-
-    const handleSaved = (item) => {
-        if (editing?.id) {
-            setMilestones(p => p.map(m => m.id === item.id ? item : m))
-            success('Milestone updated.')
-        } else {
-            setMilestones(p => [...p, item])
-            success('Milestone added.')
-        }
-        setEditing(null)
-    }
-
-    const handleDelete = async () => {
+    const remove = async () => {
+        const m = deleting;
+        setDeleting(null);
         try {
-            await del(`/proposals/${proposal.id}/milestones/${deleting.id}`)
-            setMilestones(p => p.filter(m => m.id !== deleting.id))
-            success('Milestone deleted.')
-        } catch { error('Failed to delete.') }
-        finally { setDeleting(null) }
-    }
-
-    const handleStatusChange = (item) => setMilestones(p => p.map(m => m.id === item.id ? item : m))
-
-    const completed = milestones.filter(m => m.status === 'completed' || m.completed_at).length
-    const total = milestones.length
-    const totalBudget = milestones.reduce((s, m) => s + parseFloat(m.amount ?? 0), 0)
-    const disbursed = milestones
-        .filter(m => m.status === 'completed' || m.completed_at)
-        .reduce((s, m) => s + parseFloat(m.amount ?? 0), 0)
-    const pct = total > 0 ? Math.round((completed / total) * 100) : 0
+            await del(`/proposals/${project.id}/milestones/${m.id}`);
+            replace(list.filter((x) => x.id !== m.id));
+            success('Milestone deleted.');
+        } catch { error('The milestone could not be deleted.'); }
+    };
 
     return (
-        <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
-                <div>
-                    <p className="text-sm font-bold text-gray-800">{proposal.tracker_number}</p>
-                    <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{proposal.title}</p>
-                </div>
-                <div className="flex items-center gap-3">
-                    <div className="text-right">
-                        <p className="text-xs font-semibold text-gray-800">{completed}/{total} done</p>
-                        {totalBudget > 0 && <p className="text-[10px] text-gray-400">{formatCurrency(disbursed)} / {formatCurrency(totalBudget)}</p>}
-                    </div>
-                    {canEdit && (
-                        <button onClick={() => { setEditing(null); setFormOpen(true) }}
-                            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700">
-                            <Plus size={12} /> Add
-                        </button>
-                    )}
-                </div>
-            </div>
-            {/* Progress bar */}
-            {total > 0 && (
-                <div className="px-5 py-2 bg-gray-50 border-b border-gray-100">
-                    <div className="flex items-center gap-2">
-                        <div className="flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                            <div className="h-full bg-green-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+        <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+            <div className="flex items-stretch">
+                <span className="w-1 shrink-0" style={{ backgroundColor: color }} />
+                <div className="flex min-w-0 flex-1 flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center">
+                    <button onClick={() => setOpen((v) => !v)} className="flex min-w-0 flex-1 items-start gap-3 text-left">
+                        <ChevronDown size={16} className={`mt-0.5 shrink-0 text-gray-400 transition ${open ? '' : '-rotate-90'}`} />
+                        <span className="min-w-0">
+                            <span className="flex flex-wrap items-center gap-1.5">
+                                <ProposalHover id={project.id} className="font-mono text-xs font-bold text-indigo-600">{project.tracker_number}</ProposalHover>
+                                <span className="rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ backgroundColor: `${color}14`, color }}>{programmeLabel(project.category)}</span>
+                                {overdue > 0 && <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700">{overdue} overdue</span>}
+                            </span>
+                            <span className="mt-0.5 block truncate text-sm font-semibold text-gray-900"><ProposalHover id={project.id}>{project.title}</ProposalHover></span>
+                            <span className="block text-xs text-gray-500">{[project.pi?.name, project.college?.name].filter(Boolean).join(' · ')}</span>
+                        </span>
+                    </button>
+                    <div className="flex items-center gap-4 pl-7 sm:pl-0">
+                        <div className="w-36">
+                            <div className="flex justify-between text-[11px] text-gray-500"><span>{done}/{list.length} done</span><span className="font-semibold text-gray-700">{pct}%</span></div>
+                            <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-gray-100"><div className="h-full rounded-full bg-emerald-500" style={{ width: `${pct}%` }} /></div>
                         </div>
-                        <span className="text-[11px] text-gray-500 font-medium shrink-0">{pct}%</span>
-                    </div>
-                </div>
-            )}
-            <div className="p-5 space-y-4">
-                {loading ? (
-                    <div className="space-y-3">
-                        {[...Array(2)].map((_, i) => <div key={i} className="h-16 bg-gray-100 rounded-xl animate-pulse" />)}
-                    </div>
-                ) : milestones.length === 0 ? (
-                    <div className="text-center py-6">
-                        <Clock size={24} className="text-gray-200 mx-auto mb-2" />
-                        <p className="text-sm text-gray-400">No milestones yet</p>
                         {canEdit && (
-                            <button onClick={() => { setEditing(null); setFormOpen(true) }}
-                                className="mt-2 text-xs text-indigo-500 font-semibold hover:text-indigo-700">
-                                + Add first milestone
+                            <button onClick={() => { setOpen(true); setForm({}); }} className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-indigo-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700">
+                                <Plus size={12} /> Add
                             </button>
                         )}
                     </div>
-                ) : (
-                    milestones.map(m => (
-                        <MilestoneRow
-                            key={m.id}
-                            milestone={m}
-                            canEdit={canEdit}
-                            onEdit={item => { setEditing(item); setFormOpen(true) }}
-                            onDelete={setDeleting}
-                            onStatusChange={handleStatusChange}
-                            proposalId={proposal.id}
-                        />
-                    ))
-                )}
+                </div>
             </div>
 
-            <MilestoneForm
-                open={formOpen}
-                onClose={() => { setFormOpen(false); setEditing(null) }}
-                onSaved={handleSaved}
-                initial={editing}
-                proposalId={proposal.id}
-            />
-
-            {deleting && (
-                <ConfirmDialog
-                    open
-                    title="Delete milestone?"
-                    description={`"${deleting.title}" will be permanently removed.`}
-                    confirmLabel="Delete"
-                    onConfirm={handleDelete}
-                    onCancel={() => setDeleting(null)}
-                />
+            {open && (
+                <div className="border-t border-gray-100 bg-gray-50/50 px-4 py-4">
+                    {(planned > 0 || awarded > 0) && (
+                        <div className="mb-4 flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-500">
+                            {awarded > 0 && <span>Awarded <span className="font-semibold tabular-nums text-gray-900">{formatCurrency(awarded)}</span></span>}
+                            {planned > 0 && <span>Planned in milestones <span className="font-semibold tabular-nums text-gray-900">{formatCurrency(planned)}</span></span>}
+                            {planned > 0 && <span>Reached <span className="font-semibold tabular-nums text-emerald-700">{formatCurrency(reached)}</span></span>}
+                            {awarded > 0 && planned > awarded && <span className="font-semibold text-amber-700">Milestones add up to more than the award</span>}
+                        </div>
+                    )}
+                    {list.length === 0 ? (
+                        <div className="py-4 text-center">
+                            <p className="text-sm text-gray-500">No milestones yet.</p>
+                            {canEdit && <button onClick={() => setForm({})} className="mt-1 text-sm font-semibold text-indigo-600 hover:underline">Add the first one</button>}
+                        </div>
+                    ) : (
+                        <ol>
+                            {list.map((m, i) => (
+                                <MilestoneItem key={m.id} m={m} canEdit={canEdit} busy={busy === m.id} last={i === list.length - 1}
+                                    onToggle={() => toggle(m)} onEdit={() => setForm(m)} onDelete={() => setDeleting(m)} />
+                            ))}
+                        </ol>
+                    )}
+                    <div className="mt-3 text-right">
+                        <Link href={`/proposals/${project.id}`} className="text-xs font-medium text-gray-500 hover:text-indigo-600">Open the project →</Link>
+                    </div>
+                </div>
             )}
-        </div>
-    )
+
+            {form && (
+                <MilestoneForm initial={form.id ? form : null} project={project} onClose={() => setForm(null)}
+                    onSaved={(item, isNew) => {
+                        replace(isNew ? [...list, item] : list.map((x) => (x.id === item.id ? item : x)));
+                        setForm(null);
+                        success(isNew ? 'Milestone added.' : 'Milestone updated.');
+                    }} />
+            )}
+            {deleting && (
+                <ConfirmDialog open title="Delete this milestone?" description={`“${deleting.title}” will be removed.`} confirmLabel="Delete" confirmVariant="danger"
+                    onConfirm={remove} onCancel={() => setDeleting(null)} />
+            )}
+        </section>
+    );
 }
 
 export default function BudgetMilestones() {
-    const { hasPermission } = useAuth()
-    const canEdit = hasPermission('budget_milestones.update')
-    const { error } = useToast()
+    const { hasPermission } = useAuth();
+    const { error } = useToast();
+    const canEdit = hasPermission('budget_milestones.update');
 
-    const [proposals, setProposals] = useState([])
-    const [loading, setLoading] = useState(true)
-    const [search, setSearch] = useState('')
+    const [projects, setProjects] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [search, setSearch] = useState('');
+    const [programme, setProgramme] = useState('');
+    const [show, setShow] = useState('all');
+    const [college, setCollege] = useState('');
 
-    useEffect(() => {
-        const load = async () => {
-            setLoading(true)
-            try {
-                const r = await get('/proposals', {
-                    status: 'funded,midterm_evaluation,completed',
-                    per_page: 50,
-                    search: search || undefined,
-                })
-                setProposals(r.data?.data ?? [])
-            } catch { error('Failed to load funded proposals.') }
-            finally { setLoading(false) }
+    const load = useCallback(async () => {
+        setLoading(true);
+        try {
+            const r = await get('/budget-milestones');
+            setProjects(r.data ?? []);
+        } catch {
+            setProjects([]);
+            error('Could not load milestones.');
         }
-        load()
-    }, [search])
+        setLoading(false);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    useEffect(() => { load(); }, [load]);
+
+    const update = (id, milestones) => setProjects((list) => list.map((p) => (p.id === id ? { ...p, budget_milestones: milestones } : p)));
+
+    const all = projects ?? [];
+    const milestones = all.flatMap((p) => (p.budget_milestones ?? []).map((m) => ({ ...m, project: p })));
+    const doneCount = milestones.filter(isDone).length;
+    const overdue = milestones.filter((m) => statusOf(m) === 'overdue');
+    const upcoming = milestones.filter((m) => !isDone(m) && m.due_date && daysUntil(m.due_date) >= 0 && daysUntil(m.due_date) <= 30)
+        .sort((a, b) => new Date(a.due_date) - new Date(b.due_date));
+
+    const visible = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        return all.filter((p) => {
+            const list = p.budget_milestones ?? [];
+            if (programme && p.category !== programme) return false;
+            if (college && p.college_id !== college) return false;
+            if (q && ![p.tracker_number, p.title, p.pi?.name, ...list.map((m) => m.title)].some((v) => v?.toLowerCase().includes(q))) return false;
+            if (show === 'overdue') return list.some((m) => statusOf(m) === 'overdue');
+            if (show === 'open') return list.some((m) => !isDone(m));
+            if (show === 'none') return list.length === 0;
+            return true;
+        });
+    }, [all, search, programme, show, college]);
+
+    const colleges = [...new Map(all.filter((p) => p.college).map((p) => [p.college_id, p.college.name])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+    const filtersOn = !!(search || programme || college || show !== 'all');
+    const clearFilters = () => { setSearch(''); setProgramme(''); setCollege(''); setShow('all'); };
+    const exportRows = visible.flatMap((p) => ((p.budget_milestones ?? []).length ? p.budget_milestones : [null]).map((m) => ({ p, m })));
+    const exportColumns = [
+        { label: 'Tracker', value: (r) => r.p.tracker_number },
+        { label: 'Project', value: (r) => r.p.title },
+        { label: 'PI', value: (r) => r.p.pi?.name },
+        { label: term('college'), value: (r) => r.p.college?.name },
+        { label: 'Milestone', value: (r) => r.m?.title ?? '(none planned)' },
+        { label: 'Status', value: (r) => (r.m ? STATUS[statusOf(r.m)].label : '') },
+        { label: 'Due', value: (r) => (r.m?.due_date ? formatDate(r.m.due_date) : '') },
+        { label: 'Done on', value: (r) => (r.m?.completed_at ? formatDate(r.m.completed_at) : '') },
+        { label: 'Budget', value: (r) => (r.m?.amount != null && r.m?.amount !== '' ? parseFloat(r.m.amount) : '') },
+    ];
 
     return (
         <AppLayout breadcrumb="Budget Milestones">
-            <div className="max-w-5xl mx-auto space-y-6">
-                <div className="flex items-center justify-between flex-wrap gap-3">
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-900">Budget Milestone Tracker</h1>
-                        <p className="text-sm text-gray-500 mt-1">Track disbursement milestones for funded proposals</p>
+            <div className="mx-auto max-w-6xl space-y-5">
+                <PageHeader icon={Milestone} color="violet" title="Budget Milestones"
+                    description="The checkpoints each funded project works towards, and what is coming up next.">
+                    <DownloadMenu filename="budget-milestones" title="Budget milestones" subtitle={`${visible.length} project${visible.length === 1 ? '' : 's'}`} columns={exportColumns} rows={exportRows} />
+                    <RefreshButton onClick={load} loading={loading} />
+                </PageHeader>
+
+                {projects === null ? <StatSkeletons /> : (
+                    <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                        <StatCard icon={FolderOpen} color="indigo" label="Projects" value={all.length} hint={`${all.filter((p) => !(p.budget_milestones ?? []).length).length} without milestones`} />
+                        <StatCard icon={ListChecks} color="emerald" label="Milestones done" value={`${doneCount}/${milestones.length}`} hint={milestones.length ? `${Math.round((doneCount / milestones.length) * 100)}% complete` : 'None planned yet'} />
+                        <StatCard icon={AlertCircle} color="red" label="Overdue" value={overdue.length} hint={overdue.length ? `Across ${new Set(overdue.map((m) => m.project.id)).size} project(s)` : 'Nothing late'} hintTone={overdue.length ? 'text-red-600 font-medium' : undefined} />
+                        <StatCard icon={CalendarClock} color="amber" label="Due in 30 days" value={upcoming.length} hint={upcoming[0] ? `Next: ${formatDate(upcoming[0].due_date)}` : 'Nothing due soon'} />
                     </div>
-                    <div className="relative">
-                        <input
-                            value={search}
-                            onChange={e => setSearch(e.target.value)}
-                            placeholder="Search proposals…"
-                            className="pl-8 pr-3 py-2 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-56"
-                        />
-                        <DollarSign size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                )}
+
+                {upcoming.length > 0 && (
+                    <Panel title="Coming up" subtitle="Open milestones due in the next 30 days" icon={Target} bodyClassName="p-0">
+                        <ul className="divide-y divide-gray-100">
+                            {upcoming.slice(0, 6).map((m) => {
+                                const d = daysUntil(m.due_date);
+                                return (
+                                    <li key={m.id} className="flex items-center gap-3 px-5 py-2.5">
+                                        <span className={`flex h-10 w-12 shrink-0 flex-col items-center justify-center rounded-lg text-center ${d <= 7 ? 'bg-amber-50 text-amber-700' : 'bg-gray-50 text-gray-600'}`}>
+                                            <span className="text-sm font-bold leading-none">{d === 0 ? 'Today' : d}</span>
+                                            {d !== 0 && <span className="text-[10px]">day{d === 1 ? '' : 's'}</span>}
+                                        </span>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="truncate text-sm font-medium text-gray-900">{m.title}</p>
+                                            <p className="truncate text-xs text-gray-500"><ProposalHover id={m.project.id} className="font-mono font-semibold text-indigo-600">{m.project.tracker_number}</ProposalHover> · {m.project.title}</p>
+                                        </div>
+                                        {m.amount != null && <span className="shrink-0 text-xs font-semibold tabular-nums text-gray-700">{formatCurrency(m.amount)}</span>}
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    </Panel>
+                )}
+
+                <div className="flex flex-col gap-2 rounded-2xl border border-gray-200 bg-white p-3 lg:flex-row">
+                    <label className="relative min-w-0 flex-1">
+                        <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search projects or milestones…"
+                            className="w-full rounded-xl border border-gray-200 py-2 pl-9 pr-3 text-base focus:border-violet-400 focus:outline-none focus:ring-2 focus:ring-violet-100 sm:text-sm" />
+                    </label>
+                    <div className="grid grid-cols-2 gap-2 sm:flex">
+                        <Select label="Show" value={show} onChange={setShow} className="sm:w-48">
+                            <option value="all">All projects</option>
+                            <option value="open">With open milestones</option>
+                            <option value="overdue">With overdue milestones</option>
+                            <option value="none">Without milestones</option>
+                        </Select>
+                        {programmes({ includeInactive: true }).length > 1 && (
+                            <Select label="Programme" value={programme} onChange={setProgramme} className="sm:w-44">
+                                <option value="">All programmes</option>
+                                {programmes({ includeInactive: true }).map((p) => <option key={p.key} value={p.key}>{p.name}</option>)}
+                            </Select>
+                        )}
+                        {colleges.length > 1 && (
+                            <Select label={term('college')} value={college} onChange={setCollege} className="sm:w-44">
+                                <option value="">All {term('college', { plural: true, lower: true })}</option>
+                                {colleges.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+                            </Select>
+                        )}
+                        {filtersOn && <ClearButton onClick={clearFilters} />}
                     </div>
                 </div>
 
-                {loading ? (
-                    <div className="space-y-4">
-                        {[...Array(3)].map((_, i) => <div key={i} className="h-40 bg-white border border-gray-100 rounded-2xl animate-pulse" />)}
-                    </div>
-                ) : proposals.length === 0 ? (
-                    <div className="flex flex-col items-center py-20 bg-white border border-gray-100 rounded-2xl">
-                        <DollarSign size={36} className="text-gray-200 mb-3" />
-                        <p className="text-gray-500 font-medium">No funded proposals found</p>
-                    </div>
+                {projects === null ? (
+                    <div className="space-y-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}</div>
+                ) : visible.length === 0 ? (
+                    <Panel bodyClassName="p-0">
+                        <EmptyState icon={Milestone} title={all.length ? 'Nothing matches' : 'No running projects yet'}
+                            text={all.length ? 'Try another search or filter.' : 'Funded projects appear here so their milestones can be planned.'} />
+                    </Panel>
                 ) : (
-                    <div className="space-y-4">
-                        {proposals.map(p => (
-                            <ProposalMilestonePanel key={p.id} proposal={p} canEdit={canEdit} />
+                    <div className="space-y-3">
+                        {visible.map((p) => (
+                            <ProjectPanel key={p.id} project={p} canEdit={canEdit} onChange={update}
+                                defaultOpen={visible.length <= 3 || (p.budget_milestones ?? []).some((m) => statusOf(m) === 'overdue')} />
                         ))}
                     </div>
                 )}
             </div>
         </AppLayout>
-    )
+    );
 }

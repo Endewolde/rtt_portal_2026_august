@@ -8,9 +8,11 @@ use App\Models\NoCostExtensionRequest;
 use App\Models\Proposal;
 use App\Models\User;
 use App\Support\AuditLogger;
+use App\Support\Programmes;
 use App\Support\RejectionReasons;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class NoCostExtensionController extends Controller
@@ -73,30 +75,25 @@ class NoCostExtensionController extends Controller
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
-        $extensions = NoCostExtensionRequest::with([
-            'proposal:id,tracker_number,title,category,college_id',
+        // Every request within the reviewer's scope, newest first; the page filters and counts them.
+        $query = NoCostExtensionRequest::with([
+            'proposal:id,tracker_number,title,category,college_id,pi_user_id,academic_year,status,duration_months',
             'proposal.college:id,name',
+            'proposal.award:id,proposal_id,approved_at,awarded_amount',
             'requestedBy:id,name,email',
             'resolvedBy:id,name',
         ])
-            ->whereHas('proposal', function ($q) use ($request) {
-                if ($request->_category_scope) {
-                    $q->where('category', $request->_category_scope);
-                } elseif ($request->filled('category')) {
-                    $q->where('category', $request->category);
-                }
-
-                if ($request->_college_scope) {
-                    $q->where('college_id', $request->_college_scope);
-                } elseif ($request->filled('college_id')) {
-                    $q->where('college_id', $request->college_id);
-                }
-            })
             ->when($request->status, fn ($q, $s) => $q->where('status', $s))
-            ->orderByDesc('created_at')
-            ->paginate(20);
+            ->when($request->filled('category'), fn ($q) => $q->whereHas('proposal', fn ($p) => $p->where('category', $request->category)))
+            ->when($request->filled('college_id'), fn ($q) => $q->whereHas('proposal', fn ($p) => $p->where('college_id', $request->college_id)))
+            ->orderByDesc('created_at');
+        $request->user()->accessScope()->constrainThrough($query, 'proposal');
+        $extensions = $query->limit(500)->get();
 
-        return response()->json(['data' => $extensions]);
+        return response()->json([
+            'data' => $extensions,
+            'meta' => ['counts' => $extensions->countBy('status')],
+        ]);
     }
 
     /** Officer approves a pending request — extends the proposal's duration_months. */
@@ -108,18 +105,28 @@ class NoCostExtensionController extends Controller
 
         $extension = NoCostExtensionRequest::with('proposal')->findOrFail($id);
 
+        if ($denied = $this->outOfScope($request, $extension)) {
+            return $denied;
+        }
+
         if ($extension->status !== 'pending') {
             return response()->json(['message' => 'This no-cost extension request has already been resolved.'], 422);
         }
 
-        $extension->proposal->update(['duration_months' => $extension->requested_duration_months]);
+        if (! in_array($extension->proposal->status, self::ELIGIBLE_STATUSES, true)) {
+            return response()->json(['message' => 'The project is no longer running, so its duration cannot be extended.'], 422);
+        }
 
-        $extension->update([
-            'status' => 'approved',
-            'resolved_by' => $request->user()->id,
-            'resolved_at' => now(),
-            'resolution_notes' => $request->input('resolution_notes'),
-        ]);
+        DB::transaction(function () use ($extension, $request) {
+            $extension->proposal->update(['duration_months' => $extension->requested_duration_months]);
+
+            $extension->update([
+                'status' => 'approved',
+                'resolved_by' => $request->user()->id,
+                'resolved_at' => now(),
+                'resolution_notes' => $request->input('resolution_notes'),
+            ]);
+        });
 
         AuditLogger::log('no_cost_extension.approved', Proposal::class, $extension->proposal_id, $request->user()->id);
 
@@ -142,6 +149,10 @@ class NoCostExtensionController extends Controller
         $validated = $request->validate(['reason' => 'required|string|min:10']);
 
         $extension = NoCostExtensionRequest::with('proposal')->findOrFail($id);
+
+        if ($denied = $this->outOfScope($request, $extension)) {
+            return $denied;
+        }
 
         if ($extension->status !== 'pending') {
             return response()->json(['message' => 'This no-cost extension request has already been resolved.'], 422);
@@ -172,14 +183,19 @@ class NoCostExtensionController extends Controller
         return response()->json(['data' => $extension]);
     }
 
+    /** A reviewer decides only requests for projects within their own scope. */
+    private function outOfScope(Request $request, NoCostExtensionRequest $extension): ?JsonResponse
+    {
+        $proposal = $extension->proposal;
+
+        return $proposal && $request->user()->accessScope()->covers($proposal->college_id, $proposal->category)
+            ? null
+            : response()->json(['message' => 'This request is outside your area.'], 403);
+    }
+
     private function notifyOfficers(Proposal $proposal, User $submitter, NoCostExtensionRequest $extension): void
     {
-        $roleMap = [
-            'research' => 'research_officer',
-            'community_engagement' => 'community_officer',
-            'technology_transfer' => 'technology_officer',
-        ];
-        $roles = array_values(array_filter(['central_officer', $roleMap[$proposal->category] ?? null]));
+        $roles = ['central_officer', ...Programmes::directorRoles($proposal->category)];
 
         foreach (User::role($roles)->where('status', 'active')->get()
             ->merge(User::customRoleHolders('no_cost_extensions.review', $proposal->college_id, $proposal->category))->unique('id') as $officer) {

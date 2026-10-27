@@ -4,6 +4,7 @@ namespace App\Http\Middleware;
 
 use App\Enums\Feature;
 use App\Models\AppSetting;
+use App\Support\Programmes;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Inertia\Middleware;
@@ -21,6 +22,8 @@ class HandleInertiaRequests extends Middleware
     {
         return [
             ...parent::share($request),
+            // The organisation's programmes, for every form and filter (see App\Support\Programmes).
+            'programmes' => fn () => Programmes::all()->values(),
             'app_settings' => Cache::remember('inertia_app_settings', 300, function () {
                 return AppSetting::whereIn('key', [
                     'system_name',
@@ -40,6 +43,10 @@ class HandleInertiaRequests extends Middleware
                     'announcement_message',
                     'footer_text',
                     'current_academic_year',
+                    'term_college',
+                    'term_department',
+                    'term_academic_year',
+                    'currency_code',
                     'session_timeout_minutes',
                     'sso_enabled',
                     'google_sso_enabled',
@@ -84,11 +91,10 @@ class HandleInertiaRequests extends Middleware
                     'public_features_bg',
                     'public_footer_bg',
                     // Nav items
-                    'public_nav_item_1_label', 'public_nav_item_1_href', 'public_nav_item_1_show',
-                    'public_nav_item_2_label', 'public_nav_item_2_href', 'public_nav_item_2_show',
-                    'public_nav_item_3_label', 'public_nav_item_3_href', 'public_nav_item_3_show',
-                    'public_nav_item_4_label', 'public_nav_item_4_href', 'public_nav_item_4_show',
-                    'public_nav_item_5_label', 'public_nav_item_5_href', 'public_nav_item_5_show',
+                    // (all eight of the public header's menu items — see PublicLayout's DEFAULT_NAV)
+                    ...collect(range(1, 8))->flatMap(fn (int $n) => array_map(
+                        fn (string $field) => "public_nav_item_{$n}_{$field}", ['label', 'href', 'show']
+                    ))->all(),
                     // Social links
                     'public_social_telegram',
                     'public_social_facebook',

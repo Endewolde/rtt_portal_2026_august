@@ -8,6 +8,7 @@ use App\Models\Proposal;
 use App\Models\ProposalDocument;
 use App\Models\User;
 use App\Support\AuditLogger;
+use App\Support\Programmes;
 use App\Support\RejectionReasons;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -163,12 +164,8 @@ class EthicalClearanceController extends Controller
 
     private function notifyOfficers(Proposal $proposal, User $submitter): void
     {
-        $roleMap = [
-            'research' => 'research_officer',
-            'community_engagement' => 'community_officer',
-            'technology_transfer' => 'technology_officer',
-        ];
-        $role = $roleMap[$proposal->category] ?? null;
+        // Whoever directs this programme — built-in director roles or custom roles scoped to it.
+        $role = Programmes::directorRoles($proposal->category);
         if (! $role) {
             return;
         }

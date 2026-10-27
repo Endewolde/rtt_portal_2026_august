@@ -79,6 +79,12 @@ class SendEmailNotificationJob implements ShouldQueue
         }
     }
 
+    /** The subject line for this event, e.g. for a text message that has no message of its own. */
+    public function subjectLine(): string
+    {
+        return $this->getSubject();
+    }
+
     /**
      * Subjects are "Fixed wording — detail". Both parts are translated where a
      * translation exists; a tracker number or name has none and stays as it is.
@@ -138,8 +144,16 @@ class SendEmailNotificationJob implements ShouldQueue
             'progress_report_reviewed' => 'Your Progress Report Was Reviewed — '.($this->data['tracker_number'] ?? ''),
             'review_certificate_released' => 'Your Certificate of Review Service — '.($this->data['academic_year'] ?? ''),
             'review_certificate_revoked' => 'Certificate of Review Service Revoked — '.($this->data['academic_year'] ?? ''),
+            'mentorship_requested' => 'Mentorship Request',
+            'mentorship_accepted' => 'Your Mentorship Request Was Accepted',
+            'mentorship_declined' => 'About Your Mentorship Request',
+            'opportunity_match' => 'Funding Opportunity for You — '.($this->data['title'] ?? ''),
+            'proposal_message' => 'New Message — '.($this->data['tracker_number'] ?? ''),
+            'risk_digest' => 'Weekly Project Risk Digest — '.($this->data['count'] ?? 0).' need attention',
+            'project_health_warning' => 'Your Project Needs Attention — '.($this->data['tracker_number'] ?? ''),
             'review_certificate_withdrawn' => 'Certificates of Review Service Withdrawn — '.($this->data['academic_year'] ?? ''),
             'stage_reminder' => 'Action Needed — '.($this->data['tracker_number'] ?? '').' Is Waiting On You',
+            'stage_escalation' => 'Escalation — '.($this->data['tracker_number'] ?? '').' Is Long Overdue',
             'review_disagreement' => 'Blind Reviewers Disagree — Decision On Hold — '.($this->data['tracker_number'] ?? ''),
             'approval_report_resolved' => 'Your Mistaken-Approval Report Was Reviewed — '.($this->data['tracker_number'] ?? ''),
             'budget_request_submitted' => 'New Budget Request Submitted — '.($this->data['tracker_number'] ?? ''),
@@ -147,6 +161,8 @@ class SendEmailNotificationJob implements ShouldQueue
             'contract_submitted' => 'Contract Submitted for Review — '.($this->data['tracker_number'] ?? ''),
             'contract_approved' => 'Research Contract Approved — '.($this->data['tracker_number'] ?? ''),
             'contract_rejected' => 'Contract Submission Returned — '.($this->data['tracker_number'] ?? ''),
+            'contract_reminder' => 'Reminder: Upload Your Signed Research Contract — '.($this->data['tracker_number'] ?? ''),
+            'contract_escalation' => 'Contract Still Missing — '.($this->data['tracker_number'] ?? '').' Needs Follow-up',
             'defence_extension_requested' => 'Defence Score Deadline Extension Requested — '.($this->data['tracker_number'] ?? ''),
             'defence_extension_resolved' => 'Defence Deadline Extension '.ucfirst($this->data['decision'] ?? '').' — '.($this->data['tracker_number'] ?? ''),
             'defence_deadline_extended' => 'Defence Score Deadline Extended — '.($this->data['tracker_number'] ?? ''),

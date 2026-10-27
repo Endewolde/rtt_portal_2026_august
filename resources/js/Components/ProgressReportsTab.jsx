@@ -5,6 +5,7 @@ import api, { get, post } from '../lib/api';
 import { formatDate } from '../lib/utils';
 import { downloadFile } from '../lib/download';
 import { useToast } from './Toast';
+import { currency, withCurrency } from '../lib/terms';
 
 const STATUS = {
     due:                { label: 'Due',              cls: 'bg-gray-100 text-gray-700', icon: Clock },
@@ -98,7 +99,7 @@ function SubmitModal({ report, milestones, onClose, onDone }) {
                                 className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                         </div>
                         <div>
-                            <label className="mb-1 block text-xs font-semibold text-gray-700">{tr("Budget spent so far (ETB)")}</label>
+                            <label className="mb-1 block text-xs font-semibold text-gray-700">{withCurrency(tr("Budget spent so far (ETB)"))}</label>
                             <input type="number" min="0" step="0.01" value={form.budget_spent} onChange={(e) => set('budget_spent', e.target.value)}
                                 className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                         </div>
@@ -252,7 +253,7 @@ export default function ProgressReportsTab({ proposalId }) {
                                             </div>
                                         ))}
                                     <p className="text-xs text-gray-500">
-                                        {r.percent_complete}% complete{r.budget_spent ? ` · ${Number(r.budget_spent).toLocaleString()} ETB spent` : ''} · submitted by {r.submitted_by?.name ?? '—'} on {formatDate(r.submitted_at)}
+                                        {r.percent_complete}% complete{r.budget_spent ? ` · ${Number(r.budget_spent).toLocaleString()} ${currency()} spent` : ''} · submitted by {r.submitted_by?.name ?? '—'} on {formatDate(r.submitted_at)}
                                     </p>
                                     {r.milestone_updates?.length > 0 && (
                                         <ul className="space-y-1">

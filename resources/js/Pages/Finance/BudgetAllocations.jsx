@@ -1,116 +1,116 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { usePage, Link } from '@inertiajs/react'
 import {
-    PieChart, Plus, Building2, FileText, CheckCircle2,
-    Clock, X, AlertTriangle, ChevronDown, Edit2, Check,
-    Filter,
+    PieChart, Plus, Building2, CheckCircle2, Clock, X, AlertTriangle, ChevronDown,
+    Pencil, Check, Search, Wallet, Loader2, CircleDashed, Info,
 } from 'lucide-react'
 import AppLayout from '../../Layouts/AppLayout'
+import { PageHeader, StatCard, Panel, EmptyState, Select, RefreshButton, StatSkeletons, Skeleton } from '../../Components/Insights/Kit'
 import { useToast } from '../../Components/Toast'
+import { useAuth } from '../../hooks/useAuth'
 import { formatCurrency } from '../../lib/utils'
+import { currency, term } from '../../lib/terms'
+import { programmes, programmeLabel, programmeColor } from '../../lib/programmes'
 import api from '../../lib/api'
-import { usePage } from '@inertiajs/react'
+import ProposalHover from '../../Components/Finance/ProposalHover'
+import DownloadMenu from '../../Components/Finance/DownloadMenu'
+import ClearButton from '../../Components/Finance/ClearButton'
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function getUser() {
-    try { return JSON.parse(localStorage.getItem('rtt_user') || '{}') } catch { return {} }
-}
-function getRoles(user) {
-    return (user.roles || []).map(r => (typeof r === 'string' ? r : r.name))
-}
-
-/** True if this user's role allows approving proposals in this category. */
-function canApproveCategory(roles, category) {
-    if (roles.some(r => ['super_admin', 'admin', 'central_officer'].includes(r))) return true
-    if (roles.includes('research_officer')   && category === 'research')              return true
-    if (roles.includes('community_officer')  && category === 'community_engagement')  return true
-    if (roles.includes('technology_officer') && category === 'technology_transfer')   return true
-    return false
+const STATUS = {
+    approved:      { label: 'Approved',      cls: 'bg-emerald-50 text-emerald-700 ring-emerald-200', icon: CheckCircle2 },
+    pending:       { label: 'Pending',       cls: 'bg-amber-50 text-amber-700 ring-amber-200',       icon: Clock },
+    not_allocated: { label: 'Not allocated', cls: 'bg-gray-100 text-gray-600 ring-gray-200',         icon: CircleDashed },
 }
 
-const CATEGORY_LABEL = {
-    research:              'Research',
-    community_engagement:  'Community',
-    technology_transfer:   'Technology',
-}
+const statusOf = (p) => p.budget_allocations?.[0]?.status ?? 'not_allocated'
+const allocationOf = (p) => p.budget_allocations?.[0] ?? null
+const awarded = (p) => parseFloat(p.award?.awarded_amount ?? 0)
 
-// ─── Status badge ─────────────────────────────────────────────────────────────
-
-const STATUS_CFG = {
-    approved:      { label: 'Approved',     color: 'bg-green-100 text-green-700', icon: CheckCircle2 },
-    pending:       { label: 'Pending',       color: 'bg-amber-100 text-amber-700', icon: Clock },
-    not_allocated: { label: 'Not Allocated', color: 'bg-gray-100 text-gray-500',  icon: AlertTriangle },
-}
-
-function AllocationBadge({ status }) {
-    const cfg  = STATUS_CFG[status] ?? STATUS_CFG.not_allocated
+function StatusBadge({ status }) {
+    const cfg = STATUS[status] ?? STATUS.not_allocated
     const Icon = cfg.icon
     return (
-        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${cfg.color}`}>
-            <Icon size={10} />{cfg.label}
+        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${cfg.cls}`}>
+            <Icon size={11} /> {cfg.label}
         </span>
     )
 }
 
-// ─── Fiscal year prompt ───────────────────────────────────────────────────────
-
-function FiscalYearModal({ proposal, fiscalYears, defaultYear, onClose, onSuccess }) {
-    const { error } = useToast()
-    const [year,   setYear]   = useState(defaultYear || fiscalYears[0] || '')
-    const [saving, setSaving] = useState(false)
-
-    const submit = async () => {
-        if (!year) return error('Enter a fiscal year.')
-        setSaving(true)
-        try {
-            await api.post(`/proposals/${proposal.id}/quick-allocate`, { fiscal_year: year })
-            onSuccess()
-        } catch (e) {
-            error(e.response?.data?.message ?? 'Failed to allocate.')
-        }
-        setSaving(false)
-    }
-
+function ProgrammeChip({ category }) {
+    const color = programmeColor(category)
     return (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm">
-                <div className="bg-linear-to-r from-indigo-600 to-purple-600 rounded-t-2xl px-6 py-4 flex items-center justify-between">
-                    <div>
-                        <h2 className="text-base font-bold text-white">Allocate Budget</h2>
-                        <p className="text-indigo-100 text-xs mt-0.5">{proposal.tracker_number} · {formatCurrency(proposal.award?.awarded_amount ?? 0)}</p>
+        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ backgroundColor: `${color}14`, color }}>
+            <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} /> {programmeLabel(category)}
+        </span>
+    )
+}
+
+function Dialog({ title, subtitle, icon: Icon, onClose, children, footer }) {
+    return (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 backdrop-blur-sm sm:items-center sm:p-4">
+            <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
+                <div className="flex items-start justify-between gap-3 border-b border-gray-100 px-6 py-4">
+                    <div className="flex min-w-0 items-center gap-3">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-600"><Icon size={18} /></span>
+                        <div className="min-w-0">
+                            <h2 className="text-lg font-bold text-gray-900">{title}</h2>
+                            {subtitle && <p className="truncate text-xs text-gray-500">{subtitle}</p>}
+                        </div>
                     </div>
-                    <button onClick={onClose} className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white"><X size={14} /></button>
+                    <button onClick={onClose} aria-label="Close" className="rounded-lg p-1 text-gray-400 hover:bg-gray-100"><X size={16} /></button>
                 </div>
-                <div className="p-5 space-y-3">
-                    <p className="text-xs text-gray-500">This allocates the full awarded amount ({formatCurrency(proposal.award?.awarded_amount ?? 0)}) as a pending allocation. An approving officer will need to approve it before the PI can submit budget requests.</p>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Fiscal Year *</label>
-                        <input type="text" value={year} onChange={e => setYear(e.target.value)}
-                            placeholder="e.g. 2026-2027" list="fy-list-modal"
-                            className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-                        <datalist id="fy-list-modal">
-                            {fiscalYears.map(y => <option key={y} value={y} />)}
-                        </datalist>
-                    </div>
-                </div>
-                <div className="flex gap-3 px-5 pb-5">
-                    <button onClick={onClose} className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-700 hover:bg-gray-50 font-medium">Cancel</button>
-                    <button onClick={submit} disabled={saving}
-                        className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50">
-                        {saving ? 'Creating…' : 'Create Allocation'}
-                    </button>
-                </div>
+                <div className="space-y-4 px-6 py-5">{children}</div>
+                <div className="flex gap-3 border-t border-gray-100 px-6 py-4">{footer}</div>
             </div>
         </div>
     )
 }
 
-// ─── Edit allocation modal ─────────────────────────────────────────────────────
+const inputCls = 'w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100 sm:text-sm'
 
-function EditAllocationModal({ allocation, onClose, onSuccess }) {
+function AllocateDialog({ proposal, fiscalYears, defaultYear, onClose, onDone }) {
+    const { error } = useToast()
+    const [year, setYear] = useState(defaultYear || fiscalYears[0] || '')
+    const [saving, setSaving] = useState(false)
+
+    const submit = async () => {
+        if (!year.trim()) return error('Enter a fiscal year.')
+        setSaving(true)
+        try {
+            await api.post(`/proposals/${proposal.id}/quick-allocate`, { fiscal_year: year.trim() })
+            onDone('Allocation created — it now waits for approval.')
+        } catch (e) {
+            error(e.response?.data?.message ?? 'The allocation could not be created.')
+        }
+        setSaving(false)
+    }
+
+    return (
+        <Dialog title="Allocate budget" subtitle={`${proposal.tracker_number} · ${proposal.title}`} icon={Wallet} onClose={onClose}
+            footer={<>
+                <button onClick={onClose} className="flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50">Cancel</button>
+                <button onClick={submit} disabled={saving} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">
+                    {saving && <Loader2 size={14} className="animate-spin" />} Create allocation
+                </button>
+            </>}>
+            <div className="rounded-xl bg-emerald-50 px-4 py-3">
+                <p className="text-xs text-emerald-700">Amount to allocate</p>
+                <p className="text-2xl font-bold tabular-nums text-emerald-900">{formatCurrency(awarded(proposal))}</p>
+                <p className="mt-0.5 text-xs text-emerald-700">The full awarded amount. It becomes available to the team once approved.</p>
+            </div>
+            <label className="block">
+                <span className="mb-1 block text-sm font-medium text-gray-700">Fiscal year</span>
+                <input value={year} onChange={(e) => setYear(e.target.value)} placeholder="e.g. 2026-2027" list="fy-options" className={inputCls} />
+                <datalist id="fy-options">{fiscalYears.map((y) => <option key={y} value={y} />)}</datalist>
+            </label>
+        </Dialog>
+    )
+}
+
+function EditDialog({ allocation, proposal, onClose, onDone }) {
     const { error } = useToast()
     const [amount, setAmount] = useState(String(allocation.total_amount ?? ''))
-    const [notes,  setNotes]  = useState(allocation.notes ?? '')
+    const [notes, setNotes] = useState(allocation.notes ?? '')
     const [saving, setSaving] = useState(false)
     const isApproved = allocation.status === 'approved'
 
@@ -118,491 +118,420 @@ function EditAllocationModal({ allocation, onClose, onSuccess }) {
         if (!isApproved && (!amount || Number(amount) <= 0)) return error('Enter a valid amount.')
         setSaving(true)
         try {
-            await api.patch(`/budget-allocations/${allocation.id}`, {
-                amount: isApproved ? undefined : Number(amount),
-                notes:  notes || null,
-            })
-            onSuccess()
+            await api.patch(`/budget-allocations/${allocation.id}`, { amount: isApproved ? undefined : Number(amount), notes: notes || null })
+            onDone('Allocation updated.')
         } catch (e) {
-            error(e.response?.data?.message ?? 'Failed to update allocation.')
+            error(e.response?.data?.message ?? 'The allocation could not be updated.')
         }
         setSaving(false)
     }
 
     return (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm">
-                <div className="bg-linear-to-r from-blue-600 to-indigo-600 rounded-t-2xl px-6 py-4 flex items-center justify-between">
-                    <h2 className="text-base font-bold text-white">Edit Allocation</h2>
-                    <button onClick={onClose} className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white"><X size={14} /></button>
-                </div>
-                <div className="p-5 space-y-3">
-                    {!isApproved && (
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Amount (ETB) *</label>
-                            <input type="number" min="1" step="0.01" value={amount} onChange={e => setAmount(e.target.value)}
-                                className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                        </div>
-                    )}
-                    {isApproved && (
-                        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-                            Amount cannot be changed on an approved allocation. You can update notes only.
-                        </p>
-                    )}
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                        <textarea rows={2} value={notes} onChange={e => setNotes(e.target.value)}
-                            className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                    </div>
-                </div>
-                <div className="flex gap-3 px-5 pb-5">
-                    <button onClick={onClose} className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-700 hover:bg-gray-50 font-medium">Cancel</button>
-                    <button onClick={submit} disabled={saving}
-                        className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
-                        {saving ? 'Saving…' : 'Save'}
-                    </button>
-                </div>
-            </div>
-        </div>
-    )
-}
-
-// ─── Proposal budget row ───────────────────────────────────────────────────────
-
-function ProposalBudgetRow({ proposal, roles, canAllocate, selectedIds, onSelect, onAllocate, onApprove, onEdit }) {
-    const award       = proposal.award
-    const allocation  = proposal.budget_allocations?.[0] ?? null
-    const allocStatus = allocation ? allocation.status : 'not_allocated'
-    const awardedAmt  = parseFloat(award?.awarded_amount ?? 0)
-    const userCanApproveThis = canApproveCategory(roles, proposal.category)
-
-    const isPending  = allocStatus === 'pending'
-    const isApproved = allocStatus === 'approved'
-    const isNone     = allocStatus === 'not_allocated'
-    const isSelectable = isPending && userCanApproveThis
-
-    return (
-        <div className={`bg-white border rounded-xl px-4 py-3 transition-all ${
-            isPending  ? 'border-amber-200 bg-amber-50/30' :
-            isApproved ? 'border-green-200 bg-green-50/20' :
-            'border-gray-200'
-        }`}>
-            <div className="flex flex-wrap items-start gap-3">
-                {/* Checkbox */}
-                <div className="flex items-center mt-1 shrink-0 w-4">
-                    {isSelectable ? (
-                        <input type="checkbox" checked={selectedIds.has(allocation.id)}
-                            onChange={() => onSelect(allocation.id)}
-                            className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500" />
-                    ) : (
-                        <span className="w-4 h-4" />
-                    )}
-                </div>
-
-                {/* Proposal info */}
-                <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 mb-0.5">
-                        <span className="font-mono text-xs font-bold text-indigo-600">{proposal.tracker_number}</span>
-                        <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-gray-100 text-gray-600">
-                            {CATEGORY_LABEL[proposal.category] ?? proposal.category}
-                        </span>
-                        <AllocationBadge status={allocStatus} />
-                        {allocation?.fiscal_year && (
-                            <span className="text-xs text-gray-400">FY {allocation.fiscal_year}</span>
-                        )}
-                    </div>
-                    <p className="text-sm font-medium text-gray-900 truncate">{proposal.title}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                        PI: {proposal.pi?.name}
-                        {isApproved && allocation?.approvedBy && (
-                            <> · Approved by <strong>{allocation.approvedBy.name}</strong></>
-                        )}
-                        {isPending && allocation?.allocatedBy && (
-                            <> · Allocated by {allocation.allocatedBy.name}</>
-                        )}
-                    </p>
-                </div>
-
-                {/* Amount */}
-                <div className="text-right shrink-0">
-                    <p className="text-sm font-bold text-gray-900">{formatCurrency(awardedAmt)}</p>
-                    <p className="text-xs text-gray-400">awarded</p>
-                    {allocation && parseFloat(allocation.total_amount) !== awardedAmt && (
-                        <p className="text-xs text-indigo-600 font-semibold">
-                            Alloc: {formatCurrency(allocation.total_amount)}
-                        </p>
-                    )}
-                </div>
-
-                {/* Actions */}
-                <div className="flex items-center gap-1.5 shrink-0">
-                    {isNone && canAllocate && canApproveCategory(roles, proposal.category) && (
-                        <button onClick={() => onAllocate(proposal)}
-                            className="flex items-center gap-1 px-2.5 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700">
-                            <Plus size={11} /> Allocate
-                        </button>
-                    )}
-                    {isPending && userCanApproveThis && (
-                        <button onClick={() => onApprove(allocation.id)}
-                            className="flex items-center gap-1 px-2.5 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700">
-                            <Check size={11} /> Approve
-                        </button>
-                    )}
-                    {allocation && canAllocate && canApproveCategory(roles, proposal.category) && (
-                        <button onClick={() => onEdit(allocation)}
-                            className="p-1.5 border border-gray-300 text-gray-500 rounded-lg hover:bg-gray-50">
-                            <Edit2 size={12} />
-                        </button>
-                    )}
-                </div>
-            </div>
-
-            {allocation?.notes && (
-                <p className="text-xs text-gray-400 italic mt-1.5 pl-7">{allocation.notes}</p>
+        <Dialog title="Edit allocation" subtitle={`${proposal.tracker_number} · ${proposal.title}`} icon={Pencil} onClose={onClose}
+            footer={<>
+                <button onClick={onClose} className="flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50">Cancel</button>
+                <button onClick={submit} disabled={saving} className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">
+                    {saving && <Loader2 size={14} className="animate-spin" />} Save
+                </button>
+            </>}>
+            {isApproved ? (
+                <p className="flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-xs text-amber-800">
+                    <Info size={14} className="mt-0.5 shrink-0" /> An approved allocation keeps its amount; only the notes can change.
+                </p>
+            ) : (
+                <label className="block">
+                    <span className="mb-1 block text-sm font-medium text-gray-700">Amount ({currency()})</span>
+                    <input type="number" min="1" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${inputCls} tabular-nums`} />
+                    <span className="mt-1 block text-xs text-gray-500">Awarded: {formatCurrency(awarded(proposal))}</span>
+                </label>
             )}
-        </div>
+            <label className="block">
+                <span className="mb-1 block text-sm font-medium text-gray-700">Notes</span>
+                <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} className={`${inputCls} resize-none`} />
+            </label>
+        </Dialog>
     )
 }
 
-// ─── College section ───────────────────────────────────────────────────────────
-
-function CollegeSection({ collegeName, proposals, roles, canAllocate, selectedIds, onSelect, onSelectAll, onAllocate, onApprove, onBulkApproveCollege, onEdit }) {
-    const pending    = proposals.filter(p => {
-        const alloc = p.budget_allocations?.[0]
-        return alloc?.status === 'pending' && canApproveCategory(roles, p.category)
-    })
-    const approved   = proposals.filter(p => p.budget_allocations?.[0]?.status === 'approved').length
-    const unalloc    = proposals.filter(p => !p.budget_allocations?.length).length
-    const totalBudget = proposals.reduce((s, p) => s + parseFloat(p.award?.awarded_amount ?? 0), 0)
-    const pendingIds = pending.map(p => p.budget_allocations[0].id)
-    const allSelected = pendingIds.length > 0 && pendingIds.every(id => selectedIds.has(id))
-
+/** Approved / pending / not-yet-allocated as shares of the awarded total. */
+function CoverageBar({ approved, pending, total }) {
+    const pct = (n) => (total > 0 ? Math.min(100, (n / total) * 100) : 0)
+    const rest = Math.max(0, total - approved - pending)
+    const parts = [
+        { label: 'Approved', value: approved, cls: 'bg-emerald-500', dot: 'bg-emerald-500' },
+        { label: 'Pending approval', value: pending, cls: 'bg-amber-400', dot: 'bg-amber-400' },
+        { label: 'Not allocated', value: rest, cls: 'bg-gray-200', dot: 'bg-gray-300' },
+    ]
     return (
-        <div className="border border-gray-200 rounded-2xl overflow-hidden">
-            {/* College header */}
-            <div className="px-4 py-3 bg-indigo-50 border-b border-indigo-100 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                    {/* Select all pending in this college */}
-                    {pending.length > 0 && (
-                        <input type="checkbox" checked={allSelected}
-                            onChange={() => onSelectAll(pendingIds, !allSelected)}
-                            className="w-4 h-4 rounded border-indigo-300 text-green-600 focus:ring-green-500"
-                            title="Select all pending" />
-                    )}
-                    <Building2 size={16} className="text-indigo-600 shrink-0" />
-                    <div>
-                        <p className="font-semibold text-gray-900 text-sm">{collegeName}</p>
-                        <div className="flex flex-wrap items-center gap-3 mt-0.5 text-xs text-gray-500">
-                            <span>Total: <strong>{formatCurrency(totalBudget)}</strong></span>
-                            <span className="text-green-600">{approved} approved</span>
-                            {pending.length > 0 && <span className="text-amber-600">{pending.length} pending</span>}
-                            {unalloc > 0 && <span className="text-gray-400">{unalloc} unallocated</span>}
-                        </div>
-                    </div>
-                </div>
-                {pending.length > 0 && (
-                    <button onClick={() => onBulkApproveCollege(pendingIds)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700">
-                        <Check size={12} /> Approve All ({pending.length})
-                    </button>
-                )}
+        <div className="rounded-2xl border border-gray-200 bg-white p-5">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <p className="text-sm font-semibold text-gray-900">Allocation coverage</p>
+                <p className="text-sm tabular-nums text-gray-500"><span className="font-bold text-gray-900">{Math.round(pct(approved))}%</span> of the awarded budget is approved</p>
             </div>
-
-            {/* Proposal rows */}
-            <div className="p-3 space-y-2">
-                {proposals.map(p => (
-                    <ProposalBudgetRow
-                        key={p.id}
-                        proposal={p}
-                        roles={roles}
-                        canAllocate={canAllocate}
-                        selectedIds={selectedIds}
-                        onSelect={onSelect}
-                        onAllocate={onAllocate}
-                        onApprove={onApprove}
-                        onEdit={onEdit}
-                    />
+            <div className="mt-3 flex h-3 gap-0.5 overflow-hidden rounded-full bg-gray-100">
+                {parts.map((p) => p.value > 0 && <div key={p.label} className={`${p.cls} h-full first:rounded-l-full last:rounded-r-full`} style={{ width: `${pct(p.value)}%` }} title={`${p.label}: ${formatCurrency(p.value)}`} />)}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-gray-600">
+                {parts.map((p) => (
+                    <span key={p.label} className="inline-flex items-center gap-1.5">
+                        <span className={`h-2 w-2 rounded-full ${p.dot}`} /> {p.label} <span className="font-semibold tabular-nums text-gray-900">{formatCurrency(p.value)}</span>
+                    </span>
                 ))}
             </div>
         </div>
     )
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
+function ProposalRow({ proposal, canAllocate, canApprove, selected, onToggle, onAllocate, onApprove, onEdit, busy }) {
+    const allocation = allocationOf(proposal)
+    const status = statusOf(proposal)
+    const allocatedDiffers = allocation && parseFloat(allocation.total_amount) !== awarded(proposal)
+    const selectable = status === 'pending' && canApprove
+
+    return (
+        <li className={`flex flex-col gap-3 px-4 py-3.5 transition-colors sm:flex-row sm:items-center ${selected ? 'bg-emerald-50/60' : 'hover:bg-gray-50/70'}`}>
+            <div className="flex min-w-0 flex-1 items-start gap-3">
+                <div className="flex w-4 shrink-0 justify-center pt-1">
+                    {selectable && (
+                        <input type="checkbox" checked={selected} onChange={onToggle} aria-label={`Select ${proposal.tracker_number}`}
+                            className="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" />
+                    )}
+                </div>
+                <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                        <ProposalHover id={proposal.id}><Link href={`/proposals/${proposal.id}`} className="font-mono text-xs font-bold text-indigo-600">{proposal.tracker_number}</Link></ProposalHover>
+                        <ProgrammeChip category={proposal.category} />
+                        <StatusBadge status={status} />
+                        {allocation?.fiscal_year && <span className="text-[11px] text-gray-400">FY {allocation.fiscal_year}</span>}
+                    </div>
+                    <p className="mt-1 line-clamp-2 text-sm font-medium text-gray-900 sm:line-clamp-1"><ProposalHover id={proposal.id}>{proposal.title}</ProposalHover></p>
+                    <p className="mt-0.5 text-xs text-gray-500">
+                        {proposal.pi?.name}
+                        {status === 'approved' && allocation?.approved_by?.name && <> · approved by {allocation.approved_by.name}</>}
+                        {status === 'pending' && allocation?.allocated_by?.name && <> · allocated by {allocation.allocated_by.name}</>}
+                    </p>
+                    {allocation?.notes && <p className="mt-1 text-xs italic text-gray-400">“{allocation.notes}”</p>}
+                </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-4 pl-7 sm:justify-end sm:pl-0">
+                <div className="text-left sm:text-right">
+                    <p className="text-sm font-bold tabular-nums text-gray-900">{formatCurrency(awarded(proposal))}</p>
+                    <p className="text-[11px] text-gray-400">{allocatedDiffers ? <span className="font-semibold text-indigo-600">allocated {formatCurrency(allocation.total_amount)}</span> : 'awarded'}</p>
+                </div>
+                <div className="flex shrink-0 items-center gap-1.5">
+                    {status === 'not_allocated' && canAllocate && (
+                        <button onClick={onAllocate} className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700">
+                            <Plus size={12} /> Allocate
+                        </button>
+                    )}
+                    {status === 'pending' && canApprove && (
+                        <button onClick={onApprove} disabled={busy} className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">
+                            {busy ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} Approve
+                        </button>
+                    )}
+                    {allocation && canAllocate && (
+                        <button onClick={onEdit} aria-label={`Edit allocation for ${proposal.tracker_number}`} className="rounded-lg border border-gray-200 p-1.5 text-gray-500 hover:bg-gray-50">
+                            <Pencil size={13} />
+                        </button>
+                    )}
+                </div>
+            </div>
+        </li>
+    )
+}
 
 export default function BudgetAllocations() {
     const { success, error } = useToast()
+    const { hasPermission, covers, accessScope } = useAuth()
+    const currentYear = usePage().props.app_settings?.current_academic_year ?? ''
 
-    const user  = getUser()
-    const roles = getRoles(user)
+    const [proposals, setProposals] = useState(null)
+    const [fiscalYears, setFiscalYears] = useState([])
+    const [loading, setLoading] = useState(true)
+    const [selected, setSelected] = useState(new Set())
+    const [busy, setBusy] = useState(null)
+    const [collapsed, setCollapsed] = useState(new Set())
 
-    // Who can approve: central/category officers only (NOT college officers)
-    const userCanApproveAny = roles.some(r =>
-        ['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer'].includes(r)
-    )
-    // Who can allocate and approve: central admins + category officers only
-    const canAllocate = roles.some(r =>
-        ['super_admin', 'admin', 'central_officer', 'research_officer', 'community_officer', 'technology_officer'].includes(r)
-    )
-    // Who can filter by college: only global admins
-    const isCentral = roles.some(r => ['super_admin', 'admin', 'central_officer'].includes(r))
+    const [year, setYear] = useState(currentYear)
+    const [college, setCollege] = useState('')
+    const [programme, setProgramme] = useState('')
+    const [tab, setTab] = useState('all')
+    const [search, setSearch] = useState('')
 
-    const [proposals,          setProposals]          = useState([])
-    const [colleges,           setColleges]           = useState([])
-    const [stats,              setStats]              = useState(null)
-    const [fiscalYears,        setFiscalYears]        = useState([])
-    const currentAcademicYear = usePage().props.app_settings?.current_academic_year ?? ''
-    const [loading,            setLoading]            = useState(true)
-    const [selectedIds,        setSelectedIds]        = useState(new Set())
+    const [allocating, setAllocating] = useState(null)
+    const [editing, setEditing] = useState(null)
 
-    // Filters
-    const [yearFilter,    setYearFilter]    = useState(currentAcademicYear)
-    const [collegeFilter, setCollegeFilter] = useState('')
-
-    // Modals
-    const [allocProposal, setAllocProposal] = useState(null)
-    const [editAlloc,     setEditAlloc]     = useState(null)
+    const canAllocate = (p) => hasPermission('budget_allocations.create') && covers(p.college_id, p.category)
+    // Approval is for the central office and programme directors, never the college.
+    const canApprove = (p) => hasPermission('budget_allocations.approve')
+        && (accessScope.type === 'all' || (accessScope.type === 'category' && (accessScope.categories ?? []).includes(p.category)))
 
     const load = useCallback(async () => {
         setLoading(true)
         try {
-            const params = new URLSearchParams()
-            if (yearFilter)    params.set('academic_year', yearFilter)
-            if (collegeFilter) params.set('college_id',    collegeFilter)
-
-            const [pRes, sRes, yRes] = await Promise.all([
-                api.get(`/budget-allocations/proposal-budgets?${params}`),
-                api.get('/budget-allocations/stats'),
+            const [pRes, yRes] = await Promise.all([
+                api.get('/budget-allocations/proposal-budgets'),
                 api.get('/budget-allocations/fiscal-years'),
             ])
             setProposals(pRes.data?.data ?? [])
-            setStats(sRes.data?.data ?? null)
             setFiscalYears(yRes.data?.data ?? [])
         } catch {
-            error('Failed to load budget allocations.')
+            setProposals([])
+            error('Could not load budget allocations.')
         }
         setLoading(false)
-    }, [yearFilter, collegeFilter])
+    }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => { load() }, [load])
 
-    useEffect(() => {
-        if (isCentral) {
-            api.get('/colleges').then(r => setColleges(r.data?.data ?? [])).catch(() => {})
-        }
-    }, [isCentral])
+    const all = proposals ?? []
+    const years = useMemo(() => [...new Set([currentYear, ...all.map((p) => p.academic_year)].filter(Boolean))].sort().reverse(), [all, currentYear])
+    const colleges = useMemo(() => [...new Map(all.filter((p) => p.college).map((p) => [p.college.id, p.college.name])).entries()].sort((a, b) => a[1].localeCompare(b[1])), [all])
 
-    // Derive academic years from proposals (for the filter dropdown)
-    const academicYears = [...new Set(proposals.map(p => p.academic_year).filter(Boolean))].sort().reverse()
+    // Year, college, programme and search narrow the figures; the tab only narrows the list.
+    const scoped = useMemo(() => {
+        const q = search.trim().toLowerCase()
+        return all.filter((p) => (!year || p.academic_year === year)
+            && (!college || p.college_id === college)
+            && (!programme || p.category === programme)
+            && (!q || [p.tracker_number, p.title, p.pi?.name].some((v) => v?.toLowerCase().includes(q))))
+    }, [all, year, college, programme, search])
 
-    // Group by college
-    const byCollege = proposals.reduce((acc, p) => {
-        const name = p.college?.name ?? 'Unknown'
-        ;(acc[name] ??= []).push(p)
-        return acc
-    }, {})
+    const needsMe = (p) => statusOf(p) === 'pending' && canApprove(p)
+    const tabs = [
+        { key: 'all', label: 'All', match: () => true },
+        { key: 'mine', label: 'Needs my approval', match: needsMe },
+        { key: 'pending', label: 'Pending', match: (p) => statusOf(p) === 'pending' },
+        { key: 'approved', label: 'Approved', match: (p) => statusOf(p) === 'approved' },
+        { key: 'not_allocated', label: 'Not allocated', match: (p) => statusOf(p) === 'not_allocated' },
+    ]
+    const visible = scoped.filter(tabs.find((t) => t.key === tab).match)
 
-    // Total pending that the current user can approve
-    const approvablePendingIds = proposals
-        .filter(p => p.budget_allocations?.[0]?.status === 'pending' && canApproveCategory(roles, p.category))
-        .map(p => p.budget_allocations[0].id)
-
-    const toggleSelect = (id) => setSelectedIds(prev => {
-        const next = new Set(prev)
-        next.has(id) ? next.delete(id) : next.add(id)
-        return next
-    })
-
-    const handleSelectAll = (ids, selectAll) => {
-        setSelectedIds(prev => {
-            const next = new Set(prev)
-            ids.forEach(id => selectAll ? next.add(id) : next.delete(id))
-            return next
+    const totals = useMemo(() => {
+        const t = { awarded: 0, approved: 0, pending: 0, pendingCount: 0, unallocated: 0, unallocatedSum: 0, colleges: new Set() }
+        scoped.forEach((p) => {
+            const a = allocationOf(p)
+            t.awarded += awarded(p)
+            if (p.college_id) t.colleges.add(p.college_id)
+            if (a?.status === 'approved') t.approved += parseFloat(a.total_amount ?? 0)
+            else if (a?.status === 'pending') { t.pending += parseFloat(a.total_amount ?? 0); t.pendingCount += 1 }
+            else { t.unallocated += 1; t.unallocatedSum += awarded(p) }
         })
-    }
+        return t
+    }, [scoped])
 
-    const handleSelectAllPending = () => {
-        if (approvablePendingIds.every(id => selectedIds.has(id))) {
-            setSelectedIds(new Set()) // deselect all
-        } else {
-            setSelectedIds(new Set(approvablePendingIds))
-        }
-    }
+    const byCollege = useMemo(() => {
+        const groups = new Map()
+        visible.forEach((p) => {
+            const key = p.college?.name ?? 'No college'
+            if (!groups.has(key)) groups.set(key, [])
+            groups.get(key).push(p)
+        })
+        return [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+    }, [visible])
 
-    const handleApproveOne = async (allocId) => {
+    const approvable = visible.filter(needsMe).map((p) => allocationOf(p).id)
+    const allSelected = approvable.length > 0 && approvable.every((id) => selected.has(id))
+
+    const toggle = (id) => setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+    const setMany = (ids, on) => setSelected((prev) => { const n = new Set(prev); ids.forEach((id) => (on ? n.add(id) : n.delete(id))); return n })
+    const resetSelection = () => setSelected(new Set())
+
+    const approveOne = async (id) => {
+        setBusy(id)
         try {
-            await api.post(`/budget-allocations/${allocId}/approve`)
+            await api.post(`/budget-allocations/${id}/approve`)
             success('Allocation approved.')
             load()
         } catch (e) {
-            error(e.response?.data?.message ?? 'Failed to approve.')
+            error(e.response?.data?.message ?? 'The allocation could not be approved.')
         }
+        setBusy(null)
     }
 
-    const handleBulkApprove = async (ids) => {
-        if (!ids.length) return error('No approvable allocations selected.')
+    const approveMany = async (ids) => {
+        if (!ids.length) return
+        setBusy('bulk')
         try {
             const res = await api.post('/budget-allocations/bulk-approve', { ids })
             success(res.data?.message ?? 'Allocations approved.')
-            setSelectedIds(new Set())
+            resetSelection()
             load()
         } catch (e) {
-            error(e.response?.data?.message ?? 'Failed to bulk approve.')
+            error(e.response?.data?.message ?? 'The allocations could not be approved.')
         }
+        setBusy(null)
     }
+
+    const exportColumns = [
+        { label: 'Tracker', value: (p) => p.tracker_number },
+        { label: 'Title', value: (p) => p.title },
+        { label: 'PI', value: (p) => p.pi?.name },
+        { label: term('college'), value: (p) => p.college?.name },
+        { label: 'Programme', value: (p) => programmeLabel(p.category) },
+        { label: 'Academic year', value: (p) => p.academic_year },
+        { label: 'Awarded', value: (p) => awarded(p) },
+        { label: 'Allocated', value: (p) => (allocationOf(p) ? parseFloat(allocationOf(p).total_amount) : '') },
+        { label: 'Status', value: (p) => STATUS[statusOf(p)].label },
+        { label: 'Fiscal year', value: (p) => allocationOf(p)?.fiscal_year },
+    ]
+    const filtersOn = !!(search || college || programme || year !== currentYear || tab !== 'all')
+    const clearFilters = () => { setSearch(''); setCollege(''); setProgramme(''); setYear(currentYear); setTab('all'); resetSelection() }
+
+    const done = (message) => { setAllocating(null); setEditing(null); success(message); load() }
+    const showCollege = accessScope.type !== 'college' && colleges.length > 1
 
     return (
         <AppLayout breadcrumb="Budget Allocations">
-            <div className="max-w-6xl mx-auto space-y-5 p-6">
+            <div className="mx-auto max-w-6xl space-y-5">
+                <PageHeader icon={PieChart} color="emerald" title="Budget Allocations"
+                    description="Turn awards into approved budgets. A team can request funds once its allocation is approved.">
+                    <DownloadMenu filename="budget-allocations" title="Budget allocations" subtitle={[year || 'All years', tabs.find((t) => t.key === tab)?.label].join(' · ')} columns={exportColumns} rows={visible} />
+                    <RefreshButton onClick={load} loading={loading} />
+                </PageHeader>
 
-                {/* Header */}
-                <div className="flex items-start justify-between gap-4 flex-wrap">
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                            <PieChart size={24} className="text-indigo-600" />
-                            Budget Allocations
-                        </h1>
-                        <p className="text-sm text-gray-500 mt-1">
-                            Review funded proposal budgets — approve to unlock PI budget requests
-                        </p>
-                    </div>
-                </div>
-
-                {/* Stats */}
-                {stats && (
-                    <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-                        {[
-                            { label: 'Colleges',           value: stats.colleges_with_budget,                color: 'text-indigo-600', icon: '🏛' },
-                            { label: 'Total Awarded',      value: formatCurrency(stats.total_budget),         color: 'text-gray-900',   icon: '💰', large: true },
-                            { label: 'Approved Alloc.',    value: formatCurrency(stats.total_allocated),      color: 'text-green-600',  icon: '✅', large: true },
-                            { label: 'Remaining',          value: formatCurrency(stats.total_remaining),      color: 'text-blue-600',   icon: '📊', large: true },
-                            { label: 'Pending Approval',   value: approvablePendingIds.length,               color: approvablePendingIds.length > 0 ? 'text-amber-600' : 'text-gray-400', icon: '⏳' },
-                        ].map(s => (
-                            <div key={s.label} className="bg-white border border-gray-200 rounded-xl p-3 text-center">
-                                <div className="text-xl mb-1">{s.icon}</div>
-                                <div className={`${s.large ? 'text-base' : 'text-xl'} font-bold ${s.color}`}>{s.value}</div>
-                                <div className="text-xs text-gray-500 mt-0.5">{s.label}</div>
-                            </div>
-                        ))}
+                {proposals === null ? <StatSkeletons /> : (
+                    <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                        <StatCard icon={Wallet} color="indigo" label="Total awarded" value={formatCurrency(totals.awarded)}
+                            hint={`${scoped.length} project${scoped.length === 1 ? '' : 's'} · ${totals.colleges.size} ${term('college', { plural: totals.colleges.size !== 1, lower: true })}`} />
+                        <StatCard icon={CheckCircle2} color="emerald" label="Approved" value={formatCurrency(totals.approved)}
+                            hint={totals.awarded ? `${Math.round((totals.approved / totals.awarded) * 100)}% of awarded` : '—'} />
+                        <StatCard icon={Clock} color="amber" label="Pending approval" value={formatCurrency(totals.pending)}
+                            hint={`${totals.pendingCount} allocation${totals.pendingCount === 1 ? '' : 's'}`} hintTone={totals.pendingCount ? 'text-amber-600 font-medium' : undefined} />
+                        <StatCard icon={CircleDashed} color="slate" label="Not yet allocated" value={totals.unallocated}
+                            hint={totals.unallocated ? `${formatCurrency(totals.unallocatedSum)} awarded` : 'Everything is allocated'} />
                     </div>
                 )}
 
-                {/* Workflow info */}
-                <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-3">
-                    <AlertTriangle size={15} className="text-amber-500 shrink-0 mt-0.5" />
-                    <p className="text-xs text-amber-700">
-                        <strong>Approval is restricted</strong> to Research, Community, and Technology Officers (and central admins) — each approves only their own category.
+                {proposals !== null && totals.awarded > 0 && <CoverageBar approved={totals.approved} pending={totals.pending} total={totals.awarded} />}
 
-                        PIs cannot submit budget requests until the allocation is approved.
-                    </p>
+                <div className="space-y-3 rounded-2xl border border-gray-200 bg-white p-3">
+                    <div className="flex flex-col gap-2 lg:flex-row">
+                        <label className="relative min-w-0 flex-1">
+                            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                            <input value={search} onChange={(e) => { setSearch(e.target.value); resetSelection() }} placeholder="Search tracker number, title or PI…"
+                                className="w-full rounded-xl border border-gray-200 py-2 pl-9 pr-3 text-base focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-100 sm:text-sm" />
+                        </label>
+                        <div className="grid grid-cols-2 gap-2 sm:flex">
+                            <Select label="Academic year" value={year} onChange={(v) => { setYear(v); resetSelection() }} className="sm:w-40">
+                                <option value="">All years</option>
+                                {years.map((y) => <option key={y} value={y}>{y}</option>)}
+                            </Select>
+                            {programmes({ includeInactive: true }).length > 1 && (
+                                <Select label="Programme" value={programme} onChange={(v) => { setProgramme(v); resetSelection() }} className="sm:w-48">
+                                    <option value="">All programmes</option>
+                                    {programmes({ includeInactive: true }).map((p) => <option key={p.key} value={p.key}>{p.name}</option>)}
+                                </Select>
+                            )}
+                            {showCollege && (
+                                <Select label={term('college')} value={college} onChange={(v) => { setCollege(v); resetSelection() }} className="col-span-2 sm:w-52">
+                                    <option value="">All {term('college', { plural: true, lower: true })}</option>
+                                    {colleges.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+                                </Select>
+                            )}
+                            {filtersOn && <ClearButton onClick={clearFilters} />}
+                        </div>
+                    </div>
+                    <div className="-mx-1 flex gap-1 overflow-x-auto px-1">
+                        {tabs.map((t) => {
+                            const count = scoped.filter(t.match).length
+                            if (t.key === 'mine' && !hasPermission('budget_allocations.approve')) return null
+                            return (
+                                <button key={t.key} onClick={() => { setTab(t.key); resetSelection() }}
+                                    className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${tab === t.key ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
+                                    {t.label}
+                                    <span className={`rounded-full px-1.5 text-[11px] tabular-nums ${tab === t.key ? 'bg-white/20' : t.key === 'mine' && count ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'}`}>{count}</span>
+                                </button>
+                            )
+                        })}
+                    </div>
                 </div>
 
-                {/* Filters + Bulk Actions bar */}
-                <div className="flex flex-wrap items-center gap-3 bg-white border border-gray-200 rounded-xl px-4 py-3">
-                    <Filter size={15} className="text-gray-400 shrink-0" />
-
-                    {/* Academic year */}
-                    <div className="relative">
-                        <select value={yearFilter} onChange={e => { setYearFilter(e.target.value); setSelectedIds(new Set()) }}
-                            className="appearance-none pl-3 pr-8 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
-                            <option value="">All Academic Years</option>
-                            {academicYears.map(y => <option key={y} value={y}>{y}</option>)}
-                        </select>
-                        <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                    </div>
-
-                    {/* College (central only) */}
-                    {isCentral && (
-                        <div className="relative">
-                            <select value={collegeFilter} onChange={e => { setCollegeFilter(e.target.value); setSelectedIds(new Set()) }}
-                                className="appearance-none pl-3 pr-8 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white">
-                                <option value="">All Colleges</option>
-                                {colleges.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                            </select>
-                            <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                        </div>
-                    )}
-
-                    {/* Bulk approve controls — only for users who can approve */}
-                    {userCanApproveAny && approvablePendingIds.length > 0 && (
-                        <div className="flex items-center gap-2 ml-auto">
-                            <button onClick={handleSelectAllPending}
-                                className="text-xs font-medium text-indigo-600 hover:underline">
-                                {approvablePendingIds.every(id => selectedIds.has(id)) ? 'Deselect All' : `Select All Pending (${approvablePendingIds.length})`}
-                            </button>
-                            <button
-                                onClick={() => handleBulkApprove([...selectedIds])}
-                                disabled={selectedIds.size === 0}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                                    selectedIds.size > 0
-                                        ? 'bg-green-600 text-white hover:bg-green-700'
-                                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                }`}>
-                                <Check size={12} />
-                                Approve Selected {selectedIds.size > 0 ? `(${selectedIds.size})` : ''}
-                            </button>
-                        </div>
-                    )}
-                </div>
-
-                {/* Content */}
-                {loading ? (
-                    <div className="flex justify-center py-12">
-                        <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-                    </div>
-                ) : proposals.length === 0 ? (
-                    <div className="bg-white border border-gray-200 rounded-xl p-12 text-center">
-                        <PieChart size={36} className="mx-auto text-gray-300 mb-3" />
-                        <p className="text-gray-600 font-medium">No funded proposals</p>
-                        <p className="text-sm text-gray-400 mt-1">Budget allocations appear here once proposals are funded and awarded.</p>
-                    </div>
+                {loading && proposals === null ? (
+                    <div className="space-y-3">{[0, 1].map((i) => <Skeleton key={i} className="h-56 rounded-2xl" />)}</div>
+                ) : visible.length === 0 ? (
+                    <Panel bodyClassName="p-0">
+                        <EmptyState icon={PieChart}
+                            title={all.length === 0 ? 'No funded projects yet' : 'Nothing matches these filters'}
+                            text={all.length === 0 ? 'Projects appear here once they are funded and have an award.' : 'Try another year, programme or tab.'} />
+                    </Panel>
                 ) : (
-                    <div className="space-y-5">
-                        {Object.entries(byCollege).map(([collegeName, collegeProposals]) => (
-                            <CollegeSection
-                                key={collegeName}
-                                collegeName={collegeName}
-                                proposals={collegeProposals}
-                                roles={roles}
-                                canAllocate={canAllocate}
-                                selectedIds={selectedIds}
-                                onSelect={toggleSelect}
-                                onSelectAll={handleSelectAll}
-                                onAllocate={setAllocProposal}
-                                onApprove={handleApproveOne}
-                                onBulkApproveCollege={(ids) => handleBulkApprove(ids)}
-                                onEdit={setEditAlloc}
-                            />
-                        ))}
+                    <div className="space-y-4">
+                        {approvable.length > 0 && (
+                            <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-200 bg-amber-50/70 px-4 py-2.5">
+                                <p className="flex items-center gap-2 text-sm text-amber-900">
+                                    <AlertTriangle size={15} className="shrink-0 text-amber-500" />
+                                    <span><span className="font-semibold">{approvable.length}</span> allocation{approvable.length === 1 ? '' : 's'} here wait{approvable.length === 1 ? 's' : ''} for your approval.</span>
+                                </p>
+                                <button onClick={() => setMany(approvable, !allSelected)} className="text-sm font-semibold text-amber-800 hover:underline">
+                                    {allSelected ? 'Clear selection' : 'Select all'}
+                                </button>
+                            </div>
+                        )}
+
+                        {byCollege.map(([name, rows]) => {
+                            const groupAwarded = rows.reduce((s, p) => s + awarded(p), 0)
+                            const groupApprovable = rows.filter(needsMe).map((p) => allocationOf(p).id)
+                            const groupApproved = rows.filter((p) => statusOf(p) === 'approved').length
+                            const isCollapsed = collapsed.has(name)
+                            return (
+                                <section key={name} className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+                                    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 bg-gray-50/70 px-4 py-3">
+                                        <button onClick={() => setCollapsed((prev) => { const n = new Set(prev); n.has(name) ? n.delete(name) : n.add(name); return n })}
+                                            className="flex min-w-0 items-center gap-3 text-left">
+                                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-gray-500 ring-1 ring-gray-200"><Building2 size={16} /></span>
+                                            <span className="min-w-0">
+                                                <span className="block truncate font-semibold text-gray-900">{name}</span>
+                                                <span className="block text-xs text-gray-500">
+                                                    <span className="font-semibold tabular-nums text-gray-700">{formatCurrency(groupAwarded)}</span> · {rows.length} project{rows.length === 1 ? '' : 's'} · {groupApproved} approved
+                                                </span>
+                                            </span>
+                                            <ChevronDown size={16} className={`shrink-0 text-gray-400 transition ${isCollapsed ? '-rotate-90' : ''}`} />
+                                        </button>
+                                        {groupApprovable.length > 0 && (
+                                            <button onClick={() => approveMany(groupApprovable)} disabled={busy === 'bulk'}
+                                                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50">
+                                                <Check size={12} /> Approve all ({groupApprovable.length})
+                                            </button>
+                                        )}
+                                    </div>
+                                    {!isCollapsed && (
+                                        <ul className="divide-y divide-gray-100">
+                                            {rows.map((p) => {
+                                                const a = allocationOf(p)
+                                                return (
+                                                    <ProposalRow key={p.id} proposal={p}
+                                                        canAllocate={canAllocate(p)} canApprove={canApprove(p)}
+                                                        selected={!!a && selected.has(a.id)} onToggle={() => toggle(a.id)}
+                                                        onAllocate={() => setAllocating(p)} onApprove={() => approveOne(a.id)}
+                                                        onEdit={() => setEditing({ allocation: a, proposal: p })} busy={busy === a?.id} />
+                                                )
+                                            })}
+                                        </ul>
+                                    )}
+                                </section>
+                            )
+                        })}
+                    </div>
+                )}
+
+                {selected.size > 0 && (
+                    <div className="sticky bottom-3 z-30 flex items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white/95 px-4 py-3 shadow-lg backdrop-blur">
+                        <p className="text-sm text-gray-700"><span className="font-bold">{selected.size}</span> selected</p>
+                        <div className="flex gap-2">
+                            <button onClick={resetSelection} className="rounded-xl px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100">Clear</button>
+                            <button onClick={() => approveMany([...selected])} disabled={busy === 'bulk'}
+                                className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50">
+                                {busy === 'bulk' ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Approve {selected.size}
+                            </button>
+                        </div>
                     </div>
                 )}
             </div>
 
-            {allocProposal && (
-                <FiscalYearModal
-                    proposal={allocProposal}
-                    fiscalYears={fiscalYears}
-                    defaultYear={currentAcademicYear}
-                    onClose={() => setAllocProposal(null)}
-                    onSuccess={() => {
-                        setAllocProposal(null)
-                        success('Allocation created — pending approval by the category officer.')
-                        load()
-                    }}
-                />
-            )}
-
-            {editAlloc && (
-                <EditAllocationModal
-                    allocation={editAlloc}
-                    onClose={() => setEditAlloc(null)}
-                    onSuccess={() => {
-                        setEditAlloc(null)
-                        success('Allocation updated.')
-                        load()
-                    }}
-                />
-            )}
+            {allocating && <AllocateDialog proposal={allocating} fiscalYears={fiscalYears} defaultYear={currentYear} onClose={() => setAllocating(null)} onDone={done} />}
+            {editing && <EditDialog allocation={editing.allocation} proposal={editing.proposal} onClose={() => setEditing(null)} onDone={done} />}
         </AppLayout>
     )
 }

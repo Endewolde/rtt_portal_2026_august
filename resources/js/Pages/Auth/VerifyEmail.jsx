@@ -57,7 +57,7 @@ export default function VerifyEmail() {
     }
 
     return (
-        <GuestLayout
+        <GuestLayout card
             panelHeading={state === 'success' ? 'All Set!' : state === 'error' ? 'Verification Failed' : 'Verifying…'}
             panelSubtext={
                 state === 'success'

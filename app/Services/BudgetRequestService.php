@@ -11,6 +11,7 @@ use App\Models\MidtermEvaluation;
 use App\Models\Proposal;
 use App\Models\ProposalMember;
 use App\Models\User;
+use App\Support\Terms;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -105,7 +106,7 @@ class BudgetRequestService
                 if ($totalAmount > $cap) {
                     throw new \Exception(
                         sprintf(
-                            'Round 1 is limited to 50%% of the awarded budget (max ETB %s). Requested: ETB %s.',
+                            'Round 1 is limited to 50%% of the awarded budget (max '.Terms::currency().' %s). Requested: '.Terms::currency().' %s.',
                             number_format($cap, 2),
                             number_format($totalAmount, 2)
                         )
@@ -183,7 +184,7 @@ class BudgetRequestService
         if ($requestedAmount > $remaining) {
             throw new \Exception(
                 sprintf(
-                    'Requested amount (ETB %s) exceeds remaining budget (ETB %s). Total awarded: ETB %s, already used: ETB %s.',
+                    'Requested amount ('.Terms::currency().' %s) exceeds remaining budget ('.Terms::currency().' %s). Total awarded: '.Terms::currency().' %s, already used: '.Terms::currency().' %s.',
                     number_format($requestedAmount, 2),
                     number_format($remaining, 2),
                     number_format($awardedAmount, 2),

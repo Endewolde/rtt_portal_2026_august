@@ -7,6 +7,7 @@ import TrackerNumberDisplay from '../../Components/TrackerNumberDisplay';
 import api from '../../lib/api';
 import { getCategoryLabel, formatCurrency } from '../../lib/utils';
 import { useToast } from '../../Components/Toast';
+import { currency } from '../../lib/terms';
 
 export default function GenerateAward() {
     const { url } = usePage();
@@ -169,7 +170,7 @@ export default function GenerateAward() {
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Awarded Amount (ETB)
+                                    Awarded Amount ({currency()})
                                 </label>
                                 <input type="number" min="0" step="0.01"
                                     value={form.awarded_amount}
@@ -222,14 +223,14 @@ export default function GenerateAward() {
                                                 {item.category}: {item.item_description}
                                             </span>
                                             <span className="font-medium text-gray-900 shrink-0 ml-3">
-                                                ETB {parseFloat(item.amount ?? 0).toLocaleString()}
+                                                {currency()} {parseFloat(item.amount ?? 0).toLocaleString()}
                                             </span>
                                         </div>
                                     ))}
                                     <div className="border-t border-blue-200 pt-2 mt-2 flex justify-between text-sm font-bold">
                                         <span className="text-blue-800">Total Requested</span>
                                         <span className="text-blue-900">
-                                            ETB {parseFloat(proposalBudget.total ?? 0).toLocaleString()}
+                                            {currency()} {parseFloat(proposalBudget.total ?? 0).toLocaleString()}
                                         </span>
                                     </div>
                                     <div className="pt-1 flex justify-between text-sm font-bold text-emerald-700">
@@ -262,7 +263,7 @@ export default function GenerateAward() {
                         {proposalBudget && (proposalBudget.items ?? []).length > 0 && (
                             <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                                 <p className="text-xs font-semibold text-blue-800 mb-2">
-                                    💰 PI Requested Budget — ETB {parseFloat(proposalBudget.total ?? 0).toLocaleString()}
+                                    💰 PI Requested Budget — {currency()} {parseFloat(proposalBudget.total ?? 0).toLocaleString()}
                                 </p>
                                 <div className="space-y-1">
                                     {(proposalBudget.items ?? []).map((item, i) => (
@@ -271,7 +272,7 @@ export default function GenerateAward() {
                                                 {item.category}: {item.item_description}
                                             </span>
                                             <span className="font-medium text-gray-800 shrink-0 ml-2">
-                                                ETB {parseFloat(item.amount ?? 0).toLocaleString()}
+                                                {currency()} {parseFloat(item.amount ?? 0).toLocaleString()}
                                             </span>
                                         </div>
                                     ))}
@@ -281,7 +282,7 @@ export default function GenerateAward() {
 
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Awarded Amount (ETB) <span className="text-red-500">*</span>
+                                Awarded Amount ({currency()}) <span className="text-red-500">*</span>
                             </label>
                             <input type="number" min="0" step="0.01"
                                 value={form.awarded_amount}

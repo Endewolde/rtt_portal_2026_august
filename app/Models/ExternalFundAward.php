@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -88,5 +89,25 @@ class ExternalFundAward extends Model
         }
 
         return round(($this->total_spent / (float) $this->amount_awarded) * 100, 1);
+    }
+
+    /** The office and finance see every award; a researcher sees the awards on their own applications. */
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        if (self::seesAll($user)) {
+            return $query;
+        }
+
+        return $query->whereHas('application', fn (Builder $q) => $q->where('created_by', $user->id)->orWhere('pi_user_id', $user->id));
+    }
+
+    public function isVisibleTo(User $user): bool
+    {
+        return self::seesAll($user) || ($this->application?->isVisibleTo($user) ?? false);
+    }
+
+    private static function seesAll(User $user): bool
+    {
+        return $user->can('external_funds.manage') || $user->can('external_funds.view_any') || $user->can('external_funds.expenditure');
     }
 }

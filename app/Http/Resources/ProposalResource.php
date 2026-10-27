@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\ProposalDocument;
+use App\Support\ApplicationForm;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -26,6 +27,9 @@ class ProposalResource extends JsonResource
             'title' => $this->title,
             'abstract' => $this->abstract,
             'keywords' => $this->keywords,
+            'sdgs' => $this->sdgs ?? [],
+            'call_answers' => $this->call_answers ?? (object) [],
+            'call_form_answers' => $this->whenLoaded('proposalCall', fn () => ApplicationForm::answered($this->resource)),
             'category' => $this->category,
             'status' => $this->status,
             'academic_year' => $this->academic_year,

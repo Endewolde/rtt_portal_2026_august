@@ -557,6 +557,12 @@ export default function AssignReviewers() {
                         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-5">
                             <StepHeader number="3" label="Selection Summary" done={selected.length > 0 && !!evalType && !!dueDate} />
 
+                            {proposal?.proposal_call?.review_route?.blind_reviewers > 0 && (
+                                <p className="mb-3 rounded-xl bg-violet-50 px-3 py-2 text-xs text-violet-800">
+                                    This call decides blind review once <span className="font-semibold">{proposal.proposal_call.review_route.blind_reviewers}</span> reviewers have scored — assign at least that many.
+                                </p>
+                            )}
+
                             {selected.length === 0 ? (
                                 <div className="flex flex-col items-center justify-center py-6 text-center">
                                     <div className="h-10 w-10 bg-gray-50 rounded-xl flex items-center justify-center mb-3">

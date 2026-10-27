@@ -10,16 +10,12 @@ import ViewToggle from '../../Components/ViewToggle';
 import ProposalTable from '../../Components/ProposalTable';
 import { useViewPreference } from '../../hooks/useViewPreference';
 import api from '../../lib/api';
+import { programmes } from '../../lib/programmes';
 import { useToast } from '../../Components/Toast';
 import { formatDate, formatCurrency, getCategoryLabel } from '../../lib/utils';
 
 const ARCHIVE_STATUSES = ['completed', 'archived'];
-const CATEGORIES = [
-    { value: '', label: 'All Categories' },
-    { value: 'research', label: 'Research' },
-    { value: 'community_engagement', label: 'Community Engagement' },
-    { value: 'technology_transfer', label: 'Technology Transfer' },
-];
+const categoryOptions = () => [{ value: '', label: 'All Categories' }, ...programmes({ includeInactive: true }).map((p) => ({ value: p.key, label: p.name }))];
 
 // ─── Year card ────────────────────────────────────────────────────────────────
 
@@ -375,7 +371,7 @@ export default function CompletedArchive() {
                             <BookOpen size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                             <select value={filters.category} onChange={e => setFilter('category', e.target.value)}
                                 className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white appearance-none">
-                                {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                                {categoryOptions().map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                             </select>
                         </div>
 

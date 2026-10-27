@@ -2,6 +2,8 @@
 
 namespace App\Exports;
 
+use App\Support\Programmes;
+use App\Support\Terms;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
@@ -14,12 +16,6 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 /** One row per call: applications, how far they got, money and gender — for year-end reporting. */
 class CallOutcomesExport implements FromCollection, ShouldAutoSize, WithHeadings, WithStrictNullComparison, WithStyles, WithTitle
 {
-    private const CATEGORIES = [
-        'research' => 'Research',
-        'community_engagement' => 'Community Engagement',
-        'technology_transfer' => 'Technology Transfer',
-    ];
-
     /** @param  list<array<string, mixed>>  $calls  AnalyticsService::calls() */
     public function __construct(
         private readonly array $calls,
@@ -39,7 +35,7 @@ class CallOutcomesExport implements FromCollection, ShouldAutoSize, WithHeadings
             return [
                 $call['title'].($call['is_legacy'] ? ' (legacy grants)' : ''),
                 $call['academic_year'],
-                self::CATEGORIES[$call['category']] ?? $call['category'],
+                Programmes::label($call['category']),
                 $call['submitted'],
                 $stage['validated'] ?? 0,
                 $stage['blind_passed'] ?? 0,
@@ -74,9 +70,9 @@ class CallOutcomesExport implements FromCollection, ShouldAutoSize, WithHeadings
         return [
             ['Call outcomes — '.$this->scopeLabel],
             [
-                'Call', 'Academic Year', 'Category',
+                'Call', Terms::academicYear(), 'Category',
                 'Applications', 'Validated', 'Passed Blind Review', 'Passed Open Defence', 'Funded', 'Not Selected', 'Still in Review',
-                'Success Rate (%)', 'Awarded (ETB)', 'Call Budget (ETB)', 'Budget Used (%)',
+                'Success Rate (%)', 'Awarded ('.Terms::currency().')', 'Call Budget ('.Terms::currency().')', 'Budget Used (%)',
                 'Female PIs', 'Male PIs', 'Gender Not Specified', 'Female PIs Funded', 'Male PIs Funded',
             ],
         ];

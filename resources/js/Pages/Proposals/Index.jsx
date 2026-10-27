@@ -12,6 +12,9 @@ import {
 } from 'lucide-react'
 import api from '../../lib/api'
 import { getStatusLabel, getCategoryLabel } from '../../lib/utils'
+import { term } from '../../lib/terms'
+import { sdgByNumber } from '../../lib/sdgs'
+import { programmeKeys } from '../../lib/programmes'
 
 // ── Look-ups ──────────────────────────────────────────────────────────────────
 
@@ -286,18 +289,18 @@ function TableView({ proposals }) {
             <div className="hidden overflow-x-auto md:block">
                 <table className="w-full text-sm">
                     <thead>
-                        <tr className="border-b border-gray-100 bg-gray-50/80 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                        <tr className="border-b border-gray-100 bg-gray-50/80 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500"><th className="px-4 py-3 w-10 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">#</th>
                             <th className="px-4 py-3">Proposal</th>
                             <th className="px-3 py-3">Principal Investigator</th>
-                            <th className="px-3 py-3">College</th>
+                            <th className="px-3 py-3">{term('college')}</th>
                             <th className="px-3 py-3">Status</th>
                             <th className="px-3 py-3">Submitted</th>
                             <th className="w-10 px-3 py-3" />
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                        {proposals.map((p) => (
-                            <tr key={p.id} className="group cursor-pointer transition hover:bg-slate-50/70" onClick={() => router.visit(`/proposals/${p.id}`)}>
+                        {proposals.map((p, rowIdx) => (
+                            <tr key={p.id} className="group cursor-pointer transition hover:bg-slate-50/70" onClick={() => router.visit(`/proposals/${p.id}`)}><td className="px-4 py-3 w-10 text-xs font-medium tabular-nums text-gray-400">{rowIdx + 1}</td>
                                 <td className="max-w-md px-4 py-3">
                                     <div className="flex items-center gap-2">
                                         <span className="font-mono text-[11px] font-semibold text-slate-500">{p.tracker_number}</span>
@@ -471,6 +474,7 @@ export default function ProposalIndex() {
         college_id: linked.get('college_id') ?? '',
         academic_year: linked.has('academic_year') ? linked.get('academic_year') : currentAcademicYear,
         search: linked.get('search') ?? '',
+        sdg: linked.get('sdg') ?? '',
     }))
     const [searchInput, setSearchInput] = useState(() => linked.get('search') ?? '')
     const [colleges, setColleges] = useState([])
@@ -497,7 +501,7 @@ export default function ProposalIndex() {
     useEffect(() => { loadStats(filters.academic_year) }, [filters.academic_year])
 
     // A filter change means the current page number may no longer make sense.
-    useEffect(() => { setPage(1) }, [filters.status, filters.category, filters.college_id, filters.academic_year, filters.search])
+    useEffect(() => { setPage(1) }, [filters.status, filters.category, filters.college_id, filters.academic_year, filters.search, filters.sdg])
 
     useEffect(() => { loadProposals() }, [filters, page])
 
@@ -564,6 +568,7 @@ export default function ProposalIndex() {
         if (filters.status) list.push(['status', filters.status === UNDER_REVIEW ? 'Under review' : filters.status === FUNDED_GROUP ? 'Funded (all stages)' : getStatusLabel(filters.status)])
         if (filters.category) list.push(['category', getCategoryLabel(filters.category)])
         if (filters.college_id) list.push(['college_id', colleges.find((c) => String(c.id) === String(filters.college_id))?.name ?? 'College'])
+        if (filters.sdg) list.push(['sdg', `SDG ${filters.sdg}: ${sdgByNumber(filters.sdg)?.name ?? ''}`])
         return list
     }, [filters, colleges])
 
@@ -573,7 +578,7 @@ export default function ProposalIndex() {
     }
     const clearAll = () => {
         setSearchInput('')
-        setFilters((p) => ({ ...p, status: '', category: '', college_id: '', search: '' }))
+        setFilters((p) => ({ ...p, status: '', category: '', college_id: '', search: '', sdg: '' }))
     }
 
     if (!isAdmin && user) return null
@@ -606,7 +611,7 @@ export default function ProposalIndex() {
                     <div className="flex flex-wrap items-center gap-2">
                         <select value={filters.academic_year} onChange={(e) => setFilter('academic_year', e.target.value)}
                             className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-200">
-                            <option value="">All years</option>
+                            <option value="">All {term('academic_year', { plural: true, lower: true })}</option>
                             {academicYears.map((y) => <option key={y} value={y}>{y}</option>)}
                         </select>
                         <button onClick={() => setShowStats((v) => !v)}
@@ -676,10 +681,10 @@ export default function ProposalIndex() {
                             </select>
                             <select value={filters.category} onChange={(e) => setFilter('category', e.target.value)} className={selectCls}>
                                 <option value="">All categories</option>
-                                {Object.keys(CATEGORY_STYLES).map((c) => <option key={c} value={c}>{getCategoryLabel(c)}</option>)}
+                                {programmeKeys().map((c) => <option key={c} value={c}>{getCategoryLabel(c)}</option>)}
                             </select>
                             <select value={filters.college_id} onChange={(e) => setFilter('college_id', e.target.value)} className={`${selectCls} col-span-2 sm:col-span-1`}>
-                                <option value="">All colleges</option>
+                                <option value="">All {term('college', { plural: true, lower: true })}</option>
                                 {colleges.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </select>
                         </div>

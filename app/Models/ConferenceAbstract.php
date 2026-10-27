@@ -19,6 +19,9 @@ class ConferenceAbstract extends Model
         'submitted_at', 'admin_notes',
     ];
 
+    /** The tracking token is the submitter's key to edit or withdraw — never sent unless asked for. */
+    protected $hidden = ['submission_token'];
+
     protected $casts = [
         'co_authors' => 'array',
         'keywords' => 'array',

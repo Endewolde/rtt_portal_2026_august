@@ -10,16 +10,19 @@ import { usePage } from '@inertiajs/react';
 import PublicLayout from '../../Layouts/PublicLayout';
 import { get } from '../../lib/api';
 import { getCategoryLabel, cn } from '../../lib/utils';
+import { styledProgrammes } from '../../lib/programmes';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const CATEGORIES = [
+const CATEGORY_STYLES = [
     { value: '',                     label: 'All Research',        icon: FlaskConical },
     { value: 'research',             label: 'Research',            icon: Microscope   },
     { value: 'community_engagement', label: 'Community',           icon: Handshake    },
     { value: 'technology_transfer',  label: 'Technology Transfer', icon: TrendingUp   },
     { value: 'innovation',           label: 'Innovation',          icon: Lightbulb    },
 ];
+
+const categories = () => styledProgrammes(CATEGORY_STYLES);
 
 const CATEGORY_COLORS = {
     research:             'bg-blue-50 text-blue-700 border-blue-200',
@@ -76,7 +79,7 @@ function Pagination({ meta, page, onChange }) {
 function ResearchCard({ record, onClick }) {
     const accent  = CATEGORY_ACCENT[record.category] ?? CATEGORY_ACCENT.other;
     const catCls  = CATEGORY_COLORS[record.category] ?? CATEGORY_COLORS.other;
-    const catIcon = CATEGORIES.find(c => c.value === record.category)?.icon ?? FlaskConical;
+    const catIcon = categories().find(c => c.value === record.category)?.icon ?? FlaskConical;
     const CatIcon = catIcon;
 
     return (
@@ -192,7 +195,7 @@ function DetailPanel({ record, onClose }) {
 
     const d       = detail ?? record;
     const catCls  = CATEGORY_COLORS[d.category] ?? CATEGORY_COLORS.other;
-    const catIcon = CATEGORIES.find(c => c.value === d.category)?.icon ?? FlaskConical;
+    const catIcon = categories().find(c => c.value === d.category)?.icon ?? FlaskConical;
     const CatIcon = catIcon;
 
     return (
@@ -461,7 +464,7 @@ export default function Repository() {
 
                 {/* Category tabs */}
                 <div className="flex flex-wrap gap-2 mb-6">
-                    {CATEGORIES.map(cat => {
+                    {categories().map(cat => {
                         const Icon  = cat.icon;
                         const isOn  = category === cat.value;
                         return (

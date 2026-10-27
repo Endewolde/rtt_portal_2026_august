@@ -10,12 +10,13 @@ import { PageHeader, Select, RefreshButton, StatCard, Panel, EmptyState, StatSke
 import { get } from '../../lib/api';
 import { downloadFile } from '../../lib/download';
 import { useToast } from '../../Components/Toast';
+import { currency, term } from '../../lib/terms';
 
 const CURRENT_YEAR = new Date().getFullYear();
 const DEFAULT_AY = `${CURRENT_YEAR}-${CURRENT_YEAR + 1}`;
 
 const fmt = (n) => Number(n ?? 0).toLocaleString();
-const fmtEtb = (n) => `ETB ${fmt(n)}`;
+const fmtEtb = (n) => `${currency()} ${fmt(n)}`;
 const titleCase = (s) => (s || '').replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 const yearLabel = (ay) => ay.replace('-', '–');
 
@@ -96,7 +97,7 @@ export default function AnnualReport() {
             <div className="mx-auto max-w-6xl space-y-6">
                 <PageHeader icon={FileBarChart2} color="sky" title="Annual RTT Report"
                     description={`${orgName} · Academic year ${yearLabel(academicYear)} · July ${ayStart} – June ${ayEnd}`}>
-                    <Select label="Academic year" value={academicYear} onChange={setAcademicYear}>
+                    <Select label={term('academic_year')} value={academicYear} onChange={setAcademicYear}>
                         {yearOptions.map((y) => <option key={y} value={y}>{yearLabel(y)}</option>)}
                     </Select>
                     <RefreshButton onClick={() => load(academicYear)} loading={loading} />
@@ -122,7 +123,7 @@ export default function AnnualReport() {
                             <StatCard icon={Coins} color="amber" label="Budget allocated" value={fmtEtb(data.finance.allocated)} />
                             <StatCard icon={Percent} color="sky" label="Budget utilization" value={`${data.finance.utilization}%`} hint="Disbursed of allocated" />
                             <StatCard icon={BookOpen} color="violet" label="Research outputs" value={fmt(data.outputs.total)} />
-                            <StatCard icon={ClipboardCheck} color="indigo" label="Reviews completed" value={fmt(data.reviews.completed)} hint={`of ${fmt(data.reviews.total)} assigned`} />
+                            <StatCard icon={ClipboardCheck} color="indigo" label="Reviews completed" value={fmt(data.reviews.completed)} hint={`of ${fmt(data.reviews.total)} assigned${data.reviews.reviewers ? ` · ${fmt(data.reviews.reviewers)} reviewers` : ''}`} />
                         </div>
 
                         <div className="grid gap-6 lg:grid-cols-2">
@@ -143,6 +144,9 @@ export default function AnnualReport() {
                                             [Coins, 'Allocated', data.finance.allocated, 'text-amber-600'],
                                             [ArrowDownToLine, 'Disbursed', data.finance.disbursed, 'text-emerald-600'],
                                             [Wallet, 'Remaining', data.finance.allocated - data.finance.disbursed, 'text-sky-600'],
+                                            [Award, 'Awarded to projects', data.finance.awarded ?? 0, 'text-violet-600'],
+                                            [CheckCircle2, 'Spent and verified', data.finance.settled ?? 0, 'text-emerald-700'],
+                                            [Percent, `Paid of awarded · ${data.finance.paid_of_awarded ?? 0}%`, data.finance.disbursed, 'text-indigo-600'],
                                         ].map(([Icon, label, value, tone]) => (
                                             <div key={label} className="rounded-xl border border-gray-100 bg-linear-to-br from-gray-50 to-white p-3">
                                                 <Icon size={15} className={tone} />
@@ -190,8 +194,8 @@ export default function AnnualReport() {
                                 <div className="overflow-x-auto">
                                     <table className="w-full min-w-120 text-sm">
                                         <thead>
-                                            <tr className="text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-                                                <th className="pb-2 text-left">College</th>
+                                            <tr className="text-[11px] font-semibold uppercase tracking-wider text-gray-500"><th className="px-4 py-2.5 w-10 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">#</th>
+                                                <th className="pb-2 text-left">{term('college')}</th>
                                                 <th className="w-2/5 pb-2 text-left">Funded share</th>
                                                 <th className="pb-2 text-right">Submitted</th>
                                                 <th className="pb-2 text-right">Funded</th>
@@ -201,7 +205,7 @@ export default function AnnualReport() {
                                             {data.colleges.map((c, i) => {
                                                 const rate = c.submitted > 0 ? Math.round((c.funded / c.submitted) * 100) : 0;
                                                 return (
-                                                    <tr key={c.name}>
+                                                    <tr key={c.name}><td className="py-2.5 pr-3 w-10 text-xs font-medium tabular-nums text-gray-400">{i + 1}</td>
                                                         <td className="py-2.5 pr-3 font-medium text-gray-900">{c.name}</td>
                                                         <td className="py-2.5 pr-3">
                                                             <div className="flex items-center gap-2">

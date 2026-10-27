@@ -6,17 +6,12 @@ import {
     Loader2, Filter, SlidersHorizontal,
 } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
+import { programmes } from '../../lib/programmes';
 import { get } from '../../lib/api';
 
 // ─── Static data ───────────────────────────────────────────────────────────────
 
-const CATEGORIES = [
-    { value: 'research',             label: 'Research'             },
-    { value: 'community_engagement', label: 'Community Engagement' },
-    { value: 'technology_transfer',  label: 'Technology Transfer'  },
-    { value: 'innovation',           label: 'Innovation'           },
-    { value: 'other',                label: 'Other'                },
-];
+const categoryOptions = () => programmes({ includeInactive: true }).map((p) => ({ value: p.key, label: p.name }));
 
 const ACADEMIC_YEARS = Array.from({ length: 60 }, (_, i) => {
     const s = 2059 - i;
@@ -470,7 +465,7 @@ export default function ProposalArchive() {
     // Active chip labels
     const chips = [
         activeFilters.academic_year && { key: 'academic_year', icon: Calendar, label: ACADEMIC_YEARS.find(a => a.value === activeFilters.academic_year)?.label },
-        activeFilters.category      && { key: 'category',      icon: Tag,      label: CATEGORIES.find(c => c.value === activeFilters.category)?.label },
+        activeFilters.category      && { key: 'category',      icon: Tag,      label: categoryOptions().find(c => c.value === activeFilters.category)?.label },
         activeFilters.college_id    && { key: 'college_id',    icon: Building2,label: colleges.find(c => c.value === activeFilters.college_id)?.label },
         activeFilters.search        && { key: 'search',        icon: Search,   label: `"${activeFilters.search}"` },
     ].filter(Boolean);
@@ -537,7 +532,7 @@ export default function ProposalArchive() {
                                 onChange={e => setFilters(f => ({ ...f, category: e.target.value }))}
                                 className="bg-transparent focus:outline-none appearance-none pr-5 min-w-36 text-inherit cursor-pointer">
                                 <option value="">All Categories</option>
-                                {CATEGORIES.map(o => (
+                                {categoryOptions().map(o => (
                                     <option key={o.value} value={o.value}>{o.label}</option>
                                 ))}
                             </select>

@@ -3,14 +3,10 @@ import { ChevronRight, Plus, Pencil, Trash2, Star, ClipboardList } from 'lucide-
 import AppLayout from '../../Layouts/AppLayout';
 import { useToast } from '../../Components/Toast';
 import api from '../../lib/api';
+import { programmes } from '../../lib/programmes';
 
-const PROPOSAL_CATEGORIES = [
-    { value: 'research',             label: 'Research' },
-    { value: 'community_engagement', label: 'Community Engagement' },
-    { value: 'technology_transfer',  label: 'Technology Transfer' },
-    { value: 'innovation',           label: 'Innovation' },
-    { value: 'other',                label: 'Other' },
-];
+/** The organisation's programmes as select options (Settings → Programmes). */
+const proposal_categoriesOptions = () => programmes({ includeInactive: true }).map((p) => ({ value: p.key, label: p.name }));
 
 const EMPTY_TYPE     = { name: '', label: '', proposal_category: 'research', description: '' };
 const EMPTY_CATEGORY = { name: '', description: '', weight: 10 };
@@ -234,7 +230,7 @@ export default function EvaluationCriteria() {
                                     <p className="text-sm font-medium text-gray-900 truncate">{t.label}</p>
                                     <div className="flex items-center gap-2 mt-0.5">
                                         <span className="text-xs px-1.5 py-0.5 rounded bg-blue-50 text-blue-600">
-                                            {PROPOSAL_CATEGORIES.find((c) => c.value === t.proposal_category)?.label ?? t.proposal_category}
+                                            {proposal_categoriesOptions().find((c) => c.value === t.proposal_category)?.label ?? t.proposal_category}
                                         </span>
                                         <span className="text-xs text-gray-400">{t.categories_count ?? 0} cats</span>
                                         {!t.is_active && <span className="text-xs text-gray-400 italic">inactive</span>}
@@ -352,7 +348,7 @@ export default function EvaluationCriteria() {
                             </FormField>
                             <FormField label="Proposal Category" required>
                                 <select value={typeForm.proposal_category} onChange={(e) => setTypeForm((f) => ({ ...f, proposal_category: e.target.value }))} className={inp}>
-                                    {PROPOSAL_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                                    {proposal_categoriesOptions().map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
                                 </select>
                             </FormField>
                         </>

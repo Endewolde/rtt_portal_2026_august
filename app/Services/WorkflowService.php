@@ -291,6 +291,7 @@ class WorkflowService
         'pass_blind_review' => 'review_decisions.correct',
         'fail_blind_review' => 'review_decisions.correct',
         'pass_defence' => 'review_decisions.correct',
+        'skip_defence' => 'review_decisions.correct',
         'fail_defence' => 'review_decisions.correct',
         'accept' => 'evaluation.central',
         'central_approve' => 'evaluation.central',

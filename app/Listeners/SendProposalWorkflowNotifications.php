@@ -7,6 +7,7 @@ use App\Jobs\SendEmailNotificationJob;
 use App\Jobs\StoreInAppNotificationJob;
 use App\Models\Proposal;
 use App\Models\User;
+use App\Support\Programmes;
 use Illuminate\Support\Facades\Log;
 
 class SendProposalWorkflowNotifications
@@ -59,12 +60,6 @@ class SendProposalWorkflowNotifications
 
     // ── Stage handlers ────────────────────────────────────────────────────────
 
-    private const CATEGORY_OFFICER_ROLES = [
-        'research' => 'research_officer',
-        'community_engagement' => 'community_officer',
-        'technology_transfer' => 'technology_officer',
-    ];
-
     private function onSubmitted(Proposal $proposal): void
     {
         $pi = $proposal->pi;
@@ -96,7 +91,7 @@ class SendProposalWorkflowNotifications
 
     private function notifyCategoryOfficers(Proposal $proposal, array $data): void
     {
-        $role = self::CATEGORY_OFFICER_ROLES[$proposal->category] ?? null;
+        $role = Programmes::directorRoles($proposal->category);
         $officers = ($role ? User::role($role)->where('status', 'active')->get() : collect())
             ->merge(User::customRoleHolders('proposals.validate', $proposal->college_id, $proposal->category))
             ->unique('id');
@@ -234,7 +229,7 @@ class SendProposalWorkflowNotifications
     {
         $recipients = User::role('central_officer')->where('status', 'active')->get();
 
-        $categoryRole = self::CATEGORY_OFFICER_ROLES[$proposal->category] ?? null;
+        $categoryRole = Programmes::directorRoles($proposal->category);
         if ($categoryRole) {
             $recipients = $recipients->merge(User::role($categoryRole)->where('status', 'active')->get());
         }

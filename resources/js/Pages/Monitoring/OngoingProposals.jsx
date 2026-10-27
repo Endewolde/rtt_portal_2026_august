@@ -4,19 +4,21 @@ import {
     TrendingUp, RefreshCw, Search, ChevronLeft, ChevronRight, ExternalLink,
     ArrowUp, ArrowDown, ArrowUpDown, Building2, Wallet, Download, AlertTriangle, Archive,
     Gavel, X, ArrowLeft, Upload, FileDown, CheckCircle2, FileUp,
+    Clock, ClipboardCheck, Layers, FileSignature, Banknote, Loader2,
 } from 'lucide-react';
-import {
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-    ResponsiveContainer, PieChart, Pie, Cell,
-} from 'recharts';
+import { Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import AppLayout from '../../Layouts/AppLayout';
-import FilterBar from '../../Components/FilterBar';
+import { PageHeader, Panel, EmptyState, Skeleton, Select, RefreshButton } from '../../Components/Insights/Kit';
+import ProposalHover from '../../Components/Finance/ProposalHover';
+import SavedViews, { readSharedView } from '../../Components/SavedViews';
 import ConfirmDialog from '../../Components/ConfirmDialog';
 import { useAuth } from '../../hooks/useAuth';
 import { useFeature } from '../../hooks/useFeature';
 import { useToast } from '../../Components/Toast';
 import api, { get, post } from '../../lib/api';
 import { formatDate, formatCurrency, getCategoryLabel, getStatusLabel } from '../../lib/utils';
+import { currency } from '../../lib/terms';
+import { programmeColor, programmeKeys } from '../../lib/programmes';
 
 // Same category-specific lookup fallbacks the normal proposal wizard uses
 // (resources/js/Pages/Proposals/Create.jsx) — kept in sync so a legacy-created
@@ -48,8 +50,6 @@ function parseLocalCsv(text) {
     return { headers: parseLine(first), rows: lines.slice(1).map(parseLine) };
 }
 
-const CATEGORY_OPTIONS = ['research', 'community_engagement', 'technology_transfer'];
-const CATEGORY_COLORS = { research: '#6366f1', community_engagement: '#ec4899', technology_transfer: '#14b8a6' };
 
 const MIDTERM_LABELS = {
     scheduled: { label: 'Scheduled', cls: 'bg-blue-100 text-blue-700' },
@@ -103,37 +103,15 @@ function ContractBadge({ status }) {
 
 function UtilizationBar({ allocated, utilized }) {
     const pct = allocated > 0 ? Math.min(100, Math.round((utilized / allocated) * 100)) : 0;
+    const tone = pct > 90 ? 'bg-red-500' : pct > 60 ? 'bg-amber-400' : 'bg-emerald-500';
     return (
-        <div className="min-w-24">
-            <div className="flex items-center justify-between text-[11px] text-gray-500 mb-1">
-                <span>{pct}%</span>
-                <span className="text-gray-400">{formatCurrency(allocated)}</span>
+        <div className="min-w-32">
+            <div className="mb-1 flex items-center justify-between gap-2 text-[11px]">
+                <span className="font-semibold tabular-nums text-gray-800">{pct}%</span>
+                <span className="truncate tabular-nums text-gray-400">{formatCurrency(utilized ?? 0)} / {formatCurrency(allocated ?? 0)}</span>
             </div>
-            <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
-            </div>
-        </div>
-    );
-}
-
-// ─── Hover detail card ──────────────────────────────────────────────────────────
-
-function HoverDetailCard({ info }) {
-    if (!info) return null;
-    const { p, x, y } = info;
-    const left = Math.min(x, (typeof window !== 'undefined' ? window.innerWidth : 1200) - 300);
-
-    return (
-        <div className="fixed z-50 w-72 bg-gray-900 text-white text-xs rounded-xl shadow-2xl p-4 pointer-events-none" style={{ left, top: y }}>
-            <p className="font-semibold text-white leading-snug mb-2 line-clamp-3">{p.title || 'Untitled'}</p>
-            <div className="space-y-1 text-gray-300">
-                <p><span className="text-gray-500">Tracker:</span> {p.tracker_number ?? '—'}</p>
-                <p><span className="text-gray-500">PI:</span> {p.pi?.name ?? '—'}</p>
-                <p><span className="text-gray-500">College:</span> {p.college?.name ?? '—'}</p>
-                <p><span className="text-gray-500">Category:</span> {getCategoryLabel(p.category)}</p>
-                <p><span className="text-gray-500">Funded:</span> {p.funded_at ? formatDate(p.funded_at) : '—'}</p>
-                <p><span className="text-gray-500">Research Outputs:</span> {p.outputs_count ?? 0}</p>
-                <p><span className="text-gray-500">Contract:</span> {p.contract_status ? p.contract_status.charAt(0).toUpperCase() + p.contract_status.slice(1) : 'Not Submitted'}</p>
+            <div className="h-1.5 overflow-hidden rounded-full bg-gray-100">
+                <div className={`h-full rounded-full transition-all ${tone}`} style={{ width: `${pct}%` }} />
             </div>
         </div>
     );
@@ -258,7 +236,7 @@ function SingleGrantPanel({ onGranted, onClose }) {
 
             <div className="grid grid-cols-2 gap-3">
                 <div>
-                    <label className="text-xs font-semibold text-gray-600">Awarded Amount (ETB) <span className="text-red-500">*</span></label>
+                    <label className="text-xs font-semibold text-gray-600">Awarded Amount ({currency()}) <span className="text-red-500">*</span></label>
                     <input
                         type="number" min="0" step="0.01"
                         value={awardedAmount}
@@ -389,7 +367,7 @@ function BulkGrantPanel({ onGranted }) {
                             <div className="overflow-x-auto">
                                 <table className="min-w-full text-xs">
                                     <thead>
-                                        <tr className="bg-red-50 border-b border-red-100">
+                                        <tr className="bg-red-50 border-b border-red-100"><th className="px-3 py-2 w-10 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">#</th>
                                             <th className="px-3 py-2 text-left font-semibold text-red-400 w-12">Row</th>
                                             <th className="px-3 py-2 text-left font-semibold text-red-400">Tracker</th>
                                             <th className="px-3 py-2 text-left font-semibold text-red-400">Issue</th>
@@ -397,7 +375,7 @@ function BulkGrantPanel({ onGranted }) {
                                     </thead>
                                     <tbody>
                                         {result.errors.map((e, i) => (
-                                            <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-red-50/30'}>
+                                            <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-red-50/30'}><td className="px-3 py-2 w-10 text-xs font-medium tabular-nums text-gray-400">{i + 1}</td>
                                                 <td className="px-3 py-2 font-mono text-gray-400">{e.row}</td>
                                                 <td className="px-3 py-2 text-gray-600">{e.tracker_number}</td>
                                                 <td className="px-3 py-2 text-red-500">{e.error}</td>
@@ -453,13 +431,13 @@ function BulkGrantPanel({ onGranted }) {
                 <div className="overflow-x-auto rounded-xl border border-gray-100">
                     <table className="min-w-full text-xs">
                         <thead>
-                            <tr className="bg-gray-50 border-b border-gray-100">
+                            <tr className="bg-gray-50 border-b border-gray-100"><th className="px-3 py-2 w-10 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">#</th>
                                 {preview.headers.map((h, i) => <th key={i} className="px-3 py-2 text-left font-semibold text-gray-500 whitespace-nowrap">{h}</th>)}
                             </tr>
                         </thead>
                         <tbody>
                             {preview.rows.map((row, ri) => (
-                                <tr key={ri} className={ri % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}>
+                                <tr key={ri} className={ri % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}><td className="px-3 py-2 w-10 text-xs font-medium tabular-nums text-gray-400">{ri + 1}</td>
                                     {row.map((cell, ci) => <td key={ci} className="px-3 py-2 text-gray-700 whitespace-nowrap">{cell || <span className="text-gray-300">—</span>}</td>)}
                                 </tr>
                             ))}
@@ -655,7 +633,7 @@ function NewProposalGrantPanel({ onGranted, onClose }) {
                         onChange={e => setCategory(e.target.value)}
                         className="w-full mt-1 text-sm border border-gray-200 rounded-xl px-3 py-2.5 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-300"
                     >
-                        {CATEGORY_OPTIONS.map(c => <option key={c} value={c}>{getCategoryLabel(c)}</option>)}
+                        {programmeKeys().map(c => <option key={c} value={c}>{getCategoryLabel(c)}</option>)}
                     </select>
                 </div>
                 <div>
@@ -909,7 +887,7 @@ function NewProposalGrantPanel({ onGranted, onClose }) {
 
             <div className="grid grid-cols-2 gap-3">
                 <div>
-                    <label className="text-xs font-semibold text-gray-600">Awarded Amount (ETB) <span className="text-red-500">*</span></label>
+                    <label className="text-xs font-semibold text-gray-600">Awarded Amount ({currency()}) <span className="text-red-500">*</span></label>
                     <input
                         type="number" min="0" step="0.01"
                         value={awardedAmount}
@@ -1013,8 +991,8 @@ function SortableHeader({ column, sortKey, sortDir, onSort }) {
     const active = sortKey === column.key;
     const Icon = !active ? ArrowUpDown : sortDir === 'asc' ? ArrowUp : ArrowDown;
     return (
-        <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide">
-            <button onClick={() => onSort(column.key)} className={`flex items-center gap-1 transition-colors ${active ? 'text-indigo-700' : 'text-gray-500 hover:text-gray-700'}`}>
+        <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide">
+            <button onClick={() => onSort(column.key)} className={`inline-flex items-center gap-1 transition-colors ${active ? 'text-indigo-700' : 'text-gray-500 hover:text-gray-800'}`}>
                 {column.label}
                 <Icon size={11} className={active ? 'opacity-100' : 'opacity-40'} />
             </button>
@@ -1026,34 +1004,31 @@ function SortableHeader({ column, sortKey, sortDir, onSort }) {
 // now" — ordered roughly by how blocking each gap is. Shared by the desktop
 // table and mobile cards so the two can never show different actions.
 function primaryAction(p) {
-    if (p.needs_contract) return { type: 'link', href: '/admin/awarded', label: 'Review Contract', cls: 'text-red-700 hover:text-red-900' };
-    if (p.needs_midterm) return { type: 'link', href: '/midterm-evaluations', label: 'Schedule Midterm', cls: 'text-amber-700 hover:text-amber-900' };
-    if (p.needs_completion_workshop) return { type: 'link', href: '/completion-workshops', label: 'Schedule Workshop', cls: 'text-purple-700 hover:text-purple-900' };
-    if (p.needs_disbursement) return { type: 'link', href: '/disbursements', label: 'Process Disbursement', cls: 'text-blue-700 hover:text-blue-900' };
+    if (p.needs_contract) return { type: 'link', href: '/admin/awarded', label: 'Review contract', cls: 'bg-red-50 text-red-700 ring-red-200 hover:bg-red-100' };
+    if (p.needs_midterm) return { type: 'link', href: '/midterm-evaluations', label: 'Schedule midterm', cls: 'bg-amber-50 text-amber-800 ring-amber-200 hover:bg-amber-100' };
+    if (p.needs_completion_workshop) return { type: 'link', href: '/completion-workshops', label: 'Schedule workshop', cls: 'bg-purple-50 text-purple-700 ring-purple-200 hover:bg-purple-100' };
+    if (p.needs_disbursement) return { type: 'link', href: '/disbursements', label: 'Disburse', cls: 'bg-blue-50 text-blue-700 ring-blue-200 hover:bg-blue-100' };
     if (p.needs_archiving) return { type: 'archive' };
     return { type: 'view' };
 }
 
 function ActionCell({ p, canArchive, onRequestArchive }) {
     const action = primaryAction(p);
+    const base = 'inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-semibold ring-1 transition';
 
     if (action.type === 'link') {
-        return (
-            <a href={action.href} className={`flex items-center gap-1 text-xs font-semibold ${action.cls}`}>
-                {action.label} <ExternalLink size={11} />
-            </a>
-        );
+        return <a href={action.href} className={`${base} ${action.cls}`}>{action.label} <ExternalLink size={11} /></a>;
     }
     if (action.type === 'archive') {
         return canArchive ? (
-            <button onClick={() => onRequestArchive(p)} className="flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-900">
-                <Archive size={11} /> Archive
+            <button onClick={() => onRequestArchive(p)} className={`${base} bg-emerald-50 text-emerald-700 ring-emerald-200 hover:bg-emerald-100`}>
+                <Archive size={12} /> Archive
             </button>
         ) : (
             <span className="text-xs text-gray-400">Awaiting archive</span>
         );
     }
-    return <a href={`/proposals/${p.id}`} className="text-xs font-semibold text-gray-500 hover:text-gray-700">View</a>;
+    return <a href={`/proposals/${p.id}`} className={`${base} bg-white text-gray-600 ring-gray-200 hover:bg-gray-50`}>Open <ChevronRight size={12} /></a>;
 }
 
 function daysSince(date) {
@@ -1061,139 +1036,138 @@ function daysSince(date) {
     return Math.max(0, Math.floor((Date.now() - new Date(date).getTime()) / 86400000));
 }
 
+/** Where the project is in its life after the award: contract → midterm → workshop → archive. */
+function LifecycleSteps({ p }) {
+    const steps = [
+        { label: 'Contract', done: p.contract_status === 'approved', warn: p.needs_contract },
+        { label: 'Midterm', done: p.midterm_status === 'completed' || p.midterm_status === 'scored', warn: p.needs_midterm || p.is_overdue, active: !!p.midterm_status },
+        { label: 'Workshop', done: p.completion_workshop_status === 'completed', warn: p.needs_completion_workshop, active: !!p.completion_workshop_status },
+        { label: 'Archive', done: false, warn: p.needs_archiving },
+    ];
+    return (
+        <div className="flex items-center gap-1" aria-label="Project progress">
+            {steps.map((s, i) => (
+                <div key={s.label} className="flex items-center gap-1">
+                    <span title={`${s.label}: ${s.done ? 'done' : s.warn ? 'needs action' : s.active ? 'in progress' : 'not yet'}`}
+                        className={`flex h-5 w-5 items-center justify-center rounded-full text-[9px] font-bold ring-2 ${s.done ? 'bg-emerald-500 text-white ring-emerald-100' : s.warn ? 'bg-amber-400 text-white ring-amber-100' : s.active ? 'bg-indigo-500 text-white ring-indigo-100' : 'bg-gray-100 text-gray-400 ring-white'}`}>
+                        {s.done ? <CheckCircle2 size={11} /> : s.label[0]}
+                    </span>
+                    {i < steps.length - 1 && <span className={`h-0.5 w-3 rounded ${s.done ? 'bg-emerald-300' : 'bg-gray-200'}`} />}
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function Initials({ name }) {
+    const letters = (name ?? '?').split(' ').filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+    return <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[10px] font-bold text-indigo-700">{letters}</span>;
+}
+
 // ─── Table ────────────────────────────────────────────────────────────────────
 
-function OngoingTable({ proposals, loading, sortKey, sortDir, onSort, canArchive, onRequestArchive }) {
-    const [hoverInfo, setHoverInfo] = useState(null);
-    const showHover = (e, p) => {
-        const rect = e.currentTarget.getBoundingClientRect();
-        setHoverInfo({ p, x: rect.left, y: rect.bottom + 8 });
-    };
-    const hideHover = () => setHoverInfo(null);
-
+function OngoingTable({ proposals, loading, sortKey, sortDir, onSort, canArchive, onRequestArchive, startAt = 1, onClear }) {
     if (loading) {
         return (
-            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-                <div className="divide-y divide-gray-100">
-                    {Array.from({ length: 6 }).map((_, i) => (
-                        <div key={i} className="px-4 py-3.5 flex items-center gap-4">
-                            {Array.from({ length: 6 }).map((_, j) => (
-                                <div key={j} className="h-3.5 bg-gray-100 rounded animate-pulse" style={{ width: `${12 + j * 4}%` }} />
-                            ))}
-                        </div>
-                    ))}
-                </div>
+            <div className="space-y-2 rounded-2xl border border-gray-200 bg-white p-4">
+                {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-12" />)}
             </div>
         );
     }
 
     if (proposals.length === 0) {
         return (
-            <div className="bg-white border border-gray-200 rounded-xl p-12 text-center">
-                <TrendingUp size={32} className="mx-auto mb-3 text-gray-300" />
-                <p className="text-gray-500 font-medium text-sm">No ongoing proposals match these filters.</p>
-            </div>
+            <Panel bodyClassName="p-0">
+                <EmptyState icon={TrendingUp} title="No ongoing proposals match" text="Funded proposals appear here as soon as they are funded. Try clearing the filters.">
+                    {onClear && <button onClick={onClear} className="mt-3 text-sm font-semibold text-indigo-600 hover:underline">Clear filters</button>}
+                </EmptyState>
+            </Panel>
         );
     }
 
     return (
         <>
-            <div className="hidden sm:block bg-white border border-gray-200 rounded-xl overflow-hidden">
+            <div className="hidden overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm md:block">
                 <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
+                    <table className="w-full min-w-245 text-sm">
                         <thead>
-                            <tr className="bg-gray-50 border-b border-gray-200">
-                                {SORT_COLUMNS.map(col => (
-                                    <SortableHeader key={col.key} column={col} sortKey={sortKey} sortDir={sortDir} onSort={onSort} />
-                                ))}
-                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Category</th>
-                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Days Since Funded</th>
-                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Midterm</th>
-                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Completion Workshop</th>
-                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Contract</th>
-                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Budget</th>
-                                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Action</th>
+                            <tr className="border-b border-gray-200 bg-gray-50/80">
+                                <th className="w-10 px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-400">#</th>
+                                {SORT_COLUMNS.map(col => <SortableHeader key={col.key} column={col} sortKey={sortKey} sortDir={sortDir} onSort={onSort} />)}
+                                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">Progress</th>
+                                <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">Budget used</th>
+                                <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wide text-gray-500">Next step</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
-                            {proposals.map((p, i) => (
-                                <tr key={p.id} className={`transition-colors hover:bg-indigo-50/40 ${i % 2 === 0 ? '' : 'bg-gray-50/40'}`}>
-                                    <td className="px-4 py-3 max-w-xs">
-                                        <a href={`/proposals/${p.id}`}
-                                            onMouseEnter={e => showHover(e, p)}
-                                            onMouseLeave={hideHover}
-                                            className="font-mono text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 px-2 py-1 rounded hover:bg-blue-100 transition-colors">
-                                            {p.tracker_number ?? '—'}
-                                        </a>
-                                        <p className="text-xs text-gray-600 line-clamp-1 mt-1">{p.title ?? 'Untitled'}</p>
-                                    </td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-700 font-medium">{p.pi?.name ?? '—'}</td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">{p.college?.name ?? '—'}</td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-500">{p.funded_at ? formatDate(p.funded_at) : '—'}</td>
-                                    <td className="px-4 py-3 whitespace-nowrap">
-                                        <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-700">{getCategoryLabel(p.category)}</span>
-                                    </td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-xs tabular-nums">
-                                        {p.is_overdue ? (
-                                            <span className="flex items-center gap-1 text-red-600 font-bold">
-                                                <AlertTriangle size={11} /> {daysSince(p.funded_at)}
-                                            </span>
-                                        ) : (
-                                            <span className="text-gray-600">{daysSince(p.funded_at) ?? '—'}</span>
-                                        )}
-                                    </td>
-                                    <td className="px-4 py-3 whitespace-nowrap"><MidtermBadge status={p.midterm_status} /></td>
-                                    <td className="px-4 py-3 whitespace-nowrap"><WorkshopBadge status={p.completion_workshop_status} needsWorkshop={p.needs_completion_workshop} /></td>
-                                    <td className="px-4 py-3 whitespace-nowrap"><ContractBadge status={p.contract_status} /></td>
-                                    <td className="px-4 py-3"><UtilizationBar allocated={p.budget_allocated} utilized={p.budget_utilized} /></td>
-                                    <td className="px-4 py-3 whitespace-nowrap">
-                                        <ActionCell p={p} canArchive={canArchive} onRequestArchive={onRequestArchive} />
-                                    </td>
-                                </tr>
-                            ))}
+                            {proposals.map((p, i) => {
+                                const days = daysSince(p.funded_at);
+                                return (
+                                    <tr key={p.id} className={`group transition-colors hover:bg-indigo-50/40 ${p.is_overdue ? 'bg-red-50/30' : ''}`}>
+                                        <td className="px-4 py-3.5 text-xs font-medium tabular-nums text-gray-400">{startAt + i}</td>
+                                        <td className="max-w-xs px-4 py-3.5">
+                                            <div className="flex items-center gap-1.5">
+                                                <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: programmeColor(p.category) }} title={getCategoryLabel(p.category)} />
+                                                <ProposalHover id={p.id}><a href={`/proposals/${p.id}`} className="font-mono text-xs font-bold text-indigo-600 hover:underline">{p.tracker_number ?? '—'}</a></ProposalHover>
+                                            </div>
+                                            <p className="mt-0.5 line-clamp-1 text-sm font-medium text-gray-900">{p.title ?? 'Untitled'}</p>
+                                        </td>
+                                        <td className="px-4 py-3.5">
+                                            <span className="flex items-center gap-2 whitespace-nowrap text-xs font-medium text-gray-700"><Initials name={p.pi?.name} /> {p.pi?.name ?? '—'}</span>
+                                        </td>
+                                        <td className="max-w-44 truncate px-4 py-3.5 text-xs text-gray-600">{p.college?.name ?? '—'}</td>
+                                        <td className="whitespace-nowrap px-4 py-3.5">
+                                            <p className="text-xs text-gray-700">{p.funded_at ? formatDate(p.funded_at) : '—'}</p>
+                                            {days !== null && (
+                                                <p className={`mt-0.5 inline-flex items-center gap-1 text-[11px] ${p.is_overdue ? 'font-semibold text-red-600' : 'text-gray-400'}`}>
+                                                    {p.is_overdue && <AlertTriangle size={10} />} {days} days ago
+                                                </p>
+                                            )}
+                                        </td>
+                                        <td className="px-4 py-3.5"><LifecycleSteps p={p} /></td>
+                                        <td className="px-4 py-3.5"><UtilizationBar allocated={p.budget_allocated} utilized={p.budget_utilized} /></td>
+                                        <td className="px-4 py-3.5 text-right"><ActionCell p={p} canArchive={canArchive} onRequestArchive={onRequestArchive} /></td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
-                <div className="px-4 py-2.5 bg-gray-50 border-t border-gray-200 text-xs text-gray-400">
-                    {proposals.length} proposal{proposals.length !== 1 ? 's' : ''} on this page
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-gray-100 bg-gray-50/60 px-4 py-2.5 text-[11px] text-gray-500">
+                    <span className="font-medium text-gray-600">Progress:</span>
+                    {[['bg-emerald-500', 'Done'], ['bg-indigo-500', 'In progress'], ['bg-amber-400', 'Needs action'], ['bg-gray-200', 'Not yet']].map(([c, l]) => (
+                        <span key={l} className="inline-flex items-center gap-1.5"><span className={`h-2.5 w-2.5 rounded-full ${c}`} /> {l}</span>
+                    ))}
+                    <span className="ml-auto">C Contract · M Midterm · W Workshop · A Archive</span>
                 </div>
             </div>
 
-            {/* Mobile: stacked cards */}
-            <div className="sm:hidden space-y-3">
-                {proposals.map(p => (
-                    <div key={p.id} className={`bg-white border rounded-xl p-4 ${p.is_overdue ? 'border-red-200 bg-red-50/30' : 'border-gray-200'}`}>
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                            <a href={`/proposals/${p.id}`} className="font-mono text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded shrink-0">
-                                {p.tracker_number ?? '—'}
-                            </a>
-                            <MidtermBadge status={p.midterm_status} />
-                        </div>
-                        <p className="font-medium text-gray-900 text-sm leading-snug mb-2.5">{p.title || 'Untitled'}</p>
-                        <div className="grid grid-cols-2 gap-y-1.5 gap-x-3 text-xs mb-3">
-                            <p><span className="text-gray-400">PI:</span> <span className="text-gray-600">{p.pi?.name ?? '—'}</span></p>
-                            <p><span className="text-gray-400">College:</span> <span className="text-gray-600">{p.college?.name ?? '—'}</span></p>
-                            <p><span className="text-gray-400">Category:</span> <span className="text-gray-600">{getCategoryLabel(p.category)}</span></p>
-                            <p><span className="text-gray-400">Funded:</span> <span className="text-gray-600">{p.funded_at ? formatDate(p.funded_at) : '—'}</span></p>
-                            <p className="flex items-center gap-1"><span className="text-gray-400">Workshop:</span> <WorkshopBadge status={p.completion_workshop_status} needsWorkshop={p.needs_completion_workshop} /></p>
-                            <p className="flex items-center gap-1"><span className="text-gray-400">Contract:</span> <ContractBadge status={p.contract_status} /></p>
-                        </div>
-                        {p.is_overdue && (
-                            <p className="flex items-center gap-1 text-xs font-bold text-red-600 mb-2">
-                                <AlertTriangle size={11} /> Midterm overdue — {daysSince(p.funded_at)} days since funded
-                            </p>
-                        )}
-                        <UtilizationBar allocated={p.budget_allocated} utilized={p.budget_utilized} />
-                        {primaryAction(p).type !== 'view' && (
-                            <div className="mt-3">
-                                <ActionCell p={p} canArchive={canArchive} onRequestArchive={onRequestArchive} />
+            {/* Phones and small tablets: cards */}
+            <div className="space-y-3 md:hidden">
+                {proposals.map((p, i) => {
+                    const days = daysSince(p.funded_at);
+                    return (
+                        <article key={p.id} className={`relative overflow-hidden rounded-2xl border bg-white p-4 pl-5 shadow-sm ${p.is_overdue ? 'border-red-200' : 'border-gray-200'}`}>
+                            <span className="absolute inset-y-0 left-0 w-1" style={{ backgroundColor: programmeColor(p.category) }} />
+                            <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                    <p className="flex items-center gap-1.5 text-[11px] text-gray-400"><span className="tabular-nums">#{startAt + i}</span> <a href={`/proposals/${p.id}`} className="font-mono font-bold text-indigo-600">{p.tracker_number ?? '—'}</a></p>
+                                    <p className="mt-0.5 text-sm font-semibold leading-snug text-gray-900">{p.title || 'Untitled'}</p>
+                                </div>
+                                <LifecycleSteps p={p} />
                             </div>
-                        )}
-                    </div>
-                ))}
+                            <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+                                <p className="flex items-center gap-1.5 text-gray-700"><Initials name={p.pi?.name} /> <span className="truncate">{p.pi?.name ?? '—'}</span></p>
+                                <p className="truncate text-gray-500">{p.college?.name ?? '—'}</p>
+                                <p className="text-gray-500">{getCategoryLabel(p.category)}</p>
+                                <p className={p.is_overdue ? 'font-semibold text-red-600' : 'text-gray-500'}>{p.funded_at ? `Funded ${formatDate(p.funded_at)}` : '—'}{days !== null ? ` · ${days}d` : ''}</p>
+                            </div>
+                            <div className="mt-3"><UtilizationBar allocated={p.budget_allocated} utilized={p.budget_utilized} /></div>
+                            <div className="mt-3 flex justify-end"><ActionCell p={p} canArchive={canArchive} onRequestArchive={onRequestArchive} /></div>
+                        </article>
+                    );
+                })}
             </div>
-
-            <HoverDetailCard info={hoverInfo} />
         </>
     );
 }
@@ -1216,13 +1190,19 @@ export default function OngoingProposals() {
     const [grantModalOpen, setGrantModalOpen] = useState(false);
     const [data, setData] = useState(null);
 
-    const [status, setStatus] = useState('');
-    const [collegeFilter, setCollegeFilter] = useState('');
-    const [categoryFilter, setCategoryFilter] = useState('');
-    const [q, setQ] = useState('');
+    const shared = useRef(readSharedView() ?? {}).current;
+    const [status, setStatus] = useState(shared.status ?? '');
+    const [collegeFilter, setCollegeFilter] = useState(shared.college ?? '');
+    const [categoryFilter, setCategoryFilter] = useState(shared.category ?? '');
+    const [q, setQ] = useState(shared.q ?? '');
     const [page, setPage] = useState(1);
-    const [sortKey, setSortKey] = useState('funded_at');
-    const [sortDir, setSortDir] = useState('desc');
+    const [sortKey, setSortKey] = useState(shared.sort ?? 'funded_at');
+    const [sortDir, setSortDir] = useState(shared.dir ?? 'desc');
+    const currentView = { status, college: collegeFilter, category: categoryFilter, q, sort: sortKey, dir: sortDir };
+    const applyView = (v) => {
+        setStatus(v.status ?? ''); setCollegeFilter(v.college ?? ''); setCategoryFilter(v.category ?? '');
+        setQ(v.q ?? ''); setSortKey(v.sort ?? 'funded_at'); setSortDir(v.dir ?? 'desc');
+    };
 
     const filterParams = {
         status: status || undefined,
@@ -1255,6 +1235,7 @@ export default function OngoingProposals() {
     };
 
     const toggleStatus = (key) => setStatus(prev => (prev === key ? '' : key));
+    const clearAll = () => { setStatus(''); setCollegeFilter(''); setCategoryFilter(''); setQ(''); };
 
     const downloadExcel = async () => {
         setDownloading(true);
@@ -1303,218 +1284,240 @@ export default function OngoingProposals() {
     const proposals = data?.proposals?.data ?? [];
     const pagination = data?.proposals ?? null;
     const colleges = data?.colleges ?? [];
-    const activeFilterCount = [collegeFilter, categoryFilter, q].filter(Boolean).length;
+    const filtersOn = !!(status || collegeFilter || categoryFilter || q);
     const utilizationPct = kpis.total_budget_allocated > 0
         ? Math.round((kpis.total_budget_utilized / kpis.total_budget_allocated) * 100)
         : 0;
 
-    const categoryChartData = CATEGORY_OPTIONS
+    const categoryChartData = programmeKeys({ includeInactive: true })
         .filter(c => byCategory[c])
-        .map(c => ({ name: getCategoryLabel(c), value: byCategory[c], fill: CATEGORY_COLORS[c] }));
+        .map(c => ({ name: getCategoryLabel(c), value: byCategory[c], fill: programmeColor(c) }));
+    const collegeMax = Math.max(1, ...byCollege.map(c => c.total));
+
+    const STAGES = [
+        { key: 'awaiting_midterm', label: 'Awaiting midterm', value: kpis.awaiting_midterm, icon: Clock, tone: 'amber', hint: 'Funded, midterm not held yet' },
+        { key: 'in_midterm', label: 'In midterm', value: kpis.in_midterm, icon: ClipboardCheck, tone: 'violet', hint: 'Report or scoring under way' },
+        { key: 'awaiting_archive', label: 'Ready to archive', value: kpis.awaiting_archive, icon: Archive, tone: 'emerald', hint: 'Completed, to be closed out' },
+    ];
+    const ATTENTION = [
+        { key: 'overdue', label: 'Midterm overdue', value: kpis.overdue_awaiting_midterm, icon: AlertTriangle, cls: 'red' },
+        { key: 'needs_contract', label: 'Contract pending', value: kpis.needs_contract, icon: FileSignature, cls: 'rose' },
+        { key: 'needs_disbursement', label: 'Needs disbursement', value: kpis.needs_disbursement, icon: Banknote, cls: 'blue' },
+    ];
+    const TONES = {
+        amber: { on: 'border-amber-300 bg-amber-50 ring-amber-100', icon: 'bg-amber-100 text-amber-700', num: 'text-amber-700' },
+        violet: { on: 'border-violet-300 bg-violet-50 ring-violet-100', icon: 'bg-violet-100 text-violet-700', num: 'text-violet-700' },
+        emerald: { on: 'border-emerald-300 bg-emerald-50 ring-emerald-100', icon: 'bg-emerald-100 text-emerald-700', num: 'text-emerald-700' },
+        red: { on: 'bg-red-600 text-white ring-red-600', off: 'bg-red-50 text-red-700 ring-red-200 hover:bg-red-100' },
+        rose: { on: 'bg-rose-600 text-white ring-rose-600', off: 'bg-rose-50 text-rose-700 ring-rose-200 hover:bg-rose-100' },
+        blue: { on: 'bg-blue-600 text-white ring-blue-600', off: 'bg-blue-50 text-blue-700 ring-blue-200 hover:bg-blue-100' },
+    };
+    const statusLabel = [...STAGES, ...ATTENTION].find(s => s.key === status)?.label;
+    const startAt = pagination ? (pagination.current_page - 1) * (pagination.per_page ?? 20) + 1 : 1;
 
     return (
         <AppLayout breadcrumb="Ongoing Proposals">
-            <div className="max-w-7xl mx-auto space-y-6">
+            <div className="mx-auto max-w-7xl space-y-5">
+                <PageHeader icon={TrendingUp} color="emerald" title="Ongoing Proposals"
+                    description="Every funded project after the award — contracts, midterms, workshops, money and archiving in one place.">
+                    {canGrantLegacy && (
+                        <button onClick={() => setGrantModalOpen(true)}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            <Gavel size={14} /> <span className="hidden sm:inline">Grant legacy proposal</span>
+                        </button>
+                    )}
+                    <SavedViews storageKey="saved_views_ongoing" current={currentView} onApply={applyView} />
+                    <RefreshButton onClick={() => load({ silent: true })} loading={refreshing} />
+                    <button onClick={downloadExcel} disabled={downloading || proposals.length === 0}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50">
+                        {downloading ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} {downloading ? 'Preparing…' : 'Excel'}
+                    </button>
+                </PageHeader>
 
-                {/* Header */}
-                <div className="rounded-2xl bg-linear-to-r from-slate-900 via-emerald-950 to-slate-900 px-6 py-7 text-white">
-                    <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
-                        <div className="flex items-center gap-4">
-                            <div className="h-12 w-12 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
-                                <TrendingUp size={22} />
+                {/* ── Overview: lifecycle, attention, money ───────────────── */}
+                {loading && !data ? (
+                    <div className="grid gap-4 lg:grid-cols-[1fr_320px]"><Skeleton className="h-56 rounded-2xl" /><Skeleton className="h-56 rounded-2xl" /></div>
+                ) : (
+                    <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
+                        <Panel title="Project lifecycle" subtitle="Click a stage or an alert to filter the list." icon={Layers}
+                            actions={<span className="rounded-full bg-gray-900 px-3 py-1 text-xs font-bold tabular-nums text-white">{kpis.total_ongoing} ongoing</span>}>
+                            <div className="grid gap-3 sm:grid-cols-3">
+                                {STAGES.map((s, i) => {
+                                    const active = status === s.key;
+                                    const t = TONES[s.tone];
+                                    return (
+                                        <button key={s.key} onClick={() => toggleStatus(s.key)} aria-pressed={active}
+                                            className={`group relative rounded-2xl border p-4 text-left transition-all ${active ? `${t.on} shadow-sm ring-4` : 'border-gray-200 bg-white hover:-translate-y-0.5 hover:border-gray-300 hover:shadow-sm'}`}>
+                                            <div className="flex items-center justify-between">
+                                                <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${t.icon}`}><s.icon size={17} /></span>
+                                                <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400">Step {i + 1}</span>
+                                            </div>
+                                            <p className={`mt-3 text-3xl font-bold tabular-nums ${t.num}`}>{s.value}</p>
+                                            <p className="text-sm font-semibold text-gray-900">{s.label}</p>
+                                            <p className="text-[11px] text-gray-500">{s.hint}</p>
+                                            <div className="mt-2.5 h-1 overflow-hidden rounded-full bg-gray-100">
+                                                <div className={`h-full rounded-full ${s.tone === 'amber' ? 'bg-amber-400' : s.tone === 'violet' ? 'bg-violet-500' : 'bg-emerald-500'}`}
+                                                    style={{ width: `${kpis.total_ongoing ? (s.value / kpis.total_ongoing) * 100 : 0}%` }} />
+                                            </div>
+                                        </button>
+                                    );
+                                })}
                             </div>
-                            <div>
-                                <h1 className="text-xl font-bold">Ongoing Proposals</h1>
-                                <p className="text-sm text-slate-300 mt-0.5">
-                                    Funded proposals still in progress — post-award monitoring in one place
-                                </p>
+                            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-gray-100 pt-4">
+                                <span className="text-xs font-semibold text-gray-500">Needs attention:</span>
+                                {ATTENTION.map(a => {
+                                    const active = status === a.key;
+                                    const t = TONES[a.cls];
+                                    return (
+                                        <button key={a.key} onClick={() => toggleStatus(a.key)} aria-pressed={active} disabled={!a.value && !active}
+                                            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ring-1 transition disabled:cursor-default disabled:bg-gray-50 disabled:text-gray-400 disabled:ring-gray-200 ${active ? t.on : t.off}`}>
+                                            <a.icon size={12} /> <span className="tabular-nums">{a.value}</span> {a.label}
+                                        </button>
+                                    );
+                                })}
+                                {!ATTENTION.some(a => a.value) && <span className="inline-flex items-center gap-1 text-xs text-emerald-700"><CheckCircle2 size={12} /> Nothing overdue or blocked</span>}
                             </div>
-                        </div>
-                        <div className="flex items-center gap-2 self-start lg:self-auto">
-                            {canGrantLegacy && (
-                                <button
-                                    onClick={() => setGrantModalOpen(true)}
-                                    className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-white/10 border border-white/20 text-sm font-medium hover:bg-white/20 transition-colors"
-                                >
-                                    <Gavel size={14} />
-                                    Grant Legacy Proposal
-                                </button>
-                            )}
-                            <button
-                                onClick={() => load({ silent: true })}
-                                disabled={refreshing}
-                                className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-white/10 border border-white/20 text-sm font-medium hover:bg-white/20 disabled:opacity-60 transition-colors"
-                            >
-                                <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
-                                {refreshing ? 'Refreshing…' : 'Refresh'}
-                            </button>
-                            <button
-                                onClick={downloadExcel}
-                                disabled={downloading || proposals.length === 0}
-                                className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-emerald-500 text-white text-sm font-semibold hover:bg-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            >
-                                <Download size={14} className={downloading ? 'animate-bounce' : ''} />
-                                {downloading ? 'Preparing…' : 'Download'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                        </Panel>
 
-                {/* KPI cards — tap/click narrows the status filter below */}
-                <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-                    {[
-                        { key: '', label: 'Total Ongoing', value: kpis.total_ongoing, color: '#4f46e5', bg: '#eef2ff', border: '#c7d2fe' },
-                        { key: 'awaiting_midterm', label: 'Awaiting Midterm', value: kpis.awaiting_midterm, color: '#b45309', bg: '#fffbeb', border: '#fde68a', overdue: kpis.overdue_awaiting_midterm },
-                        { key: 'in_midterm', label: 'In Midterm', value: kpis.in_midterm, color: '#7e22ce', bg: '#faf5ff', border: '#e9d5ff' },
-                        { key: 'awaiting_archive', label: 'Awaiting Archive', value: kpis.awaiting_archive, color: '#047857', bg: '#ecfdf5', border: '#a7f3d0' },
-                        { key: 'needs_contract', label: 'Contract Pending', value: kpis.needs_contract, color: '#b91c1c', bg: '#fef2f2', border: '#fecaca' },
-                        { key: 'needs_disbursement', label: 'Needs Disbursement', value: kpis.needs_disbursement, color: '#1d4ed8', bg: '#eff6ff', border: '#bfdbfe' },
-                    ].map(card => {
-                        const active = status === card.key && card.key !== '';
-                        return (
-                            <button
-                                key={card.label}
-                                onClick={() => card.key && toggleStatus(card.key)}
-                                className={`text-left rounded-2xl border-2 p-4 transition-all duration-150 active:scale-95 touch-manipulation ${active ? 'shadow-md scale-[1.02]' : 'hover:shadow-sm'} ${!card.key ? 'cursor-default' : 'cursor-pointer'}`}
-                                style={{ borderColor: active ? card.border : '#e5e7eb', backgroundColor: active ? card.bg : '#ffffff' }}
-                            >
-                                <p className="text-2xl font-extrabold tabular-nums" style={{ color: card.color }}>{card.value}</p>
-                                <p className="text-xs font-semibold text-gray-500 mt-0.5">{card.label}</p>
-                                {!!card.overdue && (
-                                    <span
-                                        role="button"
-                                        tabIndex={0}
-                                        onClick={e => { e.stopPropagation(); toggleStatus('overdue'); }}
-                                        className={`inline-flex items-center gap-1 mt-1.5 text-[11px] font-bold px-1.5 py-0.5 rounded-full ${status === 'overdue' ? 'bg-red-600 text-white' : 'bg-red-100 text-red-700'}`}
-                                    >
-                                        <AlertTriangle size={9} /> {card.overdue} overdue
+                        <Panel title="Budget used" subtitle="Spent against what was allocated." icon={Wallet}>
+                            <div className="flex items-center gap-5">
+                                <div className="relative h-28 w-28 shrink-0">
+                                    <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
+                                        <circle cx="50" cy="50" r="42" fill="none" stroke="#eef0f3" strokeWidth="10" />
+                                        <circle cx="50" cy="50" r="42" fill="none" stroke={utilizationPct > 90 ? '#dc2626' : '#059669'} strokeWidth="10" strokeLinecap="round"
+                                            strokeDasharray={`${(Math.min(100, utilizationPct) / 100) * 263.9} 263.9`} />
+                                    </svg>
+                                    <span className="absolute inset-0 flex flex-col items-center justify-center leading-none">
+                                        <span className="text-2xl font-bold tabular-nums text-gray-900">{utilizationPct}%</span>
+                                        <span className="mt-1 text-[10px] uppercase tracking-wide text-gray-400">used</span>
                                     </span>
-                                )}
-                            </button>
-                        );
-                    })}
-                    <div className="rounded-2xl border-2 border-gray-200 bg-white p-4">
-                        <div className="flex items-center gap-1.5 mb-1">
-                            <Wallet size={14} className="text-emerald-600" />
-                            <p className="text-xs font-semibold text-gray-500">Budget Utilized</p>
-                        </div>
-                        <p className="text-lg font-extrabold text-emerald-700">{formatCurrency(kpis.total_budget_utilized)}</p>
-                        <p className="text-[11px] text-gray-400 mt-0.5">{utilizationPct}% of {formatCurrency(kpis.total_budget_allocated)}</p>
-                    </div>
-                </div>
-
-                {/* Charts — omitted where they'd only ever show one meaningless bar/slice */}
-                {(!isCollegeOfficer || !isCategoryOfficer) && (
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        {!isCollegeOfficer && byCollege.length > 0 && (
-                            <div className="bg-white border border-gray-200 rounded-2xl p-5">
-                                <p className="text-sm font-bold text-gray-800 mb-4 flex items-center gap-1.5"><Building2 size={14} /> Ongoing by College</p>
-                                <ResponsiveContainer width="100%" height={220}>
-                                    <BarChart data={byCollege} margin={{ left: -20 }}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                                        <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-20} textAnchor="end" height={50} />
-                                        <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
-                                        <Tooltip />
-                                        <Bar dataKey="total" fill="#4f46e5" radius={[4, 4, 0, 0]} />
-                                    </BarChart>
-                                </ResponsiveContainer>
+                                </div>
+                                <div className="min-w-0 space-y-2.5 text-sm">
+                                    <div><p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Used</p><p className="truncate font-bold tabular-nums text-emerald-700">{formatCurrency(kpis.total_budget_utilized)}</p></div>
+                                    <div><p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Allocated</p><p className="truncate font-bold tabular-nums text-gray-900">{formatCurrency(kpis.total_budget_allocated)}</p></div>
+                                    <div><p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Left to spend</p><p className="truncate font-bold tabular-nums text-gray-700">{formatCurrency(Math.max(0, kpis.total_budget_allocated - kpis.total_budget_utilized))}</p></div>
+                                </div>
                             </div>
+                        </Panel>
+                    </div>
+                )}
+
+                {/* ── Spread: colleges and programmes ─────────────────────── */}
+                {(!isCollegeOfficer && byCollege.length > 0) || (!isCategoryOfficer && categoryChartData.length > 0) ? (
+                    <div className="grid gap-4 lg:grid-cols-2">
+                        {!isCollegeOfficer && byCollege.length > 0 && (
+                            <Panel title="By college" subtitle="Ongoing projects per college." icon={Building2}>
+                                <ul className="space-y-2.5">
+                                    {byCollege.slice(0, 8).map(c => (
+                                        <li key={c.id}>
+                                            <button onClick={() => setCollegeFilter(f => (f === c.id ? '' : c.id))} className="group w-full text-left">
+                                                <div className="mb-1 flex items-center justify-between gap-2 text-xs">
+                                                    <span className={`truncate ${collegeFilter === c.id ? 'font-semibold text-indigo-700' : 'text-gray-700 group-hover:text-gray-900'}`}>{c.name}</span>
+                                                    <span className="font-semibold tabular-nums text-gray-900">{c.total}</span>
+                                                </div>
+                                                <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                                                    <div className={`h-full rounded-full transition-all ${collegeFilter === c.id ? 'bg-indigo-600' : 'bg-indigo-400 group-hover:bg-indigo-500'}`} style={{ width: `${(c.total / collegeMax) * 100}%` }} />
+                                                </div>
+                                            </button>
+                                        </li>
+                                    ))}
+                                    {byCollege.length > 8 && <li className="text-[11px] text-gray-400">+{byCollege.length - 8} more colleges</li>}
+                                </ul>
+                            </Panel>
                         )}
                         {!isCategoryOfficer && categoryChartData.length > 0 && (
-                            <div className="bg-white border border-gray-200 rounded-2xl p-5">
-                                <p className="text-sm font-bold text-gray-800 mb-4">Ongoing by Category</p>
+                            <Panel title="By programme" subtitle="Click one to filter." icon={Layers}>
                                 <div className="flex items-center gap-4">
-                                    <ResponsiveContainer width="55%" height={200}>
+                                    <ResponsiveContainer width="50%" height={180}>
                                         <PieChart>
-                                            <Pie data={categoryChartData} dataKey="value" cx="50%" cy="50%" innerRadius={45} outerRadius={75} paddingAngle={2}>
+                                            <Pie data={categoryChartData} dataKey="value" cx="50%" cy="50%" innerRadius={48} outerRadius={78} paddingAngle={2} stroke="#fff" strokeWidth={2}>
                                                 {categoryChartData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
                                             </Pie>
                                             <Tooltip />
                                         </PieChart>
                                     </ResponsiveContainer>
-                                    <div className="flex-1 space-y-1.5 min-w-0">
-                                        {categoryChartData.map((c, i) => (
-                                            <div key={i} className="flex items-center justify-between gap-2">
-                                                <div className="flex items-center gap-1.5 min-w-0">
-                                                    <div className="h-2 w-2 rounded-full shrink-0" style={{ background: c.fill }} />
-                                                    <span className="text-[11px] text-gray-600 truncate">{c.name}</span>
-                                                </div>
-                                                <span className="text-[11px] font-bold text-gray-800 shrink-0">{c.value}</span>
-                                            </div>
+                                    <div className="min-w-0 flex-1 space-y-1.5">
+                                        {programmeKeys({ includeInactive: true }).filter(c => byCategory[c]).map(c => (
+                                            <button key={c} onClick={() => setCategoryFilter(f => (f === c ? '' : c))}
+                                                className={`flex w-full items-center justify-between gap-2 rounded-lg px-2 py-1.5 text-left transition ${categoryFilter === c ? 'bg-gray-100' : 'hover:bg-gray-50'}`}>
+                                                <span className="flex min-w-0 items-center gap-2">
+                                                    <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: programmeColor(c) }} />
+                                                    <span className="truncate text-xs text-gray-700">{getCategoryLabel(c)}</span>
+                                                </span>
+                                                <span className="shrink-0 text-xs font-bold tabular-nums text-gray-900">{byCategory[c]}</span>
+                                            </button>
                                         ))}
                                     </div>
                                 </div>
-                            </div>
+                            </Panel>
                         )}
                     </div>
-                )}
+                ) : null}
 
-                {/* Filters + table */}
+                {/* ── Toolbar ─────────────────────────────────────────────── */}
                 <div className="space-y-3">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                        <div className="relative flex-1 max-w-sm">
-                            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                            <input
-                                value={q}
-                                onChange={e => setQ(e.target.value)}
-                                placeholder="Search tracker #, title or PI…"
-                                className="w-full text-sm border border-gray-200 rounded-xl pl-9 pr-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                            />
-                        </div>
-
-                        <FilterBar accent="indigo" activeCount={activeFilterCount}>
+                    <div className="flex flex-col gap-2 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm lg:flex-row lg:items-center">
+                        <label className="relative min-w-0 flex-1">
+                            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                            <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search tracker number, title or PI…"
+                                className="w-full rounded-xl border border-gray-200 py-2 pl-9 pr-3 text-base focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 sm:text-sm" />
+                        </label>
+                        <div className="grid grid-cols-2 gap-2 sm:flex">
                             {!isCollegeOfficer && colleges.length > 1 && (
-                                <select
-                                    value={collegeFilter}
-                                    onChange={e => setCollegeFilter(e.target.value)}
-                                    className="w-full sm:w-auto text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                                >
-                                    <option value="">All Colleges</option>
+                                <Select label="College" value={collegeFilter} onChange={setCollegeFilter} className="sm:w-48">
+                                    <option value="">All colleges</option>
                                     {colleges.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                </select>
+                                </Select>
                             )}
                             {!isCategoryOfficer && (
-                                <select
-                                    value={categoryFilter}
-                                    onChange={e => setCategoryFilter(e.target.value)}
-                                    className="w-full sm:w-auto text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                                >
-                                    <option value="">All Categories</option>
-                                    {CATEGORY_OPTIONS.map(c => <option key={c} value={c}>{getCategoryLabel(c)}</option>)}
-                                </select>
+                                <Select label="Programme" value={categoryFilter} onChange={setCategoryFilter} className="sm:w-48">
+                                    <option value="">All programmes</option>
+                                    {programmeKeys().map(c => <option key={c} value={c}>{getCategoryLabel(c)}</option>)}
+                                </Select>
                             )}
-                        </FilterBar>
+                        </div>
                     </div>
 
-                    <OngoingTable
-                        proposals={proposals}
-                        loading={loading}
-                        sortKey={sortKey}
-                        sortDir={sortDir}
-                        onSort={handleSort}
-                        canArchive={canArchive}
-                        onRequestArchive={setArchiveTarget}
-                    />
+                    <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+                        <p className="text-sm text-gray-600">
+                            <b className="text-gray-900">{pagination?.total ?? proposals.length}</b> project{(pagination?.total ?? proposals.length) === 1 ? '' : 's'}
+                            {statusLabel && <> · <span className="font-medium text-gray-800">{statusLabel}</span></>}
+                            {refreshing && <Loader2 size={13} className="ml-2 inline animate-spin text-gray-400" />}
+                        </p>
+                        {filtersOn && (
+                            <button onClick={clearAll} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-gray-600 hover:bg-gray-100">
+                                <X size={12} /> Clear filters
+                            </button>
+                        )}
+                    </div>
+
+                    <OngoingTable proposals={proposals} loading={loading} sortKey={sortKey} sortDir={sortDir} onSort={handleSort}
+                        canArchive={canArchive} onRequestArchive={setArchiveTarget} startAt={startAt} onClear={filtersOn ? clearAll : null} />
 
                     {pagination && pagination.last_page > 1 && (
-                        <div className="flex items-center justify-between px-1">
-                            <p className="text-xs text-gray-400">
-                                Page {pagination.current_page} of {pagination.last_page} · {pagination.total} proposals
+                        <div className="flex flex-wrap items-center justify-between gap-2 px-1">
+                            <p className="text-xs text-gray-500">
+                                Showing {startAt}–{startAt + proposals.length - 1} of {pagination.total}
                             </p>
-                            <div className="flex items-center gap-2">
-                                <button
-                                    onClick={() => setPage(p => Math.max(1, p - 1))}
-                                    disabled={pagination.current_page <= 1}
-                                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                                >
-                                    <ChevronLeft size={13} /> Prev
+                            <div className="flex items-center gap-1">
+                                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={pagination.current_page <= 1} aria-label="Previous page"
+                                    className="rounded-lg border border-gray-200 bg-white p-1.5 text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40">
+                                    <ChevronLeft size={15} />
                                 </button>
-                                <button
-                                    onClick={() => setPage(p => Math.min(pagination.last_page, p + 1))}
-                                    disabled={pagination.current_page >= pagination.last_page}
-                                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                                >
-                                    Next <ChevronRight size={13} />
+                                {Array.from({ length: pagination.last_page }, (_, i) => i + 1)
+                                    .filter(n => n === 1 || n === pagination.last_page || Math.abs(n - pagination.current_page) <= 1)
+                                    .map((n, i, arr) => (
+                                        <span key={n} className="flex items-center gap-1">
+                                            {i > 0 && n - arr[i - 1] > 1 && <span className="px-1 text-xs text-gray-400">…</span>}
+                                            <button onClick={() => setPage(n)}
+                                                className={`min-w-8 rounded-lg px-2 py-1.5 text-xs font-semibold tabular-nums transition ${n === pagination.current_page ? 'bg-gray-900 text-white' : 'border border-gray-200 bg-white text-gray-600 hover:bg-gray-50'}`}>
+                                                {n}
+                                            </button>
+                                        </span>
+                                    ))}
+                                <button onClick={() => setPage(p => Math.min(pagination.last_page, p + 1))} disabled={pagination.current_page >= pagination.last_page} aria-label="Next page"
+                                    className="rounded-lg border border-gray-200 bg-white p-1.5 text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40">
+                                    <ChevronRight size={15} />
                                 </button>
                             </div>
                         </div>

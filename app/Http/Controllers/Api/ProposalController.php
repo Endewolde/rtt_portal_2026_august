@@ -17,6 +17,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class ProposalController extends Controller
@@ -50,6 +51,9 @@ class ProposalController extends Controller
                 ->orWhere('abstract', 'LIKE', "%{$q}%")
                 ->orWhere('tracker_number', 'LIKE', "%{$q}%")
             );
+        }
+        if ($request->filled('sdg')) {
+            $query->whereJsonContains('sdgs', (int) $request->sdg);
         }
         if ($request->filled('pi_search')) {
             $query->whereHas('pi', fn ($q) => $q->where('name', 'LIKE', "%{$request->pi_search}%"));
@@ -90,7 +94,10 @@ class ProposalController extends Controller
     {
         /** @var User $user */
         $user = $request->user();
-        $query = Proposal::with(['pi', 'college', 'proposalCall'])
+        // Lists never show the abstract, the wizard draft or call answers, and these
+        // were most of each row's weight; the full proposal comes from show().
+        $query = Proposal::select(self::listColumns())
+            ->with(['pi:id,name,email', 'college:id,name', 'proposalCall:id,title,academic_year,category,end_date'])
             ->whereNull('deleted_at');
 
         // Within the role's data scope; anyone limited to their own records (or without
@@ -125,6 +132,9 @@ class ProposalController extends Controller
             $term = '%'.$request->search.'%';
             $query->where(fn ($q) => $q->where('title', 'LIKE', $term)->orWhere('tracker_number', 'LIKE', $term));
         }
+        if ($request->filled('sdg')) {
+            $query->whereJsonContains('sdgs', (int) $request->sdg);
+        }
         if ($request->filled('pi_search')) {
             $term = '%'.$request->pi_search.'%';
             $query->whereHas('pi', fn ($q) => $q->where('name', 'like', $term)->orWhere('email', 'like', $term));
@@ -148,6 +158,16 @@ class ProposalController extends Controller
         $perPage = min(max($request->integer('per_page', 20), 1), 200);
 
         return response()->json(['data' => $query->orderByDesc('created_at')->paginate($perPage)]);
+    }
+
+    /** Proposal columns for list views: everything except the heavy text and JSON fields. */
+    private static function listColumns(): array
+    {
+        $heavy = ['abstract', 'draft_data', 'call_answers', 'anonymity_findings', 'review_disagreement', 'review_disagreement_note'];
+
+        static $columns;
+
+        return $columns ??= array_values(array_map(fn ($c) => "proposals.{$c}", array_diff(Schema::getColumnListing('proposals'), $heavy)));
     }
 
     public function involved(Request $request): JsonResponse
@@ -399,14 +419,17 @@ class ProposalController extends Controller
             ->groupBy('category')
             ->pluck('total', 'category');
 
-        $totals = [
-            'total' => (clone $baseQuery)->count(),
-            'submitted' => (clone $baseQuery)->whereNotIn('proposals.status', ['draft'])->count(),
-            'funded' => (clone $baseQuery)->whereIn('proposals.status', ['funded', 'midterm_evaluation', 'completed', 'archived'])->count(),
-            'rejected' => (clone $baseQuery)->where('proposals.status', 'rejected')->count(),
-            'under_review' => (clone $baseQuery)->whereIn('proposals.status', ['under_blind_review', 'under_open_defence', 'accepted'])->count(),
-            'draft' => (clone $baseQuery)->where('proposals.status', 'draft')->count(),
-        ];
+        // All six totals in one pass instead of six separate counts.
+        $row = (clone $baseQuery)->selectRaw("
+            COUNT(*) as total,
+            SUM(proposals.status <> 'draft') as submitted,
+            SUM(proposals.status IN ('funded','midterm_evaluation','completed','archived')) as funded,
+            SUM(proposals.status = 'rejected') as rejected,
+            SUM(proposals.status IN ('under_blind_review','under_open_defence','accepted')) as under_review,
+            SUM(proposals.status = 'draft') as draft
+        ")->toBase()->first();
+        $totals = collect(['total', 'submitted', 'funded', 'rejected', 'under_review', 'draft'])
+            ->mapWithKeys(fn ($k) => [$k => (int) ($row->{$k} ?? 0)])->all();
 
         $currentAcademicYear = DB::table('app_settings')
             ->where('key', 'current_academic_year')

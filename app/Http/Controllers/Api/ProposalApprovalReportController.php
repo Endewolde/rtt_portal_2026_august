@@ -12,6 +12,7 @@ use App\Services\ApprovalReportService;
 use App\Services\LegacyGrantService;
 use App\Services\WorkflowService;
 use App\Support\AuditLogger;
+use App\Support\Programmes;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -38,12 +39,6 @@ class ProposalApprovalReportController extends Controller
         private ApprovalReportService $approvalReports,
         private LegacyGrantService $legacyGrants,
     ) {}
-
-    private const CATEGORY_ROLE_MAP = [
-        'research' => 'research_officer',
-        'community_engagement' => 'community_officer',
-        'technology_transfer' => 'technology_officer',
-    ];
 
     private const REPORTABLE_STATUSES = ['validated', 'under_blind_review', 'blind_review_passed'];
 
@@ -557,8 +552,7 @@ class ProposalApprovalReportController extends Controller
 
     private function notifyWithdrawn(Proposal $proposal, User $reporter): void
     {
-        $role = self::CATEGORY_ROLE_MAP[$proposal->category] ?? null;
-        $officers = User::role(array_values(array_filter(['central_officer', $role])))->where('status', 'active')->get()
+        $officers = User::role(['central_officer', ...Programmes::directorRoles($proposal->category)])->where('status', 'active')->get()
             ->merge(User::customRoleHolders('approval_reports.resolve', $proposal->college_id, $proposal->category))->unique('id');
 
         $data = [
@@ -579,8 +573,7 @@ class ProposalApprovalReportController extends Controller
 
     private function notifyReviewers(Proposal $proposal, User $reporter, ProposalApprovalReport $report): void
     {
-        $role = self::CATEGORY_ROLE_MAP[$proposal->category] ?? null;
-        $roles = array_values(array_filter(['central_officer', $role]));
+        $roles = ['central_officer', ...Programmes::directorRoles($proposal->category)];
 
         $officers = User::role($roles)->where('status', 'active')->get()
             ->merge(User::customRoleHolders('approval_reports.resolve', $proposal->college_id, $proposal->category))->unique('id');

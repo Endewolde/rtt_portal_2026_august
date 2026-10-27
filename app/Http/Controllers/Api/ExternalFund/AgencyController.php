@@ -12,8 +12,9 @@ class AgencyController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = ExternalFundAgency::query()
-            ->when($request->search, fn ($q, $s) => $q->where('name', 'like', "%{$s}%")
-                ->orWhere('acronym', 'like', "%{$s}%"))
+            ->when($request->search, fn ($q, $s) => $q->where(fn ($w) => $w->where('name', 'like', "%{$s}%")
+                ->orWhere('acronym', 'like', "%{$s}%")
+                ->orWhere('country', 'like', "%{$s}%")))
             ->when($request->type, fn ($q, $t) => $q->where('type', $t))
             ->when($request->boolean('active_only'), fn ($q) => $q->where('is_active', true))
             ->withCount(['opportunities', 'applications', 'awards'])
@@ -99,7 +100,13 @@ class AgencyController extends Controller
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
-        $agency = ExternalFundAgency::findOrFail($id);
+        $agency = ExternalFundAgency::withCount(['opportunities', 'applications', 'awards'])->findOrFail($id);
+        if ($agency->applications_count || $agency->awards_count || $agency->opportunities_count) {
+            return response()->json([
+                'message' => "{$agency->name} is still linked to {$agency->applications_count} application(s), {$agency->awards_count} award(s) and {$agency->opportunities_count} opportunity(ies). Mark it inactive instead — deleting would erase that history.",
+                'errors' => [],
+            ], 422);
+        }
         $agency->delete();
 
         return response()->json(['data' => null, 'message' => 'Agency deleted.', 'errors' => [], 'meta' => []]);

@@ -6,6 +6,7 @@ import AppLayout from '../../Layouts/AppLayout';
 import { get, post } from '../../lib/api';
 import { formatCurrency } from '../../lib/utils';
 import { useAuth } from '../../hooks/useAuth';
+import { withCurrency } from '../../lib/terms';
 
 const BUDGET_CATEGORIES = [
     'personnel', 'equipment', 'supplies', 'travel',
@@ -221,7 +222,7 @@ export default function BudgetRequestCreate() {
                                     {/* Amount — 3 cols (wider so the max label fits) */}
                                     <div className="col-span-3">
                                         <label className="flex items-center justify-between text-xs mb-1">
-                                            <span className="text-gray-500">{tr("Amount (ETB)")}</span>
+                                            <span className="text-gray-500">{withCurrency(tr("Amount (ETB)"))}</span>
                                             {itemMax !== null && (
                                                 <span className={`font-semibold ${itemOver ? 'text-red-500' : 'text-emerald-600'}`}>
                                                     {tr("max :itemMax", { itemMax: formatCurrency(itemMax) })}

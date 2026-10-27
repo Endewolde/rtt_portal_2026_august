@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\BudgetRequest;
 use App\Models\BudgetSettlement;
 use App\Services\BudgetSettlementService;
+use App\Services\ProgressReportService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -44,16 +45,24 @@ class SettlementController extends Controller
             'budget_request_id' => 'required|uuid|exists:budget_requests,id',
             'total_spent' => 'required|numeric|min:0',
             'unspent_amount' => 'nullable|numeric|min:0',
-            'expense_report_path' => 'nullable|string',
         ]);
 
-        $budgetRequest = BudgetRequest::findOrFail($request->budget_request_id);
+        $budgetRequest = BudgetRequest::with('proposal')->findOrFail($request->budget_request_id);
+
+        // Only the project's own team settles its spending, and only once per request.
+        if (! $budgetRequest->proposal || ! app(ProgressReportService::class)->isTeamMember($budgetRequest->proposal, $request->user())) {
+            return response()->json(['data' => null, 'message' => 'Only the project team can settle this request.', 'errors' => [], 'meta' => []], 403);
+        }
+        if (BudgetSettlement::where('budget_request_id', $budgetRequest->id)->exists()) {
+            return response()->json(['data' => null, 'message' => 'This request has already been settled.', 'errors' => [], 'meta' => []], 422);
+        }
 
         try {
+            // The expense report is attached through the upload endpoint, never as a client-given path.
             $settlement = app(BudgetSettlementService::class)->submitSettlement(
                 $budgetRequest,
                 $request->user(),
-                $request->only('total_spent', 'unspent_amount', 'expense_report_path')
+                $request->only('total_spent', 'unspent_amount')
             );
 
             return response()->json([
@@ -211,7 +220,15 @@ class SettlementController extends Controller
             'file' => 'required|file|mimes:pdf|max:10240',
         ]);
 
-        $settlement = BudgetSettlement::findOrFail($id);
+        $settlement = BudgetSettlement::with('budgetRequest.proposal')->findOrFail($id);
+        $proposal = $settlement->budgetRequest?->proposal;
+
+        if (! $proposal || ! app(ProgressReportService::class)->isTeamMember($proposal, $request->user())) {
+            return response()->json(['data' => null, 'message' => 'Only the project team can attach the expense report.', 'errors' => [], 'meta' => []], 403);
+        }
+        if ($settlement->status !== 'submitted') {
+            return response()->json(['data' => null, 'message' => 'The report can no longer change once the settlement is verified.', 'errors' => [], 'meta' => []], 422);
+        }
 
         $path = $request->file('file')->store(
             "settlements/{$id}/expense-report",
@@ -228,9 +245,10 @@ class SettlementController extends Controller
         ]);
     }
 
-    public function downloadReport(string $id)
+    public function downloadReport(Request $request, string $id)
     {
-        $settlement = BudgetSettlement::findOrFail($id);
+        $settlement = BudgetSettlement::with('budgetRequest.proposal')->findOrFail($id);
+        abort_unless($this->canSee($settlement, $request->user()), 403, 'You cannot open this expense report.');
 
         if (! $settlement->expense_report_path) {
             abort(404, 'No expense report uploaded.');
@@ -246,18 +264,36 @@ class SettlementController extends Controller
         );
     }
 
-    public function stats(): JsonResponse
+    public function stats(Request $request): JsonResponse
     {
+        $user = $request->user();
+        $query = BudgetSettlement::query();
+        $user->accessScope()->constrainThrough($query, 'budgetRequest.proposal', fn ($q) => $q->whereHas('budgetRequest.proposal', fn ($q) => $q->where('pi_user_id', $user->id)
+            ->orWhereHas('members', fn ($sq) => $sq->where('user_id', $user->id)->where('status', 'active'))));
+        $counts = (clone $query)->selectRaw('status, COUNT(*) as n')->groupBy('status')->pluck('n', 'status');
+
         return response()->json([
             'data' => [
-                'total' => BudgetSettlement::count(),
-                'submitted' => BudgetSettlement::where('status', 'submitted')->count(),
-                'college_verified' => BudgetSettlement::where('status', 'college_verified')->count(),
-                'finance_verified' => BudgetSettlement::where('status', 'finance_verified')->count(),
+                'total' => (int) $counts->sum(),
+                'submitted' => (int) ($counts['submitted'] ?? 0),
+                'college_verified' => (int) ($counts['college_verified'] ?? 0),
+                'finance_verified' => (int) ($counts['finance_verified'] ?? 0),
             ],
             'message' => '',
             'errors' => [],
             'meta' => [],
         ]);
+    }
+
+    /** The project team, or staff whose scope covers the project. */
+    private function canSee(BudgetSettlement $settlement, mixed $user): bool
+    {
+        $proposal = $settlement->budgetRequest?->proposal;
+        if (! $proposal || ! $user) {
+            return false;
+        }
+
+        return app(ProgressReportService::class)->isTeamMember($proposal, $user)
+            || ($user->can('settlements.view_any') && $user->accessScope()->covers($proposal->college_id, $proposal->category));
     }
 }

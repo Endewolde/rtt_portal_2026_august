@@ -13,13 +13,19 @@ class ReviewController extends Controller
     public function index(Request $request, string $applicationId): JsonResponse
     {
         $application = ExternalFundApplication::findOrFail($applicationId);
+        if (! $application->isVisibleTo($request->user())) {
+            return response()->json(['message' => 'Forbidden.'], 403);
+        }
 
         $reviews = $application->reviews()
             ->with('reviewer:id,name,email')
             ->orderBy('stage')
             ->get();
 
-        return response()->json(['data' => $reviews, 'message' => '', 'errors' => [], 'meta' => []]);
+        return response()->json(['data' => $reviews, 'message' => '', 'errors' => [], 'meta' => [
+            'stage_decisions' => $application->stageDecisions(),
+            'approved_stages' => $application->approvedStages(),
+        ]]);
     }
 
     public function store(Request $request, string $applicationId): JsonResponse
@@ -29,6 +35,10 @@ class ReviewController extends Controller
         }
 
         $application = ExternalFundApplication::findOrFail($applicationId);
+
+        if (! in_array($application->status, ['draft', 'under_internal_review'], true)) {
+            return response()->json(['message' => 'Internal review is over for this application — it is '.str_replace('_', ' ', $application->status).'.', 'errors' => []], 422);
+        }
 
         $data = $request->validate([
             'stage' => 'required|in:department,college,research_office,management',
@@ -54,11 +64,15 @@ class ReviewController extends Controller
             $application->update(['status' => 'under_internal_review']);
         }
 
+        $approved = $application->approvedStages();
+
         return response()->json([
             'data' => $review->load('reviewer:id,name'),
-            'message' => 'Review submitted.',
+            'message' => count($approved) === count(ExternalFundApplication::STAGES)
+                ? 'Review saved. All four stages have approved — it can now be cleared for submission.'
+                : 'Review saved.',
             'errors' => [],
-            'meta' => [],
+            'meta' => ['stage_decisions' => $application->stageDecisions(), 'approved_stages' => $approved],
         ], 201);
     }
 }

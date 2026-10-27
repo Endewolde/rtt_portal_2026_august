@@ -19,6 +19,10 @@ import AnonymityCheckPanel from '../../Components/AnonymityCheckPanel';
 import ReviewDisagreementPanel from '../../Components/ReviewDisagreementPanel';
 import ProgressReportsTab from '../../Components/ProgressReportsTab';
 import ProposalStatusGuide from '../../Components/ProposalStatusGuide';
+import ProjectHealthCard from '../../Components/ProjectHealthCard';
+import { SdgBadges } from '../../Components/SdgPicker';
+import { CallAnswers } from '../../Components/CallQuestions';
+import ProposalMessages from '../../Components/ProposalMessages';
 import ProposalVersions from '../../Components/ProposalVersions';
 import DefenceRecordButton from '../../Components/DefenceRecordButton';
 import { issueByKey } from '../../lib/approvalReportIssues';
@@ -439,7 +443,7 @@ const DOC_TYPE_COLORS = {
     ethical_clearance_certificate: 'bg-purple-100 text-purple-700',
 };
 
-function DocumentsTab({ proposalId, documents, userId, isPI, isDraft, hideIdentity, onRefresh, showEthicalClearanceOption }) {
+function DocumentsTab({ proposalId, documents, userId, isPI, isDraft, hideIdentity, onRefresh, showEthicalClearanceOption, callDocuments = [] }) {
     const { success, error: toastError } = useToast();
     const [uploading,  setUploading]  = useState(false);
     const [docType,    setDocType]    = useState('shared_document');
@@ -561,7 +565,7 @@ function DocumentsTab({ proposalId, documents, userId, isPI, isDraft, hideIdenti
                         const current = sorted.find(d => d.is_current) ?? sorted[0];
                         const older = sorted.filter(d => d.id !== current.id);
                         const typeColor = DOC_TYPE_COLORS[type] ?? 'bg-gray-100 text-gray-600';
-                        const typeLabel = DOC_TYPE_LABELS[type] ?? type?.replace(/_/g, ' ');
+                        const typeLabel = DOC_TYPE_LABELS[type] ?? callDocuments.find(d => `call_${d.key}` === type)?.label ?? type?.replace(/_/g, ' ');
 
                         const row = (doc, faded = false) => {
                             const isOwner = (doc.uploaded_by?.id ?? doc.uploaded_by) === userId;
@@ -1376,6 +1380,52 @@ function RecalculatePanel({ proposalId, proposalStatus, onDecisionChanged }) {
     );
 }
 
+/** The proposal's active mentor, when the PI has one for it. */
+function ProposalMentor({ proposalId }) {
+    const [mentor, setMentor] = useState(null);
+    useEffect(() => { get(`/proposals/${proposalId}/mentor`).then((r) => setMentor(r.data ?? null)).catch(() => {}); }, [proposalId]);
+    if (!mentor) return null;
+    return (
+        <div className="flex items-center gap-2 rounded-xl border border-violet-100 bg-violet-50/60 px-3 py-2 text-sm">
+            <span className="font-semibold text-violet-800">{tr('Mentor')}:</span>
+            <span className="text-violet-900">{mentor.name}</span>
+        </div>
+    );
+}
+
+/** The office rates how useful a review was; ratings lift or lower the reviewer in future matching. */
+function ReviewQualityRating({ assignmentId, value }) {
+    const { error } = useToast();
+    const [rating, setRating] = useState(value ?? null);
+    const [saving, setSaving] = useState(false);
+    const options = [[3, 'Useful', 'bg-emerald-600 text-white'], [2, 'Adequate', 'bg-sky-600 text-white'], [1, 'Thin', 'bg-amber-500 text-white']];
+
+    const rate = async (next) => {
+        const target = rating === next ? null : next;
+        setSaving(true);
+        try {
+            await post(`/review-assignments/${assignmentId}/quality`, { rating: target });
+            setRating(target);
+        } catch (e) {
+            error(e.response?.data?.message ?? 'Could not save the rating.');
+        }
+        setSaving(false);
+    };
+
+    return (
+        <div className="flex flex-wrap items-center gap-1.5 border-t border-gray-100 bg-gray-50/60 px-4 py-2">
+            <span className="mr-1 text-[11px] font-medium text-gray-500">{tr('Review quality')}:</span>
+            {options.map(([n, label, active]) => (
+                <button key={n} onClick={() => rate(n)} disabled={saving}
+                    className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition disabled:opacity-60 ${rating === n ? active : 'bg-white text-gray-600 ring-1 ring-gray-200 hover:bg-gray-100'}`}>
+                    {tr(label)}
+                </button>
+            ))}
+            <span className="ml-auto text-[10px] text-gray-400">{tr('Only the office sees this')}</span>
+        </div>
+    );
+}
+
 function ReviewResultsTab({ proposalId, isVisible, isStaff, proposalStatus, onDecisionChanged }) {
     const [results, setResults] = useState(null);
     const [loading, setLoading] = useState(true);
@@ -1498,6 +1548,7 @@ function ReviewResultsTab({ proposalId, isVisible, isStaff, proposalStatus, onDe
                                     ))}
                                 </div>
                             )}
+                            {rv.assignment_id && <ReviewQualityRating assignmentId={rv.assignment_id} value={rv.quality_rating} />}
                         </div>
                     ))}
                 </div>
@@ -1669,6 +1720,12 @@ export default function ProposalShow() {
     const [loading, setLoading] = useState(true);
     // ?tab=Progress (from a notification link) opens that tab directly.
     const [activeTab, setActiveTab] = useState(() => new URLSearchParams(window.location.search).get('tab') || 'Overview');
+    // The message thread tab shows only to those who may read it, with their unread count.
+    const [messageInfo, setMessageInfo] = useState({ can_see: false, count: 0 });
+    useEffect(() => {
+        if (!id) return;
+        get(`/proposals/${id}/messages/unread`).then((r) => setMessageInfo(r.data ?? { can_see: false, count: 0 })).catch(() => {});
+    }, [id]);
     const [dialog, setDialog] = useState(null);
     const [reason, setReason] = useState('');
     const [submitting, setSubmitting] = useState(false);
@@ -2284,6 +2341,9 @@ export default function ProposalShow() {
                     <AiScorePanel proposalId={proposal.id} />
                 )}
 
+                {/* Running projects: time, money and progress against each other */}
+                {['funded', 'midterm_evaluation'].includes(proposal.status) && <ProjectHealthCard proposalId={proposal.id} />}
+
                 {/* Tabs */}
                 {isProposalMember && (
                     <ProposalStatusGuide proposalId={id} status={proposal.status} onOpenTab={setActiveTab} />
@@ -2291,14 +2351,17 @@ export default function ProposalShow() {
 
                 <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                     <div className="flex border-b border-gray-200 overflow-x-auto">
-                        {[...TABS, ...(['funded', 'midterm_evaluation', 'completed', 'archived'].includes(proposal.status) ? ['Progress'] : [])].map((tab) => (
+                        {[...TABS, ...(['funded', 'midterm_evaluation', 'completed', 'archived'].includes(proposal.status) ? ['Progress'] : []), ...(messageInfo.can_see ? ['Messages'] : [])].map((tab) => (
                             <button key={tab} onClick={() => setActiveTab(tab)}
-                                className={`px-5 py-3 text-sm font-medium shrink-0 border-b-2 transition-colors ${
+                                className={`inline-flex items-center gap-1.5 px-5 py-3 text-sm font-medium shrink-0 border-b-2 transition-colors ${
                                     activeTab === tab
                                         ? 'border-blue-600 text-blue-700'
                                         : 'border-transparent text-gray-500 hover:text-gray-700'
                                 }`}>
-                                {tab}
+                                {tr(tab)}
+                                {tab === 'Messages' && messageInfo.count > 0 && (
+                                    <span className="rounded-full bg-red-500 px-1.5 text-[10px] font-bold tabular-nums text-white">{messageInfo.count}</span>
+                                )}
                             </button>
                         ))}
                     </div>
@@ -2319,6 +2382,19 @@ export default function ProposalShow() {
                                     <div>
                                         <p className="font-semibold text-gray-800 mb-1">{tr("Keywords")}</p>
                                         <p className="text-gray-500">{proposal.keywords}</p>
+                                    </div>
+                                )}
+                                {(proposal.call_form_answers ?? []).length > 0 && (
+                                    <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-4">
+                                        <p className="font-semibold text-gray-800 mb-3">{tr("Questions for this call")}</p>
+                                        <CallAnswers items={proposal.call_form_answers} />
+                                    </div>
+                                )}
+                                <ProposalMentor proposalId={proposal.id} />
+                                {(proposal.sdgs ?? []).length > 0 && (
+                                    <div>
+                                        <p className="font-semibold text-gray-800 mb-1.5">{tr("Sustainable Development Goals")}</p>
+                                        <SdgBadges value={proposal.sdgs} size="md" />
                                     </div>
                                 )}
                                 <div className="grid sm:grid-cols-2 gap-3 pt-2">
@@ -2357,15 +2433,15 @@ export default function ProposalShow() {
                                         <div className="hidden sm:block overflow-x-auto">
                                             <table className="w-full text-sm">
                                                 <thead className="bg-gray-50 text-xs uppercase text-gray-500">
-                                                    <tr>
+                                                    <tr><th className="px-4 py-2 w-10 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">#</th>
                                                         {['Member', 'Email', 'Role', 'Contribution'].map((h) => (
                                                             <th key={h} className="px-4 py-2 text-left font-medium">{h}</th>
                                                         ))}
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-gray-100">
-                                                    {members.filter(m => m.status === 'active').map((m) => (
-                                                        <tr key={m.id}>
+                                                    {members.filter(m => m.status === 'active').map((m, rowIdx) => (
+                                                        <tr key={m.id}><td className="px-4 py-2.5 w-10 text-xs font-medium tabular-nums text-gray-400">{rowIdx + 1}</td>
                                                             <td className="px-4 py-2.5 font-medium text-gray-800">{m.user?.name ?? '—'}</td>
                                                             <td className="px-4 py-2.5 text-gray-500">{m.user?.email ?? '—'}</td>
                                                             <td className="px-4 py-2.5">
@@ -2407,15 +2483,15 @@ export default function ProposalShow() {
                                         <div className="hidden sm:block overflow-x-auto">
                                             <table className="w-full text-sm">
                                                 <thead className="bg-gray-50 text-xs uppercase text-gray-500">
-                                                    <tr>
+                                                    <tr><th className="px-4 py-2 w-10 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">#</th>
                                                         {['Category', 'Description', 'Amount', 'Justification'].map((h) => (
                                                             <th key={h} className="px-4 py-2 text-left font-medium">{h}</th>
                                                         ))}
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-gray-100">
-                                                    {budgets.map((b) => (
-                                                        <tr key={b.id}>
+                                                    {budgets.map((b, rowIdx) => (
+                                                        <tr key={b.id}><td className="px-4 py-2.5 w-10 text-xs font-medium tabular-nums text-gray-400">{rowIdx + 1}</td>
                                                             <td className="px-4 py-2.5 text-gray-600 capitalize">{b.category}</td>
                                                             <td className="px-4 py-2.5 text-gray-800">{b.item_description}</td>
                                                             <td className="px-4 py-2.5 font-medium">{formatCurrency(b.amount)}</td>
@@ -2425,7 +2501,7 @@ export default function ProposalShow() {
                                                 </tbody>
                                                 <tfoot className="bg-gray-50 border-t border-gray-200">
                                                     <tr>
-                                                        <td colSpan={2} className="px-4 py-2 text-sm font-semibold text-gray-700">{tr("Total")}</td>
+                                                        <td colSpan={3} className="px-4 py-2 text-sm font-semibold text-gray-700">{tr("Total")}</td>
                                                         <td className="px-4 py-2 text-sm font-bold text-gray-900">{formatCurrency(budgetTotal)}</td>
                                                         <td />
                                                     </tr>
@@ -2464,6 +2540,7 @@ export default function ProposalShow() {
                                 hideIdentity={proposal.members_hidden}
                                 onRefresh={load}
                                 showEthicalClearanceOption={proposal.ethical_clearance_required}
+                                callDocuments={proposal.proposal_call?.application_form?.documents ?? []}
                             />
                         )}
 
@@ -2500,6 +2577,7 @@ export default function ProposalShow() {
                         )}
 
                         {activeTab === 'Progress' && <ProgressReportsTab proposalId={id} />}
+                        {activeTab === 'Messages' && <ProposalMessages proposalId={id} onRead={() => setMessageInfo((m) => ({ ...m, count: 0 }))} />}
 
                         {activeTab === 'Complaints' && (
                             <ComplaintsTab

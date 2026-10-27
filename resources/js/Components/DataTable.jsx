@@ -149,7 +149,45 @@ export default function DataTable({
                 </select>
             </div>
 
-            <div className="overflow-x-auto rounded-lg border border-gray-200">
+            {/* Phones: one card per row, labelled, instead of a sideways-scrolling table */}
+            <div className="space-y-2 sm:hidden">
+                {isLoading ? (
+                    Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-24 animate-pulse rounded-xl bg-gray-100" />)
+                ) : table.getRowModel().rows.length === 0 ? (
+                    <p className="rounded-xl border border-gray-200 px-4 py-8 text-center text-sm text-gray-400">{emptyMessage}</p>
+                ) : table.getRowModel().rows.map((row) => {
+                    const { pageIndex, pageSize } = table.getState().pagination;
+                    const cells = row.getVisibleCells().filter((c) => !['__rownum__', '__select__'].includes(c.column.id));
+                    const [lead, ...others] = cells;
+                    const labelOf = (c) => (typeof c.column.columnDef.header === 'string' ? c.column.columnDef.header : '');
+                    return (
+                        <div key={row.id} className={`rounded-xl border px-4 py-3 ${row.getIsSelected() ? 'border-indigo-200 bg-indigo-50' : 'border-gray-200 bg-white'}`}>
+                            <div className="flex items-start gap-2.5">
+                                <span className="mt-0.5 flex h-5 min-w-5 shrink-0 items-center justify-center rounded-md bg-gray-100 px-1 text-[10px] font-bold tabular-nums text-gray-500">
+                                    {pageIndex * pageSize + row.index + 1}
+                                </span>
+                                {selectable && (
+                                    <input type="checkbox" className="mt-0.5 h-4 w-4 cursor-pointer rounded border-gray-300 text-indigo-600"
+                                        checked={row.getIsSelected()} onChange={row.getToggleSelectedHandler()} aria-label="Select row" />
+                                )}
+                                <div className="min-w-0 flex-1 text-sm font-medium text-gray-900">{lead && flexRender(lead.column.columnDef.cell, lead.getContext())}</div>
+                            </div>
+                            {others.length > 0 && (
+                                <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 pl-7.5 text-xs">
+                                    {others.map((c) => (
+                                        <div key={c.id} className={`min-w-0 ${labelOf(c) ? '' : 'col-span-2 flex justify-end'}`}>
+                                            {labelOf(c) && <dt className="text-[10px] font-medium uppercase tracking-wide text-gray-400">{labelOf(c)}</dt>}
+                                            <dd className="text-gray-700">{flexRender(c.column.columnDef.cell, c.getContext())}</dd>
+                                        </div>
+                                    ))}
+                                </dl>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+
+            <div className="hidden overflow-x-auto rounded-lg border border-gray-200 sm:block">
                 <table className="w-full text-sm text-left">
                     <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                         {table.getHeaderGroups().map((hg) => (

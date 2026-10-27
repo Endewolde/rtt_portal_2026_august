@@ -5,12 +5,13 @@ import {
     FileText, ClipboardCheck, BookOpen, DollarSign,
     Calendar, Clock, ChevronRight, ArrowUpRight, ArrowDownRight,
     FlaskConical, Lightbulb, Users, Globe, Award,
-    AlertCircle, CheckCircle2, BarChart2, Download,
+    AlertCircle, CheckCircle2, BarChart2, Download, Sparkles,
 } from 'lucide-react'
 import AppLayout from '../../Layouts/AppLayout'
 import api from '../../lib/api'
 import { useAuth } from '../../hooks/useAuth'
 import { formatDate, formatCurrency, getStatusColor, getStatusLabel, cn } from '../../lib/utils'
+import { currency } from '../../lib/terms'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -114,6 +115,60 @@ function SectionCard({ title, action, children, className = '' }) {
     )
 }
 
+// ─── Funding opportunities matched to the researcher ──────────────────────────
+
+/** Open opportunities that match the researcher's expertise and past proposals; hidden when there are none. */
+function RecommendedOpportunities() {
+    const [items, setItems] = useState(null)
+
+    useEffect(() => {
+        api.get('/external-funds/opportunities/recommended')
+            .then(r => setItems(r.data?.data ?? []))
+            .catch(() => setItems([]))
+    }, [])
+
+    if (!items || items.length === 0) return null
+
+    return (
+        <div className="mt-6">
+            <SectionCard
+                title={tr("Funding for you")}
+                action={
+                    <Link href="/funding-opportunities" className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+                        {tr("All opportunities")} <ChevronRight size={12} />
+                    </Link>
+                }
+            >
+                <ul className="divide-y divide-gray-50">
+                    {items.map(o => {
+                        const days = o.deadline ? daysUntil(o.deadline) : null
+                        return (
+                            <li key={o.id} className="flex flex-col gap-2 px-5 py-3.5 sm:flex-row sm:items-center">
+                                <div className="min-w-0 flex-1">
+                                    <p className="text-sm font-semibold text-gray-900">{o.title}</p>
+                                    <p className="mt-0.5 text-xs text-gray-500">
+                                        {[o.agency, o.amount_max ? `${tr('up to')} ${o.currency ?? ''} ${Number(o.amount_max).toLocaleString()}` : null].filter(Boolean).join(' · ')}
+                                    </p>
+                                    {o.reasons?.length > 0 && (
+                                        <p className="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-emerald-700">
+                                            <Sparkles size={11} /> {tr('Matches')}: {o.reasons.join(', ')}
+                                        </p>
+                                    )}
+                                </div>
+                                {days !== null && (
+                                    <span className={cn('shrink-0 self-start rounded-full px-2.5 py-0.5 text-[11px] font-semibold sm:self-center', urgencyClass(days))}>
+                                        {urgencyLabel(days)}
+                                    </span>
+                                )}
+                            </li>
+                        )
+                    })}
+                </ul>
+            </SectionCard>
+        </div>
+    )
+}
+
 // ─── Category badge ───────────────────────────────────────────────────────────
 
 function CategoryBadge({ category }) {
@@ -213,8 +268,8 @@ export default function ResearcherHubIndex() {
                 />
                 <StatCard
                     label="Total Awarded"
-                    value={loading ? null : (budgetSummary.awarded ? formatCurrency(budgetSummary.awarded) : 'ETB 0.00')}
-                    subLabel={budgetSummary.disbursed ? `ETB ${budgetSummary.disbursed} disbursed` : 'no disbursements yet'}
+                    value={loading ? null : (budgetSummary.awarded ? formatCurrency(budgetSummary.awarded) : formatCurrency(0))}
+                    subLabel={budgetSummary.disbursed ? `${currency()} ${budgetSummary.disbursed} disbursed` : 'no disbursements yet'}
                     icon={DollarSign}
                     colorKey="emerald"
                     loading={loading}
@@ -431,6 +486,8 @@ export default function ResearcherHubIndex() {
                     )}
                 </SectionCard>
             </div>
+
+            <RecommendedOpportunities />
         </AppLayout>
     )
 }

@@ -8,8 +8,7 @@ import {
     FileText, FileCheck, DollarSign, Trophy,
     ClipboardList, CheckCircle2, XCircle,
     AlertTriangle, AlertCircle, Calendar, MessageSquare,
-    Users, PenLine, Inbox, Trash2, Zap,
-} from 'lucide-react'
+    Users, PenLine, Inbox, Trash2, Zap, Sparkles } from 'lucide-react'
 import { get, post, del } from '../lib/api'
 import { timeAgo } from '../lib/utils'
 
@@ -188,10 +187,65 @@ const TYPE_CFG = {
         template: d => d.message || 'Your certificate of review service was revoked',
         actionLabel: 'Open My Reviews', actionUrl: () => '/reviews',
     },
+    mentorship_requested: {
+        icon: Users, color: 'violet', label: 'Mentorship Request', category: 'action',
+        template: d => d.message || 'Someone asked you to be their mentor',
+        actionLabel: 'Open Mentorship', actionUrl: () => '/mentorship',
+    },
+    mentorship_accepted: {
+        icon: Users, color: 'emerald', label: 'Mentorship Accepted', category: 'activity',
+        template: d => d.message || 'Your mentorship request was accepted',
+        actionLabel: 'Open Mentorship', actionUrl: () => '/mentorship',
+    },
+    mentorship_declined: {
+        icon: Users, color: 'gray', label: 'Mentorship Request', category: 'activity',
+        template: d => d.message || 'Your mentorship request was declined',
+        actionLabel: 'Open Mentorship', actionUrl: () => '/mentorship',
+    },
+    opportunity_match: {
+        icon: Sparkles, color: 'emerald', label: 'Funding Opportunity', category: 'activity',
+        template: d => d.message || 'A funding opportunity matches your work',
+        actionLabel: 'See opportunities', actionUrl: () => '/funding-opportunities',
+    },
+    proposal_message: {
+        icon: MessageSquare, color: 'indigo', label: 'New Message', category: 'action',
+        template: d => d.message || 'You have a new message about a proposal',
+        actionLabel: 'Open Messages', actionUrl: d => d.proposal_id ? `/proposals/${d.proposal_id}?tab=Messages` : '/notifications',
+    },
+    risk_digest: {
+        icon: AlertTriangle, color: 'red', label: 'Projects at Risk', category: 'action',
+        template: d => d.message || 'Some funded projects need attention',
+        actionLabel: 'Open Projects at Risk', actionUrl: () => '/projects-at-risk?level=high',
+    },
+    project_health_warning: {
+        icon: AlertTriangle, color: 'amber', label: 'Project Needs Attention', category: 'action',
+        template: d => d.message || 'Your project needs attention',
+        actionLabel: 'Open Project', actionUrl: d => d.proposal_id ? `/proposals/${d.proposal_id}` : '/my-proposals',
+    },
     review_certificate_withdrawn: {
         icon: AlertTriangle, color: 'amber', label: 'Certificates Withdrawn', category: 'activity',
         template: d => d.message || 'Certificates of review service were withdrawn',
         actionLabel: 'Open My Reviews', actionUrl: () => '/reviews',
+    },
+    broadcast: {
+        icon: Bell, color: 'indigo', label: 'Announcement', category: 'activity',
+        template: d => d.title ? `${d.title}${d.message ? ` — ${d.message}` : ''}` : (d.message || 'New announcement'),
+        actionLabel: null, actionUrl: () => '/notifications',
+    },
+    contract_reminder: {
+        icon: PenLine, color: 'amber', label: 'Contract Needed', category: 'action',
+        template: d => d.message || `Upload the signed contract for ${d.tracker_number || 'your project'}`,
+        actionLabel: 'Open Proposal', actionUrl: d => d.proposal_id ? `/proposals/${d.proposal_id}` : '/my-research',
+    },
+    contract_escalation: {
+        icon: AlertTriangle, color: 'red', label: 'Contract Overdue', category: 'action',
+        template: d => d.message || `The contract for ${d.tracker_number || 'a project'} is long overdue`,
+        actionLabel: 'Open Awarded', actionUrl: () => '/admin/awarded',
+    },
+    stage_escalation: {
+        icon: AlertTriangle, color: 'red', label: 'Escalation', category: 'action',
+        template: d => d.message || `${d.tracker_number || 'A proposal'} is long overdue`,
+        actionLabel: 'Open Proposal', actionUrl: d => d.proposal_id ? `/proposals/${d.proposal_id}` : '/admin/turnaround',
     },
     stage_reminder: {
         icon: AlertTriangle, color: 'amber', label: 'Action Needed', category: 'action',

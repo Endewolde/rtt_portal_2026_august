@@ -12,6 +12,7 @@ import ResolveApprovalReportModal from '../../Components/ResolveApprovalReportMo
 import ReportMistakenApprovalModal from '../../Components/ReportMistakenApprovalModal';
 import ConfirmDialog from '../../Components/ConfirmDialog';
 import { APPROVAL_REPORT_ISSUES, issueByKey } from '../../lib/approvalReportIssues';
+import { term } from '../../lib/terms';
 
 const PER_PAGE = 20;
 
@@ -250,7 +251,7 @@ export default function ApprovalReports() {
                             {colleges.length > 0 && (
                                 <select value={collegeId} onChange={(e) => setCollegeId(e.target.value)}
                                     className="min-w-0 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-slate-200 md:w-44">
-                                    <option value="">All colleges</option>
+                                    <option value="">All {term('college', { plural: true, lower: true })}</option>
                                     {colleges.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                                 </select>
                             )}

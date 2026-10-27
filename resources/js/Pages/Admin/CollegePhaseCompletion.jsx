@@ -5,8 +5,9 @@ import InsightsNav from '../../Components/InsightsNav';
 import { PageHeader, Select, RefreshButton, StatCard, Panel, EmptyState, StatSkeletons, Skeleton } from '../../Components/Insights/Kit';
 import { get } from '../../lib/api';
 import { getCategoryLabel } from '../../lib/utils';
+import { term } from '../../lib/terms';
+import { programmeKeys } from '../../lib/programmes';
 
-const CATEGORY_OPTIONS = ['research', 'community_engagement', 'technology_transfer'];
 
 const PHASE_TABS = [
     { key: 'both', label: 'Both phases' },
@@ -139,8 +140,8 @@ export default function CollegePhaseCompletion() {
             <div className="mx-auto max-w-7xl space-y-6">
                 <PageHeader icon={ListChecks} color="emerald" title="College Phase Completion"
                     description={`Blind review and open defence progress per college · ${data?.academic_year ?? 'selected'} academic year`}>
-                    <Select label="Academic year" value={academicYear} onChange={setAcademicYear}>
-                        <option value="">{data?.academic_year ? `Current (${data.academic_year})` : 'All years'}</option>
+                    <Select label={term('academic_year')} value={academicYear} onChange={setAcademicYear}>
+                        <option value="">{data?.academic_year ? `Current (${data.academic_year})` : `All ${term('academic_year', { plural: true, lower: true })}`}</option>
                         {(data?.academic_years ?? []).map((y) => <option key={y} value={y}>{y}</option>)}
                     </Select>
                     <RefreshButton onClick={() => load({ silent: true })} loading={refreshing} />
@@ -168,14 +169,14 @@ export default function CollegePhaseCompletion() {
                         </div>
                         <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
                             {collegeOptions.length > 1 && (
-                                <Select label="College" value={collegeId} onChange={setCollegeId}>
-                                    <option value="">All colleges</option>
+                                <Select label={term('college')} value={collegeId} onChange={setCollegeId}>
+                                    <option value="">All {term('college', { plural: true, lower: true })}</option>
                                     {collegeOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                                 </Select>
                             )}
                             <Select label="Category" value={category} onChange={setCategory}>
                                 <option value="">All categories</option>
-                                {CATEGORY_OPTIONS.map((c) => <option key={c} value={c}>{getCategoryLabel(c)}</option>)}
+                                {programmeKeys().map((c) => <option key={c} value={c}>{getCategoryLabel(c)}</option>)}
                             </Select>
                             {filtered && (
                                 <button onClick={() => { setCollegeId(''); setCategory(''); }}
@@ -205,18 +206,18 @@ export default function CollegePhaseCompletion() {
                         <div className={`overflow-x-auto transition ${refreshing ? 'opacity-60' : ''}`}>
                             <table className="w-full min-w-160 text-sm">
                                 <thead>
-                                    <tr className="border-b border-gray-100 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-                                        <th className="px-5 py-2.5 text-left">College</th>
+                                    <tr className="border-b border-gray-100 text-[11px] font-semibold uppercase tracking-wider text-gray-500"><th className="px-5 py-2.5 w-10 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">#</th>
+                                        <th className="px-5 py-2.5 text-left">{term('college')}</th>
                                         <th className="px-4 py-2.5 text-right">Proposals</th>
                                         {showBlind && <th className="px-4 py-2.5 text-left">Blind review</th>}
                                         {showDefence && <th className="px-4 py-2.5 text-left">Open defence</th>}
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
-                                    {sortedColleges.map((c) => {
+                                    {sortedColleges.map((c, rowIdx) => {
                                         const done = isFullyDone(c);
                                         return (
-                                            <tr key={c.college_id} className={done ? 'bg-emerald-50/50' : 'hover:bg-gray-50/60'}>
+                                            <tr key={c.college_id} className={done ? 'bg-emerald-50/50' : 'hover:bg-gray-50/60'}><td className="px-5 py-4 w-10 text-xs font-medium tabular-nums text-gray-400">{rowIdx + 1}</td>
                                                 <td className="whitespace-nowrap px-5 py-4 align-top">
                                                     <span className="flex items-center gap-2 font-semibold text-gray-900">
                                                         {done

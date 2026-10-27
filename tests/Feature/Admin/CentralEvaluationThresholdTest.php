@@ -83,5 +83,11 @@ test('central evaluation queue reports the raw point threshold, not a percentage
         ->and($row['threshold'])->toEqual(70.0)
         ->and($row['threshold_pct'])->toEqual(70.0)
         ->and($row['total_max'])->toEqual(100.0)
-        ->and($row['combined_score'])->toEqual(75.0);
+        ->and($row['combined_score'])->toEqual(75.0)
+        // Scores arrive summarised; the raw assignments and questions stay on the server.
+        ->and($row)->not->toHaveKey('review_assignments')
+        ->and($row)->not->toHaveKey('budgets')
+        ->and($row['skips_defence'])->toBeFalse()
+        ->and($row['blind_reviewers'])->toBe(1)
+        ->and($row['defence_reviewers'])->toBe(1);
 });

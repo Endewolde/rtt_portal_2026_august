@@ -8,7 +8,7 @@ import {
 import AppLayout from '../../Layouts/AppLayout';
 import TrackerNumberDisplay from '../../Components/TrackerNumberDisplay';
 import Step3CoInvestigators from './Steps/Step3CoInvestigators';
-import Step5Documents, { DOC_TYPES } from './Steps/Step5Documents';
+import Step5Documents, { docTypesFor } from './Steps/Step5Documents';
 import { post, get, del } from '../../lib/api';
 import api from '../../lib/api';
 import { useAuth } from '../../hooks/useAuth';
@@ -18,6 +18,10 @@ import RoleRestrictedModal from '../../Components/RoleRestrictedModal';
 import ProposalLimitModal from '../../Components/ProposalLimitModal';
 import SubmissionEligibilityNotice from '../../Components/SubmissionEligibilityNotice';
 import AiWritingCoach from '../../Components/AiWritingCoach';
+import { currency, withCurrency } from '../../lib/terms';
+import SdgPicker, { SdgBadges } from '../../Components/SdgPicker';
+import CallQuestions, { CallAnswers, callQuestionErrors } from '../../Components/CallQuestions';
+import { getCategoryLabel } from '../../lib/utils';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -121,7 +125,7 @@ const DURATION_OPTIONS = [3, 6, 9, 12, 18, 24, 30, 36, 48, 60];
 
 // ─── Step 1 — Basic Info ──────────────────────────────────────────────────────
 
-function Step1({ data, onChange, errors, category, lookupOptions }) {
+function Step1({ data, onChange, errors, category, lookupOptions, callQuestions }) {
     const abstractLen  = (data.abstract ?? '').length;
     const abstractOk   = abstractLen >= 100;
     const isResearch   = category === 'research';
@@ -195,13 +199,16 @@ function Step1({ data, onChange, errors, category, lookupOptions }) {
                 <p className="text-xs text-gray-400 mt-1">{tr("Separate keywords with commas.")}</p>
             </div>
 
+            {/* Sustainable Development Goals */}
+            <div>
+                <Label text="Sustainable Development Goals" />
+                <SdgPicker value={data.sdgs ?? []} onChange={sdgs => onChange({ ...data, sdgs })} />
+            </div>
+
             {/* ── Category-specific fields ───────────────────── */}
             <div className="border-t border-gray-100 pt-5">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">
-                    {category === 'research'             && 'Research-Specific Details'}
-                    {category === 'community_engagement' && 'Community Engagement Details'}
-                    {category === 'technology_transfer'  && 'Technology Transfer Details'}
-                    {!category                           && 'Proposal Details'}
+                    {category ? `${getCategoryLabel(category)} Details` : 'Proposal Details'}
                 </p>
 
                 <div className="grid sm:grid-cols-2 gap-4">
@@ -292,6 +299,9 @@ function Step1({ data, onChange, errors, category, lookupOptions }) {
                     )}
                 </div>
             )}
+
+            <CallQuestions questions={callQuestions} answers={data.call_answers}
+                onChange={(answers) => onChange({ ...data, call_answers: answers })} errors={errors.call_answers} />
         </div>
     );
 }
@@ -382,7 +392,7 @@ function Step4({ items, onChange, rowErrors }) {
 
                                     {/* Amount with ETB prefix */}
                                     <div className={`flex items-center shrink-0 rounded-lg border overflow-hidden ${rowErr?.amount ? 'border-red-400' : 'border-gray-200'}`}>
-                                        <span className="px-2.5 py-1.5 bg-gray-50 border-r border-gray-200 text-xs font-semibold text-gray-500">{tr("ETB")}</span>
+                                        <span className="px-2.5 py-1.5 bg-gray-50 border-r border-gray-200 text-xs font-semibold text-gray-500">{withCurrency(tr("ETB"))}</span>
                                         <input
                                             type="number" min="0"
                                             value={item.amount}
@@ -429,7 +439,7 @@ function Step4({ items, onChange, rowErrors }) {
                 {items.length > 0 && (
                     <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5">
                         <span className="text-xs text-gray-500">{items.length} item{items.length !== 1 ? 's' : ''} · Total</span>
-                        <span className="text-sm font-bold text-gray-900">{tr("ETB :total", { total: Number(total).toLocaleString() })}</span>
+                        <span className="text-sm font-bold text-gray-900">{withCurrency(tr("ETB :total", { total: Number(total).toLocaleString() }))}</span>
                     </div>
                 )}
             </div>
@@ -500,9 +510,12 @@ function Step6Preview({ stepData, budgetItems, user, category, selectedCall, onG
     const piContrib    = Math.max(0, 100 - totalCo);
     const budgetTotal  = budgetItems.reduce((s, i) => s + Number(i.amount || 0), 0);
     const documents    = stepData[4]?.documents ?? {};
-    const docsDone     = DOC_TYPES.filter(dt => documents[dt.key]?.status === 'done').length;
-    const docsRequired = DOC_TYPES.filter(dt => dt.required).length;
-    const missingDocs  = DOC_TYPES.filter(dt => dt.required && documents[dt.key]?.status !== 'done');
+    const docTypes     = docTypesFor(selectedCall);
+    const docsDone     = docTypes.filter(dt => documents[dt.key]?.status === 'done').length;
+    const docsRequired = docTypes.filter(dt => dt.required).length;
+    const missingDocs  = docTypes.filter(dt => dt.required && documents[dt.key]?.status !== 'done');
+    const callQuestions = selectedCall?.application_form?.questions ?? [];
+    const callErrors    = callQuestionErrors(callQuestions, d.call_answers);
 
     const keywords      = (d.keywords ?? '').split(',').map(k => k.trim()).filter(Boolean);
     const durationLabel = d.duration_months
@@ -525,6 +538,7 @@ function Step6Preview({ stepData, budgetItems, user, category, selectedCall, onG
     if ((d.abstract?.trim().length ?? 0) < 100)  issues.push({ msg: 'Abstract must be at least 100 characters',                                     step: 0 });
     if (!d.focus_area?.trim())                   issues.push({ msg: 'Focus area is not selected',                                                   step: 0 });
     if (!d.duration_months)                      issues.push({ msg: 'Duration is not selected',                                                     step: 0 });
+    if (Object.keys(callErrors).length > 0)      issues.push({ msg: `${Object.keys(callErrors).length} call question${Object.keys(callErrors).length > 1 ? 's' : ''} need${Object.keys(callErrors).length > 1 ? '' : 's'} an answer`, step: 0 });
     if (team.length === 0)                       issues.push({ msg: 'At least one co-investigator is required',                                     step: 2 });
     if (budgetItems.length === 0)                issues.push({ msg: 'No budget items added',                                                         step: 3 });
     if (missingDocs.length > 0)                  issues.push({ msg: `${missingDocs.length} required document${missingDocs.length > 1 ? 's' : ''} not uploaded`, step: 4 });
@@ -628,6 +642,20 @@ function Step6Preview({ stepData, budgetItems, user, category, selectedCall, onG
                     )}
                 </div>
 
+                {(d.sdgs ?? []).length > 0 && (
+                    <div>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">{tr("Sustainable Development Goals")}</p>
+                        <SdgBadges value={d.sdgs} />
+                    </div>
+                )}
+
+                {callQuestions.length > 0 && (
+                    <div>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">{tr("Questions for this call")}</p>
+                        <CallAnswers items={callQuestions.map(q => ({ ...q, answer: d.call_answers?.[q.id] }))} />
+                    </div>
+                )}
+
                 {/* Keywords */}
                 {keywords.length > 0 && (
                     <div>
@@ -720,7 +748,7 @@ function Step6Preview({ stepData, budgetItems, user, category, selectedCall, onG
             {/* ── Step 4: Budget Plan ───────────────────────────────────────── */}
             <StepSection
                 number={4}
-                title={budgetTotal > 0 ? `Budget Plan — ETB ${budgetTotal.toLocaleString()}` : 'Budget Plan'}
+                title={budgetTotal > 0 ? `Budget Plan — ${currency()} ${budgetTotal.toLocaleString()}` : 'Budget Plan'}
                 status={step4Status}
                 onEdit={() => onGoToStep?.(3)}
             >
@@ -743,7 +771,7 @@ function Step6Preview({ stepData, budgetItems, user, category, selectedCall, onG
                                             <div className="flex items-center justify-between text-xs mb-1">
                                                 <span className="text-gray-600 font-medium">{cat}</span>
                                                 <span className="text-gray-500">
-                                                    {tr("ETB :amount", { amount: amount.toLocaleString() })}
+                                                    {withCurrency(tr("ETB :amount", { amount: amount.toLocaleString() }))}
                                                     <span className="text-gray-400 ml-1">({pct.toFixed(1)}%)</span>
                                                 </span>
                                             </div>
@@ -759,15 +787,15 @@ function Step6Preview({ stepData, budgetItems, user, category, selectedCall, onG
                         <div className="border border-gray-100 rounded-xl overflow-hidden">
                             <table className="w-full text-sm">
                                 <thead>
-                                    <tr className="bg-gray-50 border-b border-gray-100">
+                                    <tr className="bg-gray-50 border-b border-gray-100"><th className="px-4 py-2.5 w-10 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">#</th>
                                         <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">{tr("Category")}</th>
                                         <th className="text-left px-4 py-2.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">{tr("Description")}</th>
-                                        <th className="text-right px-4 py-2.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">{tr("ETB")}</th>
+                                        <th className="text-right px-4 py-2.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">{withCurrency(tr("ETB"))}</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-50">
                                     {budgetItems.map((item, i) => (
-                                        <tr key={i} className="hover:bg-gray-50/60 transition-colors">
+                                        <tr key={i} className="hover:bg-gray-50/60 transition-colors"><td className="px-4 py-2.5 w-10 text-xs font-medium tabular-nums text-gray-400">{i + 1}</td>
                                             <td className="px-4 py-2.5 font-medium text-gray-700">{item.category || '—'}</td>
                                             <td className="px-4 py-2.5 text-gray-600">
                                                 <div>{item.description || '—'}</div>
@@ -783,7 +811,7 @@ function Step6Preview({ stepData, budgetItems, user, category, selectedCall, onG
                                 </tbody>
                                 <tfoot>
                                     <tr className="bg-gray-50 border-t border-gray-200">
-                                        <td colSpan={2} className="px-4 py-2.5 text-xs font-bold text-gray-600 uppercase tracking-wide">
+                                        <td colSpan={3} className="px-4 py-2.5 text-xs font-bold text-gray-600 uppercase tracking-wide">
                                             Total · {budgetItems.length} item{budgetItems.length !== 1 ? 's' : ''}
                                         </td>
                                         <td className="px-4 py-2.5 font-bold text-gray-900 text-right">
@@ -811,7 +839,7 @@ function Step6Preview({ stepData, budgetItems, user, category, selectedCall, onG
                             </div>
                         </div>
                     )}
-                    {DOC_TYPES.map(dt => {
+                    {docTypes.map(dt => {
                         const doc      = documents[dt.key];
                         const uploaded = doc?.status === 'done';
                         return (
@@ -843,7 +871,7 @@ function Step6Preview({ stepData, budgetItems, user, category, selectedCall, onG
                         );
                     })}
                     <p className="text-xs text-gray-400 pt-1">
-                        {tr(":docsDone of :DOC_TYPES_count uploaded · :docsRequired required", { docsDone: docsDone, DOC_TYPES_count: DOC_TYPES.length, docsRequired: docsRequired })}
+                        {tr(":docsDone of :DOC_TYPES_count uploaded · :docsRequired required", { docsDone: docsDone, DOC_TYPES_count: docTypes.length, docsRequired: docsRequired })}
                     </p>
                 </div>
             </StepSection>
@@ -859,6 +887,13 @@ function Step7Submit({ proposalId, stepData, budgetItems, onSuccess, onGoToStep,
     const [submitting, setSubmitting] = useState(false);
     const [tracker,    setTracker]    = useState('');
     const [accessDenied, setAccessDenied] = useState(false);
+    // Projects this PI already leads, so a second (or third) award is never a surprise.
+    const [running, setRunning] = useState([]);
+    useEffect(() => {
+        get('/my-awards')
+            .then((r) => setRunning((r.data ?? []).filter((a) => ['funded', 'midterm_evaluation'].includes(a.status))))
+            .catch(() => {});
+    }, []);
 
     const checks = [
         { label: 'Title provided',          ok: !!(stepData[0]?.title?.trim()) },
@@ -934,6 +969,18 @@ function Step7Submit({ proposalId, stepData, budgetItems, onSuccess, onGoToStep,
                     ))}
                 </div>
             </div>
+
+            {running.length > 0 && (
+                <div className="flex items-start gap-3 rounded-xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-800">
+                    <Info size={16} className="mt-0.5 shrink-0" />
+                    <div>
+                        <p className="font-semibold">{tr("You already lead :count running funded project(s)", { count: running.length })}</p>
+                        <p className="mt-0.5 text-xs text-violet-700">
+                            {running.map((a) => a.tracker_number).join(', ')}. {tr("You can still submit — reviewers and the funding committee will see your current projects when they decide.")}
+                        </p>
+                    </div>
+                </div>
+            )}
 
             {!allOk && (
                 <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-sm text-amber-700">
@@ -1081,6 +1128,7 @@ export default function ProposalCreate() {
                             title:           p.title           ?? '',
                             abstract:        p.abstract        ?? '',
                             keywords:        p.keywords        ?? '',
+                            sdgs:            p.sdgs            ?? [],
                             focus_area:      p.focus_area      ?? '',
                             duration_months: p.duration_months ?? '',
                             research_type:   p.research_type   ?? '',
@@ -1222,6 +1270,8 @@ export default function ProposalCreate() {
         if (!d?.focus_area?.trim()) errors.focus_area = 'Focus area is required.';
         if (!d?.duration_months) errors.duration_months = 'Duration is required.';
         if (category === 'research' && !d?.research_type?.trim()) errors.research_type = 'Research type is required.';
+        const callErrors = callQuestionErrors(selectedCall?.application_form?.questions, d?.call_answers);
+        if (Object.keys(callErrors).length) errors.call_answers = callErrors;
         return errors;
     };
 
@@ -1292,6 +1342,11 @@ export default function ProposalCreate() {
             if (data.focus_area?.trim()) delete remaining.focus_area;
             if (data.duration_months) delete remaining.duration_months;
             if (data.research_type?.trim()) delete remaining.research_type;
+            if (remaining.call_answers) {
+                const callErrors = callQuestionErrors(selectedCall?.application_form?.questions, data.call_answers);
+                if (Object.keys(callErrors).length) remaining.call_answers = callErrors;
+                else delete remaining.call_answers;
+            }
             setStep1Errors(remaining);
         }
     };
@@ -1303,7 +1358,7 @@ export default function ProposalCreate() {
 
     const renderStep = () => {
         switch (step) {
-            case 0: return <Step1 data={stepData[0]} onChange={handleStep1Change} errors={step1Errors} category={category} lookupOptions={lookupOptions} />;
+            case 0: return <Step1 data={stepData[0]} onChange={handleStep1Change} errors={step1Errors} category={category} lookupOptions={lookupOptions} callQuestions={selectedCall?.application_form?.questions} />;
             case 1: return <Step2 user={user} />;
             case 2: return (
                 <Step3CoInvestigators
@@ -1314,7 +1369,7 @@ export default function ProposalCreate() {
                 />
             );
             case 3: return <Step4 items={budgetItems} onChange={handleBudgetChange} rowErrors={budgetRowErrors} />;
-            case 4: return <Step5Documents proposalId={proposalId} onComplete={handleStepComplete} initialUploads={stepData[4]?.documents} />;
+            case 4: return <Step5Documents proposalId={proposalId} onComplete={handleStepComplete} initialUploads={stepData[4]?.documents} docTypes={docTypesFor(selectedCall)} />;
             case 5: return <Step6Preview stepData={stepData} budgetItems={budgetItems} user={user} category={category} selectedCall={selectedCall} onGoToStep={setStep} />;
             case 6: return (
                 <Step7Submit

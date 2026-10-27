@@ -31,11 +31,13 @@ use App\Services\ReviewerMatchService;
 use App\Services\ReviewScoreService;
 use App\Services\WorkflowService;
 use App\Support\AuditLogger;
+use App\Support\Programmes;
 use App\Support\RejectionReasons;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
@@ -437,7 +439,7 @@ class ReviewController extends Controller
         $request->validate([
             'name' => 'required|string|unique:evaluation_types,name',
             'label' => 'required|string',
-            'proposal_category' => 'required|in:research,community_engagement,technology_transfer,innovation,other',
+            'proposal_category' => ['required', Rule::in(Programmes::keys())],
             'description' => 'nullable|string',
         ]);
 
@@ -594,8 +596,10 @@ class ReviewController extends Controller
         }
 
         $submitted = $proposal->reviewAssignments->filter(fn ($a) => $a->status === 'submitted');
+        // Only the office rates reviews; the research team never sees who wrote which.
+        $canRate = $user->can('reviews.rate_quality') && $user->accessScope()->covers($proposal->college_id, $proposal->category);
 
-        $reviews = $submitted->map(function ($assignment) {
+        $reviews = $submitted->map(function ($assignment) use ($canRate) {
             $scores = $assignment->scores;
             $display = $this->scoreService->calculateWeightedDisplay($assignment);
             $recommendation = $scores->whereNotNull('recommendation')->last()?->recommendation;
@@ -614,7 +618,7 @@ class ReviewController extends Controller
                 'overall_max' => $scores->isNotEmpty() ? $display['max'] : null,
                 'recommendation' => $recommendation,
                 'comments' => $comments,
-            ];
+            ] + ($canRate ? ['assignment_id' => $assignment->id, 'quality_rating' => $assignment->quality_rating] : []);
         })->values();
 
         $scored = $reviews->whereNotNull('overall_score')->where('set_aside', false);
@@ -636,10 +640,48 @@ class ReviewController extends Controller
                 'average_score' => $scored->isNotEmpty() ? min(round($scored->avg('overall_score'), 2), (float) $scored->first()['overall_max']) : null,
                 'average_max' => $scored->isNotEmpty() ? $scored->first()['overall_max'] : null,
                 'reviews' => $reviews,
+                'can_rate' => $canRate,
             ],
             'message' => '',
             'errors' => [],
         ]);
+    }
+
+    /** The office rates a submitted review: 3 useful, 2 adequate, 1 thin, or null to clear. */
+    public function rateQuality(Request $request, string $id): JsonResponse
+    {
+        $assignment = ReviewAssignment::with('proposal:id,college_id,category')->findOrFail($id);
+        $user = $request->user();
+
+        if (! $user->can('reviews.rate_quality') || ! $user->accessScope()->covers($assignment->proposal?->college_id, $assignment->proposal?->category)) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
+        }
+        if ($assignment->status !== 'submitted') {
+            return response()->json(['data' => null, 'message' => 'Only submitted reviews can be rated.', 'errors' => []], 422);
+        }
+
+        $rating = $request->validate(['rating' => ['nullable', 'integer', 'between:1,3']])['rating'] ?? null;
+        $assignment->update([
+            'quality_rating' => $rating,
+            'quality_rated_by' => $rating ? $user->id : null,
+            'quality_rated_at' => $rating ? now() : null,
+        ]);
+
+        return response()->json(['data' => ['assignment_id' => $assignment->id, 'quality_rating' => $rating], 'message' => $rating ? 'Review rated.' : 'Rating cleared.', 'errors' => []]);
+    }
+
+    /** The signed-in reviewer's own quality record: how their reviews were rated. */
+    public function myQuality(Request $request): JsonResponse
+    {
+        $ratings = ReviewAssignment::where('reviewer_id', $request->user()->id)->whereNotNull('quality_rating')->pluck('quality_rating');
+
+        return response()->json(['data' => [
+            'rated' => $ratings->count(),
+            'average' => $ratings->isEmpty() ? null : round($ratings->avg(), 2),
+            'useful' => $ratings->filter(fn ($r) => $r === 3)->count(),
+            'adequate' => $ratings->filter(fn ($r) => $r === 2)->count(),
+            'thin' => $ratings->filter(fn ($r) => $r === 1)->count(),
+        ], 'message' => '', 'errors' => []]);
     }
 
     /**
@@ -720,12 +762,23 @@ class ReviewController extends Controller
         $rawStatus = $request->input('status', 'under_blind_review');
         $statuses = array_filter(array_map('trim', explode(',', $rawStatus)));
 
-        $query = Proposal::with([
+        // Only what the Blind Review / Open Defence pages show — no abstracts, wizard
+        // drafts or per-question scores, which made these lists slow to load.
+        $query = Proposal::select([
+            'id', 'tracker_number', 'title', 'category', 'status', 'academic_year', 'college_id', 'pi_user_id',
+            'proposal_call_id', 'submitted_at', 'validated_at', 'status_entered_at', 'updated_at',
+            'review_disagreement_flagged_at', 'review_disagreement_resolved_at',
+        ])->with([
             'pi:id,name,email',
             'college:id,name',
+            'proposalCall:id,title,end_date',
+            'reviewAssignments' => fn ($q) => $q->select([
+                'id', 'proposal_id', 'reviewer_id', 'evaluation_type_id', 'status', 'assigned_at', 'due_date',
+                'submitted_at', 'is_second_opinion', 'set_aside_at', 'is_external',
+            ]),
             'reviewAssignments.reviewer:id,name,email',
+            'reviewAssignments.reviewer.roles:id,name',
             'reviewAssignments.evaluationType:id,name,label',
-            'reviewAssignments.scores',
         ])->orderByDesc('updated_at');
 
         count($statuses) === 1

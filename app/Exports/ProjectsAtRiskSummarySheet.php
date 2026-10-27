@@ -3,6 +3,7 @@
 namespace App\Exports;
 
 use App\Services\ProjectRiskService;
+use App\Support\Terms;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromArray;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
@@ -57,7 +58,7 @@ class ProjectsAtRiskSummarySheet implements FromArray, ShouldAutoSize, WithStric
             $rows[] = [$label, $this->summary['by_signal'][$key] ?? 0];
         }
 
-        $section(['College', 'Projects', 'High risk', 'Watch', 'On track', 'Budget (ETB)', 'Released (ETB)']);
+        $section([Terms::college(), 'Projects', 'High risk', 'Watch', 'On track', 'Budget ('.Terms::currency().')', 'Released ('.Terms::currency().')']);
         foreach ($this->projects->groupBy(fn ($p) => $p['college'] ?? '—')->sortKeys() as $college => $group) {
             $rows[] = [
                 $college,

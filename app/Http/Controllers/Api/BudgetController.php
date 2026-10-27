@@ -21,6 +21,7 @@ use App\Services\DisbursementService;
 use App\Services\SignatureService;
 use App\Support\AuditLogger;
 use App\Support\RejectionReasons;
+use App\Support\Terms;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -41,7 +42,9 @@ class BudgetController extends Controller
     {
         $user = $request->user();
         $query = BudgetRequest::with([
-            'proposal:id,tracker_number,title,pi_user_id,college_id,category',
+            'proposal:id,tracker_number,title,pi_user_id,college_id,category,academic_year',
+            'proposal.college:id,name',
+            'proposal.pi:id,name',
             'requestedBy:id,name,email',
             'items',
             'signatures.user:id,name,email',
@@ -210,7 +213,7 @@ class BudgetController extends Controller
                     return response()->json([
                         'data' => null,
                         'message' => sprintf(
-                            'Round 1 is limited to 50%% of the awarded budget (max ETB %s). Requested: ETB %s.',
+                            'Round 1 is limited to 50%% of the awarded budget (max '.Terms::currency().' %s). Requested: '.Terms::currency().' %s.',
                             number_format($cap, 2),
                             number_format((float) $totalAmount, 2)
                         ),
@@ -566,6 +569,9 @@ class BudgetController extends Controller
         $request->validate(['fiscal_year' => 'required|string|max:20']);
 
         $proposal = Proposal::with('award')->findOrFail($proposalId);
+        if (! $this->userCanAllocateFor($request->user(), $proposal)) {
+            return response()->json(['data' => null, 'message' => 'You do not have permission to allocate this budget.', 'errors' => [], 'meta' => []], 403);
+        }
 
         try {
             $allocation = $this->allocationService->quickAllocateFromAward(
@@ -668,6 +674,12 @@ class BudgetController extends Controller
         return $scope->isAll() || ($scope->isCategory() && in_array($category, $scope->categories, true));
     }
 
+    /** Allocating (and editing an allocation) needs the permission and the proposal within the user's scope. */
+    private function userCanAllocateFor(mixed $user, Proposal $proposal): bool
+    {
+        return $user->can('budget_allocations.create') && $user->accessScope()->covers($proposal->college_id, $proposal->category);
+    }
+
     /** Update amount/notes on a pending or approved allocation. */
     public function updateAllocation(string $id, Request $request): JsonResponse
     {
@@ -676,7 +688,10 @@ class BudgetController extends Controller
             'notes' => 'nullable|string',
         ]);
 
-        $allocation = BudgetAllocation::findOrFail($id);
+        $allocation = BudgetAllocation::with('proposal:id,college_id,category')->findOrFail($id);
+        if (! $allocation->proposal || ! $this->userCanAllocateFor($request->user(), $allocation->proposal)) {
+            return response()->json(['data' => null, 'message' => 'You do not have permission to change this allocation.', 'errors' => [], 'meta' => []], 403);
+        }
 
         try {
             $updated = $this->allocationService->updateAllocation(
@@ -947,7 +962,7 @@ class BudgetController extends Controller
                 continue;
             }
             SendRawMailJob::deliver(
-                "<p>Dear {$officer->name},</p><p>Budget request for <strong>{$proposal->title}</strong> ({$proposal->tracker_number}) — Round {$budgetRequest->funding_round} — has been approved by the college officer and is now awaiting your review.</p><p>Amount requested: ETB ".number_format((float) $budgetRequest->total_amount, 2).'</p>',
+                "<p>Dear {$officer->name},</p><p>Budget request for <strong>{$proposal->title}</strong> ({$proposal->tracker_number}) — Round {$budgetRequest->funding_round} — has been approved by the college officer and is now awaiting your review.</p><p>Amount requested: ".e(Terms::money($budgetRequest->total_amount)).'</p>',
                 $officer->email,
                 $officer->name,
                 "Budget Request Awaiting Finance Approval — {$proposal->tracker_number}"

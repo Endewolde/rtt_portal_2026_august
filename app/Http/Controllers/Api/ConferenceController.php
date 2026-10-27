@@ -12,8 +12,11 @@ use App\Models\ConferenceSpeaker;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ConferenceController extends Controller
@@ -76,9 +79,13 @@ class ConferenceController extends Controller
             ->withCount(['registrations as active_registrations_count' => fn ($q) => $q->whereIn('status', ['pending', 'confirmed'])])
             ->where('slug', $slug)
             ->where('status', 'published')
+            ->where(fn ($q) => $q->whereNull('publish_at')->orWhere('publish_at', '<=', now()))
             ->firstOrFail();
 
+        // The join link goes to registrants by email; the public page only says there is one.
         $data = $conference->toArray();
+        $data['has_virtual_link'] = filled($conference->virtual_link);
+        $data['registration_closed'] = $conference->is_past;
         $data['is_full'] = $conference->max_capacity
             && $conference->active_registrations_count >= $conference->max_capacity;
         $data['spots_remaining'] = $conference->max_capacity
@@ -96,18 +103,38 @@ class ConferenceController extends Controller
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
-        $query = Conference::withCount(['speakers', 'sessions', 'registrations'])
-            ->orderByDesc('created_at');
+        $query = Conference::withCount([
+            'speakers',
+            'sessions',
+            'registrations as registrations_count' => fn ($q) => $q->whereIn('status', ['pending', 'confirmed']),
+            'abstracts as abstracts_count' => fn ($q) => $q->where('status', '!=', 'draft'),
+        ])->orderByDesc('start_date');
 
         if ($search = $request->query('search')) {
             $query->where('title', 'like', "%{$search}%");
         }
-
         if ($status = $request->query('status')) {
             $query->where('status', $status);
         }
+        match ($request->query('when')) {
+            'upcoming' => $query->where(fn ($q) => $q->where('start_date', '>=', now())->orWhere('end_date', '>=', now())),
+            'past' => $query->where(fn ($q) => $q->where('end_date', '<', now())->orWhere(fn ($q2) => $q2->whereNull('end_date')->where('start_date', '<', now()))),
+            default => null,
+        };
 
-        return response()->json(['data' => $query->paginate(20), 'message' => '', 'errors' => []]);
+        $page = $query->paginate(min(200, max(1, (int) $request->query('per_page', 20))))->through(fn (Conference $c) => $c->makeVisible('virtual_link'));
+
+        // Figures for the whole programme, not just this page.
+        $stats = [
+            'total' => Conference::count(),
+            'published' => Conference::where('status', 'published')->count(),
+            'upcoming' => Conference::where('status', '!=', 'archived')->where(fn ($q) => $q->where('start_date', '>=', now())->orWhere('end_date', '>=', now()))->count(),
+            'registrations' => ConferenceRegistration::whereIn('status', ['pending', 'confirmed'])->count(),
+            'abstracts_open' => Conference::where('status', 'published')->where('abstract_submission_open', true)
+                ->where(fn ($q) => $q->whereNull('abstract_deadline')->orWhere('abstract_deadline', '>=', now()))->count(),
+        ];
+
+        return response()->json(['data' => $page->toArray() + ['stats' => $stats], 'message' => '', 'errors' => []]);
     }
 
     public function store(Request $request): JsonResponse
@@ -146,7 +173,7 @@ class ConferenceController extends Controller
             $this->notifyAdminsConferencePublished($conference);
         }
 
-        return response()->json(['data' => $conference, 'message' => 'Conference created.', 'errors' => []], 201);
+        return response()->json(['data' => $conference->makeVisible('virtual_link'), 'message' => 'Conference created.', 'errors' => []], 201);
     }
 
     public function show(string $id, Request $request): JsonResponse
@@ -155,9 +182,15 @@ class ConferenceController extends Controller
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
-        $conference = Conference::with(['speakers', 'sessions.speakers', 'registrations'])
-            ->withCount(['speakers', 'sessions', 'registrations'])
-            ->findOrFail($id);
+        $conference = Conference::with(['speakers', 'sessions.speakers', 'registrations' => fn ($q) => $q->orderByDesc('registered_at')])
+            ->withCount([
+                'speakers',
+                'sessions',
+                'registrations as registrations_count' => fn ($q) => $q->whereIn('status', ['pending', 'confirmed']),
+                'abstracts as abstracts_count' => fn ($q) => $q->where('status', '!=', 'draft'),
+            ])
+            ->findOrFail($id)
+            ->makeVisible('virtual_link');
 
         return response()->json(['data' => $conference, 'message' => '', 'errors' => []]);
     }
@@ -174,7 +207,12 @@ class ConferenceController extends Controller
             'title' => 'sometimes|string|max:255',
             'description' => 'nullable|string',
             'start_date' => 'sometimes|date',
-            'end_date' => 'nullable|date',
+            'end_date' => ['nullable', 'date', function ($attr, $value, $fail) use ($request, $conference) {
+                $start = $request->input('start_date', $conference->start_date);
+                if ($value && $start && strtotime((string) $value) < strtotime((string) $start)) {
+                    $fail('The end date must be on or after the start date.');
+                }
+            }],
             'timezone' => 'nullable|string|max:50',
             'location_type' => 'sometimes|in:physical,virtual,hybrid',
             'location_address' => 'nullable|string',
@@ -192,7 +230,8 @@ class ConferenceController extends Controller
 
         $wasPublished = $conference->status === 'published';
         $becomesPublished = isset($data['status']) && $data['status'] === 'published' && ! $wasPublished;
-        $becomesArchived = isset($data['status']) && $data['status'] === 'archived' && $wasPublished;
+        // Archiving a conference that is over is housekeeping, not a cancellation.
+        $becomesArchived = isset($data['status']) && $data['status'] === 'archived' && $wasPublished && ! $conference->is_past;
         $detailsChanged = $wasPublished && array_intersect_key($data, array_flip(['start_date', 'end_date', 'location_type', 'location_address', 'virtual_link', 'title']));
 
         $conference->update($data);
@@ -210,7 +249,7 @@ class ConferenceController extends Controller
             $this->notifyRegistrantsConferenceCancelled($conference);
         }
 
-        return response()->json(['data' => $conference, 'message' => 'Conference updated.', 'errors' => []]);
+        return response()->json(['data' => $conference->makeVisible('virtual_link'), 'message' => 'Conference updated.', 'errors' => []]);
     }
 
     public function destroy(string $id, Request $request): JsonResponse
@@ -221,7 +260,7 @@ class ConferenceController extends Controller
 
         $conference = Conference::findOrFail($id);
 
-        if ($conference->status === 'published') {
+        if ($conference->status === 'published' && ! $conference->is_past) {
             $this->notifyRegistrantsConferenceCancelled($conference);
         }
 
@@ -339,7 +378,7 @@ class ConferenceController extends Controller
             'type' => 'required|in:keynote,talk,workshop,panel,break,other',
             'sort_order' => 'nullable|integer|min:0',
             'speaker_ids' => 'nullable|array',
-            'speaker_ids.*' => 'uuid|exists:conference_speakers,id',
+            'speaker_ids.*' => ['uuid', Rule::exists('conference_speakers', 'id')->where('conference_id', $conference->id)],
         ]);
 
         $speakerIds = $data['speaker_ids'] ?? [];
@@ -367,12 +406,17 @@ class ConferenceController extends Controller
             'description' => 'nullable|string',
             'track' => 'nullable|string|max:100',
             'starts_at' => 'sometimes|date',
-            'ends_at' => 'nullable|date',
+            'ends_at' => ['nullable', 'date', function ($attr, $value, $fail) use ($request, $session) {
+                $start = $request->input('starts_at', $session->starts_at);
+                if ($value && $start && strtotime((string) $value) <= strtotime((string) $start)) {
+                    $fail('The session must end after it starts.');
+                }
+            }],
             'room' => 'nullable|string|max:100',
             'type' => 'sometimes|in:keynote,talk,workshop,panel,break,other',
             'sort_order' => 'nullable|integer|min:0',
             'speaker_ids' => 'nullable|array',
-            'speaker_ids.*' => 'uuid|exists:conference_speakers,id',
+            'speaker_ids.*' => ['uuid', Rule::exists('conference_speakers', 'id')->where('conference_id', $id)],
         ]);
 
         $speakerIds = $data['speaker_ids'] ?? null;
@@ -403,7 +447,13 @@ class ConferenceController extends Controller
     /** Public registration form submit. */
     public function register(Request $request, string $slug): JsonResponse
     {
-        $conference = Conference::where('slug', $slug)->where('status', 'published')->firstOrFail();
+        $conference = Conference::where('slug', $slug)->where('status', 'published')
+            ->where(fn ($q) => $q->whereNull('publish_at')->orWhere('publish_at', '<=', now()))
+            ->firstOrFail();
+
+        if ($conference->is_past) {
+            return response()->json(['message' => 'This conference has ended, so registration is closed.', 'errors' => []], 422);
+        }
 
         $data = $request->validate([
             'name' => 'required|string|max:255',
@@ -411,20 +461,33 @@ class ConferenceController extends Controller
             'organization' => 'nullable|string|max:255',
             'phone' => 'nullable|string|max:30',
         ]);
+        $data['email'] = Str::lower(trim($data['email']));
 
-        if ($conference->max_capacity) {
-            $count = $conference->registrations()->whereIn('status', ['pending', 'confirmed'])->count();
-            if ($count >= $conference->max_capacity) {
-                return response()->json(['message' => 'This conference is fully booked.', 'errors' => []], 422);
+        // One seat at a time: the conference row is held while seats are counted.
+        $result = DB::transaction(function () use ($conference, $data) {
+            $locked = Conference::whereKey($conference->id)->lockForUpdate()->first();
+
+            $existing = $locked->registrations()->whereRaw('LOWER(email) = ?', [$data['email']])->first();
+            if ($existing && $existing->status !== 'cancelled') {
+                return 'You are already registered for this conference.';
             }
-        }
+            if ($locked->max_capacity && $locked->registrations()->whereIn('status', ['pending', 'confirmed'])->count() >= $locked->max_capacity) {
+                return 'This conference is fully booked.';
+            }
 
-        $existing = $conference->registrations()->where('email', $data['email'])->first();
-        if ($existing) {
-            return response()->json(['message' => 'You are already registered for this conference.', 'errors' => []], 422);
-        }
+            if ($existing) {
+                $existing->update([...$data, 'status' => 'confirmed', 'registered_at' => now()]);
 
-        $reg = $conference->registrations()->create([...$data, 'registered_at' => now()]);
+                return $existing->fresh();
+            }
+
+            return $locked->registrations()->create([...$data, 'registered_at' => now()]);
+        });
+
+        if (is_string($result)) {
+            return response()->json(['message' => $result, 'errors' => []], 422);
+        }
+        $reg = $result;
 
         // Send confirmation to registrant
         $this->sendRegistrationConfirmation($conference, $reg);
@@ -449,6 +512,28 @@ class ConferenceController extends Controller
             'message' => '',
             'errors' => [],
         ]);
+    }
+
+    /** Admin — confirm, or cancel (freeing the seat), one registration. */
+    public function updateRegistration(Request $request, string $id, string $registrationId): JsonResponse
+    {
+        if (! $request->user()?->can('conferences.manage')) {
+            return response()->json(['message' => 'Forbidden.'], 403);
+        }
+
+        $registration = ConferenceRegistration::where('conference_id', $id)->findOrFail($registrationId);
+        $data = $request->validate(['status' => 'required|in:pending,confirmed,cancelled']);
+
+        if ($data['status'] !== 'cancelled' && $registration->status === 'cancelled') {
+            $conference = Conference::findOrFail($id);
+            if ($conference->max_capacity && $conference->registrations()->whereIn('status', ['pending', 'confirmed'])->count() >= $conference->max_capacity) {
+                return response()->json(['message' => 'The conference is full — cancel another registration first.', 'errors' => []], 422);
+            }
+        }
+
+        $registration->update($data);
+
+        return response()->json(['data' => $registration->fresh(), 'message' => $data['status'] === 'cancelled' ? 'Registration cancelled — the seat is free again.' : 'Registration restored.', 'errors' => []]);
     }
 
     /** Admin — export registrations as CSV. */
@@ -487,6 +572,12 @@ class ConferenceController extends Controller
 
     // ── Email helpers ─────────────────────────────────────────────────────────
 
+    /** People who run conferences (anyone with the permission, built-in or custom role). */
+    private function organisers(): Collection
+    {
+        return User::permission('conferences.manage')->where('status', 'active')->whereNotNull('email')->get();
+    }
+
     private function senderName(): string
     {
         return AppSetting::where('key', 'system_name')->value('value') ?? config('mail.from.name');
@@ -508,7 +599,7 @@ class ConferenceController extends Controller
 
     private function notifyAdminsNewRegistration(Conference $conference, ConferenceRegistration $reg): void
     {
-        $admins = User::whereHas('roles', fn ($q) => $q->whereIn('name', ['super_admin', 'admin']))->get();
+        $admins = $this->organisers();
 
         foreach ($admins as $admin) {
             if (! $admin->email) {
@@ -531,7 +622,7 @@ class ConferenceController extends Controller
 
     private function notifyAdminsConferencePublished(Conference $conference): void
     {
-        $admins = User::whereHas('roles', fn ($q) => $q->whereIn('name', ['super_admin', 'admin']))->get();
+        $admins = $this->organisers();
 
         foreach ($admins as $admin) {
             if (! $admin->email) {

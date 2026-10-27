@@ -4,12 +4,14 @@ import {
     ResponsiveContainer, Cell, PieChart, Pie, LineChart, Line,
 } from 'recharts';
 import {
-    TrendingUp, Users, TrendingDown, Building2, BookOpen, AlertCircle,
+    TrendingUp, Users, TrendingDown, Building2, BookOpen, AlertCircle, Globe2,
     Sliders, FileSpreadsheet, ChevronRight, CheckCircle2, BarChart2, Layers,
     CalendarRange,
 } from 'lucide-react';
 import { formatCurrency } from '../../lib/utils';
 import { useToast } from '../Toast';
+import { currency, term } from '../../lib/terms';
+import { sdgByNumber } from '../../lib/sdgs';
 
 // ─── Excel export (shared by every report view) ────────────────────────────────
 
@@ -110,6 +112,12 @@ export const REPORT_META = {
         icon:  AlertCircle,
         color: 'rose',
         desc:  'Complaint volume, resolution outcomes, and average resolution time per college',
+    },
+    sdg_alignment: {
+        label: 'SDG Alignment',
+        icon:  Globe2,
+        color: 'emerald',
+        desc:  'Proposals, funded projects and money per UN Sustainable Development Goal',
     },
     custom_builder: {
         label: 'Report Builder',
@@ -238,7 +246,7 @@ function ProposalTrendChart({ data, onDrill }) {
             </ResponsiveContainer>
             <SummaryTable
                 onRowClick={onDrill ? (i) => onDrill(rows[i].raw) : undefined}
-                columns={['Academic Year', 'Submitted', 'Funded', 'Rejected', 'Funded %']}
+                columns={[term('academic_year'), 'Submitted', 'Funded', 'Rejected', 'Funded %']}
                 rows={rows.map(r => [r.name, r['Submitted'], r['Funded'], r['Rejected'], `${r['Funded %']}%`])}
             />
         </div>
@@ -272,7 +280,7 @@ function CollegePerformanceChart({ data, onDrill }) {
             </ResponsiveContainer>
             <SummaryTable
                 onRowClick={onDrill ? (i) => onDrill(rows[i].raw) : undefined}
-                columns={['College', 'Submitted', 'Accepted', 'Total Awarded', 'Outputs', 'Publications']}
+                columns={[term('college'), 'Submitted', 'Accepted', 'Total Awarded', 'Outputs', 'Publications']}
                 rows={rows.map(r => [r.name, r.Submitted, r.Accepted, formatCurrency(r.Awarded), r.Outputs, r.Pubs])}
             />
         </div>
@@ -467,7 +475,7 @@ function ProposalsByCollegeChart({ data, onDrill }) {
             </ResponsiveContainer>
             <SummaryTable
                 onRowClick={onDrill ? (i) => onDrill(rows[i].raw) : undefined}
-                columns={['College', 'Total Proposals', 'Accepted', 'Rejection Rate']}
+                columns={[term('college'), 'Total Proposals', 'Accepted', 'Rejection Rate']}
                 rows={rows.map(r => [r.name, r.Total, r.Accepted, `${r['Rejection %']}%`])}
             />
         </div>
@@ -501,11 +509,48 @@ function ComplaintsByCollegeChart({ data, onDrill }) {
             </ResponsiveContainer>
             <SummaryTable
                 onRowClick={onDrill ? (i) => onDrill(rows[i].raw) : undefined}
-                columns={['College', 'Total', 'Resolved', 'Unresolved', 'Level 1 (College)', 'Level 2 (Officer)', 'Avg Resolution']}
+                columns={[term('college'), 'Total', 'Resolved', 'Unresolved', 'Level 1 (College)', 'Level 2 (Officer)', 'Avg Resolution']}
                 rows={rows.map(r => [
                     r.name, r.Total, r.Resolved, r.Unresolved, r.level1, r.level2,
                     r.avgDays != null ? `${r.avgDays}d` : '—',
                 ])}
+            />
+        </div>
+    );
+}
+
+/** One bar per goal in the goal's own colour; goals nobody tagged are left out of the chart, kept in the table. */
+function SdgAlignmentChart({ data, onDrill }) {
+    const rows = data.map(r => ({ raw: r, name: `${r.sdg}. ${r.goal}`, Proposals: Number(r.proposals ?? 0), Funded: Number(r.funded ?? 0), awarded: Number(r.awarded ?? 0), color: sdgByNumber(r.sdg)?.color ?? '#6366f1' }));
+    const tagged = rows.filter(r => r.Proposals > 0);
+
+    return (
+        <div className="space-y-6">
+            {tagged.length === 0 ? (
+                <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 py-12 text-center">
+                    <Globe2 size={28} className="text-gray-300" />
+                    <p className="mt-2 text-sm font-medium text-gray-600">No proposals are tagged with SDGs yet</p>
+                    <p className="mt-0.5 text-xs text-gray-400">Researchers choose goals in the first step of the proposal form.</p>
+                </div>
+            ) : (
+                <ResponsiveContainer width="100%" height={Math.max(220, tagged.length * 34)}>
+                    <BarChart data={tagged} layout="vertical" margin={{ top: 4, right: 24, bottom: 4, left: 8 }}>
+                        <CartesianGrid {...GRID} horizontal={false} vertical />
+                        <XAxis type="number" allowDecimals={false} {...AXIS} />
+                        <YAxis type="category" dataKey="name" width={210} tick={{ fontSize: 11, fill: '#374151' }} tickLine={false} axisLine={false} />
+                        <Tooltip {...TOOLTIP} />
+                        <Legend {...LEGEND} />
+                        <Bar dataKey="Proposals" radius={[0, 6, 6, 0]} maxBarSize={16} onClick={drill(onDrill)} cursor={onDrill ? 'pointer' : undefined}>
+                            {tagged.map(r => <Cell key={r.raw.sdg} fill={r.color} />)}
+                        </Bar>
+                        <Bar dataKey="Funded" fill="#0f172a" radius={[0, 6, 6, 0]} maxBarSize={16} onClick={drill(onDrill)} cursor={onDrill ? 'pointer' : undefined} />
+                    </BarChart>
+                </ResponsiveContainer>
+            )}
+            <SummaryTable
+                onRowClick={onDrill ? (i) => onDrill(rows[i].raw) : undefined}
+                columns={['Goal', 'Proposals', 'Funded', 'Awarded']}
+                rows={rows.map(r => [r.name, r.Proposals, r.Funded, r.awarded ? formatCurrency(r.awarded) : '—'])}
             />
         </div>
     );
@@ -594,6 +639,7 @@ export function renderChart(type, data, { onDrill } = {}) {
         case 'approval_rate_by_category':    return <ApprovalRateChart data={data} onDrill={onDrill} />;
         case 'review_progress_pipeline':     return <ReviewPipelineChart data={data} onDrill={onDrill} />;
         case 'complaint_summary':            return <ComplaintsByCollegeChart data={data} onDrill={onDrill} />;
+        case 'sdg_alignment':                return <SdgAlignmentChart data={data} onDrill={onDrill} />;
         case 'custom_builder':               return <ReportBuilderTable data={data} />;
         default:                             return <pre className="text-xs text-gray-600 overflow-auto">{JSON.stringify(data, null, 2)}</pre>;
     }
@@ -671,7 +717,7 @@ export function reportKpis(type, rows = []) {
             return [
                 { label: 'Proposals', value: submitted, tone: 'indigo' },
                 { label: 'Accepted', value: sum(rows, 'proposals_accepted'), hint: `${pct(sum(rows, 'proposals_accepted'), submitted)} acceptance`, tone: 'emerald' },
-                { label: 'Total awarded', value: `ETB ${compact(sum(rows, 'total_awarded'))}`, tone: 'amber' },
+                { label: 'Total awarded', value: `${currency()} ${compact(sum(rows, 'total_awarded'))}`, tone: 'amber' },
                 { label: 'Research outputs', value: sum(rows, 'outputs_produced'), hint: `${sum(rows, 'publications_count')} journal articles`, tone: 'slate' },
             ];
         }
@@ -692,9 +738,9 @@ export function reportKpis(type, rows = []) {
             const disbursed = sum(rows, 'disbursed');
             return [
                 { label: 'Funded projects', value: rows.length, tone: 'slate' },
-                { label: 'Allocated', value: `ETB ${compact(allocated)}`, tone: 'indigo' },
-                { label: 'Disbursed', value: `ETB ${compact(disbursed)}`, hint: `${pct(disbursed, allocated)} of allocation`, tone: 'emerald' },
-                { label: 'Settled', value: `ETB ${compact(sum(rows, 'settled'))}`, tone: 'amber' },
+                { label: 'Allocated', value: `${currency()} ${compact(allocated)}`, tone: 'indigo' },
+                { label: 'Disbursed', value: `${currency()} ${compact(disbursed)}`, hint: `${pct(disbursed, allocated)} of allocation`, tone: 'emerald' },
+                { label: 'Settled', value: `${currency()} ${compact(sum(rows, 'settled'))}`, tone: 'amber' },
             ];
         }
         case 'complaint_summary': {
@@ -706,6 +752,16 @@ export function reportKpis(type, rows = []) {
                 { label: 'Unresolved', value: sum(rows, 'unresolved'), tone: 'red' },
                 { label: 'Resolution rate', value: pct(closed, total), tone: 'emerald' },
                 { label: 'Avg days to resolve', value: timed.length ? (timed.reduce((s, r) => s + num(r.avg_resolution_days), 0) / timed.length).toFixed(1) : '—', tone: 'amber' },
+            ];
+        }
+        case 'sdg_alignment': {
+            const tagged = rows.filter((r) => num(r.proposals) > 0);
+            const top = [...tagged].sort((a, b) => num(b.proposals) - num(a.proposals))[0];
+            return [
+                { label: 'Goals addressed', value: `${tagged.length} / 17`, tone: 'emerald' },
+                { label: 'Top goal', value: top ? `SDG ${top.sdg}` : '—', hint: top?.goal, tone: 'indigo' },
+                { label: 'Funded (goal links)', value: sum(rows, 'funded'), hint: 'A project can serve several goals', tone: 'amber' },
+                { label: 'Awarded (goal links)', value: `${currency()} ${compact(sum(rows, 'awarded'))}`, tone: 'slate' },
             ];
         }
         default:

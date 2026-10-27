@@ -20,6 +20,11 @@ Schedule::command('notifications:send-digests weekly')->weeklyOn(1, '07:00');
 Schedule::command('rtt:track-ethical-clearance-expiry')->dailyAt('08:30');
 Schedule::command('rtt:defence-deadlines')->everyFifteenMinutes()->withoutOverlapping();
 Schedule::command('rtt:progress-reports')->dailyAt('07:30')->withoutOverlapping();
+Schedule::command('rtt:risk-digest')->weeklyOn(1, '07:45')->withoutOverlapping();
+Schedule::command('rtt:officer-digest')->weekdays()->at('07:15')->withoutOverlapping();
+Schedule::command('rtt:contract-chase')->dailyAt('09:00')->withoutOverlapping();
+Schedule::command('rtt:stage-escalations')->weekdays()->at('09:15')->withoutOverlapping();
+Schedule::command('rtt:report-subscriptions')->dailyAt('06:30')->withoutOverlapping();
 
 // Backups run 3x/day, admin-configurable via Settings — Backup & Recovery
 // (backup_time / backup_time_2 / backup_time_3), defaulting to 6 AM / 6 PM / midnight.

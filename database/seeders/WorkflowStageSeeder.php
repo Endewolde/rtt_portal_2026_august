@@ -56,6 +56,7 @@ class WorkflowStageSeeder extends Seeder
             'schedule_defence',
             'pass_defence',
             'fail_defence',
+            'skip_defence',
             'accept',
             'central_approve',
             'central_reject',
@@ -120,6 +121,8 @@ class WorkflowStageSeeder extends Seeder
             // is allowed to change.
             ['from' => 'blind_review_passed', 'action' => 'fail_blind_review',     'to' => 'rejected',            'roles' => $adminFull],
             ['from' => 'blind_review_passed', 'action' => 'schedule_defence',      'to' => 'under_open_defence',  'roles' => $adminWithCol],
+            // Calls whose review route has no open defence go straight to central evaluation.
+            ['from' => 'blind_review_passed', 'action' => 'skip_defence',          'to' => 'accepted',            'roles' => $adminFull],
             ['from' => 'under_open_defence', 'action' => 'pass_defence',          'to' => 'accepted',            'roles' => $adminFull],
             ['from' => 'under_open_defence', 'action' => 'fail_defence',          'to' => 'rejected',            'roles' => $adminFull],
             // Same action, a second edge — same reasoning as blind_review_passed's

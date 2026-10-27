@@ -8,6 +8,8 @@ import { get, post } from '../../lib/api';
 import { getCategoryLabel } from '../../lib/utils';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../Components/Toast';
+import { term } from '../../lib/terms';
+import { programmeKeys } from '../../lib/programmes';
 
 const fmt = (v) => (v === null || v === undefined ? '—' : `${v}d`);
 
@@ -60,14 +62,14 @@ function CollegeMatrix({ colleges, stages }) {
         <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-sm">
                 <thead>
-                    <tr className="border-b border-gray-100 bg-gray-50/80 text-[11px] font-semibold uppercase tracking-wider text-gray-500">
-                        <th className="px-4 py-2.5 text-left">College</th>
+                    <tr className="border-b border-gray-100 bg-gray-50/80 text-[11px] font-semibold uppercase tracking-wider text-gray-500"><th className="px-4 py-2.5 w-10 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">#</th>
+                        <th className="px-4 py-2.5 text-left">{term('college')}</th>
                         {stages.map((s) => <th key={s.stage} className="px-1 py-2.5 text-center">{s.label}</th>)}
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                    {colleges.map((c) => (
-                        <tr key={c.college}>
+                    {colleges.map((c, rowIdx) => (
+                        <tr key={c.college}><td className="px-4 py-2 w-10 text-xs font-medium tabular-nums text-gray-400">{rowIdx + 1}</td>
                             <td className="px-4 py-2 text-gray-800">{c.college}<span className="ml-1 text-xs text-gray-400">({c.proposals})</span></td>
                             {stages.map((s) => {
                                 const v = c.stages[s.stage];
@@ -135,19 +137,19 @@ export default function Turnaround() {
             <InsightsNav />
             <div className="mx-auto max-w-7xl space-y-6">
                 <PageHeader icon={Timer} color="indigo" title="Turnaround" description="How long proposals wait at each stage, what is stuck, and who to nudge.">
-                    <Select label="Academic year" value={filters.academic_year} onChange={(v) => setFilter('academic_year', v)}>
+                    <Select label={term('academic_year')} value={filters.academic_year} onChange={(v) => setFilter('academic_year', v)}>
                         {(data?.academic_years ?? []).map((y) => <option key={y} value={y}>{y}</option>)}
                     </Select>
                     {isCentral && (
-                        <Select label="College" value={filters.college_id} onChange={(v) => setFilter('college_id', v)}>
-                            <option value="">All colleges</option>
+                        <Select label={term('college')} value={filters.college_id} onChange={(v) => setFilter('college_id', v)}>
+                            <option value="">All {term('college', { plural: true, lower: true })}</option>
                             {(data?.college_options ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                         </Select>
                     )}
                     {isCentral && (
                         <Select label="Category" value={filters.category} onChange={(v) => setFilter('category', v)}>
                             <option value="">All categories</option>
-                            {['research', 'community_engagement', 'technology_transfer'].map((c) => <option key={c} value={c}>{getCategoryLabel(c)}</option>)}
+                            {programmeKeys().map((c) => <option key={c} value={c}>{getCategoryLabel(c)}</option>)}
                         </Select>
                     )}
                     <RefreshButton onClick={load} loading={loading} />

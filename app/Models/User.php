@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -22,11 +23,27 @@ use Spatie\Permission\Traits\HasRoles;
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
-    use HasApiTokens, HasFactory, HasRoles, HasUuids, Notifiable, SoftDeletes;
+    use HasApiTokens, HasFactory, HasUuids, Notifiable, SoftDeletes;
+    use HasRoles {
+        roles as private spatieRoles;
+    }
 
     // Force Spatie to look up roles/permissions under 'web' guard
     // regardless of which guard (sanctum, api, etc.) authenticated the request.
     protected $guard_name = 'web';
+
+    /**
+     * The user's roles, latest assigned first — so wherever one role is shown for a
+     * person, it is the one they were given most recently. Assignments from before
+     * this was recorded fall back to the newest role.
+     */
+    public function roles(): BelongsToMany
+    {
+        return $this->spatieRoles()
+            ->withPivot('assigned_at')
+            ->orderByPivot('assigned_at', 'desc')
+            ->orderBy(config('permission.table_names.roles').'.created_at', 'desc');
+    }
 
     protected $primaryKey = 'id';
 
@@ -43,6 +60,8 @@ class User extends Authenticatable
         'college_id',
         'department_id',
         'expertise',
+        'mentor_available',
+        'mentor_note',
         'affiliation',
         'public_profile',
         'profile_slug',
@@ -74,6 +93,15 @@ class User extends Authenticatable
         'telegram_link_token',
     ];
 
+    /** A user removed for good takes their role and permission links with them. */
+    protected static function booted(): void
+    {
+        static::forceDeleted(function (User $user) {
+            $user->roles()->detach();
+            $user->permissions()->detach();
+        });
+    }
+
     protected function casts(): array
     {
         return [
@@ -84,6 +112,7 @@ class User extends Authenticatable
             'first_login_at' => 'datetime',
             'password' => 'hashed',
             'expertise' => 'array',
+            'mentor_available' => 'boolean',
             'public_profile' => 'boolean',
             'two_factor_enabled' => 'boolean',
             'alert_preferences' => 'array',

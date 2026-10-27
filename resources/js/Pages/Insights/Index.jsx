@@ -10,6 +10,7 @@ import InsightsNav, { useInsightsPages } from '../../Components/InsightsNav';
 import { useAuth } from '../../hooks/useAuth';
 import { get } from '../../lib/api';
 import { getStatusLabel } from '../../lib/utils';
+import { currency, term } from '../../lib/terms';
 
 const STAGE_COLORS = ['#6366f1', '#4f46e5', '#f59e0b', '#f97316', '#8b5cf6', '#14b8a6', '#10b981', '#06b6d4', '#0ea5e9'];
 const compact = (v) => new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(Number(v ?? 0));
@@ -157,7 +158,7 @@ export default function InsightsIndex() {
                             <span className="sr-only">Academic year</span>
                             <select value={year} onChange={(e) => setYear(e.target.value)}
                                 className="appearance-none rounded-xl bg-white/10 py-2.5 pl-4 pr-10 text-sm font-semibold text-white ring-1 ring-white/20 focus:outline-none focus:ring-white/50">
-                                <option value="" className="text-gray-900">All academic years</option>
+                                <option value="" className="text-gray-900">All {term('academic_year', { plural: true, lower: true })}</option>
                                 {[...new Set([year, ...years].filter(Boolean))].map((y) => <option key={y} value={y} className="text-gray-900">{y}</option>)}
                             </select>
                             <ChevronDown size={15} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-300" />
@@ -172,8 +173,8 @@ export default function InsightsIndex() {
                     <Kpi icon={Trophy} label="Funded" value={n(totals.funded)} tone="bg-emerald-100 text-emerald-600" loading={stats.loading} hint="Including running projects" />
                     <Kpi icon={Target} label="Success rate" value={successRate != null ? `${successRate}%` : '—'} tone="bg-violet-100 text-violet-600" loading={stats.loading} hint="Funded of all decided" />
                     {canReports && (
-                        <Kpi icon={Wallet} label="Disbursed" value={`ETB ${compact(disbursed)}`} tone="bg-teal-100 text-teal-600" loading={budget.loading}
-                            hint={allocated > 0 ? `${Math.round((disbursed / allocated) * 100)}% of ETB ${compact(allocated)}` : 'Nothing allocated'} href="/reports?type=budget_utilization" />
+                        <Kpi icon={Wallet} label="Disbursed" value={`${currency()} ${compact(disbursed)}`} tone="bg-teal-100 text-teal-600" loading={budget.loading}
+                            hint={allocated > 0 ? `${Math.round((disbursed / allocated) * 100)}% of ${currency()} ${compact(allocated)}` : 'Nothing allocated'} href="/reports?type=budget_utilization" />
                     )}
                     {canRisk && (
                         <Kpi icon={ShieldAlert} label="Projects at risk" value={n(riskSummary?.high)} tone="bg-red-100 text-red-600" loading={risk.loading}
@@ -184,7 +185,7 @@ export default function InsightsIndex() {
                 {canReports && (
                     <div className="grid gap-6 lg:grid-cols-5">
                         {/* Funnel */}
-                        <Panel title="Where proposals are" subtitle={year || 'All academic years'} href={`/reports?type=review_progress_pipeline${year ? `&academic_year=${year}` : ''}`} className="lg:col-span-2">
+                        <Panel title="Where proposals are" subtitle={year || `All ${term('academic_year', { plural: true, lower: true })}`} href={`/reports?type=review_progress_pipeline${year ? `&academic_year=${year}` : ''}`} className="lg:col-span-2">
                             {pipeline.loading ? <Skeleton h="h-64" /> : stages.length === 0 ? (
                                 <p className="py-16 text-center text-sm text-gray-400">No proposals in the pipeline.</p>
                             ) : (
@@ -245,7 +246,7 @@ export default function InsightsIndex() {
                             {budget.loading ? <Skeleton h="h-32" /> : (
                                 <div className="space-y-4">
                                     <div className="flex items-baseline gap-2">
-                                        <p className="text-2xl font-bold tabular-nums text-gray-900">ETB {compact(allocated)}</p>
+                                        <p className="text-2xl font-bold tabular-nums text-gray-900">{currency()} {compact(allocated)}</p>
                                         <p className="text-xs text-gray-400">allocated</p>
                                     </div>
                                     <div className="flex h-2.5 overflow-hidden rounded-full bg-gray-100">
@@ -261,7 +262,7 @@ export default function InsightsIndex() {
                                             <li key={label} className="flex items-center gap-2">
                                                 <span className={`h-2 w-2 shrink-0 rounded-full ${dot}`} />
                                                 <span className="flex-1 text-gray-600">{label}</span>
-                                                <span className="font-semibold tabular-nums text-gray-900">ETB {compact(value)}</span>
+                                                <span className="font-semibold tabular-nums text-gray-900">{currency()} {compact(value)}</span>
                                             </li>
                                         ))}
                                     </ul>

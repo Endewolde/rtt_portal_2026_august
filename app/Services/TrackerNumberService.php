@@ -2,17 +2,18 @@
 
 namespace App\Services;
 
+use App\Support\Programmes;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class TrackerNumberService
 {
     private array $prefixes = [
-        'research'             => 'RES',
+        'research' => 'RES',
         'community_engagement' => 'COM',
-        'technology_transfer'  => 'TECH',
-        'innovation'           => 'INN',
-        'other'                => 'OTH',
+        'technology_transfer' => 'TECH',
+        'innovation' => 'INN',
+        'other' => 'OTH',
     ];
 
     /**
@@ -24,11 +25,11 @@ class TrackerNumberService
      */
     public function generate(string $category, string $year): string
     {
-        if (! isset($this->prefixes[$category])) {
+        // The programme's own prefix (Settings → Programmes); legacy codes keep theirs.
+        $prefix = Programmes::prefix($category) ?? ($this->prefixes[$category] ?? null);
+        if (! $prefix) {
             throw new \InvalidArgumentException("Unknown proposal category: {$category}");
         }
-
-        $prefix = $this->prefixes[$category];
 
         $sequence = DB::transaction(function () use ($category, $year) {
             $row = DB::table('tracker_numbers')
@@ -44,17 +45,17 @@ class TrackerNumberService
                     ->where('academic_year', $year)
                     ->update([
                         'last_sequence' => $newSequence,
-                        'updated_at'    => now(),
+                        'updated_at' => now(),
                     ]);
             } else {
                 $newSequence = 1;
                 DB::table('tracker_numbers')->insert([
-                    'id'            => Str::uuid()->toString(),
-                    'category'      => $category,
+                    'id' => Str::uuid()->toString(),
+                    'category' => $category,
                     'academic_year' => $year,
                     'last_sequence' => $newSequence,
-                    'created_at'    => now(),
-                    'updated_at'    => now(),
+                    'created_at' => now(),
+                    'updated_at' => now(),
                 ]);
             }
 

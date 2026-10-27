@@ -1,33 +1,38 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link } from '@inertiajs/react';
 import {
-    DollarSign, Plus, ChevronDown, ChevronUp, CheckCircle2,
-    Clock, Send, XCircle, CreditCard, FileCheck, AlertCircle,
-    LayoutGrid, TableProperties, X, Info, Pencil, Trash2, Banknote, Trophy,
+    DollarSign, Plus, ChevronDown, CheckCircle2, Clock, Send, XCircle, CreditCard, FileCheck,
+    X, Info, Pencil, Trash2, Banknote, Trophy, Search, PenLine, Building2, Landmark, Lock,
+    AlertTriangle, Flag, Loader2, ArrowRight, Wallet, Inbox,
 } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import ViewToggle from '../../Components/ViewToggle';
-import ConfirmDialog from '../../Components/ConfirmDialog';
+import { PageHeader, StatCard, Panel, EmptyState, Select, RefreshButton, StatSkeletons, Skeleton, DataTable } from '../../Components/Insights/Kit';
 import { useAuth } from '../../hooks/useAuth';
 import { useViewPreference } from '../../hooks/useViewPreference';
 import { useConfirm } from '../../hooks/useConfirm';
 import { useToast } from '../../Components/Toast';
 import { formatDate, formatCurrency } from '../../lib/utils';
+import { programmeLabel, programmeColor } from '../../lib/programmes';
 import api from '../../lib/api';
 import RejectWithReasonModal from '../../Components/RejectWithReasonModal';
+import { currency, term } from '../../lib/terms';
+import ProposalHover from '../../Components/Finance/ProposalHover';
+import DownloadMenu from '../../Components/Finance/DownloadMenu';
+import ClearButton from '../../Components/Finance/ClearButton';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG = {
-    draft:              { label: 'Draft',                  cls: 'bg-gray-100 text-gray-600',      icon: Clock        },
-    pending_signatures: { label: 'Pending Signatures',     cls: 'bg-yellow-100 text-yellow-700',  icon: Clock        },
-    submitted:          { label: 'Awaiting College Review', cls: 'bg-blue-100 text-blue-700',     icon: Send         },
-    college_approved:   { label: 'College Approved',       cls: 'bg-indigo-100 text-indigo-700',  icon: CheckCircle2 },
-    finance_returned:   { label: 'Returned by Finance',    cls: 'bg-orange-100 text-orange-700',  icon: XCircle      },
-    rejected:           { label: 'Rejected',               cls: 'bg-red-100 text-red-700',        icon: XCircle      },
-    approved:           { label: 'Finance Approved',       cls: 'bg-green-100 text-green-700',    icon: CheckCircle2 },
-    disbursed:          { label: 'Disbursed',              cls: 'bg-teal-100 text-teal-700',      icon: CreditCard   },
-    settled:            { label: 'Settled',                cls: 'bg-slate-100 text-slate-600',    icon: FileCheck    },
+    draft:              { label: 'Draft',                   cls: 'bg-gray-100 text-gray-600 ring-gray-200',          icon: Clock },
+    pending_signatures: { label: 'Awaiting signatures',     cls: 'bg-amber-50 text-amber-700 ring-amber-200',        icon: PenLine },
+    submitted:          { label: 'Awaiting college review', cls: 'bg-sky-50 text-sky-700 ring-sky-200',              icon: Send },
+    college_approved:   { label: 'Awaiting finance review', cls: 'bg-indigo-50 text-indigo-700 ring-indigo-200',     icon: Landmark },
+    finance_returned:   { label: 'Returned by finance',     cls: 'bg-orange-50 text-orange-700 ring-orange-200',     icon: XCircle },
+    rejected:           { label: 'Rejected',                cls: 'bg-red-50 text-red-700 ring-red-200',              icon: XCircle },
+    approved:           { label: 'Approved · ready to pay', cls: 'bg-emerald-50 text-emerald-700 ring-emerald-200',  icon: CheckCircle2 },
+    disbursed:          { label: 'Disbursed',               cls: 'bg-teal-50 text-teal-700 ring-teal-200',           icon: CreditCard },
+    settled:            { label: 'Settled',                 cls: 'bg-slate-100 text-slate-600 ring-slate-200',       icon: FileCheck },
 };
 
 const BUDGET_CATEGORIES = [
@@ -36,1316 +41,919 @@ const BUDGET_CATEGORIES = [
     'Software & Licenses', 'Publication', 'Overhead', 'Other',
 ];
 
-const STATUS_TABS = [
-    { key: 'all',             label: 'All' },
-    { key: 'pending',         label: 'Pending',          match: ['draft', 'pending_signatures', 'submitted'] },
-    { key: 'college_review',  label: 'College Review',   match: ['submitted', 'finance_returned'] },
-    { key: 'finance_review',  label: 'Finance Review',   match: ['college_approved', 'approved'] },
-    { key: 'approved',        label: 'Approved',         match: ['approved'] },
-    { key: 'rejected',        label: 'Rejected',         match: ['rejected', 'finance_returned'] },
-    { key: 'disbursed',       label: 'Disbursed',        match: ['disbursed'] },
-    { key: 'settled',         label: 'Settled',          match: ['settled'] },
+/** The road every request travels; returned and rejected requests stop at the college step. */
+const STAGES = [
+    { key: 'sign', label: 'Signatures', icon: PenLine },
+    { key: 'college', label: 'College', icon: Building2 },
+    { key: 'finance', label: 'Finance', icon: Landmark },
+    { key: 'paid', label: 'Disbursed', icon: Banknote },
+    { key: 'settled', label: 'Settled', icon: Flag },
 ];
+const STAGE_INDEX = { draft: 0, pending_signatures: 0, submitted: 1, finance_returned: 1, rejected: 1, college_approved: 2, approved: 3, disbursed: 4, settled: 5 };
 
-// ─── Status badge ─────────────────────────────────────────────────────────────
+const blankItem = () => ({ category: '', description: '', amount: '', justification: '' });
+const inputCls = 'w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-base focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 sm:text-sm';
+
+// ─── Small pieces ─────────────────────────────────────────────────────────────
 
 function StatusBadge({ status }) {
     const cfg = STATUS_CONFIG[status] ?? STATUS_CONFIG.draft;
     const Icon = cfg.icon;
     return (
-        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${cfg.cls}`}>
-            <Icon size={10} />{cfg.label}
+        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${cfg.cls}`}>
+            <Icon size={11} /> {cfg.label}
         </span>
     );
 }
 
-// ─── Signature progress ───────────────────────────────────────────────────────
-
 function SigProgress({ signatures }) {
-    const signed = signatures.filter(s => s.status === 'signed').length;
-    const total  = signatures.length;
+    const signed = signatures.filter((s) => s.status === 'signed').length;
+    const total = signatures.length;
     if (!total) return <span className="text-xs text-gray-400">—</span>;
+    const done = signed === total;
     return (
-        <div className="flex items-center gap-1.5">
-            <div className="flex-1 h-1.5 bg-gray-100 rounded-full w-16 overflow-hidden">
-                <div className={`h-full rounded-full transition-all ${signed === total ? 'bg-green-500' : 'bg-amber-400'}`}
-                    style={{ width: `${(signed / total) * 100}%` }} />
-            </div>
-            <span className={`text-xs font-medium ${signed === total ? 'text-green-600' : 'text-amber-600'}`}>
-                {signed}/{total}
+        <span className="inline-flex items-center gap-1.5" title={`${signed} of ${total} signed`}>
+            <span className="h-1.5 w-14 overflow-hidden rounded-full bg-gray-100">
+                <span className={`block h-full rounded-full ${done ? 'bg-emerald-500' : 'bg-amber-400'}`} style={{ width: `${(signed / total) * 100}%` }} />
             </span>
+            <span className={`text-[11px] font-semibold tabular-nums ${done ? 'text-emerald-600' : 'text-amber-600'}`}>{signed}/{total}</span>
+        </span>
+    );
+}
+
+function StageTrack({ status }) {
+    const at = STAGE_INDEX[status] ?? 0;
+    const stopped = status === 'rejected' || status === 'finance_returned';
+    return (
+        <ol className="flex items-center gap-1">
+            {STAGES.map((s, i) => {
+                const done = i < at;
+                const current = i === at;
+                const Icon = s.icon;
+                return (
+                    <li key={s.key} className="flex min-w-0 flex-1 items-center gap-1">
+                        <span title={s.label}
+                            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ring-1 ${
+                                done ? 'bg-emerald-500 text-white ring-emerald-500'
+                                    : current ? (stopped ? 'bg-red-50 text-red-600 ring-red-300' : 'bg-indigo-50 text-indigo-600 ring-indigo-300')
+                                    : 'bg-white text-gray-300 ring-gray-200'}`}>
+                            {done ? <CheckCircle2 size={14} /> : <Icon size={13} />}
+                        </span>
+                        <span className={`hidden truncate text-[11px] font-medium md:inline ${done ? 'text-emerald-700' : current ? (stopped ? 'text-red-600' : 'text-indigo-700') : 'text-gray-400'}`}>{s.label}</span>
+                        {i < STAGES.length - 1 && <span className={`h-px min-w-2 flex-1 ${done ? 'bg-emerald-300' : 'bg-gray-200'}`} />}
+                    </li>
+                );
+            })}
+        </ol>
+    );
+}
+
+function ProgrammeDot({ category }) {
+    if (!category) return null;
+    const color = programmeColor(category);
+    return (
+        <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium" style={{ backgroundColor: `${color}14`, color }}>
+            <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: color }} /> {programmeLabel(category)}
+        </span>
+    );
+}
+
+function Sheet({ title, subtitle, icon: Icon, tone = 'bg-indigo-100 text-indigo-600', onClose, children, footer, wide }) {
+    return (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 backdrop-blur-sm sm:items-center sm:p-4">
+            <div role="dialog" aria-modal="true" className={`flex max-h-[94vh] w-full flex-col rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl ${wide ? 'max-w-2xl' : 'max-w-md'}`}>
+                <div className="flex items-start justify-between gap-3 border-b border-gray-100 px-6 py-4">
+                    <div className="flex min-w-0 items-center gap-3">
+                        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${tone}`}><Icon size={18} /></span>
+                        <div className="min-w-0">
+                            <h2 className="text-lg font-bold text-gray-900">{title}</h2>
+                            {subtitle && <p className="truncate text-xs text-gray-500">{subtitle}</p>}
+                        </div>
+                    </div>
+                    <button onClick={onClose} aria-label="Close" className="rounded-lg p-1 text-gray-400 hover:bg-gray-100"><X size={16} /></button>
+                </div>
+                <div className="flex-1 space-y-5 overflow-y-auto px-6 py-5">{children}</div>
+                {footer && <div className="flex gap-3 border-t border-gray-100 px-6 py-4">{footer}</div>}
+            </div>
         </div>
     );
 }
 
-// ─── Create modal ─────────────────────────────────────────────────────────────
+function Callout({ tone = 'amber', icon: Icon = Info, title, children }) {
+    const tones = {
+        amber: 'border-amber-200 bg-amber-50 text-amber-800',
+        red: 'border-red-200 bg-red-50 text-red-800',
+        sky: 'border-sky-200 bg-sky-50 text-sky-800',
+        emerald: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+        orange: 'border-orange-200 bg-orange-50 text-orange-800',
+        indigo: 'border-indigo-200 bg-indigo-50 text-indigo-800',
+    };
+    return (
+        <div className={`flex items-start gap-2.5 rounded-xl border px-4 py-3 ${tones[tone]}`}>
+            <Icon size={15} className="mt-0.5 shrink-0" />
+            <div className="min-w-0 text-sm">
+                {title && <p className="font-semibold">{title}</p>}
+                <div className={title ? 'mt-0.5 text-xs opacity-90' : 'text-xs'}>{children}</div>
+            </div>
+        </div>
+    );
+}
+
+// ─── Items editor (shared by create and edit) ─────────────────────────────────
+
+function ItemsEditor({ items, setItems, cap, capNote }) {
+    const total = items.reduce((s, x) => s + (parseFloat(x.amount) || 0), 0);
+    const over = cap !== null && total > cap;
+    const update = (i, field, value) => setItems((list) => list.map((x, idx) => (idx === i ? { ...x, [field]: value } : x)));
+
+    return (
+        <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold text-gray-800">Budget items</p>
+                {cap !== null && (
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold tabular-nums ${over ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                        {formatCurrency(Math.max(0, cap - total))} still available
+                    </span>
+                )}
+            </div>
+            {capNote}
+
+            {items.map((item, i) => {
+                const amount = parseFloat(item.amount) || 0;
+                const itemMax = cap !== null ? Math.max(0, cap - (total - amount)) : null;
+                const itemOver = itemMax !== null && amount > itemMax;
+                return (
+                    <div key={i} className={`rounded-xl border bg-gray-50/70 p-4 ${itemOver ? 'border-red-300' : 'border-gray-200'}`}>
+                        <div className="mb-3 flex items-center justify-between">
+                            <span className="text-[11px] font-bold uppercase tracking-wide text-gray-400">Item {i + 1}</span>
+                            {items.length > 1 && (
+                                <button type="button" onClick={() => setItems((list) => list.filter((_, idx) => idx !== i))}
+                                    className="inline-flex items-center gap-1 text-xs font-medium text-gray-400 hover:text-red-600">
+                                    <Trash2 size={12} /> Remove
+                                </button>
+                            )}
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                            <label className="block">
+                                <span className="mb-1 block text-xs text-gray-500">Category</span>
+                                <select value={item.category} onChange={(e) => update(i, 'category', e.target.value)} className={inputCls}>
+                                    <option value="">Choose…</option>
+                                    {BUDGET_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                            </label>
+                            <label className="block">
+                                <span className="mb-1 flex items-center justify-between text-xs">
+                                    <span className="text-gray-500">Amount ({currency()})</span>
+                                    {itemMax !== null && <span className={`font-semibold ${itemOver ? 'text-red-600' : 'text-emerald-600'}`}>max {formatCurrency(itemMax)}</span>}
+                                </span>
+                                <input type="number" min="0" step="0.01" value={item.amount} placeholder="0.00"
+                                    onChange={(e) => update(i, 'amount', e.target.value)}
+                                    className={`${inputCls} tabular-nums ${itemOver ? 'border-red-400 bg-red-50 text-red-700' : ''}`} />
+                            </label>
+                            <label className="block sm:col-span-2">
+                                <span className="mb-1 block text-xs text-gray-500">Description</span>
+                                <input value={item.description} onChange={(e) => update(i, 'description', e.target.value)} placeholder="What will this pay for?" className={inputCls} />
+                            </label>
+                            <label className="block sm:col-span-2">
+                                <span className="mb-1 block text-xs text-gray-500">Justification <span className="text-gray-400">(optional)</span></span>
+                                <input value={item.justification} onChange={(e) => update(i, 'justification', e.target.value)} placeholder="Why is it needed?" className={inputCls} />
+                            </label>
+                        </div>
+                    </div>
+                );
+            })}
+
+            <button type="button" onClick={() => setItems((list) => [...list, blankItem()])}
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-500 hover:border-indigo-300 hover:bg-indigo-50 hover:text-indigo-600">
+                <Plus size={14} /> Add item
+            </button>
+
+            <div className={`flex items-center justify-between rounded-xl px-4 py-3 text-white ${over ? 'bg-red-600' : 'bg-slate-900'}`}>
+                <span className="text-sm font-medium">{over ? `Over the limit by ${formatCurrency(total - cap)}` : 'Total requested'}</span>
+                <span className="tabular-nums">
+                    <span className="text-lg font-bold">{formatCurrency(total)}</span>
+                    {cap !== null && <span className="ml-1 text-xs opacity-70">/ {formatCurrency(cap)}</span>}
+                </span>
+            </div>
+        </div>
+    );
+}
+
+const itemsPayload = (items) => items.map((i) => ({
+    category: i.category, description: i.description, amount: parseFloat(i.amount), justification: i.justification || null,
+}));
+const itemsIncomplete = (items) => items.some((i) => !i.category || !i.description || !i.amount);
+
+// ─── Create ───────────────────────────────────────────────────────────────────
 
 function CreateModal({ proposals, templates, preselected, onClose, onSuccess }) {
     const { error } = useToast();
-    const [proposal,       setProposal]       = useState(preselected ?? null);
-    const [templateId,     setTemplateId]      = useState(templates[0]?.id ?? '');
-    const [items,          setItems]           = useState([{ category: '', description: '', amount: '', justification: '' }]);
-    const [origBudget,     setOrigBudget]      = useState([]);
-    const [budgetSummary,  setBudgetSummary]   = useState(null);
-    const [submitting,     setSubmitting]      = useState(false);
+    const [proposal, setProposal] = useState(preselected ?? (proposals.length === 1 ? proposals[0] : null));
+    const [items, setItems] = useState([blankItem()]);
+    const [origBudget, setOrigBudget] = useState([]);
+    const [summary, setSummary] = useState(null);
+    const [submitting, setSubmitting] = useState(false);
+    const templateId = templates[0]?.id ?? '';
 
-    // Load original proposal budget (for reference display + pre-fill category/description)
     useEffect(() => {
-        if (!proposal?.id) { setOrigBudget([]); setBudgetSummary(null); return; }
+        if (!proposal?.id) { setOrigBudget([]); setSummary(null); return; }
         api.get(`/proposals/${proposal.id}/budget`)
-            .then(r => {
+            .then((r) => {
                 const raw = r.data?.data?.items ?? r.data?.items ?? [];
                 setOrigBudget(Array.isArray(raw) ? raw : []);
-                if (raw.length) {
-                    // Pre-fill category + description only — amounts are left blank
-                    // so the PI must enter what they need this round within the remaining cap
-                    setItems(raw.map(b => ({
-                        category:      b.category ?? '',
-                        description:   b.item_description ?? b.description ?? '',
-                        amount:        '',
-                        justification: b.justification ?? '',
-                    })));
-                }
+                // Start from the proposal's own lines; amounts stay blank so the team asks for what this round needs.
+                if (raw.length) setItems(raw.map((b) => ({ category: b.category ?? '', description: b.item_description ?? b.description ?? '', amount: '', justification: b.justification ?? '' })));
             })
             .catch(() => {});
-        // Fetch remaining budget for this proposal
         api.get(`/proposals/${proposal.id}/budget-summary`)
-            .then(r => setBudgetSummary(r.data?.data ?? null))
-            .catch(() => setBudgetSummary(null));
+            .then((r) => setSummary(r.data?.data ?? null))
+            .catch(() => setSummary(null));
     }, [proposal?.id]);
 
-    const add    = () => setItems(p => [...p, { category: '', description: '', amount: '', justification: '' }]);
-    const remove = i  => setItems(p => p.filter((_, idx) => idx !== i));
-    const update = (i, f, v) => setItems(p => p.map((x, idx) => idx === i ? { ...x, [f]: v } : x));
-    const total  = items.reduce((s, x) => s + (parseFloat(x.amount) || 0), 0);
+    const total = items.reduce((s, x) => s + (parseFloat(x.amount) || 0), 0);
+    const cap = summary?.effective_cap ?? null;
+    const overBudget = cap !== null && total > cap;
+    const fullyUsed = !!(summary?.awarded_amount > 0 && summary?.remaining <= 0);
 
-    // Use effective_cap (50% for Round 1, remaining for subsequent rounds)
-    const remaining       = budgetSummary?.effective_cap ?? null;
-    const overBudget      = remaining !== null && total > remaining;
-    // True when the entire awarded budget has been spent across all finalized rounds
-    const budgetFullyUsed = !!(budgetSummary?.awarded_amount > 0 && budgetSummary?.remaining <= 0);
-
-    // Reason why the PI cannot create a new round yet (null = allowed)
-    const blockingReason = (() => {
-        if (!proposal || !budgetSummary || budgetFullyUsed) return null;
-
-        // Allocation must be approved before any budget request (Round 1 or later)
-        if (budgetSummary.allocation_approved === false) {
-            return {
-                title: 'Budget allocation not yet approved',
-                body:  'Your proposal\'s budget allocation must be approved by a Research, Community, or Technology Officer before you can submit a budget request.',
-            };
+    const blocking = (() => {
+        if (!proposal || !summary || fullyUsed) return null;
+        if (summary.allocation_approved === false) {
+            return { title: 'The budget allocation is not approved yet', body: 'The programme director or central office approves the allocation first; then you can request funds.' };
         }
-
-        if (budgetSummary.is_first_round) return null; // Round 1 allowed once allocation approved
-
-        // Check for an unsettled previous round
-        const unsettled = (budgetSummary.rounds ?? []).find(
-            r => r.settlement_status && r.settlement_status !== 'finance_verified'
-        );
+        if (summary.is_first_round) return null;
+        const unsettled = (summary.rounds ?? []).find((r) => r.settlement_status && r.settlement_status !== 'finance_verified');
         if (unsettled) {
-            return {
-                title: `Round ${unsettled.funding_round} settlement is not yet Finance-verified`,
-                body: 'Finance must verify and finalize the previous round\'s settlement before you can submit a new request.',
-            };
+            return { title: `Round ${unsettled.funding_round} is not settled yet`, body: 'Finance must verify the previous round’s settlement before a new request.' };
         }
-
-        // Check midterm evaluation
-        if (!budgetSummary.midterm_passed) {
-            const rec = budgetSummary.midterm?.recommendation;
-            return {
-                title: rec === 'hold'
-                    ? 'Midterm evaluation is on hold ⛔'
-                    : 'Midterm evaluation not yet passed',
-                body: rec === 'hold'
-                    ? 'Your midterm evaluation was scored "Hold". The College Officer must update the score to "Continue" before the next round is unlocked.'
-                    : 'A completed midterm evaluation with a "Continue" recommendation is required before requesting the next round.',
-            };
+        if (!summary.midterm_passed) {
+            const hold = summary.midterm?.recommendation === 'hold';
+            return hold
+                ? { title: 'The midterm evaluation is on hold', body: 'The college officer must change the result to “Continue” before the next round opens.' }
+                : { title: 'The midterm evaluation has not passed yet', body: 'A completed midterm evaluation recommending “Continue” is needed before the next round.' };
         }
-
         return null;
     })();
 
     const submit = async () => {
-        if (!proposal)                                          return error('Select a proposal.');
-        if (!templateId)                                        return error('No form template available.');
-        if (items.some(i => !i.category || !i.description || !i.amount)) return error('Fill in all required item fields.');
+        if (!proposal) return error('Choose a project.');
+        if (!templateId) return error('No request form is set up yet. Ask the finance office.');
+        if (itemsIncomplete(items)) return error('Fill in the category, description and amount of every item.');
         setSubmitting(true);
         try {
-            await api.post('/budget-requests', {
-                proposal_id:      proposal.id,
-                form_template_id: templateId,
-                items: items.map(i => ({
-                    category:      i.category,
-                    description:   i.description,
-                    amount:        parseFloat(i.amount),
-                    justification: i.justification || null,
-                })),
-            });
+            await api.post('/budget-requests', { proposal_id: proposal.id, form_template_id: templateId, items: itemsPayload(items) });
             onSuccess();
         } catch (e) {
-            error(e.response?.data?.message ?? 'Failed to create budget request.');
+            error(e.response?.data?.message ?? 'The budget request could not be created.');
         }
         setSubmitting(false);
     };
 
     return (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center p-4 overflow-y-auto">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-8">
-                {/* Header */}
-                <div className="bg-linear-to-r from-blue-600 to-indigo-600 rounded-t-2xl px-6 py-5 flex items-start justify-between">
-                    <div>
-                        <h2 className="text-lg font-bold text-white">New Budget Request</h2>
-                        <p className="text-blue-100 text-sm mt-0.5">Submit your funding request for disbursement</p>
-                    </div>
-                    <button onClick={onClose} className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white">
-                        <X size={16} />
-                    </button>
-                </div>
+        <Sheet wide title="New budget request" subtitle="Ask for this round’s funds" icon={Wallet} onClose={onClose}
+            footer={fullyUsed ? (
+                <button onClick={onClose} className="flex-1 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white">Close</button>
+            ) : (<>
+                <button onClick={onClose} className="flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50">Cancel</button>
+                <button onClick={submit} disabled={submitting || !proposal || overBudget || !!blocking}
+                    className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">
+                    {submitting && <Loader2 size={14} className="animate-spin" />} Create request
+                </button>
+            </>)}>
 
-                <div className="p-6 space-y-6">
-                    {/* Proposal selector */}
-                    <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">
-                            Funded Proposal <span className="text-red-500">*</span>
-                        </label>
-                        <div className="space-y-2">
-                            {proposals.map(p => (
-                                <button key={p.id} type="button" onClick={() => setProposal(p)}
-                                    className={`w-full text-left border-2 rounded-xl px-4 py-3 transition-all ${
-                                        proposal?.id === p.id
-                                            ? 'border-blue-600 bg-blue-50'
-                                            : 'border-gray-200 hover:border-blue-300 bg-white'
-                                    }`}
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                                            proposal?.id === p.id ? 'border-blue-600 bg-blue-600' : 'border-gray-300'
-                                        }`}>
-                                            {proposal?.id === p.id && <CheckCircle2 size={12} className="text-white" />}
-                                        </div>
-                                        <div>
-                                            <span className="font-mono text-xs font-bold text-blue-600">{p.tracker_number}</span>
-                                            <p className="text-sm text-gray-800 font-medium">{p.title}</p>
-                                        </div>
-                                    </div>
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Blocking reason — form disabled with explanation */}
-                    {proposal && budgetSummary && blockingReason && (
-                        <div className="bg-red-50 border border-red-300 rounded-xl p-4 space-y-1">
-                            <p className="text-sm font-semibold text-red-800">{blockingReason.title}</p>
-                            <p className="text-xs text-red-600">{blockingReason.body}</p>
-                        </div>
-                    )}
-
-                    {/* Budget fully utilized — show notification instead of form */}
-                    {proposal && budgetSummary && budgetFullyUsed && (
-                        <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-6 text-center space-y-3">
-                            <div className="text-4xl">🏁</div>
-                            <h3 className="text-base font-bold text-amber-800">
-                                No More Budget Requests Needed
-                            </h3>
-                            <p className="text-sm text-amber-700">
-                                The full awarded budget for this proposal has been utilized.
-                                No further budget requests can be created.
-                            </p>
-                            <div className="flex justify-center gap-6 pt-2">
-                                <div>
-                                    <p className="text-xs text-amber-600">Total Awarded</p>
-                                    <p className="text-sm font-bold text-amber-900">
-                                        {formatCurrency(budgetSummary.awarded_amount)}
-                                    </p>
-                                </div>
-                                <div>
-                                    <p className="text-xs text-amber-600">Total Spent</p>
-                                    <p className="text-sm font-bold text-amber-900">
-                                        {formatCurrency(budgetSummary.total_spent)}
-                                    </p>
-                                </div>
-                                <div>
-                                    <p className="text-xs text-amber-600">Remaining</p>
-                                    <p className="text-sm font-bold text-amber-900">
-                                        {formatCurrency(0)}
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Original budget reference — hidden when budget is exhausted */}
-                    {!budgetFullyUsed && origBudget.length > 0 && !blockingReason && (
-                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                            <p className="text-xs font-bold text-amber-800 uppercase tracking-wide mb-2">
-                                Original Proposal Budget (reference)
-                            </p>
-                            <div className="space-y-1">
-                                {origBudget.map((b, i) => (
-                                    <div key={i} className="flex justify-between text-xs text-amber-700">
-                                        <span>{b.category} — {b.item_description ?? b.description}</span>
-                                        <span className="font-semibold">{formatCurrency(b.amount)}</span>
-                                    </div>
-                                ))}
-                                <div className="border-t border-amber-300 pt-1 flex justify-between text-xs font-bold text-amber-900">
-                                    <span>Total</span>
-                                    <span>{formatCurrency(origBudget.reduce((s, b) => s + parseFloat(b.amount || 0), 0))}</span>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Budget items + process info — hidden when exhausted, dimmed when blocked */}
-                    {!budgetFullyUsed && <div className={blockingReason ? 'space-y-6 opacity-40 pointer-events-none select-none' : 'space-y-6'}><div>
-                        <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-2">
-                                <label className="text-sm font-semibold text-gray-700">
-                                    Budget Items <span className="text-red-500">*</span>
-                                </label>
-                                {remaining !== null && (
-                                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                                        overBudget
-                                            ? 'bg-red-100 text-red-700'
-                                            : Math.max(0, remaining - total) === 0
-                                                ? 'bg-amber-100 text-amber-700'
-                                                : 'bg-emerald-100 text-emerald-700'
-                                    }`}>
-                                        {formatCurrency(Math.max(0, remaining - total))} available
-                                    </span>
-                                )}
-                            </div>
-                            <button type="button" onClick={add}
-                                className="text-xs text-blue-600 hover:text-blue-800 font-semibold border border-blue-200 bg-blue-50 px-3 py-1 rounded-lg">
-                                + Add Item
+            <div>
+                <p className="mb-2 text-sm font-semibold text-gray-800">Project</p>
+                <div className="space-y-2">
+                    {proposals.map((p) => {
+                        const on = proposal?.id === p.id;
+                        return (
+                            <button key={p.id} type="button" onClick={() => setProposal(p)}
+                                className={`flex w-full items-center gap-3 rounded-xl border-2 px-4 py-3 text-left transition ${on ? 'border-indigo-600 bg-indigo-50' : 'border-gray-200 hover:border-indigo-200'}`}>
+                                <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${on ? 'border-indigo-600 bg-indigo-600' : 'border-gray-300'}`}>
+                                    {on && <CheckCircle2 size={12} className="text-white" />}
+                                </span>
+                                <span className="min-w-0">
+                                    <span className="block font-mono text-xs font-bold text-indigo-600">{p.tracker_number}</span>
+                                    <span className="block truncate text-sm font-medium text-gray-800">{p.title}</span>
+                                </span>
                             </button>
-                        </div>
-                        {budgetSummary && (
-                            <div className="mb-3 space-y-1">
-                                {budgetSummary.is_first_round ? (
-                                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5">
-                                        🔒 Round 1 is capped at <strong>50%</strong> of the awarded budget ({formatCurrency(budgetSummary.round_one_cap)} max)
-                                    </p>
-                                ) : (
-                                    <>
-                                        <p className="text-xs text-gray-400">
-                                            {formatCurrency(budgetSummary.awarded_amount)} awarded — {formatCurrency(budgetSummary.total_spent)} used — {formatCurrency(budgetSummary.remaining)} remaining
-                                        </p>
-                                        {!budgetSummary.midterm_passed && (
-                                            <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-1.5">
-                                                ⚠️ Midterm evaluation not yet passed. A College Officer must score the evaluation with "Continue" before a new round can be created.
-                                            </p>
-                                        )}
-                                    </>
-                                )}
-                            </div>
-                        )}
-                        <div className="space-y-3">
-                            {items.map((item, i) => {
-                                const thisAmount = parseFloat(item.amount) || 0;
-                                const itemMax    = remaining !== null
-                                    ? Math.max(0, remaining - (total - thisAmount))
-                                    : null;
-                                const itemOver   = itemMax !== null && thisAmount > itemMax;
-
-                                return (
-                                    <div key={i} className={`border rounded-xl p-4 bg-gray-50 ${itemOver ? 'border-red-300' : 'border-gray-200'}`}>
-                                        <div className="flex items-center justify-between mb-3">
-                                            <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">Item {i + 1}</span>
-                                            {items.length > 1 && (
-                                                <button type="button" onClick={() => remove(i)}
-                                                    className="text-xs text-red-500 hover:text-red-700 font-medium">
-                                                    Remove
-                                                </button>
-                                            )}
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div>
-                                                <label className="block text-xs text-gray-500 mb-1">Category *</label>
-                                                <select value={item.category} onChange={e => update(i, 'category', e.target.value)}
-                                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                                                    <option value="">Select…</option>
-                                                    {BUDGET_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label className="flex items-center justify-between text-xs mb-1">
-                                                    <span className="text-gray-500">Amount (ETB) *</span>
-                                                    {itemMax !== null && (
-                                                        <span className={`font-semibold ${itemOver ? 'text-red-500' : 'text-emerald-600'}`}>
-                                                            max {formatCurrency(itemMax)}
-                                                        </span>
-                                                    )}
-                                                </label>
-                                                <input type="number" min="0" max={itemMax ?? undefined} step="0.01"
-                                                    value={item.amount}
-                                                    onChange={e => update(i, 'amount', e.target.value)}
-                                                    className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 ${
-                                                        itemOver
-                                                            ? 'border-red-400 bg-red-50 text-red-700 focus:ring-red-400'
-                                                            : 'border-gray-300 focus:ring-blue-500'
-                                                    }`}
-                                                    placeholder="0.00" />
-                                            </div>
-                                            <div className="col-span-2">
-                                                <label className="block text-xs text-gray-500 mb-1">Description *</label>
-                                                <input type="text" value={item.description}
-                                                    onChange={e => update(i, 'description', e.target.value)}
-                                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                    placeholder="Describe this budget item…" />
-                                            </div>
-                                            <div className="col-span-2">
-                                                <label className="block text-xs text-gray-500 mb-1">Justification</label>
-                                                <input type="text" value={item.justification}
-                                                    onChange={e => update(i, 'justification', e.target.value)}
-                                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                    placeholder="Why is this needed? (optional)" />
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                        <div className={`flex justify-between items-center mt-3 px-4 py-3 rounded-xl font-bold ${
-                            overBudget ? 'bg-red-600' : 'bg-blue-600'
-                        } text-white`}>
-                            <span className="text-sm">
-                                {overBudget
-                                    ? `Over limit by ${formatCurrency(total - remaining)}`
-                                    : 'Total Requested'}
-                            </span>
-                            <div className="text-right">
-                                <span className="text-lg">{formatCurrency(total)}</span>
-                                {remaining !== null && (
-                                    <span className="text-xs font-normal opacity-80 ml-1">/ {formatCurrency(remaining)}</span>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3">
-                        <Info size={16} className="text-blue-500 shrink-0 mt-0.5" />
-                        <div className="text-sm text-blue-700 space-y-1">
-                            <p className="font-semibold">What happens next?</p>
-                            <ol className="list-decimal list-inside space-y-0.5 text-xs">
-                                <li>All team members receive a signing notification</li>
-                                <li>Once everyone signs, you can submit for review</li>
-                                <li>College Officer / Admin approves the request</li>
-                                <li>Finance disburses the approved amount</li>
-                                <li>After spending, submit a settlement report</li>
-                            </ol>
-                        </div>
-                    </div>
-                    </div>}
-                </div>
-
-                <div className="flex gap-3 px-6 pb-6">
-                    {budgetFullyUsed ? (
-                        <button type="button" onClick={onClose}
-                            className="flex-1 px-4 py-2.5 bg-amber-500 text-white rounded-xl text-sm font-semibold hover:bg-amber-600 transition-colors">
-                            Close
-                        </button>
-                    ) : (
-                        <>
-                            <button type="button" onClick={onClose}
-                                className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-700 hover:bg-gray-50 font-medium">
-                                Cancel
-                            </button>
-                            <button type="button" onClick={submit} disabled={submitting || !proposal || overBudget || !!blockingReason}
-                                className="flex-1 px-4 py-2.5 bg-blue-700 text-white rounded-xl text-sm font-semibold hover:bg-blue-800 disabled:opacity-50 transition-colors">
-                                {submitting ? 'Creating…' : 'Create Budget Request'}
-                            </button>
-                        </>
-                    )}
+                        );
+                    })}
                 </div>
             </div>
-        </div>
+
+            {proposal && summary && (
+                <div className="grid grid-cols-3 gap-2 rounded-xl bg-gray-50 p-3 text-center">
+                    {[['Awarded', summary.awarded_amount], ['Used so far', summary.total_spent], ['Remaining', summary.remaining]].map(([label, v]) => (
+                        <div key={label}>
+                            <p className="text-[11px] text-gray-500">{label}</p>
+                            <p className="text-sm font-bold tabular-nums text-gray-900">{formatCurrency(v ?? 0)}</p>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {blocking && <Callout tone="red" icon={Lock} title={blocking.title}>{blocking.body}</Callout>}
+
+            {fullyUsed ? (
+                <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6 text-center">
+                    <Trophy size={28} className="mx-auto text-emerald-500" />
+                    <p className="mt-2 font-semibold text-emerald-900">The whole award has been used</p>
+                    <p className="mt-1 text-sm text-emerald-700">No further budget requests are needed for this project.</p>
+                </div>
+            ) : proposal && (
+                <div className={blocking ? 'pointer-events-none select-none opacity-40' : ''}>
+                    {origBudget.length > 0 && (
+                        <details className="mb-4 rounded-xl border border-gray-200 bg-white px-4 py-3">
+                            <summary className="cursor-pointer text-sm font-medium text-gray-700">Original proposal budget <span className="text-gray-400">· {formatCurrency(origBudget.reduce((s, b) => s + parseFloat(b.amount || 0), 0))}</span></summary>
+                            <div className="mt-2 space-y-1">
+                                {origBudget.map((b, i) => (
+                                    <div key={i} className="flex justify-between gap-3 text-xs text-gray-600">
+                                        <span className="truncate">{b.category} — {b.item_description ?? b.description}</span>
+                                        <span className="shrink-0 font-semibold tabular-nums">{formatCurrency(b.amount)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </details>
+                    )}
+                    <ItemsEditor items={items} setItems={setItems} cap={cap}
+                        capNote={summary?.is_first_round && <Callout tone="sky" icon={Lock}>Round 1 is capped at 50% of the award ({formatCurrency(summary.round_one_cap)}).</Callout>} />
+                    <div className="mt-4">
+                        <Callout tone="indigo" icon={ArrowRight} title="What happens next">
+                            Every team member signs → you submit it → the college reviews → finance approves and pays → you settle with receipts.
+                        </Callout>
+                    </div>
+                </div>
+            )}
+        </Sheet>
     );
 }
 
-// ─── Edit modal ───────────────────────────────────────────────────────────────
+// ─── Edit ─────────────────────────────────────────────────────────────────────
 
 function EditModal({ request, onClose, onSuccess }) {
     const { error, success } = useToast();
-    const [items, setItems] = useState(
-        (request.items ?? []).map(i => ({
-            category:      i.category      ?? '',
-            description:   i.description   ?? '',
-            amount:        i.amount        ?? '',
-            justification: i.justification ?? '',
-        }))
-    );
-    const [budgetSummary, setBudgetSummary] = useState(null);
-    const [submitting,    setSubmitting]    = useState(false);
+    const [items, setItems] = useState((request.items ?? []).map((i) => ({ category: i.category ?? '', description: i.description ?? '', amount: i.amount ?? '', justification: i.justification ?? '' })));
+    const [summary, setSummary] = useState(null);
+    const [submitting, setSubmitting] = useState(false);
 
     useEffect(() => {
-        api.get(`/proposals/${request.proposal.id}/budget-summary`)
-            .then(r => setBudgetSummary(r.data?.data ?? null))
-            .catch(() => {});
+        api.get(`/proposals/${request.proposal.id}/budget-summary`).then((r) => setSummary(r.data?.data ?? null)).catch(() => {});
     }, [request.proposal.id]);
 
-    const add    = () => setItems(p => [...p, { category: '', description: '', amount: '', justification: '' }]);
-    const remove = i  => setItems(p => p.filter((_, idx) => idx !== i));
-    const update = (i, f, v) => setItems(p => p.map((x, idx) => idx === i ? { ...x, [f]: v } : x));
-    const total  = items.reduce((s, x) => s + (parseFloat(x.amount) || 0), 0);
-
-    // Round 1 is always capped at 50% of awarded; subsequent rounds are capped at overall remaining budget
-    const isRound1   = request.funding_round === 1;
-    const remaining  = budgetSummary
-        ? isRound1
-            ? (budgetSummary.round_one_cap ?? null)
-            : budgetSummary.remaining
-        : null;
-    const overBudget = remaining !== null && total > remaining;
+    // Round 1 stays capped at half the award; later rounds at what is left.
+    const isRound1 = request.funding_round === 1;
+    const cap = summary ? (isRound1 ? (summary.round_one_cap ?? null) : summary.remaining) : null;
+    const total = items.reduce((s, x) => s + (parseFloat(x.amount) || 0), 0);
 
     const submit = async () => {
-        if (items.some(i => !i.category || !i.description || !i.amount)) {
-            return error('Fill in all required item fields.');
-        }
+        if (itemsIncomplete(items)) return error('Fill in the category, description and amount of every item.');
         setSubmitting(true);
         try {
-            await api.put(`/budget-requests/${request.id}`, {
-                items: items.map(i => ({
-                    category:      i.category,
-                    description:   i.description,
-                    amount:        parseFloat(i.amount),
-                    justification: i.justification || null,
-                })),
-            });
-            success('Budget request updated. Team members must re-sign.');
+            await api.put(`/budget-requests/${request.id}`, { items: itemsPayload(items) });
+            success('Budget request updated. Team members need to sign again.');
             onSuccess();
         } catch (e) {
-            error(e.response?.data?.message ?? 'Failed to update budget request.');
+            error(e.response?.data?.message ?? 'The budget request could not be updated.');
         }
         setSubmitting(false);
     };
 
     return (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-start justify-center p-4 overflow-y-auto">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-8">
-                {/* Header */}
-                <div className="bg-linear-to-r from-amber-500 to-orange-500 rounded-t-2xl px-6 py-5 flex items-start justify-between">
-                    <div>
-                        <h2 className="text-lg font-bold text-white">Edit Budget Request</h2>
-                        <p className="text-amber-100 text-sm mt-0.5">
-                            {request.proposal?.tracker_number} · Round {request.funding_round}
-                        </p>
-                    </div>
-                    <button onClick={onClose} className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white">
-                        <X size={16} />
-                    </button>
-                </div>
-
-                <div className="p-6 space-y-4">
-                    {/* Budget Items */}
-                    <div>
-                        <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-2">
-                                <label className="text-sm font-semibold text-gray-700">
-                                    Budget Items <span className="text-red-500">*</span>
-                                </label>
-                                {remaining !== null && (
-                                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
-                                        overBudget ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'
-                                    }`}>
-                                        {formatCurrency(Math.max(0, remaining - total))} available
-                                    </span>
-                                )}
-                            </div>
-                            <button type="button" onClick={add}
-                                className="text-xs text-blue-600 hover:text-blue-800 font-semibold border border-blue-200 bg-blue-50 px-3 py-1 rounded-lg">
-                                + Add Item
-                            </button>
-                        </div>
-
-                        {budgetSummary && isRound1 && remaining !== null && (
-                            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5 mb-3">
-                                🔒 Round 1 is capped at <strong>50%</strong> of the awarded budget ({formatCurrency(remaining)} max)
-                            </p>
-                        )}
-
-                        <div className="space-y-3">
-                            {items.map((item, i) => {
-                                const thisAmount = parseFloat(item.amount) || 0;
-                                const itemMax    = remaining !== null
-                                    ? Math.max(0, remaining - (total - thisAmount))
-                                    : null;
-                                const itemOver   = itemMax !== null && thisAmount > itemMax;
-
-                                return (
-                                    <div key={i} className={`border rounded-xl p-4 bg-gray-50 ${itemOver ? 'border-red-300' : 'border-gray-200'}`}>
-                                        <div className="flex items-center justify-between mb-3">
-                                            <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">Item {i + 1}</span>
-                                            {items.length > 1 && (
-                                                <button type="button" onClick={() => remove(i)}
-                                                    className="text-xs text-red-500 hover:text-red-700 font-medium">
-                                                    Remove
-                                                </button>
-                                            )}
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div>
-                                                <label className="block text-xs text-gray-500 mb-1">Category *</label>
-                                                <select value={item.category} onChange={e => update(i, 'category', e.target.value)}
-                                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white">
-                                                    <option value="">Select…</option>
-                                                    {BUDGET_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label className="flex items-center justify-between text-xs mb-1">
-                                                    <span className="text-gray-500">Amount (ETB) *</span>
-                                                    {itemMax !== null && (
-                                                        <span className={`font-semibold ${itemOver ? 'text-red-500' : 'text-emerald-600'}`}>
-                                                            max {formatCurrency(itemMax)}
-                                                        </span>
-                                                    )}
-                                                </label>
-                                                <input type="number" min="0" max={itemMax ?? undefined} step="0.01"
-                                                    value={item.amount}
-                                                    onChange={e => update(i, 'amount', e.target.value)}
-                                                    className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 ${
-                                                        itemOver
-                                                            ? 'border-red-400 bg-red-50 text-red-700 focus:ring-red-400'
-                                                            : 'border-gray-300 focus:ring-blue-500'
-                                                    }`}
-                                                    placeholder="0.00" />
-                                            </div>
-                                            <div className="col-span-2">
-                                                <label className="block text-xs text-gray-500 mb-1">Description *</label>
-                                                <input type="text" value={item.description}
-                                                    onChange={e => update(i, 'description', e.target.value)}
-                                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                    placeholder="Describe this budget item…" />
-                                            </div>
-                                            <div className="col-span-2">
-                                                <label className="block text-xs text-gray-500 mb-1">Justification</label>
-                                                <input type="text" value={item.justification}
-                                                    onChange={e => update(i, 'justification', e.target.value)}
-                                                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                    placeholder="Why is this needed? (optional)" />
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-
-                        <div className={`flex justify-between items-center mt-3 px-4 py-3 rounded-xl font-bold ${
-                            overBudget ? 'bg-red-600' : 'bg-amber-500'
-                        } text-white`}>
-                            <span className="text-sm">
-                                {overBudget ? `Over limit by ${formatCurrency(total - remaining)}` : 'Total Requested'}
-                            </span>
-                            <div className="text-right">
-                                <span className="text-lg">{formatCurrency(total)}</span>
-                                {remaining !== null && (
-                                    <span className="text-xs font-normal opacity-80 ml-1">/ {formatCurrency(remaining)}</span>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-
-                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                        ⚠️ Saving will reset all signatures — team members will need to re-sign.
-                    </p>
-                </div>
-
-                <div className="flex gap-3 px-6 pb-6">
-                    <button type="button" onClick={onClose}
-                        className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm text-gray-700 hover:bg-gray-50 font-medium">
-                        Cancel
-                    </button>
-                    <button type="button" onClick={submit} disabled={submitting || overBudget}
-                        className="flex-1 px-4 py-2.5 bg-amber-500 text-white rounded-xl text-sm font-semibold hover:bg-amber-600 disabled:opacity-50 transition-colors">
-                        {submitting ? 'Saving…' : 'Save Changes'}
-                    </button>
-                </div>
-            </div>
-        </div>
+        <Sheet wide title="Edit budget request" subtitle={`${request.proposal?.tracker_number} · Round ${request.funding_round}`} icon={Pencil} tone="bg-amber-100 text-amber-600" onClose={onClose}
+            footer={<>
+                <button onClick={onClose} className="flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50">Cancel</button>
+                <button onClick={submit} disabled={submitting || (cap !== null && total > cap)}
+                    className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">
+                    {submitting && <Loader2 size={14} className="animate-spin" />} Save changes
+                </button>
+            </>}>
+            <ItemsEditor items={items} setItems={setItems} cap={cap}
+                capNote={isRound1 && cap !== null && <Callout tone="sky" icon={Lock}>Round 1 is capped at 50% of the award ({formatCurrency(cap)}).</Callout>} />
+            <Callout tone="amber" icon={AlertTriangle}>Saving clears the signatures collected so far — everyone signs again.</Callout>
+        </Sheet>
     );
 }
 
-// ─── Card component ───────────────────────────────────────────────────────────
+// ─── Officer modals ───────────────────────────────────────────────────────────
 
-function NotesModal({ title, placeholder, onConfirm, onClose, confirmLabel, confirmCls }) {
+function ReturnModal({ request, onConfirm, onClose }) {
     const [notes, setNotes] = useState('');
+    const [saving, setSaving] = useState(false);
+    const valid = notes.trim().length >= 10;
     return (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-base font-semibold text-gray-900">{title}</h3>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={16} /></button>
-                </div>
-                <textarea
-                    value={notes}
-                    onChange={e => setNotes(e.target.value)}
-                    placeholder={placeholder}
-                    rows={4}
-                    className="w-full border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none mb-4"
-                    autoFocus
-                />
-                <div className="flex gap-3">
-                    <button onClick={onClose}
-                        className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 font-medium">
-                        Cancel
-                    </button>
-                    <button onClick={() => notes.trim().length >= 10 && onConfirm(notes)}
-                        disabled={notes.trim().length < 10}
-                        className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-50 transition-colors ${confirmCls}`}>
-                        {confirmLabel}
-                    </button>
-                </div>
-                {notes.trim().length < 10 && notes.length > 0 && (
-                    <p className="text-xs text-red-500 mt-2 text-center">Please provide at least 10 characters.</p>
-                )}
-            </div>
-        </div>
+        <Sheet title="Return to the college" subtitle={request.proposal?.tracker_number} icon={XCircle} tone="bg-orange-100 text-orange-600" onClose={onClose}
+            footer={<>
+                <button onClick={onClose} className="flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50">Cancel</button>
+                <button onClick={async () => { setSaving(true); await onConfirm(notes.trim()); setSaving(false); }} disabled={!valid || saving}
+                    className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50">
+                    {saving && <Loader2 size={14} className="animate-spin" />} Return with notes
+                </button>
+            </>}>
+            <label className="block">
+                <span className="mb-1 block text-sm font-medium text-gray-700">What needs to change?</span>
+                <textarea rows={4} autoFocus value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Explain what the college officer should address…" className={`${inputCls} resize-none`} />
+                <span className={`mt-1 block text-xs ${valid ? 'text-gray-400' : 'text-gray-500'}`}>At least 10 characters.</span>
+            </label>
+        </Sheet>
     );
 }
 
 function DisburseModal({ request, onClose, onSuccess }) {
     const { error, success } = useToast();
-    const [amount,        setAmount]        = useState('');
+    const [amount, setAmount] = useState(String(request.total_amount ?? ''));
     const [transactionId, setTransactionId] = useState('');
-    const [chequeNumber,  setChequeNumber]  = useState('');
-    const [notes,         setNotes]         = useState('');
-    const [saving,        setSaving]        = useState(false);
+    const [chequeNumber, setChequeNumber] = useState('');
+    const [notes, setNotes] = useState('');
+    const [saving, setSaving] = useState(false);
 
     const submit = async () => {
         if (!amount || parseFloat(amount) <= 0) return error('Enter a valid amount.');
         setSaving(true);
         try {
             await api.post(`/budget-requests/${request.id}/disburse`, {
-                amount: parseFloat(amount),
-                transaction_id: transactionId || undefined,
-                cheque_number: chequeNumber || undefined,
-                notes: notes || undefined,
+                amount: parseFloat(amount), transaction_id: transactionId || undefined, cheque_number: chequeNumber || undefined, notes: notes || undefined,
             });
-            success('Funds disbursed. PI and members have been notified.');
+            success('Funds disbursed. The team has been told.');
             onSuccess();
         } catch (e) {
-            error(e.response?.data?.message ?? 'Disbursement failed.');
+            error(e.response?.data?.message ?? 'The disbursement could not be recorded.');
         }
         setSaving(false);
     };
 
-    const inp = 'w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300';
-
     return (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-                <div className="bg-linear-to-r from-emerald-500 to-teal-500 rounded-t-2xl px-6 py-5 flex items-center justify-between">
-                    <div>
-                        <h2 className="text-lg font-bold text-white">Record Disbursement</h2>
-                        <p className="text-emerald-100 text-sm mt-0.5">{request.proposal?.tracker_number} · {formatCurrency(request.total_amount)} approved</p>
-                    </div>
-                    <button onClick={onClose} className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white"><X size={16} /></button>
-                </div>
-                <div className="p-6 space-y-4">
-                    <div>
-                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">Amount Disbursed <span className="text-red-500">*</span></label>
-                        <input type="number" min="0.01" step="0.01" placeholder="0.00" value={amount} onChange={e => setAmount(e.target.value)} className={inp} />
-                    </div>
-                    <div>
-                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">Transaction / Reference ID</label>
-                        <input type="text" placeholder="Optional" value={transactionId} onChange={e => setTransactionId(e.target.value)} className={inp} />
-                    </div>
-                    <div>
-                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">Cheque Number</label>
-                        <input type="text" placeholder="Optional" value={chequeNumber} onChange={e => setChequeNumber(e.target.value)} className={inp} />
-                    </div>
-                    <div>
-                        <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 block">Notes</label>
-                        <textarea rows={2} placeholder="Optional notes…" value={notes} onChange={e => setNotes(e.target.value)} className={inp + ' resize-none'} />
-                    </div>
-                    <div className="flex gap-3 pt-2">
-                        <button onClick={onClose} className="flex-1 px-4 py-2.5 rounded-xl border border-gray-200 text-sm text-gray-700 hover:bg-gray-50">Cancel</button>
-                        <button onClick={submit} disabled={saving || !amount}
-                            className="flex-1 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold disabled:opacity-50">
-                            {saving ? 'Recording…' : 'Record Disbursement'}
-                        </button>
-                    </div>
-                </div>
+        <Sheet title="Record disbursement" subtitle={`${request.proposal?.tracker_number} · ${formatCurrency(request.total_amount)} approved`} icon={Banknote} tone="bg-teal-100 text-teal-600" onClose={onClose}
+            footer={<>
+                <button onClick={onClose} className="flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50">Cancel</button>
+                <button onClick={submit} disabled={saving || !amount}
+                    className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-50">
+                    {saving && <Loader2 size={14} className="animate-spin" />} Record disbursement
+                </button>
+            </>}>
+            <label className="block">
+                <span className="mb-1 block text-sm font-medium text-gray-700">Amount paid ({currency()})</span>
+                <input type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className={`${inputCls} tabular-nums`} />
+            </label>
+            <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                    <span className="mb-1 block text-sm font-medium text-gray-700">Transaction reference</span>
+                    <input value={transactionId} onChange={(e) => setTransactionId(e.target.value)} placeholder="Optional" className={inputCls} />
+                </label>
+                <label className="block">
+                    <span className="mb-1 block text-sm font-medium text-gray-700">Cheque number</span>
+                    <input value={chequeNumber} onChange={(e) => setChequeNumber(e.target.value)} placeholder="Optional" className={inputCls} />
+                </label>
             </div>
-        </div>
+            <label className="block">
+                <span className="mb-1 block text-sm font-medium text-gray-700">Notes</span>
+                <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Optional" className={`${inputCls} resize-none`} />
+            </label>
+        </Sheet>
     );
 }
 
-function RequestCard({ request, userId, isOfficer, isAdmin, onRefresh }) {
+// ─── What the viewer may do with a request ────────────────────────────────────
+
+function useAbilities() {
+    const { user, hasPermission } = useAuth();
+    // Same stages as the server: the college stage is for those who can't give the finance approval.
+    const isFinance = hasPermission('budget_requests.approve_finance');
+    const isCollege = hasPermission('budget_requests.approve_college') && !isFinance;
+    const canPay = hasPermission('funds.disburse');
+
+    return useCallback((request) => {
+        const sigs = request.signatures ?? [];
+        const allSigned = sigs.length > 0 && sigs.every((s) => s.status === 'signed');
+        const mine = request.requested_by?.id === user?.id;
+        const a = {
+            sign: sigs.find((s) => s.user_id === user?.id)?.status === 'pending',
+            submit: allSigned && ['draft', 'pending_signatures'].includes(request.status),
+            edit: ['draft', 'pending_signatures'].includes(request.status) && mine && !allSigned,
+            collegeDecide: isCollege && ['submitted', 'finance_returned'].includes(request.status),
+            financeDecide: isFinance && request.status === 'college_approved',
+            disburse: canPay && request.status === 'approved',
+            isOfficer: isCollege || isFinance,
+        };
+        a.needsMe = a.sign || a.submit || a.collegeDecide || a.financeDecide || a.disburse;
+        return a;
+    }, [user?.id, isCollege, isFinance, canPay]);
+}
+
+// ─── Request card ─────────────────────────────────────────────────────────────
+
+function RequestCard({ request, can, onRefresh }) {
     const { error, success } = useToast();
     const { confirm, Dialog } = useConfirm();
-    const { hasPermission } = useAuth();
-    const [expanded,        setExpanded]        = useState(false);
-    const [showEdit,        setShowEdit]        = useState(false);
-    const [rejectModal,     setRejectModal]     = useState(false);
-    const [finReturnModal,  setFinReturnModal]  = useState(false);
-    const [showDisburse,    setShowDisburse]    = useState(false);
+    const [expanded, setExpanded] = useState(can.needsMe);
+    const [modal, setModal] = useState(null);
 
-    // Same stages as the server: the college stage is for those who can't give the finance approval.
-    const isFinanceOfficer  = hasPermission('budget_requests.approve_finance');
-    const isCollegeOfficer  = hasPermission('budget_requests.approve_college') && !isFinanceOfficer;
+    const sigs = request.signatures ?? [];
+    const paid = (request.disbursements ?? []).reduce((s, d) => s + parseFloat(d.amount || 0), 0);
 
-    const sigs        = request.signatures ?? [];
-    const signed      = sigs.filter(s => s.status === 'signed').length;
-    const allSigned   = signed === sigs.length && sigs.length > 0;
-    const mySig       = sigs.find(s => s.user_id === userId);
-    const canSign     = mySig?.status === 'pending';
-    const canSubmit   = allSigned && ['draft', 'pending_signatures'].includes(request.status);
-    const canEdit     = ['draft', 'pending_signatures'].includes(request.status)
-                        && request.requested_by?.id === userId
-                        && !allSigned;
-
-    // College officer: approve or reject submitted / finance_returned
-    const canCollegeApprove = isCollegeOfficer && ['submitted', 'finance_returned'].includes(request.status);
-    const canCollegeReject  = isCollegeOfficer && ['submitted', 'finance_returned'].includes(request.status);
-
-    // Finance officer: approve or return college_approved
-    const canFinanceApprove = isFinanceOfficer && request.status === 'college_approved';
-    const canFinanceReturn  = isFinanceOfficer && request.status === 'college_approved';
-    // Finance officer or college officer: disburse on approved requests
-    const canDisburse       = hasPermission('funds.disburse') && request.status === 'approved';
-
-    const handleDelete = async () => {
-        const ok = await confirm({
-            title: 'Delete Budget Request?',
-            description: 'This will permanently delete this budget request and all signatures. This cannot be undone.',
-            confirmLabel: 'Delete',
-            variant: 'destructive',
-        });
-        if (!ok) return;
-        try {
-            await api.delete(`/budget-requests/${request.id}`);
-            success('Budget request deleted.');
-            onRefresh();
-        } catch (e) {
-            error(e.response?.data?.message ?? 'Failed to delete.');
-        }
-    };
-
-    const act = async (label, apiCall, successMsg) => {
+    const act = async (label, call, done) => {
         const ok = await confirm({ title: `${label}?`, confirmLabel: label });
         if (!ok) return;
-        try { await apiCall(); success(successMsg); onRefresh(); }
-        catch (e) { error(e.response?.data?.message ?? `${label} failed.`); }
+        try { await call(); success(done); onRefresh(); } catch (e) { error(e.response?.data?.message ?? `${label} failed.`); }
     };
 
-    const doReject = async (payload) => {
-        await api.post(`/budget-requests/${request.id}/reject`, payload);
-        success('Budget request rejected. PI and members notified.');
-        setRejectModal(false);
-        onRefresh();
+    const remove = async () => {
+        const ok = await confirm({ title: 'Delete this budget request?', description: 'The request and its signatures are removed for good.', confirmLabel: 'Delete', variant: 'destructive' });
+        if (!ok) return;
+        try { await api.delete(`/budget-requests/${request.id}`); success('Budget request deleted.'); onRefresh(); } catch (e) { error(e.response?.data?.message ?? 'The request could not be deleted.'); }
     };
 
-    const doFinanceReturn = async (notes) => {
-        try {
-            await api.post(`/budget-requests/${request.id}/finance-return`, { notes });
-            success('Budget request returned to college officer with notes.');
-            setFinReturnModal(false);
-            onRefresh();
-        } catch (e) { error(e.response?.data?.message ?? 'Return failed.'); }
-    };
+    const btn = 'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold';
 
     return (
-        <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden hover:shadow-md transition-shadow">
-            <div className="px-5 py-4 flex items-center justify-between cursor-pointer"
-                onClick={() => setExpanded(v => !v)}>
-                <div className="flex items-center gap-4 flex-1 min-w-0">
-                    <div className="w-10 h-10 bg-blue-50 border border-blue-100 rounded-xl flex items-center justify-center shrink-0">
-                        <DollarSign size={18} className="text-blue-600" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                            <span className="font-mono text-xs font-bold text-blue-600">
-                                {request.proposal?.tracker_number}
-                            </span>
-                            <span className="text-xs text-gray-400">Round {request.funding_round}</span>
-                            <StatusBadge status={request.status} />
-                        </div>
-                        <p className="text-sm font-semibold text-gray-900 truncate">{request.proposal?.title}</p>
-                        <div className="flex items-center gap-3 mt-0.5">
-                            <span className="text-xs text-gray-500 font-medium">{formatCurrency(request.total_amount)}</span>
-                            {sigs.length > 0 && <SigProgress signatures={sigs} />}
-                        </div>
-                    </div>
-                </div>
-                {expanded ? <ChevronUp size={15} className="text-gray-400 shrink-0" /> : <ChevronDown size={15} className="text-gray-400 shrink-0" />}
-            </div>
+        <article className={`overflow-hidden rounded-2xl border bg-white transition hover:shadow-md ${can.needsMe ? 'border-indigo-200 ring-1 ring-indigo-100' : 'border-gray-200'}`}>
+            <button onClick={() => setExpanded((v) => !v)} className="flex w-full items-start gap-4 px-5 py-4 text-left">
+                <span className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 sm:flex"><DollarSign size={18} /></span>
+                <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-center gap-1.5">
+                        <ProposalHover id={request.proposal?.id} className="font-mono text-xs font-bold text-indigo-600">{request.proposal?.tracker_number}</ProposalHover>
+                        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-600">Round {request.funding_round}</span>
+                        <ProgrammeDot category={request.proposal?.category} />
+                        <StatusBadge status={request.status} />
+                        {can.needsMe && <span className="rounded-full bg-indigo-600 px-2 py-0.5 text-[11px] font-semibold text-white">Your turn</span>}
+                    </span>
+                    <span className="mt-1 block truncate text-sm font-semibold text-gray-900"><ProposalHover id={request.proposal?.id}>{request.proposal?.title}</ProposalHover></span>
+                    <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+                        <span className="font-bold tabular-nums text-gray-900">{formatCurrency(request.total_amount)}</span>
+                        {sigs.length > 0 && <SigProgress signatures={sigs} />}
+                        <span>{formatDate(request.created_at)}</span>
+                        {request.requested_by?.name && <span>by {request.requested_by.name}</span>}
+                    </span>
+                </span>
+                <ChevronDown size={16} className={`mt-1 shrink-0 text-gray-400 transition ${expanded ? 'rotate-180' : ''}`} />
+            </button>
 
             {expanded && (
-                <div className="border-t border-gray-100 px-5 py-4 space-y-4 bg-gray-50/50">
-                    {/* Items */}
-                    {(request.items ?? []).length > 0 && (
-                        <div>
-                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Budget Items</p>
-                            <div className="space-y-1.5">
-                                {request.items.map((item, i) => (
-                                    <div key={i} className="flex justify-between items-center text-sm bg-white border border-gray-100 rounded-lg px-3 py-2">
-                                        <div className="min-w-0">
-                                            <span className="font-medium text-gray-700">{item.category}</span>
-                                            {item.description && <span className="text-gray-400 ml-2 truncate">— {item.description}</span>}
-                                        </div>
-                                        <span className="font-semibold text-gray-900 shrink-0 ml-3">{formatCurrency(item.amount)}</span>
-                                    </div>
-                                ))}
-                                <div className="flex justify-between text-sm font-bold bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
-                                    <span className="text-blue-800">Total</span>
-                                    <span className="text-blue-900">{formatCurrency(request.total_amount)}</span>
+                <div className="space-y-4 border-t border-gray-100 bg-gray-50/50 px-5 py-4">
+                    <StageTrack status={request.status} />
+
+                    {request.status === 'finance_returned' && request.finance_notes && <Callout tone="orange" icon={XCircle} title="Returned by finance">{request.finance_notes}</Callout>}
+                    {request.status === 'rejected' && request.rejection_reason && <Callout tone="red" icon={XCircle} title="Rejected">{request.rejection_reason}</Callout>}
+                    {request.college_review_notes && ['college_approved', 'approved'].includes(request.status) && <Callout tone="indigo" icon={Building2} title="College notes">{request.college_review_notes}</Callout>}
+                    {request.status === 'approved' && !can.isOfficer && (
+                        <Callout tone="emerald" icon={Trophy} title="Approved — ready to collect">
+                            {formatCurrency(request.total_amount)} was approved by finance{request.approved_at ? ` on ${formatDate(request.approved_at)}` : ''}. Visit the finance office to collect it.
+                        </Callout>
+                    )}
+
+                    <div className="grid gap-4 lg:grid-cols-2">
+                        {(request.items ?? []).length > 0 && (
+                            <div className="rounded-xl border border-gray-200 bg-white">
+                                <p className="border-b border-gray-100 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-400">Items</p>
+                                <ul className="divide-y divide-gray-50">
+                                    {request.items.map((item, i) => (
+                                        <li key={i} className="flex items-start justify-between gap-3 px-4 py-2 text-sm">
+                                            <span className="min-w-0">
+                                                <span className="font-medium text-gray-800">{item.category}</span>
+                                                {item.description && <span className="block truncate text-xs text-gray-500">{item.description}</span>}
+                                            </span>
+                                            <span className="shrink-0 font-semibold tabular-nums text-gray-900">{formatCurrency(item.amount)}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                                <div className="flex justify-between border-t border-gray-100 px-4 py-2.5 text-sm font-bold">
+                                    <span>Total</span><span className="tabular-nums">{formatCurrency(request.total_amount)}</span>
                                 </div>
                             </div>
+                        )}
+
+                        <div className="space-y-4">
+                            {sigs.length > 0 && (
+                                <div className="rounded-xl border border-gray-200 bg-white">
+                                    <p className="border-b border-gray-100 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-gray-400">Signatures</p>
+                                    <ul className="divide-y divide-gray-50">
+                                        {sigs.map((sig) => (
+                                            <li key={sig.id} className="flex items-center gap-3 px-4 py-2 text-sm">
+                                                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${sig.status === 'signed' ? 'bg-emerald-500 text-white' : sig.status === 'refused' ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-400'}`}>
+                                                    {sig.status === 'signed' ? <CheckCircle2 size={12} /> : sig.status === 'refused' ? <XCircle size={12} /> : <Clock size={12} />}
+                                                </span>
+                                                <span className="min-w-0 flex-1 truncate"><span className="font-medium text-gray-800">{sig.user?.name ?? '—'}</span> <span className="text-xs capitalize text-gray-400">{sig.role}</span></span>
+                                                <span className={`text-xs font-medium capitalize ${sig.status === 'signed' ? 'text-emerald-600' : sig.status === 'refused' ? 'text-red-500' : 'text-gray-400'}`}>{sig.status}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                            {(request.disbursements ?? []).length > 0 && (
+                                <div className="rounded-xl border border-teal-200 bg-teal-50/60">
+                                    <p className="flex justify-between border-b border-teal-100 px-4 py-2.5 text-xs font-semibold uppercase tracking-wide text-teal-700">
+                                        <span>Disbursed</span><span className="tabular-nums">{formatCurrency(paid)}</span>
+                                    </p>
+                                    <ul className="divide-y divide-teal-100">
+                                        {request.disbursements.map((d, i) => (
+                                            <li key={i} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
+                                                <span className="min-w-0">
+                                                    <span className="font-semibold tabular-nums text-teal-900">{formatCurrency(d.amount)}</span>
+                                                    <span className="block truncate text-xs text-teal-700">{[d.transaction_id && `Ref ${d.transaction_id}`, d.cheque_number && `Cheque ${d.cheque_number}`].filter(Boolean).join(' · ') || '—'}</span>
+                                                </span>
+                                                <span className="shrink-0 text-xs text-teal-700">{formatDate(d.created_at)}</span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
                         </div>
-                    )}
+                    </div>
 
-                    {/* Signatures */}
-                    {sigs.length > 0 && (
-                        <div>
-                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Signature Chain</p>
-                            <div className="space-y-2">
-                                {sigs.map(sig => (
-                                    <div key={sig.id} className="flex items-center gap-3">
-                                        <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
-                                            sig.status === 'signed'  ? 'bg-green-500' :
-                                            sig.status === 'refused' ? 'bg-red-500' : 'bg-gray-200'
-                                        }`}>
-                                            {sig.status === 'signed'  && <CheckCircle2 size={12} className="text-white" />}
-                                            {sig.status === 'refused' && <XCircle      size={12} className="text-white" />}
-                                            {sig.status === 'pending' && <Clock        size={12} className="text-gray-500" />}
-                                        </div>
-                                        <div className="flex-1 text-sm">
-                                            <span className="font-medium text-gray-800">{sig.user?.name ?? '—'}</span>
-                                            <span className="text-gray-400 text-xs ml-1.5 capitalize">({sig.role})</span>
-                                        </div>
-                                        <span className={`text-xs font-medium capitalize ${
-                                            sig.status === 'signed'  ? 'text-green-600' :
-                                            sig.status === 'refused' ? 'text-red-500' : 'text-gray-400'
-                                        }`}>{sig.status}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Collection banner — shown to PI/members when approved */}
-                    {request.status === 'approved' && !isFinanceOfficer && !isCollegeOfficer && (
-                        <div className="bg-green-50 border border-green-200 rounded-xl px-4 py-4 flex items-start gap-3">
-                            <div className="w-9 h-9 bg-green-100 rounded-full flex items-center justify-center shrink-0">
-                                <Trophy size={16} className="text-green-600" />
-                            </div>
-                            <div>
-                                <p className="text-sm font-bold text-green-800">Budget Approved — Ready to Collect</p>
-                                <p className="text-xs text-green-700 mt-0.5">
-                                    Your budget of <span className="font-semibold">{formatCurrency(request.total_amount)}</span> has been approved by Finance.
-                                    Please visit the finance office to collect your funds.
-                                </p>
-                                {request.approved_at && (
-                                    <p className="text-xs text-green-600 mt-1">Approved on {formatDate(request.approved_at)}</p>
-                                )}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Disbursements */}
-                    {(request.disbursements ?? []).length > 0 && (
-                        <div>
-                            <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Disbursements</p>
-                            <div className="space-y-2">
-                                {request.disbursements.map((d, i) => (
-                                    <div key={i} className="flex items-center justify-between bg-teal-50 border border-teal-100 rounded-xl px-3 py-2.5">
-                                        <div className="flex items-center gap-2">
-                                            <Banknote size={14} className="text-teal-600" />
-                                            <div>
-                                                <span className="text-sm font-semibold text-teal-900">{formatCurrency(d.amount)}</span>
-                                                {d.transaction_id && <span className="text-xs text-teal-600 ml-2">Ref: {d.transaction_id}</span>}
-                                                {d.cheque_number && <span className="text-xs text-teal-600 ml-2">Cheque: {d.cheque_number}</span>}
-                                            </div>
-                                        </div>
-                                        <span className="text-xs text-teal-600">{formatDate(d.created_at)}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Feedback banners */}
-                    {request.status === 'finance_returned' && request.finance_notes && (
-                        <div className="bg-orange-50 border border-orange-200 rounded-xl px-4 py-3">
-                            <p className="text-xs font-bold text-orange-700 uppercase tracking-wide mb-1">Finance Officer Notes</p>
-                            <p className="text-sm text-orange-800">{request.finance_notes}</p>
-                        </div>
-                    )}
-                    {request.status === 'rejected' && request.rejection_reason && (
-                        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-                            <p className="text-xs font-bold text-red-700 uppercase tracking-wide mb-1">Rejection Reason</p>
-                            <p className="text-sm text-red-800">{request.rejection_reason}</p>
-                        </div>
-                    )}
-                    {request.college_review_notes && ['college_approved', 'approved'].includes(request.status) && (
-                        <div className="bg-indigo-50 border border-indigo-200 rounded-xl px-4 py-3">
-                            <p className="text-xs font-bold text-indigo-700 uppercase tracking-wide mb-1">College Officer Notes</p>
-                            <p className="text-sm text-indigo-800">{request.college_review_notes}</p>
-                        </div>
-                    )}
-
-                    {/* Actions */}
-                    <div className="flex flex-wrap gap-2 pt-1 border-t border-gray-100">
-                        {canSign && (
-                            <button onClick={() => act('Sign', () => api.post(`/budget-requests/${request.id}/sign`), 'Signed successfully.')}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700">
-                                <CheckCircle2 size={12} /> Sign
-                            </button>
-                        )}
-                        {canSubmit && (
-                            <button onClick={() => act('Submit for Review', () => api.post(`/budget-requests/${request.id}/submit`), 'Submitted for college review.')}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700">
-                                <Send size={12} /> Submit for College Review
-                            </button>
-                        )}
-
-                        {/* College officer: approve → college_approved */}
-                        {canCollegeApprove && (
-                            <button onClick={() => act('College Approve', () => api.post(`/budget-requests/${request.id}/approve`), 'Approved by college. Forwarded to Finance.')}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700">
-                                <CheckCircle2 size={12} /> College Approve
-                            </button>
-                        )}
-                        {/* College officer: reject → rejected + notify PI */}
-                        {canCollegeReject && (
-                            <button onClick={() => setRejectModal(true)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700">
-                                <XCircle size={12} /> Reject
-                            </button>
-                        )}
-
-                        {/* Finance officer: approve → approved (final) */}
-                        {canFinanceApprove && (
-                            <button onClick={() => act('Finance Approve', () => api.post(`/budget-requests/${request.id}/approve`), 'Finance approved. PI and members notified to collect funds.')}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded-lg hover:bg-emerald-700">
-                                <CheckCircle2 size={12} /> Finance Approve
-                            </button>
-                        )}
-                        {/* Finance officer: return → finance_returned + notify college */}
-                        {canFinanceReturn && (
-                            <button onClick={() => setFinReturnModal(true)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-orange-500 text-white text-xs font-semibold rounded-lg hover:bg-orange-600">
-                                <XCircle size={12} /> Return to College
-                            </button>
-                        )}
-
-                        {/* Finance officer: record disbursement on approved requests */}
-                        {canDisburse && (
-                            <button onClick={() => setShowDisburse(true)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 text-white text-xs font-semibold rounded-lg hover:bg-teal-700">
-                                <Banknote size={12} /> Disburse Funds
-                            </button>
-                        )}
-
-                        <Link href={`/budget-requests/${request.id}`}
-                            className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 text-gray-700 text-xs font-medium rounded-lg hover:bg-white">
-                            View Details →
-                        </Link>
-                        {canEdit && (
-                            <>
-                                <button onClick={() => setShowEdit(true)}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 border border-amber-300 text-amber-700 bg-amber-50 text-xs font-medium rounded-lg hover:bg-amber-100">
-                                    <Pencil size={12} /> Edit
-                                </button>
-                                <button onClick={handleDelete}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 border border-red-200 text-red-600 bg-red-50 text-xs font-medium rounded-lg hover:bg-red-100">
-                                    <Trash2 size={12} /> Remove
-                                </button>
-                            </>
-                        )}
+                    <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-3">
+                        {can.sign && <button onClick={() => act('Sign', () => api.post(`/budget-requests/${request.id}/sign`), 'Signed.')} className={`${btn} bg-indigo-600 text-white hover:bg-indigo-700`}><PenLine size={12} /> Sign</button>}
+                        {can.submit && <button onClick={() => act('Submit for college review', () => api.post(`/budget-requests/${request.id}/submit`), 'Sent to the college for review.')} className={`${btn} bg-emerald-600 text-white hover:bg-emerald-700`}><Send size={12} /> Submit for review</button>}
+                        {can.collegeDecide && <>
+                            <button onClick={() => act('Approve for the college', () => api.post(`/budget-requests/${request.id}/approve`), 'Approved and sent to finance.')} className={`${btn} bg-indigo-600 text-white hover:bg-indigo-700`}><CheckCircle2 size={12} /> Approve</button>
+                            <button onClick={() => setModal('reject')} className={`${btn} border border-red-200 bg-white text-red-600 hover:bg-red-50`}><XCircle size={12} /> Reject</button>
+                        </>}
+                        {can.financeDecide && <>
+                            <button onClick={() => act('Give finance approval', () => api.post(`/budget-requests/${request.id}/approve`), 'Approved. The team has been told to collect the funds.')} className={`${btn} bg-emerald-600 text-white hover:bg-emerald-700`}><CheckCircle2 size={12} /> Finance approve</button>
+                            <button onClick={() => setModal('return')} className={`${btn} border border-orange-200 bg-white text-orange-600 hover:bg-orange-50`}><XCircle size={12} /> Return to college</button>
+                        </>}
+                        {can.disburse && <button onClick={() => setModal('disburse')} className={`${btn} bg-teal-600 text-white hover:bg-teal-700`}><Banknote size={12} /> Disburse</button>}
+                        {can.edit && <>
+                            <button onClick={() => setModal('edit')} className={`${btn} border border-gray-200 bg-white text-gray-700 hover:bg-gray-50`}><Pencil size={12} /> Edit</button>
+                            <button onClick={remove} className={`${btn} border border-gray-200 bg-white text-red-600 hover:bg-red-50`}><Trash2 size={12} /> Delete</button>
+                        </>}
+                        <Link href={`/budget-requests/${request.id}`} className={`${btn} ml-auto text-indigo-600 hover:bg-indigo-50`}>Full details <ArrowRight size={12} /></Link>
                     </div>
                 </div>
             )}
 
-            {showEdit && (
-                <EditModal
-                    request={request}
-                    onClose={() => setShowEdit(false)}
-                    onSuccess={() => { setShowEdit(false); onRefresh(); }}
-                />
+            {modal === 'edit' && <EditModal request={request} onClose={() => setModal(null)} onSuccess={() => { setModal(null); onRefresh(); }} />}
+            {modal === 'disburse' && <DisburseModal request={request} onClose={() => setModal(null)} onSuccess={() => { setModal(null); onRefresh(); }} />}
+            {modal === 'return' && (
+                <ReturnModal request={request} onClose={() => setModal(null)} onConfirm={async (notes) => {
+                    try {
+                        await api.post(`/budget-requests/${request.id}/finance-return`, { notes });
+                        success('Returned to the college officer with your notes.');
+                        setModal(null);
+                        onRefresh();
+                    } catch (e) { error(e.response?.data?.message ?? 'The request could not be returned.'); }
+                }} />
             )}
-
-            {rejectModal && (
-                <RejectWithReasonModal
-                    context="budget_request"
-                    title="Reject Budget Request"
-                    subtitle={request.proposal?.tracker_number}
-                    note="The PI and team members are notified with this reason so they can correct and resubmit."
-                    confirmLabel="Reject & Notify PI"
-                    detailsField="notes"
-                    onSubmit={doReject}
-                    onClose={() => setRejectModal(false)}
-                />
+            {modal === 'reject' && (
+                <RejectWithReasonModal context="budget_request" title="Reject budget request" subtitle={request.proposal?.tracker_number}
+                    note="The team is told this reason so they can correct it and try again." confirmLabel="Reject & notify" detailsField="notes"
+                    onSubmit={async (payload) => {
+                        await api.post(`/budget-requests/${request.id}/reject`, payload);
+                        success('Budget request rejected. The team has been told.');
+                        setModal(null);
+                        onRefresh();
+                    }}
+                    onClose={() => setModal(null)} />
             )}
-
-            {finReturnModal && (
-                <NotesModal
-                    title="Return to College Officer"
-                    placeholder="Provide notes for the college officer explaining what needs to be addressed…"
-                    confirmLabel="Return with Notes"
-                    confirmCls="bg-orange-500 hover:bg-orange-600"
-                    onConfirm={doFinanceReturn}
-                    onClose={() => setFinReturnModal(false)}
-                />
-            )}
-
-            {showDisburse && (
-                <DisburseModal
-                    request={request}
-                    onClose={() => setShowDisburse(false)}
-                    onSuccess={() => { setShowDisburse(false); onRefresh(); }}
-                />
-            )}
-
             <Dialog />
-        </div>
+        </article>
     );
 }
 
-// ─── Main page ────────────────────────────────────────────────────────────────
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
+const TABS = [
+    { key: 'all', label: 'All', match: () => true },
+    { key: 'mine', label: 'Needs my action', match: (r, can) => can(r).needsMe },
+    { key: 'signing', label: 'Signing', match: (r) => ['draft', 'pending_signatures'].includes(r.status) },
+    { key: 'college', label: 'College review', match: (r) => ['submitted', 'finance_returned'].includes(r.status) },
+    { key: 'finance', label: 'Finance review', match: (r) => r.status === 'college_approved' },
+    { key: 'approved', label: 'Ready to pay', match: (r) => r.status === 'approved' },
+    { key: 'paid', label: 'Disbursed', match: (r) => r.status === 'disbursed' },
+    { key: 'settled', label: 'Settled', match: (r) => r.status === 'settled' },
+    { key: 'rejected', label: 'Rejected', match: (r) => r.status === 'rejected' },
+];
 
 export default function BudgetRequests() {
-    const { user, hasPermission, accessScope } = useAuth();
-    const { success, error }   = useToast();
-    const [view, setView]      = useViewPreference('budget_requests', 'card');
+    const { hasPermission, accessScope } = useAuth();
+    const { success, error } = useToast();
+    const [view, setView] = useViewPreference('budget_requests', 'card');
+    const can = useAbilities();
 
     // Researchers request money for their own projects; officers see requests within their scope.
-    const isPI     = accessScope.type === 'own' && hasPermission('budget_requests.create');
-    const isAdmin  = accessScope.type !== 'own' && hasPermission('budget_requests.view_any');
+    const isPI = accessScope.type === 'own' && hasPermission('budget_requests.create');
 
-    const [requests,        setRequests]        = useState([]);
+    const [requests, setRequests] = useState(null);
     const [fundedProposals, setFundedProposals] = useState([]);
-    const [templates,       setTemplates]       = useState([]);
-    const [loading,         setLoading]         = useState(true);
-    const [activeTab,       setActiveTab]       = useState('all');
-    const [showCreate,      setShowCreate]      = useState(false);
-    const [preselected,     setPreselected]     = useState(null);
+    const [templates, setTemplates] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [tab, setTab] = useState('all');
+    // Other pages link here with ?proposal=<tracker number> to show one project's requests.
+    const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get('proposal') ?? '');
+    const [round, setRound] = useState('');
+    const [programme, setProgramme] = useState('');
+    const [college, setCollege] = useState('');
+    const [year, setYear] = useState('');
+    const [create, setCreate] = useState(null);
 
     const load = useCallback(() => {
         setLoading(true);
         api.get('/budget-requests')
-            .then(r => {
-                const raw = r.data?.data ?? [];
-                setRequests(Array.isArray(raw) ? raw : []);
-            })
-            .catch(() => error('Failed to load budget requests.'))
+            .then((r) => setRequests(Array.isArray(r.data?.data) ? r.data.data : []))
+            .catch(() => { setRequests([]); error('Could not load budget requests.'); })
             .finally(() => setLoading(false));
-    }, []);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
         load();
         if (isPI) {
             api.get('/proposals/my')
-                .then(async r => {
-                    // Include midterm_evaluation — proposal moves to that status when midterm is scheduled
-                    const funded = (r.data?.data ?? []).filter(p =>
-                        ['funded', 'midterm_evaluation'].includes(p.status)
-                    );
-                    // Fetch budget summaries in parallel and filter out proposals where
-                    // an award EXISTS and the remaining budget is fully exhausted.
-                    // Proposals with no award record are kept (remaining = 0 but awarded = 0).
-                    const summaries = await Promise.all(
-                        funded.map(p =>
-                            api.get(`/proposals/${p.id}/budget-summary`)
-                                .then(s => {
-                                    const d = s.data?.data ?? {};
-                                    const awarded   = parseFloat(d.awarded_amount ?? 0);
-                                    const remaining = parseFloat(d.remaining ?? 0);
-                                    return { id: p.id, exhausted: awarded > 0 && remaining <= 0 };
-                                })
-                                .catch(() => ({ id: p.id, exhausted: false }))
-                        )
-                    );
-                    const exhaustedIds = new Set(summaries.filter(s => s.exhausted).map(s => s.id));
-                    setFundedProposals(funded.filter(p => !exhaustedIds.has(p.id)));
+                .then(async (r) => {
+                    // Midterm evaluation counts as funded: the project moves there once a midterm is scheduled.
+                    const funded = (r.data?.data ?? []).filter((p) => ['funded', 'midterm_evaluation'].includes(p.status));
+                    // Hide projects whose whole award is already used (no award yet still shows).
+                    const summaries = await Promise.all(funded.map((p) => api.get(`/proposals/${p.id}/budget-summary`)
+                        .then((s) => { const d = s.data?.data ?? {}; return { id: p.id, exhausted: parseFloat(d.awarded_amount ?? 0) > 0 && parseFloat(d.remaining ?? 0) <= 0 }; })
+                        .catch(() => ({ id: p.id, exhausted: false }))));
+                    const exhausted = new Set(summaries.filter((s) => s.exhausted).map((s) => s.id));
+                    setFundedProposals(funded.filter((p) => !exhausted.has(p.id)));
                 })
                 .catch(() => {});
         }
-        api.get('/form-templates')
-            .then(r => setTemplates(r.data?.data ?? []))
-            .catch(() => {});
+        api.get('/form-templates').then((r) => setTemplates(r.data?.data ?? [])).catch(() => {});
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const filtered = requests.filter(r => {
-        if (activeTab === 'all') return true;
-        const tab = STATUS_TABS.find(t => t.key === activeTab);
-        return tab?.match?.includes(r.status) ?? true;
-    });
+    // Once loaded, open on the requests waiting for this person if there are any.
+    useEffect(() => {
+        if (!search && requests?.some((r) => can(r).needsMe)) setTab((t) => (t === 'all' ? 'mine' : t));
+    }, [requests === null]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const tabCount = key => {
-        if (key === 'all') return requests.length;
-        const tab = STATUS_TABS.find(t => t.key === key);
-        return requests.filter(r => tab?.match?.includes(r.status)).length;
-    };
+    const all = requests ?? [];
+    const rounds = [...new Set(all.map((r) => r.funding_round).filter(Boolean))].sort((a, b) => a - b);
 
-    const openCreate = (proposal = null) => { setPreselected(proposal); setShowCreate(true); };
+    const colleges = [...new Map(all.filter((r) => r.proposal?.college).map((r) => [r.proposal.college.id, r.proposal.college.name])).entries()].sort((a, b) => a[1].localeCompare(b[1]));
+    const years = [...new Set(all.map((r) => r.proposal?.academic_year).filter(Boolean))].sort().reverse();
+    const usedProgrammes = [...new Set(all.map((r) => r.proposal?.category).filter(Boolean))];
+
+    const scoped = useMemo(() => {
+        const q = search.trim().toLowerCase();
+        return all.filter((r) => (!round || String(r.funding_round) === round)
+            && (!programme || r.proposal?.category === programme)
+            && (!college || r.proposal?.college_id === college)
+            && (!year || r.proposal?.academic_year === year)
+            && (!q || [r.proposal?.tracker_number, r.proposal?.title, r.requested_by?.name, r.proposal?.pi?.name].some((v) => v?.toLowerCase().includes(q))));
+    }, [all, search, round, programme, college, year]);
+
+    const filtersOn = !!(search || round || programme || college || year || tab !== 'all');
+    const clearFilters = () => { setSearch(''); setRound(''); setProgramme(''); setCollege(''); setYear(''); setTab('all'); };
+
+    const activeTab = TABS.find((t) => t.key === tab) ?? TABS[0];
+    const visible = scoped.filter((r) => activeTab.match(r, can));
+
+    const sum = (list) => list.reduce((s, r) => s + parseFloat(r.total_amount || 0), 0);
+    const inReview = scoped.filter((r) => ['submitted', 'finance_returned', 'college_approved'].includes(r.status));
+    const ready = scoped.filter((r) => r.status === 'approved');
+    const paidOut = scoped.reduce((s, r) => s + (r.disbursements ?? []).reduce((x, d) => x + parseFloat(d.amount || 0), 0), 0);
+    const waitingOnMe = scoped.filter((r) => can(r).needsMe).length;
+
+    const columns = [
+        { key: 'proposal', label: 'Project', render: (r) => (
+            <div className="min-w-0">
+                <ProposalHover id={r.proposal?.id} className="font-mono text-xs font-bold text-indigo-600">{r.proposal?.tracker_number}</ProposalHover>
+                <p className="max-w-64 truncate text-xs text-gray-500">{r.proposal?.title}</p>
+            </div>
+        ) },
+        { key: 'round', label: 'Round', render: (r) => <span className="text-xs font-semibold text-gray-700">{r.funding_round}</span> },
+        { key: 'amount', label: 'Amount', align: 'right', render: (r) => <span className="font-semibold text-gray-900">{formatCurrency(r.total_amount)}</span> },
+        { key: 'status', label: 'Status', render: (r) => <span className="inline-flex items-center gap-1.5"><StatusBadge status={r.status} />{can(r).needsMe && <span className="h-2 w-2 rounded-full bg-indigo-600" title="Your turn" />}</span> },
+        { key: 'sigs', label: 'Signatures', render: (r) => <SigProgress signatures={r.signatures ?? []} /> },
+        { key: 'date', label: 'Created', render: (r) => <span className="text-xs text-gray-500">{formatDate(r.created_at)}</span> },
+        { key: 'go', label: '', align: 'right', render: (r) => <Link href={`/budget-requests/${r.id}`} className="text-xs font-semibold text-indigo-600 hover:underline">Open</Link> },
+    ];
 
     return (
         <AppLayout breadcrumb="Budget Requests">
-            <div className="max-w-6xl mx-auto space-y-6">
+            <div className="mx-auto max-w-6xl space-y-5">
+                <PageHeader icon={DollarSign} color="indigo" title="Budget Requests"
+                    description={isPI ? 'Ask for each round of your project’s funds and follow it to payment.' : 'Requests for project funds, from signatures to payment and settlement.'}>
+                    <ViewToggle view={view} onChange={setView} />
+                    <DownloadMenu filename="budget-requests" title="Budget requests" subtitle={(TABS.find((t) => t.key === tab) ?? TABS[0]).label} rows={visible} columns={[
+                        { label: 'Tracker', value: (r) => r.proposal?.tracker_number },
+                        { label: 'Title', value: (r) => r.proposal?.title },
+                        { label: 'PI', value: (r) => r.proposal?.pi?.name },
+                        { label: term('college'), value: (r) => r.proposal?.college?.name },
+                        { label: 'Programme', value: (r) => programmeLabel(r.proposal?.category) },
+                        { label: 'Round', value: (r) => r.funding_round },
+                        { label: 'Amount', value: (r) => parseFloat(r.total_amount || 0) },
+                        { label: 'Paid out', value: (r) => (r.disbursements ?? []).reduce((x, d) => x + parseFloat(d.amount || 0), 0) },
+                        { label: 'Status', value: (r) => STATUS_CONFIG[r.status]?.label ?? r.status },
+                        { label: 'Signatures', value: (r) => `${(r.signatures ?? []).filter((x) => x.status === 'signed').length}/${(r.signatures ?? []).length}` },
+                        { label: 'Requested by', value: (r) => r.requested_by?.name },
+                        { label: 'Created', value: (r) => (r.created_at ? formatDate(r.created_at) : '') },
+                    ]} />
+                    <RefreshButton onClick={load} loading={loading} />
+                    {isPI && fundedProposals.length > 0 && (
+                        <button onClick={() => setCreate({ proposal: null })}
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700">
+                            <Plus size={15} /> New request
+                        </button>
+                    )}
+                </PageHeader>
 
-                {/* Header */}
-                <div className="flex items-start justify-between gap-4">
-                    <div>
-                        <h1 className="text-2xl font-bold text-gray-900">Budget Requests</h1>
-                        <p className="text-sm text-gray-500 mt-1">
-                            {isPI && !isAdmin ? 'Your funding disbursement requests for funded proposals' : 'All budget requests across proposals'}
-                        </p>
+                {requests === null ? <StatSkeletons /> : (
+                    <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                        <StatCard icon={Inbox} color="indigo" label="Waiting on you" value={waitingOnMe}
+                            hint={waitingOnMe ? 'Open “Needs my action”' : 'You’re all caught up'} hintTone={waitingOnMe ? 'text-indigo-600 font-medium' : undefined} />
+                        <StatCard icon={Clock} color="amber" label="In review" value={formatCurrency(sum(inReview))} hint={`${inReview.length} request${inReview.length === 1 ? '' : 's'} at college or finance`} />
+                        <StatCard icon={CheckCircle2} color="emerald" label="Approved, not yet paid" value={formatCurrency(sum(ready))} hint={`${ready.length} request${ready.length === 1 ? '' : 's'}`} />
+                        <StatCard icon={Banknote} color="sky" label="Paid out" value={formatCurrency(paidOut)} hint={`${scoped.length} request${scoped.length === 1 ? '' : 's'} in view`} />
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
-                        <ViewToggle view={view} onChange={setView} />
-                        {isPI && fundedProposals.length > 0 && (
-                            <button onClick={() => openCreate()}
-                                className="flex items-center gap-2 px-4 py-2 bg-blue-700 text-white rounded-xl text-sm font-semibold hover:bg-blue-800 shadow-sm">
-                                <Plus size={15} /> New Request
-                            </button>
-                        )}
-                    </div>
-                </div>
+                )}
 
-                {/* Funded proposals banner (PI only) */}
                 {isPI && fundedProposals.length > 0 && (
-                    <div className="bg-green-50 border border-green-200 rounded-2xl p-4 flex items-start gap-3">
-                        <CheckCircle2 size={20} className="text-green-500 shrink-0 mt-0.5" />
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-bold text-green-800">
-                                {fundedProposals.length} funded proposal{fundedProposals.length > 1 ? 's' : ''} ready for budget request
-                            </p>
-                            <p className="text-xs text-green-700 mt-0.5">Submit a budget request to receive your funding disbursement.</p>
-                            <div className="mt-2 flex flex-wrap gap-2">
-                                {fundedProposals.map(p => (
-                                    <button key={p.id} onClick={() => openCreate(p)}
-                                        className="font-mono text-xs bg-green-100 text-green-800 px-3 py-1 rounded-full border border-green-300 hover:bg-green-200 transition-colors">
-                                        {p.tracker_number} →
-                                    </button>
-                                ))}
-                            </div>
+                    <div className="flex flex-col gap-3 rounded-2xl border border-emerald-200 bg-linear-to-r from-emerald-50 to-teal-50 p-4 sm:flex-row sm:items-center">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-600 ring-1 ring-emerald-200"><Wallet size={18} /></span>
+                        <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-emerald-900">{fundedProposals.length} funded project{fundedProposals.length > 1 ? 's' : ''} can request funds</p>
+                            <p className="text-xs text-emerald-700">Pick one to start this round’s request.</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                            {fundedProposals.map((p) => (
+                                <button key={p.id} onClick={() => setCreate({ proposal: p })}
+                                    className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 font-mono text-xs font-semibold text-emerald-800 ring-1 ring-emerald-300 hover:bg-emerald-100">
+                                    {p.tracker_number} <ArrowRight size={11} />
+                                </button>
+                            ))}
                         </div>
                     </div>
                 )}
 
-                {/* Main card */}
-                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-
-                    {/* Tabs */}
-                    <div className="flex border-b border-gray-200 overflow-x-auto">
-                        {STATUS_TABS.map(tab => (
-                            <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-                                className={`flex items-center gap-1.5 px-5 py-3.5 text-sm font-medium shrink-0 border-b-2 transition-colors ${
-                                    activeTab === tab.key
-                                        ? 'border-blue-600 text-blue-700 bg-blue-50/40'
-                                        : 'border-transparent text-gray-500 hover:text-gray-700'
-                                }`}
-                            >
-                                {tab.label}
-                                {tabCount(tab.key) > 0 && (
-                                    <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
-                                        activeTab === tab.key ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
-                                    }`}>{tabCount(tab.key)}</span>
-                                )}
-                            </button>
-                        ))}
+                <div className="space-y-3 rounded-2xl border border-gray-200 bg-white p-3">
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                        <label className="relative min-w-0 flex-1">
+                            <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search tracker number, title or requester…"
+                                className="w-full rounded-xl border border-gray-200 py-2 pl-9 pr-3 text-base focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 sm:text-sm" />
+                        </label>
+                        <div className="grid grid-cols-2 gap-2 sm:flex">
+                            {usedProgrammes.length > 1 && (
+                                <Select label="Programme" value={programme} onChange={setProgramme} className="sm:w-44">
+                                    <option value="">All programmes</option>
+                                    {usedProgrammes.map((k) => <option key={k} value={k}>{programmeLabel(k)}</option>)}
+                                </Select>
+                            )}
+                            {colleges.length > 1 && (
+                                <Select label={term('college')} value={college} onChange={setCollege} className="sm:w-44">
+                                    <option value="">All {term('college', { plural: true, lower: true })}</option>
+                                    {colleges.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+                                </Select>
+                            )}
+                            {years.length > 1 && (
+                                <Select label="Year" value={year} onChange={setYear} className="sm:w-32">
+                                    <option value="">All years</option>
+                                    {years.map((y) => <option key={y} value={y}>{y}</option>)}
+                                </Select>
+                            )}
+                            {rounds.length > 1 && (
+                                <Select label="Round" value={round} onChange={setRound} className="sm:w-32">
+                                    <option value="">All rounds</option>
+                                    {rounds.map((n) => <option key={n} value={String(n)}>Round {n}</option>)}
+                                </Select>
+                            )}
+                            {filtersOn && <ClearButton onClick={clearFilters} />}
+                        </div>
                     </div>
-
-                    {/* Content */}
-                    <div className="p-5">
-                        {loading ? (
-                            <div className="flex justify-center py-12">
-                                <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
-                            </div>
-                        ) : filtered.length === 0 ? (
-                            <div className="text-center py-12">
-                                <DollarSign size={36} className="mx-auto text-gray-300 mb-3" />
-                                <p className="text-gray-600 font-medium">No budget requests</p>
-                                <p className="text-sm text-gray-400 mt-1">
-                                    {isPI ? 'Requests appear here once your proposal is funded.' : 'No requests to show.'}
-                                </p>
-                            </div>
-                        ) : view === 'card' ? (
-                            <div className="space-y-4">
-                                {filtered.map(r => (
-                                    <RequestCard
-                                        key={r.id}
-                                        request={r}
-                                        userId={user?.id}
-                                        isOfficer={isAdmin && !hasPermission('budget_requests.approve_finance')}
-                                        isAdmin={isAdmin}
-                                        onRefresh={load}
-                                    />
-                                ))}
-                            </div>
-                        ) : (
-                            /* Table view */
-                            <>
-                                <div className="hidden sm:block overflow-x-auto">
-                                    <table className="w-full text-sm">
-                                        <thead className="border-b border-gray-200">
-                                            <tr>
-                                                {['#', 'Proposal', 'Round', 'Amount', 'Status', 'Signatures', 'Date', ''].map(h => (
-                                                    <th key={h} className="px-3 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wide">{h}</th>
-                                                ))}
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-50">
-                                            {filtered.map((r, i) => (
-                                                <tr key={r.id} className="hover:bg-gray-50">
-                                                    <td className="px-3 py-3 text-xs font-medium text-gray-400 tabular-nums w-10">{i + 1}</td>
-                                                    <td className="px-3 py-3">
-                                                        <p className="font-mono text-xs font-bold text-blue-600">{r.proposal?.tracker_number}</p>
-                                                        <p className="text-xs text-gray-500 truncate max-w-48">{r.proposal?.title}</p>
-                                                    </td>
-                                                    <td className="px-3 py-3 text-xs font-bold text-gray-700">Round {r.funding_round}</td>
-                                                    <td className="px-3 py-3 text-sm font-semibold text-gray-900">{formatCurrency(r.total_amount)}</td>
-                                                    <td className="px-3 py-3"><StatusBadge status={r.status} /></td>
-                                                    <td className="px-3 py-3"><SigProgress signatures={r.signatures ?? []} /></td>
-                                                    <td className="px-3 py-3 text-xs text-gray-500">{formatDate(r.created_at)}</td>
-                                                    <td className="px-3 py-3 text-right">
-                                                        <Link href={`/budget-requests/${r.id}`}
-                                                            className="text-xs text-blue-600 hover:underline font-semibold">
-                                                            View →
-                                                        </Link>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-
-                                {/* Mobile: fall back to the same cards used by card view */}
-                                <div className="sm:hidden space-y-4">
-                                    {filtered.map(r => (
-                                        <RequestCard
-                                            key={r.id}
-                                            request={r}
-                                            userId={user?.id}
-                                            isOfficer={isAdmin && !hasPermission('budget_requests.approve_finance')}
-                                            isAdmin={isAdmin}
-                                            onRefresh={load}
-                                        />
-                                    ))}
-                                </div>
-                            </>
-                        )}
+                    <div className="-mx-1 flex gap-1 overflow-x-auto px-1">
+                        {TABS.map((t) => {
+                            const count = scoped.filter((r) => t.match(r, can)).length;
+                            if (t.key !== 'all' && t.key !== 'mine' && count === 0 && tab !== t.key) return null;
+                            return (
+                                <button key={t.key} onClick={() => setTab(t.key)}
+                                    className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition ${tab === t.key ? 'bg-gray-900 text-white' : 'text-gray-600 hover:bg-gray-100'}`}>
+                                    {t.label}
+                                    <span className={`rounded-full px-1.5 text-[11px] tabular-nums ${tab === t.key ? 'bg-white/20' : t.key === 'mine' && count ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-500'}`}>{count}</span>
+                                </button>
+                            );
+                        })}
                     </div>
                 </div>
+
+                {requests === null ? (
+                    <div className="space-y-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}</div>
+                ) : visible.length === 0 ? (
+                    <Panel bodyClassName="p-0">
+                        <EmptyState icon={DollarSign}
+                            title={tab === 'mine' ? 'Nothing is waiting on you' : all.length === 0 ? 'No budget requests yet' : 'Nothing matches'}
+                            text={tab === 'mine' ? 'Requests you need to sign, review, approve or pay will show here.' : all.length === 0 ? (isPI ? 'Once your project is funded and its allocation approved, start a request here.' : 'Requests appear here as teams submit them.') : 'Try another tab or search.'} />
+                    </Panel>
+                ) : view === 'card' ? (
+                    <div className="space-y-3">
+                        {visible.map((r) => <RequestCard key={r.id} request={r} can={can(r)} onRefresh={load} />)}
+                    </div>
+                ) : (
+                    <>
+                        <Panel bodyClassName="p-0" className="hidden sm:flex">
+                            <DataTable columns={columns} rows={visible} rowKey={(r) => r.id} minWidth={760} />
+                        </Panel>
+                        <div className="space-y-3 sm:hidden">
+                            {visible.map((r) => <RequestCard key={r.id} request={r} can={can(r)} onRefresh={load} />)}
+                        </div>
+                    </>
+                )}
             </div>
 
-            {showCreate && (
-                <CreateModal
-                    proposals={fundedProposals}
-                    templates={templates}
-                    preselected={preselected}
-                    onClose={() => { setShowCreate(false); setPreselected(null); }}
-                    onSuccess={() => {
-                        setShowCreate(false);
-                        setPreselected(null);
-                        success('Budget request created. Team members notified to sign.');
-                        load();
-                    }}
-                />
+            {create && (
+                <CreateModal proposals={fundedProposals} templates={templates} preselected={create.proposal}
+                    onClose={() => setCreate(null)}
+                    onSuccess={() => { setCreate(null); success('Budget request created. Team members have been asked to sign.'); load(); }} />
             )}
         </AppLayout>
     );

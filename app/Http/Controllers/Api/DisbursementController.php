@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\BudgetRequest;
 use App\Models\Disbursement;
 use App\Services\DisbursementService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -57,14 +58,25 @@ class DisbursementController extends Controller
             'notes' => 'nullable|string',
         ]);
 
-        $budgetRequest = BudgetRequest::findOrFail($request->budget_request_id);
+        $user = $request->user();
+        $budgetRequest = BudgetRequest::with('proposal:id,college_id,category')->findOrFail($request->budget_request_id);
 
-        $disbursement = $this->service->disburse(
-            $budgetRequest,
-            (float) $request->amount,
-            $request->only('transaction_id', 'cheque_number', 'notes'),
-            $request->user()
-        );
+        // Releasing money needs the permission and the project within the payer's scope.
+        if (! $user->can('funds.disburse') || ! $budgetRequest->proposal
+            || ! $user->accessScope()->covers($budgetRequest->proposal->college_id, $budgetRequest->proposal->category)) {
+            return response()->json(['data' => null, 'message' => 'You do not have permission to disburse funds.', 'errors' => [], 'meta' => []], 403);
+        }
+
+        try {
+            $disbursement = $this->service->disburse(
+                $budgetRequest,
+                (float) $request->amount,
+                $request->only('transaction_id', 'cheque_number', 'notes'),
+                $user
+            );
+        } catch (\Exception $e) {
+            return response()->json(['data' => null, 'message' => $e->getMessage(), 'errors' => [], 'meta' => []], 422);
+        }
 
         return response()->json([
             'data' => $disbursement->load(['budgetRequest.proposal', 'disbursedBy']),
@@ -124,6 +136,15 @@ class DisbursementController extends Controller
         ]);
     }
 
+    /** Approved requests the user can see that still wait for money. */
+    private function pendingQuery(mixed $user): Builder
+    {
+        $query = BudgetRequest::where('status', 'approved');
+        $user->accessScope()->constrainThrough($query, 'proposal', fn ($q) => $q->whereHas('proposal', fn ($q) => $q->where('pi_user_id', $user->id)));
+
+        return $query;
+    }
+
     public function stats(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -141,7 +162,7 @@ class DisbursementController extends Controller
             'data' => [
                 'total_disbursed' => (float) $totalDisbursed,
                 'this_month' => (float) $thisMonth,
-                'pending_count' => BudgetRequest::where('status', 'approved')->count(),
+                'pending_count' => $this->pendingQuery($user)->count(),
                 'disbursement_count' => (clone $query)->count(),
             ],
             'message' => '',

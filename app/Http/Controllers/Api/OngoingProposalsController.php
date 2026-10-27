@@ -14,12 +14,14 @@ use App\Models\User;
 use App\Services\LegacyGrantService;
 use App\Services\TrackerNumberService;
 use App\Services\WorkflowService;
+use App\Support\Programmes;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Maatwebsite\Excel\Facades\Excel;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -271,7 +273,7 @@ class OngoingProposalsController extends Controller
 
         $validated = $request->validate([
             'title' => 'required|string|max:500',
-            'category' => 'required|in:research,community_engagement,technology_transfer',
+            'category' => ['required', Rule::in(Programmes::keys(true))],
             'college_id' => 'required|uuid|exists:colleges,id',
             'department_id' => 'required|uuid|exists:departments,id',
             'pi_user_id' => 'required|uuid|exists:users,id',

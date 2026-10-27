@@ -14,6 +14,7 @@ use App\Models\Proposal;
 use App\Models\ProposalCall;
 use App\Models\ProposalDocument;
 use App\Services\ProposalService;
+use App\Support\ApplicationForm;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -154,12 +155,19 @@ class ProposalWizardController extends Controller
             ], 422);
         }
 
+        $proposal = Proposal::findOrFail($id);
+
+        // A call's own documents (Calls → Application form) upload as "call_<key>".
         $request->validate([
             'file' => ['required', 'file', 'max:10240'],
-            'document_type' => ['required', 'string', 'in:proposal_document,budget_spreadsheet,pi_cv,supporting_document,shared_document,ethical_clearance_certificate'],
+            'document_type' => ['required', 'string', function (string $attribute, mixed $value, \Closure $fail) use ($proposal) {
+                $standard = ['proposal_document', 'budget_spreadsheet', 'pi_cv', 'supporting_document', 'shared_document', 'ethical_clearance_certificate'];
+                if (! in_array($value, $standard, true) && ! ApplicationForm::isCallDocument($proposal->proposalCall, (string) $value)) {
+                    $fail('The selected document type is invalid.');
+                }
+            }],
         ]);
 
-        $proposal = Proposal::findOrFail($id);
         $file = $request->file('file');
         $path = $file->store("proposals/{$id}/documents", 'private');
 

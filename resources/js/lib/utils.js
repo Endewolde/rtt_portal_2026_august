@@ -2,6 +2,8 @@ import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { format, parseISO } from 'date-fns';
 import { translate } from './i18n';
+import { currency } from './terms';
+import { programmeByKey, programmeLabel } from './programmes';
 
 export function cn(...inputs) {
     return twMerge(clsx(inputs));
@@ -29,7 +31,7 @@ export function formatDateTime(date) {
 
 export function formatCurrency(amount) {
     if (amount == null) return '—';
-    return `ETB ${Number(amount).toLocaleString('en-ET', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    return `${currency()} ${Number(amount).toLocaleString('en-ET', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 export function truncate(text, length = 120) {
@@ -73,15 +75,11 @@ export function getStatusLabel(status) {
     return translate(map[status] ?? status);
 }
 
+/** A programme's name (proposal categories are the organisation's programmes). */
 export function getCategoryLabel(category) {
-    const map = {
-        research: 'Research',
-        community_engagement: 'Community Engagement',
-        technology_transfer: 'Technology Transfer',
-        innovation: 'Innovation',
-        other: 'Other',
-    };
-    return translate(map[category] ?? category);
+    if (!category) return '—';
+    const legacy = { innovation: 'Innovation', other: 'Other' };
+    return translate(programmeByKey(category)?.name ?? legacy[category] ?? programmeLabel(category));
 }
 
 export function timeAgo(date) {

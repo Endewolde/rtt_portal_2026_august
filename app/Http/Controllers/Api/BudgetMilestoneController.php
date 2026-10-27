@@ -10,6 +10,39 @@ use Illuminate\Http\Request;
 
 class BudgetMilestoneController extends Controller
 {
+    private const RUNNING = ['funded', 'midterm_evaluation', 'completed'];
+
+    /**
+     * Every running project the user may see, with its milestones and award, in one
+     * call — the tracker page no longer asks project by project.
+     */
+    public function overview(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        if (! $user->can('budget_milestones.view_any') && ! $user->can('budget_milestones.view')) {
+            return response()->json(['data' => [], 'message' => 'Forbidden.', 'errors' => []], 403);
+        }
+
+        $query = Proposal::whereIn('status', self::RUNNING)
+            ->with([
+                'college:id,name',
+                'pi:id,name',
+                'award:id,proposal_id,awarded_amount',
+                'budgetMilestones' => fn ($q) => $q->orderBy('sort_order')->orderBy('due_date'),
+            ])
+            ->orderBy('tracker_number');
+
+        if ($user->can('budget_milestones.view_any')) {
+            $user->accessScope()->constrain($query, 'proposals', fn ($q) => $q->where('pi_user_id', $user->id));
+        } else {
+            $query->where('pi_user_id', $user->id);
+        }
+
+        $projects = $query->get(['id', 'tracker_number', 'title', 'status', 'category', 'college_id', 'pi_user_id', 'academic_year']);
+
+        return response()->json(['data' => $projects, 'message' => 'OK.', 'errors' => []]);
+    }
+
     public function index(Request $request, string $proposalId): JsonResponse
     {
         $proposal = Proposal::findOrFail($proposalId);
@@ -57,6 +90,7 @@ class BudgetMilestoneController extends Controller
     public function update(Request $request, string $proposalId, BudgetMilestone $budgetMilestone): JsonResponse
     {
         $proposal = Proposal::findOrFail($proposalId);
+        abort_unless($budgetMilestone->proposal_id === $proposal->id, 404);
 
         if (! $this->canEdit($request->user(), $proposal)) {
             return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
@@ -85,6 +119,7 @@ class BudgetMilestoneController extends Controller
     public function destroy(Request $request, string $proposalId, BudgetMilestone $budgetMilestone): JsonResponse
     {
         $proposal = Proposal::findOrFail($proposalId);
+        abort_unless($budgetMilestone->proposal_id === $proposal->id, 404);
 
         if (! $this->canEdit($request->user(), $proposal)) {
             return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
@@ -101,12 +136,13 @@ class BudgetMilestoneController extends Controller
             return false;
         }
 
-        return $user->hasPermissionTo('budget_milestones.view_any')
-            || ($user->hasPermissionTo('budget_milestones.view') && $proposal->pi_user_id === $user->id);
+        return ($user->can('budget_milestones.view_any') && $user->accessScope()->covers($proposal->college_id, $proposal->category))
+            || ($user->can('budget_milestones.view') && $proposal->pi_user_id === $user->id);
     }
 
+    /** Editing needs the permission and the project within the user's scope. */
     private function canEdit(?object $user, Proposal $proposal): bool
     {
-        return $user?->hasPermissionTo('budget_milestones.update');
+        return (bool) $user?->can('budget_milestones.update') && $user->accessScope()->covers($proposal->college_id, $proposal->category);
     }
 }

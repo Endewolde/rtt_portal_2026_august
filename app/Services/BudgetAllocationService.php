@@ -9,6 +9,7 @@ use App\Models\BudgetAllocation;
 use App\Models\College;
 use App\Models\Proposal;
 use App\Models\User;
+use App\Support\Terms;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -84,7 +85,7 @@ class BudgetAllocationService
             if ($amount > $remaining) {
                 throw new \Exception(
                     sprintf(
-                        'Amount ETB %s exceeds college remaining balance of ETB %s.',
+                        'Amount '.Terms::currency().' %s exceeds college remaining balance of '.Terms::currency().' %s.',
                         number_format($amount, 2),
                         number_format($remaining, 2)
                     )

@@ -180,7 +180,7 @@ export default function Step3CoInvestigators({ proposalId, piUser, onComplete, i
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
                     <table className="w-full text-sm">
                         <thead className="bg-gray-50 border-b border-gray-200">
-                            <tr>
+                            <tr><th className="px-4 py-3 w-10 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">#</th>
                                 {['Member', 'College / Dept', 'Role', ...(showInvitationStatus ? ['Invite'] : []), 'Contribution %', ''].map((h) => (
                                     <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
                                 ))}
@@ -218,7 +218,7 @@ export default function Step3CoInvestigators({ proposalId, piUser, onComplete, i
 
                             {/* Co-PI rows */}
                             {coIs.map((c, i) => (
-                                <tr key={c.user_id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                                <tr key={c.user_id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}><td className="px-4 py-3 w-10 text-xs font-medium tabular-nums text-gray-400">{i + 1}</td>
                                     <td className="px-4 py-3">
                                         <div className="flex items-center gap-3">
                                             <div className={`w-8 h-8 rounded-full ${getColor(c.name)} flex items-center justify-center text-white text-xs font-medium shrink-0`}>
@@ -269,7 +269,7 @@ export default function Step3CoInvestigators({ proposalId, piUser, onComplete, i
                         </tbody>
                         <tfoot className="bg-gray-50 border-t border-gray-200">
                             <tr>
-                                <td colSpan={3} className="px-4 py-2 text-sm text-gray-600">
+                                <td colSpan={4} className="px-4 py-2 text-sm text-gray-600">
                                     Total team: {coIs.length + 1} member{coIs.length !== 0 ? 's' : ''}
                                 </td>
                                 <td className="px-4 py-2 text-center">

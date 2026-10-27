@@ -10,7 +10,10 @@ import AppLayout from '../../Layouts/AppLayout';
 import StatusBadge from '../../Components/StatusBadge';
 import WorkflowBreadcrumb from '../../Components/WorkflowBreadcrumb';
 import ViewToggle from '../../Components/ViewToggle';
-import FilterBar from '../../Components/FilterBar';
+import { PageHeader, RefreshButton } from '../../Components/Insights/Kit';
+import StageFilters from '../../Components/Review/StageFilters';
+import DownloadMenu from '../../Components/Finance/DownloadMenu';
+import ProposalHover from '../../Components/Finance/ProposalHover';
 import ProposalTable from '../../Components/ProposalTable';
 import { useViewPreference } from '../../hooks/useViewPreference';
 import api from '../../lib/api';
@@ -101,26 +104,27 @@ const STATUS_LABEL = {
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 
-function StatCard({ icon: Icon, label, value, sub, color }) {
+function StatCard({ icon: Icon, label, value, sub, color, onClick }) {
     const colors = {
-        green:  { bg: 'bg-green-50',  icon: 'bg-green-100 text-green-600',  val: 'text-green-700' },
-        purple: { bg: 'bg-purple-50', icon: 'bg-purple-100 text-purple-600', val: 'text-purple-700' },
-        blue:   { bg: 'bg-blue-50',   icon: 'bg-blue-100 text-blue-600',    val: 'text-blue-700' },
-        red:    { bg: 'bg-red-50',    icon: 'bg-red-100 text-red-500',      val: 'text-red-600' },
-        gray:   { bg: 'bg-gray-50',   icon: 'bg-gray-100 text-gray-500',    val: 'text-gray-700' },
-    }[color] ?? { bg: 'bg-gray-50', icon: 'bg-gray-100 text-gray-500', val: 'text-gray-700' };
+        green:  { bar: 'bg-emerald-500', icon: 'bg-emerald-100 text-emerald-600' },
+        purple: { bar: 'bg-violet-500',  icon: 'bg-violet-100 text-violet-600' },
+        blue:   { bar: 'bg-sky-500',     icon: 'bg-sky-100 text-sky-600' },
+        red:    { bar: 'bg-red-500',     icon: 'bg-red-100 text-red-600' },
+        gray:   { bar: 'bg-gray-300',    icon: 'bg-gray-100 text-gray-500' },
+    }[color] ?? { bar: 'bg-gray-300', icon: 'bg-gray-100 text-gray-500' };
+    const Tag = onClick ? 'button' : 'div';
 
     return (
-        <div className={`${colors.bg} border border-white rounded-2xl px-5 py-4 flex items-center gap-4`}>
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${colors.icon}`}>
-                <Icon size={18} />
+        <Tag type={onClick ? 'button' : undefined} onClick={onClick}
+            className={`relative h-full w-full overflow-hidden rounded-2xl border border-gray-200 bg-white p-4 text-left transition ${onClick ? 'cursor-pointer hover:-translate-y-0.5 hover:shadow-md' : ''}`}>
+            <span className={`absolute inset-y-0 left-0 w-1 ${colors.bar}`} />
+            <div className="flex items-center justify-between gap-2">
+                <span className="truncate text-xs font-medium text-gray-500">{label}</span>
+                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${colors.icon}`}><Icon size={15} /></span>
             </div>
-            <div>
-                <p className="text-xs text-gray-500 font-medium">{label}</p>
-                <p className={`text-2xl font-bold leading-none mt-0.5 ${colors.val}`}>{value}</p>
-                {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
-            </div>
-        </div>
+            <p className="mt-1.5 truncate text-2xl font-bold tabular-nums text-gray-900">{value}</p>
+            <p className="mt-0.5 min-h-4 truncate text-[11px] text-gray-400">{sub ?? (onClick ? 'Click to jump there' : '')}</p>
+        </Tag>
     );
 }
 
@@ -477,9 +481,9 @@ function AwaitingRow({ proposal }) {
                 <div className="flex items-center gap-4 flex-1 min-w-0 px-5 py-4">
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <span className="font-mono text-xs font-bold text-purple-700 bg-purple-50 border border-purple-100 px-2.5 py-1 rounded-lg shrink-0">
+                            <ProposalHover id={proposal.id} className="font-mono text-xs font-bold text-purple-700 bg-purple-50 border border-purple-100 px-2.5 py-1 rounded-lg shrink-0">
                                 {proposal.tracker_number}
-                            </span>
+                            </ProposalHover>
                             <span className="text-xs text-gray-400">{getCategoryLabel(proposal.category)}</span>
                             <StatusBadge status={proposal.status} />
                             {urgency && (
@@ -528,9 +532,9 @@ function DefenceCard({ proposal, onReassign, onExtend, onRemove, onRequestDeadli
                 <div className="flex items-start justify-between gap-4 flex-1 px-5 py-4">
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <span className="font-mono text-xs font-bold text-purple-700 bg-purple-50 border border-purple-100 px-2.5 py-1 rounded-lg shrink-0">
+                            <ProposalHover id={proposal.id} className="font-mono text-xs font-bold text-purple-700 bg-purple-50 border border-purple-100 px-2.5 py-1 rounded-lg shrink-0">
                                 {proposal.tracker_number}
-                            </span>
+                            </ProposalHover>
                             <span className="text-xs text-gray-400">{getCategoryLabel(proposal.category)}</span>
                             <StatusBadge status={proposal.status} />
                             {overdue > 0 && (
@@ -682,11 +686,18 @@ export default function OpenDefence() {
     const isCollegeOfficer = accessScope?.type === 'college';
     const [view, setView] = useViewPreference('open_defence', 'card');
     const [activeTab, setActiveTab] = useState('active');
+    const awaitingRef = useRef(null);
+    const defenceRef = useRef(null);
+    const jumpTo = (ref, tab) => {
+        if (tab) setActiveTab(tab);
+        requestAnimationFrame(() => ref.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    };
 
     const [allProposals, setAllProposals]        = useState([]);
     const [yearFilter, setYearFilter]            = useState(app_settings?.current_academic_year ?? '');
     const [categoryFilter, setCategoryFilter]    = useState('');
     const [collegeFilter, setCollegeFilter]      = useState('');
+    const [search, setSearch]                    = useState('');
     const [loading, setLoading]                  = useState(true);
     const [reassignModal, setReassignModal]       = useState(null);
     const [removeConfirm, setRemoveConfirm]       = useState(null);
@@ -762,10 +773,12 @@ export default function OpenDefence() {
     const availableCategories = [...new Set(allProposals.map(p => p.category).filter(Boolean))].sort();
     const availableColleges   = [...new Map(allProposals.filter(p => p.college).map(p => [p.college.id, p.college])).values()]
         .sort((a, b) => a.name.localeCompare(b.name));
-    const proposals = allProposals
-        .filter(p => !yearFilter || p.academic_year === yearFilter)
-        .filter(p => !categoryFilter || p.category === categoryFilter)
-        .filter(p => !collegeFilter || p.college_id === collegeFilter);
+    const q = search.trim().toLowerCase();
+    const matchesOthers = p => (!categoryFilter || p.category === categoryFilter)
+        && (!collegeFilter || p.college_id === collegeFilter)
+        && (!q || [p.tracker_number, p.title, p.pi?.name].some(v => v?.toLowerCase().includes(q)));
+    const proposals = allProposals.filter(p => (!yearFilter || p.academic_year === yearFilter) && matchesOthers(p));
+    const hiddenByYear = yearFilter ? allProposals.filter(p => p.academic_year !== yearFilter && matchesOthers(p)).length : 0;
 
     // ── Data slices ──
     const passedBlindReview = proposals.filter(p => p.status === 'blind_review_passed');
@@ -815,76 +828,42 @@ export default function OpenDefence() {
                 )}
 
                 {/* ── Page header ── */}
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-6 gap-4">
-                    <div className="flex items-center gap-4">
-                        <div className="h-12 w-12 bg-purple-600 rounded-2xl flex items-center justify-center shrink-0 shadow-sm shadow-purple-200">
-                            <Presentation size={22} className="text-white" />
-                        </div>
-                        <div>
-                            <h1 className="text-xl font-bold text-gray-900">Open Defence Management</h1>
-                            <p className="text-sm text-gray-500 mt-0.5">Schedule defences and manage active open defence reviews</p>
-                        </div>
-                    </div>
-                    <FilterBar
-                        accent="purple"
-                        activeCount={[collegeFilter, categoryFilter, yearFilter].filter(Boolean).length}
-                        trailing={
-                            <>
-                                <ViewToggle view={view} onChange={setView} />
-                                <button onClick={load}
-                                    className="flex items-center gap-2 px-3.5 py-2.5 sm:py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors font-medium shrink-0">
-                                    <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-                                    <span className="hidden sm:inline">Refresh</span>
-                                </button>
-                            </>
-                        }
-                    >
-                        {availableColleges.length > 1 && (
-                            <select
-                                value={collegeFilter}
-                                onChange={e => { setCollegeFilter(e.target.value); setActiveTab('active'); }}
-                                className="w-full sm:w-auto text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-purple-300"
-                            >
-                                <option value="">All Colleges</option>
-                                {availableColleges.map(c => (
-                                    <option key={c.id} value={c.id}>{c.name}</option>
-                                ))}
-                            </select>
-                        )}
-                        {availableCategories.length > 1 && (
-                            <select
-                                value={categoryFilter}
-                                onChange={e => { setCategoryFilter(e.target.value); setActiveTab('active'); }}
-                                className="w-full sm:w-auto text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-purple-300"
-                            >
-                                <option value="">All Categories</option>
-                                {availableCategories.map(c => (
-                                    <option key={c} value={c}>{getCategoryLabel(c)}</option>
-                                ))}
-                            </select>
-                        )}
-                        {availableYears.length > 0 && (
-                            <select
-                                value={yearFilter}
-                                onChange={e => { setYearFilter(e.target.value); setActiveTab('active'); }}
-                                className="w-full sm:w-auto text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-purple-300"
-                            >
-                                <option value="">All Years</option>
-                                {availableYears.map(y => (
-                                    <option key={y} value={y}>{y}</option>
-                                ))}
-                            </select>
-                        )}
-                    </FilterBar>
+                <div className="mb-5 space-y-4">
+                    <PageHeader icon={Presentation} color="violet" title="Open Defence"
+                        description="Schedule defences for proposals that passed blind review, and follow each panel to a decision.">
+                        <DownloadMenu filename="open-defence" title="Open defence" subtitle={yearFilter || 'All years'} rows={proposals} columns={[
+                            { label: 'Tracker', value: (p) => p.tracker_number },
+                            { label: 'Title', value: (p) => p.title },
+                            { label: 'Programme', value: (p) => getCategoryLabel(p.category) },
+                            { label: 'College', value: (p) => p.college?.name },
+                            { label: 'Stage', value: (p) => (p.status === 'blind_review_passed' ? 'Awaiting schedule' : 'Under open defence') },
+                            { label: 'Panel members', value: (p) => defenceAssignments(p).length },
+                            { label: 'Scores submitted', value: (p) => defenceAssignments(p).filter((a) => a.status === 'submitted').length },
+                            { label: 'Overdue', value: (p) => defenceAssignments(p).filter((a) => a.due_date && daysUntil(a.due_date) < 0 && a.status !== 'submitted').length },
+                        ]} />
+                        <ViewToggle view={view} onChange={setView} />
+                        <RefreshButton onClick={load} loading={loading} />
+                    </PageHeader>
+                    <StageFilters
+                        search={search} onSearch={setSearch}
+                        colleges={availableColleges} college={collegeFilter} onCollege={(v) => { setCollegeFilter(v); setActiveTab('active'); }}
+                        programmes={availableCategories} programme={categoryFilter} onProgramme={(v) => { setCategoryFilter(v); setActiveTab('active'); }}
+                        years={availableYears} year={yearFilter} onYear={(v) => { setYearFilter(v); setActiveTab('active'); }}
+                        hiddenByYear={hiddenByYear}
+                        onClear={() => { setSearch(''); setCollegeFilter(''); setCategoryFilter(''); }} />
                 </div>
 
                 {/* ── Stat cards ── */}
                 {!loading && allProposals.length > 0 && (
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
-                        <StatCard icon={Shield}       label="Awaiting Schedule"  value={passedBlindReview.length} color="green" />
-                        <StatCard icon={Presentation} label="Under Defence"       value={underDefence.length}      color="purple" />
-                        <StatCard icon={Activity}     label="Reviews Submitted"   value={`${totalSubmitted}/${totalAssignments}`} sub="of assigned reviews" color="blue" />
-                        <StatCard icon={AlertCircle}  label="Overdue Reviews"     value={totalOverdue} color={totalOverdue > 0 ? 'red' : 'gray'} />
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+                        <StatCard icon={Shield}       label="Awaiting schedule"  value={passedBlindReview.length} color="green"
+                            onClick={passedBlindReview.length ? () => jumpTo(awaitingRef) : undefined} />
+                        <StatCard icon={Presentation} label="Under defence"      value={underDefence.length}      color="purple"
+                            onClick={underDefence.length ? () => jumpTo(defenceRef, 'active') : undefined} />
+                        <StatCard icon={Activity}     label="Scores submitted"   value={`${totalSubmitted}/${totalAssignments}`} sub="of assigned panel scores" color="blue"
+                            onClick={tabComplete.length ? () => jumpTo(defenceRef, 'complete') : undefined} />
+                        <StatCard icon={AlertCircle}  label="Overdue scores"     value={totalOverdue} color={totalOverdue > 0 ? 'red' : 'gray'}
+                            onClick={tabOverdue.length ? () => jumpTo(defenceRef, 'overdue') : undefined} />
                     </div>
                 )}
 
@@ -910,7 +889,7 @@ export default function OpenDefence() {
 
                         {/* ── Awaiting Schedule (above tabs) ── */}
                         {passedBlindReview.length > 0 && (
-                            <div>
+                            <div ref={awaitingRef} className="scroll-mt-4">
                                 <div className="border-l-4 border-l-green-500 pl-4 mb-4">
                                     <div className="flex items-center gap-3">
                                         <Calendar size={18} className="text-green-600" />
@@ -941,7 +920,7 @@ export default function OpenDefence() {
 
                         {/* ── Under Open Defence (tabbed) ── */}
                         {underDefence.length > 0 && (
-                            <div>
+                            <div ref={defenceRef} className="scroll-mt-4">
                                 <div className="border-l-4 border-l-purple-500 pl-4 mb-5">
                                     <div className="flex items-center gap-3">
                                         <Presentation size={18} className="text-purple-600" />

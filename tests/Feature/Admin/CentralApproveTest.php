@@ -65,7 +65,7 @@ test('remarks are limited to 2000 characters', function () {
         ->assertJsonValidationErrors('remarks');
 });
 
-test('an award over the call budget needs explicit confirmation', function () {
+test('an award can never be more than is left in the call budget', function () {
     $this->call->update(['funding_budget' => 100000]);
 
     $this->actingAs($this->central, 'sanctum')
@@ -77,6 +77,11 @@ test('an award over the call budget needs explicit confirmation', function () {
 
     $this->actingAs($this->central, 'sanctum')
         ->postJson("/api/v1/proposals/{$this->proposal->id}/central/approve", ['awarded_amount' => 150000, 'acknowledge_over_budget' => true])
+        ->assertStatus(422);
+    expect($this->proposal->fresh()->status)->toBe('accepted');
+
+    $this->actingAs($this->central, 'sanctum')
+        ->postJson("/api/v1/proposals/{$this->proposal->id}/central/approve", ['awarded_amount' => 100000])
         ->assertOk();
 });
 

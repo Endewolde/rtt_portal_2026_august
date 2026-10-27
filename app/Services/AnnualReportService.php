@@ -74,10 +74,28 @@ class AnnualReportService
             ->where('proposals.academic_year', $ay)
             ->sum('disbursements.amount');
 
+        // What was awarded to the year's funded proposals, and what was spent and verified.
+        $awarded = (float) DB::table('awards')
+            ->join('proposals', 'awards.proposal_id', '=', 'proposals.id')
+            ->where('proposals.academic_year', $ay)
+            ->whereNull('proposals.deleted_at')
+            ->whereIn('proposals.status', self::FUNDED_STATUSES)
+            ->sum('awards.awarded_amount');
+
+        $settled = (float) DB::table('budget_settlements')
+            ->join('budget_requests', 'budget_settlements.budget_request_id', '=', 'budget_requests.id')
+            ->join('proposals', 'budget_requests.proposal_id', '=', 'proposals.id')
+            ->where('proposals.academic_year', $ay)
+            ->whereNotNull('budget_settlements.finance_verified_at')
+            ->sum('budget_settlements.total_spent');
+
         return [
             'allocated' => $allocated,
+            'awarded' => $awarded,
             'disbursed' => $disbursed,
+            'settled' => $settled,
             'utilization' => $allocated > 0 ? round(($disbursed / $allocated) * 100, 1) : 0,
+            'paid_of_awarded' => $awarded > 0 ? round(($disbursed / $awarded) * 100, 1) : 0,
         ];
     }
 
@@ -88,13 +106,16 @@ class AnnualReportService
             ->join('proposals', 'review_assignments.proposal_id', '=', 'proposals.id')
             ->where('proposals.academic_year', $ay);
 
-        $total = (clone $base)->count();
-        $completed = (clone $base)->where('review_assignments.status', 'completed')->count();
+        // Cancelled and declined assignments were never owed; submitted ones are done.
+        $owed = (clone $base)->whereNotIn('review_assignments.status', ['cancelled', 'declined']);
+        $total = (clone $owed)->count();
+        $completed = (clone $owed)->whereIn('review_assignments.status', ['submitted', 'completed'])->count();
 
         return [
             'total' => $total,
             'completed' => $completed,
             'rate' => $total > 0 ? round(($completed / $total) * 100, 1) : 0,
+            'reviewers' => (clone $owed)->distinct()->count('review_assignments.reviewer_id'),
         ];
     }
 

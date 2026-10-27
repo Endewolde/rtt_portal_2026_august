@@ -1,4 +1,5 @@
 import { getStatusLabel } from '../lib/utils';
+import { currency } from '../lib/terms';
 
 const CATEGORY_COLORS = {
     research:             'bg-blue-100 text-blue-700',
@@ -113,7 +114,7 @@ export default function ProposalTable({
         : '—';
 
     const fmtCurrency = (n) =>
-        n != null ? `ETB ${parseFloat(n).toLocaleString()}` : '—';
+        n != null ? `${currency()} ${parseFloat(n).toLocaleString()}` : '—';
 
     // Secondary fields shown in the mobile card grid — tracker/grant_reference,
     // title and status get dedicated placement above this grid instead.
@@ -304,7 +305,7 @@ export default function ProposalTable({
 
             {/* Mobile: stacked cards — no horizontal scrolling */}
             <div className="sm:hidden divide-y divide-gray-100">
-                {proposals.map(p => (
+                {proposals.map((p, i) => (
                     <div key={p.id} className="p-4">
                         {selectable && (
                             <label className="flex items-center gap-2 mb-2.5 text-xs text-gray-500">
@@ -319,6 +320,7 @@ export default function ProposalTable({
                         )}
                         <div className="flex items-start justify-between gap-2 mb-2">
                             <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="flex h-5 min-w-5 items-center justify-center rounded-md bg-gray-100 px-1 text-[10px] font-bold tabular-nums text-gray-500">{i + 1}</span>
                                 {col('tracker') && (
                                     <a href={`/proposals/${p.id}`}
                                         className="font-mono text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded hover:bg-blue-100 transition-colors">

@@ -3,6 +3,7 @@ import { BadgeCheck, X, AlertTriangle, Info, Wallet, TrendingUp, TrendingDown, H
 import api from '../lib/api';
 import { useToast } from './Toast';
 import { formatCurrency, getCategoryLabel } from '../lib/utils';
+import { currency } from '../lib/terms';
 
 const MAX_REMARKS = 2000;
 
@@ -37,7 +38,6 @@ export default function ApproveFundingModal({ proposal, onSubmit, onClose }) {
     const [remarks, setRemarks] = useState('');
     const [history, setHistory] = useState(null);
     const [saving, setSaving] = useState(false);
-    const [overBudgetOk, setOverBudgetOk] = useState(false);
 
     useEffect(() => {
         if (!proposal.pi?.id) return;
@@ -62,13 +62,13 @@ export default function ApproveFundingModal({ proposal, onSubmit, onClose }) {
     const callBudget = proposal.call_budget?.budget != null ? proposal.call_budget : null;
     const afterAward = callBudget && value ? callBudget.remaining - value : null;
     const overBudget = afterAward !== null && afterAward < 0;
-    const canSubmit = amountValid && !saving && (!overBudget || overBudgetOk);
+    const canSubmit = amountValid && !saving && !overBudget;
 
     const submit = async () => {
         if (!canSubmit) return;
         setSaving(true);
         try {
-            await onSubmit({ awarded_amount: value, remarks: remarks.trim() || null, acknowledge_over_budget: overBudget && overBudgetOk });
+            await onSubmit({ awarded_amount: value, remarks: remarks.trim() || null });
         } catch (e) {
             const errors = e?.response?.data?.errors;
             error(errors && Object.keys(errors).length ? Object.values(errors).flat()[0] : (e?.response?.data?.message ?? 'The approval could not be saved.'));
@@ -159,7 +159,7 @@ export default function ApproveFundingModal({ proposal, onSubmit, onClose }) {
                         </label>
                         <div className="flex rounded-xl border border-gray-300 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-200">
                             <span className="flex items-center gap-1.5 rounded-l-xl border-r border-gray-200 bg-gray-50 px-3 text-xs font-semibold text-gray-500">
-                                <Wallet size={13} /> ETB
+                                <Wallet size={13} /> {currency()}
                             </span>
                             <input
                                 id="award-amount"
@@ -173,7 +173,7 @@ export default function ApproveFundingModal({ proposal, onSubmit, onClose }) {
                         </div>
                         <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs">
                             {!amountValid ? (
-                                <span className="text-red-500">Enter an amount of at least ETB 1.</span>
+                                <span className="text-red-500">Enter an amount of at least {currency()} 1.</span>
                             ) : overRequest ? (
                                 <span className="flex items-center gap-1 text-amber-600">
                                     <AlertTriangle size={12} /> {formatCurrency(value - requested)} more than requested
@@ -196,16 +196,22 @@ export default function ApproveFundingModal({ proposal, onSubmit, onClose }) {
                     {callBudget && (
                         <div className={`rounded-xl border px-4 py-3 ${overBudget ? 'border-rose-200 bg-rose-50' : 'border-gray-200 bg-gray-50/70'}`}>
                             <p className="flex items-center gap-1.5 text-xs font-semibold text-gray-700"><Wallet size={13} className="text-gray-400" /> Call budget · {proposal.call_budget.call_title}</p>
-                            <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                            <div className="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
                                 <div><p className="text-gray-500">Budget</p><p className="font-semibold tabular-nums text-gray-900">{formatCurrency(callBudget.budget)}</p></div>
+                                <div><p className="text-gray-500">Used so far</p><p className="font-semibold tabular-nums text-gray-900">{formatCurrency(callBudget.committed)}</p></div>
                                 <div><p className="text-gray-500">Left now</p><p className="font-semibold tabular-nums text-gray-900">{formatCurrency(callBudget.remaining)}</p></div>
                                 <div><p className="text-gray-500">After this award</p><p className={`font-semibold tabular-nums ${overBudget ? 'text-rose-700' : 'text-emerald-700'}`}>{afterAward === null ? '—' : formatCurrency(afterAward)}</p></div>
                             </div>
                             {overBudget && (
-                                <label className="mt-3 flex cursor-pointer items-start gap-2 text-xs text-rose-800">
-                                    <input type="checkbox" checked={overBudgetOk} onChange={(e) => setOverBudgetOk(e.target.checked)} className="mt-0.5 rounded border-rose-300" />
-                                    <span>This award is {formatCurrency(-afterAward)} more than is left in the call's budget. Approve it anyway.</span>
-                                </label>
+                                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-rose-800">
+                                    <span><b>Insufficient budget.</b> {callBudget.remaining > 0 ? `This award is ${formatCurrency(-afterAward)} more than is left.` : 'The budget is fully used.'} Lower it, or ask for the budget to be raised (Funding round → Budget).</span>
+                                    {callBudget.remaining > 0 && (
+                                        <button type="button" onClick={() => setAmount(formatInput(String(callBudget.remaining)))}
+                                            className="rounded-lg border border-rose-200 bg-white px-2.5 py-1 font-semibold text-rose-700 hover:bg-rose-100">
+                                            Use what is left
+                                        </button>
+                                    )}
+                                </div>
                             )}
                         </div>
                     )}

@@ -1,12 +1,15 @@
 import { useState, useEffect, useRef, useCallback, memo } from 'react';
 import {
     FileText, Printer, Search, ChevronRight, BadgeDollarSign,
-    User, RefreshCw, Layers, CheckCircle, Lock, Unlock, Download, Save,
+    User, RefreshCw, Layers, CheckCircle, Lock, Unlock, Download, Save, Clock, Hash,
 } from 'lucide-react';
+import { PageHeader, StatCard, StatSkeletons, RefreshButton } from '../../Components/Insights/Kit';
+import ProposalHover from '../../Components/Finance/ProposalHover';
 import AppLayout from '../../Layouts/AppLayout';
 import api from '../../lib/api';
-import { usePage, router } from '@inertiajs/react';
+import { usePage } from '@inertiajs/react';
 import { useToast } from '../../Components/Toast';
+import { currency } from '../../lib/terms';
 
 const TEMPLATE_KEY   = 'rtt_grant_letter_template';
 const LAST_PROP_KEY  = 'rtt_grant_letter_last';
@@ -15,7 +18,8 @@ function loadSavedTemplate() {
     try { return JSON.parse(localStorage.getItem(TEMPLATE_KEY) ?? 'null') ?? {}; } catch { return {}; }
 }
 function saveTemplateToStorage(overrides) {
-    try { localStorage.setItem(TEMPLATE_KEY, JSON.stringify({ ...overrides, savedAt: new Date().toISOString() })); } catch {}
+    // A local copy only; "savedAt" is set by the server when the template is really saved.
+    try { localStorage.setItem(TEMPLATE_KEY, JSON.stringify(overrides)); } catch {}
 }
 
 // ── Pure helpers ──────────────────────────────────────────────────────────────
@@ -40,6 +44,15 @@ function numberToWords(num) {
     return convert(Math.round(parseFloat(num)));
 }
 
+/** "one year", "18 months", "two years" — how long the grant runs, in words. */
+function durationWords(months) {
+    const m = parseInt(months, 10);
+    if (!m) return 'one year';
+    const words = ['', 'one', 'two', 'three', 'four', 'five'];
+    if (m % 12 === 0 && m / 12 <= 5) return `${words[m / 12]} year${m === 12 ? '' : 's'}`;
+    return `${m} months`;
+}
+
 function todayFormatted() {
     return new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
@@ -53,7 +66,7 @@ function buildData(proposal, head) {
     const amount = award?.awarded_amount ? parseFloat(award.awarded_amount) : null;
     const amountFmt = amount
         ? amount.toLocaleString('en-US', { minimumFractionDigits: 2 })
-          + ' (' + numberToWords(amount) + ' Ethiopian Birr)'
+          + ' (' + numberToWords(amount) + ' ' + (head.currencyName || 'Ethiopian Birr') + ')'
         : '[Amount]';
 
     const members = [
@@ -65,7 +78,7 @@ function buildData(proposal, head) {
     const title    = proposal?.title ?? '';
 
     const body = proposal ? [
-        `${head.orgName} is pleased to inform you that your ${category} proposal entitled "${title}" has undergone a thorough evaluation and assessment by the Evaluation Management System and is accepted for funding amounting to ${amountFmt} for one year.`,
+        `${head.orgName} is pleased to inform you that your ${category} proposal entitled "${title}" has undergone a thorough evaluation and assessment by the Evaluation Management System and is accepted for funding amounting to ${amountFmt} for ${durationWords(proposal?.duration_months)}.`,
         '',
         `Thus, we are pleased to inform you that the office of the Vice President for Research and Technology Transfer has approved your proposal for the aforementioned budget grant. Upon completion of the project and when all functional requirements are met, you are required to hand over the system to the university. In the meantime, training, support and maintenance should be provided by the team members whenever deemed necessary by the office of the Vice President for Research and Technology Transfer during the grant period. We wish you success in your research project and look forward to receiving tangible outputs and successful implementation of the project.`,
     ].join('\n') : '';
@@ -279,11 +292,13 @@ export default function GrantLetters() {
         footerAmharic:  appSettings.org_name_amharic  ?? 'ወላይታ ሶዶ ዩኒቨርሲቲ',
         logo:           appSettings.system_logo        ?? null,
         stamp:          null,
+        currencyName:   appSettings.currency_name ?? 'Ethiopian Birr',
     });
 
     const [proposals, setProposals]     = useState([]);
     const [loadingList, setLoadingList] = useState(true);
     const [search, setSearch]           = useState('');
+    const [listFilter, setListFilter]   = useState('all');
     const [selected, setSelected]       = useState(null);
     const [currentHtml, setCurrentHtml] = useState(null);
 
@@ -304,43 +319,40 @@ export default function GrantLetters() {
     const autoSelectedRef   = useRef(false);
     const templateSaveTimer = useRef(null);
 
-    // Capture DOM state right before any Inertia navigation so edits are never lost.
+    // The shared template and the letterhead from Settings, before any letter is built.
+    const [templateReady, setTemplateReady] = useState(false);
     useEffect(() => {
-        const off = router.on('before', () => {
-            const dom = canvasDomRef.current;
-            if (!dom) return;
-            const get = f => dom.querySelector(`[data-field="${f}"]`)?.innerText?.trim() ?? '';
-            const overrides = {
-                signatoryName:  get('signatoryName'),
-                signatoryTitle: get('signatoryTitle') || 'Vice President, Research and Technology Transfer',
-                date:           get('date') || todayFormatted(),
-                fileNo:         get('fileNo'),
-                cc:             get('cc').split('\n').map(s => s.replace(/^•\s*/, '').trim()).filter(Boolean),
-            };
-            if (overrides.signatoryName || overrides.fileNo || overrides.cc.length) {
-                saveTemplateToStorage(overrides);
-                setSavedTemplate(overrides);
-            }
-        });
-        return off;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        api.get('/awards/letter-template')
+            .then(r => {
+                const server = r.data?.data;
+                if (server?.signatoryName) {
+                    setSavedTemplate(server);
+                    saveTemplateToStorage(server);
+                }
+                const fromSettings = Object.fromEntries(Object.entries(r.data?.meta?.head ?? {}).filter(([, v]) => v));
+                if (Object.keys(fromSettings).length) setHead(h => ({ ...h, ...fromSettings, footerAmharic: fromSettings.orgNameAmharic ?? h.footerAmharic }));
+            })
+            .catch(() => {})
+            .finally(() => setTemplateReady(true));
     }, []);
 
-    // Load funded proposals
-    useEffect(() => {
+    // Running projects (funded, or already at midterm) with their awards and letter status.
+    const loadProposals = useCallback(() => {
         setLoadingList(true);
-        api.get('/proposals', { params: { status: 'funded', per_page: 200, with_award: 1 } })
+        return api.get('/proposals', { params: { status: 'funded,midterm_evaluation', per_page: 200, with_award: 1 } })
             .then(r => {
                 const items = r.data?.data?.data ?? r.data?.data ?? [];
                 setProposals(items.map(p => ({ ...p, award: p.award ?? null })));
             })
-            .catch(() => {})
+            .catch(() => toastError('Could not load funded projects.'))
             .finally(() => setLoadingList(false));
-    }, []);
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Auto-restore last selected proposal after proposals load
+    useEffect(() => { loadProposals(); }, [loadProposals]);
+
+    // Auto-restore last selected proposal once projects and the template have loaded
     useEffect(() => {
-        if (proposals.length === 0 || autoSelectedRef.current) return;
+        if (!templateReady || proposals.length === 0 || autoSelectedRef.current) return;
         try {
             const lastId = localStorage.getItem(LAST_PROP_KEY);
             if (!lastId) return;
@@ -351,7 +363,7 @@ export default function GrantLetters() {
             }
         } catch {}
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [proposals]);
+    }, [proposals, templateReady]);
 
     // Wire logo + stamp click handlers whenever the canvas remounts (new proposal)
     const handleCanvasMount = useCallback(domNode => {
@@ -365,24 +377,23 @@ export default function GrantLetters() {
             stampArea.addEventListener('click', () => stampInputRef.current?.click());
         }
 
-        // Auto-save template fields on every edit, debounced 600 ms.
-        // setSavedTemplate is a stable React setter — safe to capture in useCallback([]) closure.
+        // Typing the signatory, title or file number on the letter fills the template
+        // form too. Only filled-in values are taken, so the letter never empties a
+        // saved template; the date and CC stay as set in the form.
         let saveTimer;
         const autoSave = () => {
             clearTimeout(saveTimer);
             saveTimer = setTimeout(() => {
                 const get = f => domNode.querySelector(`[data-field="${f}"]`)?.innerText?.trim() ?? '';
-                const overrides = {
-                    signatoryName:  get('signatoryName'),
-                    signatoryTitle: get('signatoryTitle') || 'Vice President, Research and Technology Transfer',
-                    date:           get('date') || todayFormatted(),
-                    fileNo:         get('fileNo'),
-                    cc:             get('cc').split('\n').map(s => s.replace(/^•\s*/, '').trim()).filter(Boolean),
-                };
-                if (overrides.signatoryName || overrides.fileNo || overrides.cc.length) {
-                    saveTemplateToStorage(overrides);
-                    setSavedTemplate(overrides);
-                }
+                const typed = Object.fromEntries(
+                    [['signatoryName', get('signatoryName')], ['signatoryTitle', get('signatoryTitle')], ['fileNo', get('fileNo')]].filter(([, v]) => v),
+                );
+                if (!Object.keys(typed).length) return;
+                setSavedTemplate(prev => {
+                    const next = { ...prev, ...typed };
+                    saveTemplateToStorage(next);
+                    return next;
+                });
             }, 600);
         };
         domNode.addEventListener('input', autoSave);
@@ -462,6 +473,7 @@ export default function GrantLetters() {
         if (savedTemplate.signatoryName)  data.signatoryName  = savedTemplate.signatoryName;
         if (savedTemplate.signatoryTitle) data.signatoryTitle = savedTemplate.signatoryTitle;
         if (savedTemplate.fileNo)         data.fileNo         = savedTemplate.fileNo;
+        if (savedTemplate.date)           data.date           = savedTemplate.date;
         if (savedTemplate.cc?.length)     data.cc             = savedTemplate.cc;
         setSelected(full);
         setCurrentHtml(generateLetterHtml(data, head));
@@ -508,13 +520,31 @@ export default function GrantLetters() {
         templateSaveTimer.current = setTimeout(() => saveTemplateToStorage(updated), 400);
     };
 
-    const saveTemplate = () => {
+    // Saved on the server, so it is there on return, in any browser, for every letter issuer.
+    const saveTemplate = async ({ quiet = false } = {}) => {
         if (!savedTemplate.signatoryName?.trim()) {
-            toastError('Fill in the Signatory Name below before saving.');
-            return;
+            toastError('Fill in the Signatory Name before saving.');
+            return false;
         }
-        saveTemplateToStorage(savedTemplate);
-        success('Template saved.');
+        const payload = {
+            signatoryName:  savedTemplate.signatoryName.trim(),
+            signatoryTitle: savedTemplate.signatoryTitle?.trim() || null,
+            fileNo:         savedTemplate.fileNo?.trim() || null,
+            date:           savedTemplate.date?.trim() || null,
+            cc:             (savedTemplate.cc ?? []).filter(Boolean),
+        };
+        try {
+            const r = await api.put('/awards/letter-template', payload);
+            const saved = r.data?.data ?? payload;
+            setSavedTemplate(saved);
+            saveTemplateToStorage(saved);
+            if (!quiet) success('Template saved — it will be here next time.');
+            return true;
+        } catch (e) {
+            saveTemplateToStorage(savedTemplate);
+            toastError(e.response?.data?.message ?? 'The template could not be saved to the server; it is kept in this browser only.');
+            return false;
+        }
     };
 
     const applyTemplate = () => {
@@ -534,6 +564,7 @@ export default function GrantLetters() {
             toastError('Please save a template with a Signatory Name first, then approve.');
             return;
         }
+        if (!(await saveTemplate({ quiet: true }))) return;
 
         setLockedOverrides(savedTemplate);
         setLockedHead(head);
@@ -541,14 +572,24 @@ export default function GrantLetters() {
         setBulkLoading(true);
 
         try {
-            const [full, approveRes] = await Promise.all([
-                Promise.all(
-                    proposals.map(p =>
-                        api.get(`/proposals/${p.id}`)
+            // Fetch each project's team a few at a time rather than all at once.
+            const fetchAll = async () => {
+                const out = new Array(proposals.length);
+                let next = 0;
+                const worker = async () => {
+                    while (next < proposals.length) {
+                        const i = next++;
+                        const p = proposals[i];
+                        out[i] = await api.get(`/proposals/${p.id}`)
                             .then(r => ({ ...p, ...(r.data?.data ?? {}), award: p.award ?? r.data?.data?.award }))
-                            .catch(() => p),
-                    ),
-                ),
+                            .catch(() => p);
+                    }
+                };
+                await Promise.all(Array.from({ length: Math.min(6, proposals.length) }, worker));
+                return out;
+            };
+            const [full, approveRes] = await Promise.all([
+                fetchAll(),
                 api.post('/awards/approve-letters', {
                     signatoryName:  savedTemplate.signatoryName,
                     signatoryTitle: savedTemplate.signatoryTitle,
@@ -559,6 +600,7 @@ export default function GrantLetters() {
             ]);
             setBulkProposals(full);
             success(approveRes.data?.message ?? 'Template approved. PIs can now download their award letters.');
+            loadProposals();
         } catch (e) {
             toastError(e.response?.data?.message ?? 'Failed to approve letters. Please try again.');
             setTemplateLocked(false);
@@ -595,11 +637,14 @@ export default function GrantLetters() {
         if (!src || src.startsWith('data:')) return src;
         try {
             const abs = src.startsWith('http') ? src : window.location.origin + src;
-            const res = await fetch(abs);
-            const buf = await res.arrayBuffer();
-            const mime = res.headers.get('content-type') || 'image/png';
-            const b64  = btoa(String.fromCharCode(...new Uint8Array(buf)));
-            return `data:${mime};base64,${b64}`;
+            const blob = await (await fetch(abs)).blob();
+            // FileReader handles any size; spreading bytes into a string overflowed on large logos.
+            return await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
         } catch {
             return src; // best-effort fallback
         }
@@ -656,11 +701,15 @@ export default function GrantLetters() {
         await printViaBlob(pages);
     };
 
+    const issued = (p) => !!p.award?.grant_letter_approved_at;
+    const q = search.trim().toLowerCase();
     const filtered = proposals.filter(p =>
-        !search
-        || p.title?.toLowerCase().includes(search.toLowerCase())
-        || p.tracker_number?.includes(search),
+        (listFilter === 'all' || (listFilter === 'issued' ? issued(p) : !issued(p)))
+        && (!q || [p.title, p.tracker_number, p.pi?.name, p.award?.grant_reference].some(v => v?.toLowerCase().includes(q))),
     );
+    const issuedCount = proposals.filter(issued).length;
+    const missingRef = proposals.filter(p => !p.award?.grant_reference).length;
+    const totalAwarded = proposals.reduce((sum, p) => sum + parseFloat(p.award?.awarded_amount ?? 0), 0);
 
     return (
         <AppLayout breadcrumb="Grant Letters">
@@ -698,26 +747,14 @@ export default function GrantLetters() {
 
             <div className="max-w-screen-2xl mx-auto">
                 {/* Header */}
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-5">
-                    <div className="flex items-center gap-3">
-                        <div className="h-11 w-11 bg-slate-900 rounded-2xl flex items-center justify-center shrink-0">
-                            <FileText size={20} className="text-white" />
-                        </div>
-                        <div>
-                            <h1 className="text-xl font-bold text-gray-900">Grant Letters</h1>
-                            <p className="text-sm text-gray-500 mt-0.5">
-                                {currentHtml
-                                    ? 'Click any text on the letter to edit it — body, names, header, footer, all inline'
-                                    : 'Select a funded proposal to start'}
-                            </p>
-                        </div>
-                    </div>
-
+                <div className="mb-5 space-y-5">
+                <PageHeader icon={FileText} color="indigo" title="Grant Letters"
+                    description={currentHtml ? 'Click any text on the letter to edit it — header, names, body, signatory and footer.' : 'Pick a funded project to prepare its award letter, then approve the template to issue them all.'}>
                     <div className="flex flex-wrap items-center gap-2">
                         {currentHtml && !templateLocked && (
                             <>
                                 <button
-                                    onClick={saveTemplate}
+                                    onClick={() => saveTemplate()}
                                     className="flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50"
                                 >
                                     <Save size={14} /> Save Template
@@ -736,6 +773,7 @@ export default function GrantLetters() {
                                 </button>
                             </>
                         )}
+                        {!currentHtml && <RefreshButton onClick={loadProposals} loading={loadingList} />}
                         {templateLocked && (
                             <>
                                 <button
@@ -758,6 +796,16 @@ export default function GrantLetters() {
                             </>
                         )}
                     </div>
+                </PageHeader>
+
+                {loadingList && proposals.length === 0 ? <StatSkeletons /> : (
+                    <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+                        <StatCard icon={BadgeDollarSign} color="emerald" label="Funded projects" value={proposals.length} hint={`${currency()} ${totalAwarded.toLocaleString('en-US', { maximumFractionDigits: 0 })} awarded`} />
+                        <StatCard icon={CheckCircle} color="indigo" label="Letters issued" value={issuedCount} hint={proposals.length ? `${Math.round((issuedCount / proposals.length) * 100)}% of projects` : '—'} />
+                        <StatCard icon={Clock} color="amber" label="Waiting for a letter" value={proposals.length - issuedCount} hint={proposals.length - issuedCount ? 'Approve the template to issue them' : 'Every project has its letter'} />
+                        <StatCard icon={Hash} color={missingRef ? 'red' : 'slate'} label="Missing grant reference" value={missingRef} hint={missingRef ? 'Their letters have no Ref/No' : 'All set'} hintTone={missingRef ? 'text-red-600 font-medium' : undefined} />
+                    </div>
+                )}
                 </div>
 
                 {/* Template locked banner */}
@@ -777,23 +825,25 @@ export default function GrantLetters() {
 
                 <div className="flex gap-5 items-start">
                     {/* Left: proposal list */}
-                    <div className="w-72 shrink-0">
+                    <div className="w-80 shrink-0">
                         <div className="relative mb-3">
                             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
                             <input
                                 value={search}
                                 onChange={e => setSearch(e.target.value)}
-                                placeholder="Search funded proposals…"
+                                placeholder="Search tracker, title, PI or grant ref…"
                                 className="w-full pl-9 pr-3 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
                             />
                         </div>
 
                         <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-                            <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
-                                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Funded Proposals</span>
-                                <span className="text-xs font-bold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">
-                                    {proposals.length}
-                                </span>
+                            <div className="flex gap-1 border-b border-gray-100 p-1.5">
+                                {[['all', 'All', proposals.length], ['waiting', 'No letter', proposals.length - issuedCount], ['issued', 'Issued', issuedCount]].map(([key, label, count]) => (
+                                    <button key={key} onClick={() => setListFilter(key)}
+                                        className={`flex flex-1 items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-xs font-semibold transition ${listFilter === key ? 'bg-gray-900 text-white' : 'text-gray-500 hover:bg-gray-100'}`}>
+                                        {label} <span className={`rounded-full px-1.5 text-[10px] ${listFilter === key ? 'bg-white/20' : 'bg-gray-100'}`}>{count}</span>
+                                    </button>
+                                ))}
                             </div>
 
                             {loadingList ? (
@@ -803,7 +853,7 @@ export default function GrantLetters() {
                             ) : filtered.length === 0 ? (
                                 <div className="py-10 text-center">
                                     <BadgeDollarSign size={28} className="mx-auto text-gray-300 mb-2" />
-                                    <p className="text-xs text-gray-400">No funded proposals</p>
+                                    <p className="text-xs text-gray-400">{proposals.length ? 'Nothing matches' : 'No funded projects yet'}</p>
                                 </div>
                             ) : (
                                 <div className="divide-y divide-gray-50 max-h-[calc(100vh-240px)] overflow-y-auto">
@@ -814,8 +864,12 @@ export default function GrantLetters() {
                                             className={`w-full text-left px-4 py-3.5 hover:bg-gray-50 transition-colors flex items-start gap-3 border-l-2 ${selected?.id === p.id ? 'bg-slate-50 border-slate-900' : 'border-transparent'}`}
                                         >
                                             <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2 mb-1">
-                                                    <span className="font-mono text-xs font-bold text-emerald-700">{p.tracker_number}</span>
+                                                <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                                                    <ProposalHover id={p.id} className="font-mono text-xs font-bold text-indigo-600">{p.tracker_number}</ProposalHover>
+                                                    {issued(p)
+                                                        ? <span className="rounded-full bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700" title={`Issued ${new Date(p.award.grant_letter_approved_at).toLocaleDateString('en-GB')}`}>Letter issued</span>
+                                                        : <span className="rounded-full bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">No letter</span>}
+                                                    {!p.award?.grant_reference && <span className="rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">No ref</span>}
                                                 </div>
                                                 <p className="text-xs font-medium text-gray-800 line-clamp-2 leading-snug">{p.title}</p>
                                                 <div className="flex items-center gap-1.5 mt-1.5">
@@ -824,7 +878,7 @@ export default function GrantLetters() {
                                                 </div>
                                                 {p.award?.awarded_amount && (
                                                     <div className="mt-1 text-xs font-semibold text-emerald-700">
-                                                        ETB {parseFloat(p.award.awarded_amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                                        {currency()} {parseFloat(p.award.awarded_amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                                                     </div>
                                                 )}
                                             </div>
@@ -839,15 +893,22 @@ export default function GrantLetters() {
                         <div className="mt-3 bg-white border border-gray-200 rounded-2xl overflow-hidden">
                             <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
                                 <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Letter Template</span>
-                                {savedTemplate.signatoryName && selected && (
-                                    <button
-                                        onClick={applyTemplate}
-                                        className="text-xs font-semibold text-indigo-600 hover:text-indigo-800"
-                                    >
-                                        Apply to letter ↺
+                                <div className="flex items-center gap-3">
+                                    {savedTemplate.signatoryName && selected && (
+                                        <button onClick={applyTemplate} className="text-xs font-semibold text-indigo-600 hover:text-indigo-800">
+                                            Apply to letter ↺
+                                        </button>
+                                    )}
+                                    <button onClick={() => saveTemplate()} className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-800">
+                                        <Save size={12} /> Save
                                     </button>
-                                )}
+                                </div>
                             </div>
+                            {savedTemplate.savedAt && (
+                                <p className="border-b border-gray-100 bg-emerald-50/60 px-4 py-1.5 text-[11px] text-emerald-800">
+                                    Saved {new Date(savedTemplate.savedAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}{savedTemplate.savedBy ? ` by ${savedTemplate.savedBy}` : ''}
+                                </p>
+                            )}
                             <div className="px-4 py-3 space-y-3">
                                 <div>
                                     <label className="block text-xs font-medium text-gray-600 mb-1">Signatory Name <span className="text-red-500">*</span></label>
@@ -908,10 +969,15 @@ export default function GrantLetters() {
                     {/* Right: A4 letter preview */}
                     <div className="flex-1 flex justify-center overflow-x-auto">
                         {!currentHtml ? (
-                            <div className="w-full max-w-2xl flex flex-col items-center justify-center py-32 bg-white border border-dashed border-gray-200 rounded-2xl text-gray-400">
-                                <FileText size={40} className="mb-4 opacity-30" />
-                                <p className="text-sm font-medium">Select a funded proposal</p>
-                                <p className="text-xs mt-1">The letter will appear here for editing</p>
+                            <div className="flex w-full max-w-2xl flex-col items-center justify-center rounded-2xl border border-dashed border-gray-300 bg-white px-8 py-24 text-center">
+                                <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-500"><FileText size={26} /></span>
+                                <p className="mt-4 text-sm font-semibold text-gray-800">Pick a project on the left</p>
+                                <p className="mt-1 max-w-sm text-xs text-gray-500">Its letter opens here on A4. Edit anything inline, set the signatory and CC in the template box, then approve the template to issue every project's letter at once.</p>
+                                <ol className="mt-5 grid w-full max-w-md grid-cols-3 gap-2 text-left text-[11px] text-gray-600">
+                                    {['Pick a project', 'Fill the template', 'Approve & issue'].map((t, i) => (
+                                        <li key={t} className="rounded-xl bg-gray-50 px-3 py-2"><span className="mb-0.5 block font-bold text-indigo-600">{i + 1}</span>{t}</li>
+                                    ))}
+                                </ol>
                             </div>
                         ) : (
                             <div style={{

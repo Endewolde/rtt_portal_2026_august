@@ -2,13 +2,14 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Exceptions\OverBudgetException;
 use App\Http\Controllers\Controller;
-use App\Models\Award;
 use App\Models\Proposal;
 use App\Models\ProposalCall;
 use App\Models\User;
 use App\Services\AwardService;
 use App\Services\FundingBudgetService;
+use App\Services\FundingDecisionService;
 use App\Services\ReviewScoreService;
 use App\Services\WorkflowService;
 use App\Support\RejectionReasons;
@@ -52,7 +53,7 @@ class CentralEvaluationController extends Controller
 
         $budgets = [];
         $proposals = $query->get()
-            ->map(function (Proposal $p) use (&$budgets) {
+            ->map(function (Proposal $p) use (&$budgets, $request) {
                 // Live recalculation against CURRENT threshold settings and CURRENT
                 // evaluation-criteria weights — never cached, so this list is always
                 // up to date even if thresholds/criteria changed after the proposal's
@@ -60,8 +61,14 @@ class CentralEvaluationController extends Controller
                 $snapshot = $this->scoreService->recalculateSnapshot($p);
 
                 $budgetTotal = $p->budgets->sum('amount');
+                $reviewers = $p->reviewAssignments->where('status', 'submitted');
 
-                return array_merge($p->toArray(), [
+                // The scores are summarised below; the raw assignments, questions and
+                // budget lines are not sent to the browser.
+                return array_merge($p->makeHidden(['reviewAssignments', 'budgets'])->toArray(), [
+                    'skips_defence' => $snapshot['skips_defence'] ?? false,
+                    'blind_reviewers' => $reviewers->filter(fn ($a) => str_starts_with($a->evaluationType?->name ?? '', 'blind_review') && ! $a->set_aside_at)->count(),
+                    'defence_reviewers' => $reviewers->filter(fn ($a) => str_starts_with($a->evaluationType?->name ?? '', 'open_defence'))->count(),
                     'blind_score_raw' => $snapshot['blind']['score'] ?? null,
                     'blind_max' => $snapshot['blind']['max'] ?? null,
                     'defence_score_raw' => $snapshot['defence']['score'] ?? null,
@@ -74,8 +81,10 @@ class CentralEvaluationController extends Controller
                     'defence_below_threshold' => $snapshot['defence_below_threshold'],
                     'decision_mode' => $snapshot['decision_mode'],
                     'budget_total' => $budgetTotal,
+                    // College-level deciders spend their college's share of the call, not the whole call.
                     'call_budget' => $p->proposalCall
-                        ? ($budgets[$p->proposal_call_id] ??= ['call_title' => $p->proposalCall->title] + $this->fundingBudget->summary($p->proposalCall))
+                        ? ($budgets[$p->proposal_call_id.'|'.$p->college_id] ??= ['call_title' => $p->proposalCall->title.($request->_college_scope ? ' · your college\'s share' : '')]
+                            + ($request->_college_scope ? $this->fundingBudget->collegeSummary($p->proposalCall, (string) $p->college_id) : $this->fundingBudget->summary($p->proposalCall)))
                         : null,
                 ]);
             });
@@ -112,7 +121,6 @@ class CentralEvaluationController extends Controller
         $request->validate([
             'awarded_amount' => 'required|numeric|min:1',
             'remarks' => 'nullable|string|max:2000',
-            'acknowledge_over_budget' => 'sometimes|boolean',
         ]);
 
         $proposal = Proposal::with('proposalCall')->findOrFail($id);
@@ -121,67 +129,27 @@ class CentralEvaluationController extends Controller
             return $denied;
         }
 
-        // Going over the call's budget needs an explicit confirmation.
-        if ($proposal->proposalCall && ! $request->boolean('acknowledge_over_budget')) {
-            $budget = $this->fundingBudget->summary($proposal->proposalCall, $proposal->id);
-            if ($budget['remaining'] !== null && (float) $request->awarded_amount > $budget['remaining']) {
-                return response()->json([
-                    'data' => ['remaining' => $budget['remaining'], 'over_by' => round((float) $request->awarded_amount - $budget['remaining'], 2)],
-                    'message' => 'Over budget: this award is more than the '.number_format(max(0, $budget['remaining']), 2).' ETB left in the call\'s funding budget.',
-                    'errors' => [],
-                    'meta' => ['code' => 'over_budget'],
-                ], 422);
-            }
-        }
-
         try {
-            // Create or update the award BEFORE transitioning so that when the
-            // ProposalTransitioned event fires and sends the email, the correct
-            // awarded_amount is already persisted on the award record. One
-            // transaction: a refused transition must not leave an award behind.
-            [$updated, $award] = DB::transaction(function () use ($request, $proposal) {
-                $existingAward = Award::where('proposal_id', $proposal->id)->first();
-                if ($existingAward) {
-                    $existingAward->update([
-                        'awarded_amount' => (float) $request->awarded_amount,
-                        'approval_notes' => $request->remarks ?? $existingAward->approval_notes,
-                        'approved_by' => $request->user()->id,
-                        'approved_at' => now(),
-                    ]);
-                    $award = $existingAward->fresh();
-                } else {
-                    $award = $this->awardService->createForFundedProposal(
-                        $proposal,
-                        $request->user(),
-                        (float) $request->awarded_amount,
-                        $request->remarks
-                    );
-                }
-
-                $updated = $this->workflowService->transition(
-                    $proposal,
-                    'central_approve',
-                    $request->user(),
-                    $request->remarks ?? 'Approved by Central Office for funding'
-                );
-
-                return [$updated, $award];
-            });
-
+            [$updated, $award] = app(FundingDecisionService::class)->approve(
+                $proposal, $request->user(), (float) $request->awarded_amount, $request->remarks,
+            );
+        } catch (OverBudgetException $e) {
             return response()->json([
-                'data' => ['status' => $updated->status, 'grant_reference' => $award->grant_reference],
-                'message' => 'Proposal approved for funding. Grant: '.$award->grant_reference,
-                'errors' => [],
-                'meta' => [],
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'data' => null,
+                'data' => ['remaining' => $e->remaining, 'over_by' => $e->overBy],
                 'message' => $e->getMessage(),
                 'errors' => [],
-                'meta' => [],
+                'meta' => ['code' => 'over_budget'],
             ], 422);
+        } catch (\Exception $e) {
+            return response()->json(['data' => null, 'message' => $e->getMessage(), 'errors' => [], 'meta' => []], 422);
         }
+
+        return response()->json([
+            'data' => ['status' => $updated->status, 'grant_reference' => $award->grant_reference],
+            'message' => 'Proposal approved for funding. Grant: '.$award->grant_reference,
+            'errors' => [],
+            'meta' => [],
+        ]);
     }
 
     public function centralReject(Request $request, string $id): JsonResponse
@@ -196,15 +164,7 @@ class CentralEvaluationController extends Controller
         }
 
         try {
-            DB::table('proposals')->where('id', $proposal->id)
-                ->update(['rejection_reason' => $request->reason, 'rejected_at' => now()]);
-
-            $updated = $this->workflowService->transition(
-                $proposal->fresh(),
-                'central_reject',
-                $request->user(),
-                $request->reason
-            );
+            $updated = app(FundingDecisionService::class)->reject($proposal, $request->user(), $request->reason);
 
             return response()->json([
                 'data' => ['status' => $updated->status],
@@ -237,17 +197,18 @@ class CentralEvaluationController extends Controller
             ->orderByDesc('created_at')
             ->get(['id', 'tracker_number', 'title', 'status', 'category', 'college_id', 'created_at']);
 
-        $activeFunded = $asPi->where('status', 'funded')->values();
+        // Running projects — funded or already at midterm — both count as holding funding.
+        $activeFunded = $asPi->whereIn('status', ['funded', 'midterm_evaluation'])->values();
         $historicalFunded = $asPi->where('status', 'funded')->values(); // same for now; extend if you add 'completed'
 
         // Proposals where this user is a co-investigator (any active/funded)
         $asCoInv = Proposal::whereHas('members', fn ($q) => $q->where('user_id', $userId)->where('role', 'co_investigator'))
-            ->where('status', 'funded')
+            ->whereIn('status', ['funded', 'midterm_evaluation'])
             ->with(['college:id,name'])
             ->get(['id', 'tracker_number', 'title', 'status', 'category', 'college_id']);
 
         $totalAwarded = $asPi->whereNotNull('award')->sum(fn ($p) => (float) ($p->award?->awarded_amount ?? 0));
-        $fundedCount = $asPi->where('status', 'funded')->count();
+        $fundedCount = $asPi->whereIn('status', ['funded', 'midterm_evaluation', 'completed', 'archived'])->count();
 
         return response()->json([
             'data' => [

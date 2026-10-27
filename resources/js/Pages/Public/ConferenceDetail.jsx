@@ -759,17 +759,14 @@ export default function ConferenceDetail() {
                                     </div>
                                 )}
 
-                                {c.virtual_link && (
+                                {c.has_virtual_link && (
                                     <div className="flex items-start gap-3">
                                         <div className="w-8 h-8 rounded-xl bg-green-50 flex items-center justify-center shrink-0">
                                             <Globe size={14} className="text-green-600" />
                                         </div>
                                         <div>
                                             <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Join Online</p>
-                                            <a href={c.virtual_link} target="_blank" rel="noopener noreferrer"
-                                                className="text-sm font-semibold text-indigo-600 hover:underline flex items-center gap-1">
-                                                Join Link <ExternalLink size={11} />
-                                            </a>
+                                            <p className="text-sm font-semibold text-gray-900">The join link is emailed to you when you register.</p>
                                         </div>
                                     </div>
                                 )}

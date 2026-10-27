@@ -10,6 +10,7 @@ use App\Models\Proposal;
 use App\Models\ProposalCall;
 use App\Models\ReviewAssignment;
 use App\Models\User;
+use App\Support\Terms;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -251,9 +252,9 @@ class AssistantService
                 'title' => $call->title,
                 'subtitle' => $call->academic_year,
                 'lines' => [
-                    'Budget: ETB '.number_format($b['budget'], 2),
-                    'Awarded: ETB '.number_format($b['committed'], 2)." ({$b['awards']} awards)",
-                    'Left: ETB '.number_format($b['remaining'], 2),
+                    'Budget: '.Terms::money($b['budget']),
+                    'Awarded: '.Terms::money($b['committed'])." ({$b['awards']} awards)",
+                    'Left: '.Terms::money($b['remaining']),
                 ],
                 'tone' => $b['remaining'] < 0 ? 'danger' : 'default',
                 'action' => ['label' => 'Open merit list', 'url' => '/admin/central-evaluation'],

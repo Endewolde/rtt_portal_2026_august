@@ -7,13 +7,16 @@ import {
 import PublicLayout from '../../Layouts/PublicLayout'
 import { get } from '../../lib/api'
 import { cn } from '../../lib/utils'
+import { styledProgrammes } from '../../lib/programmes'
 
-const CATEGORIES = [
+const CATEGORY_STYLES = [
     { value: '',                    label: 'All Categories',  Icon: LayoutGrid,    color: '#6366f1' },
     { value: 'research',            label: 'Research',        Icon: FlaskConical,  color: '#3b82f6' },
     { value: 'community_engagement',label: 'Community',       Icon: Users,         color: '#10b981' },
     { value: 'technology_transfer', label: 'Tech Transfer',   Icon: TrendingUp,    color: '#8b5cf6' },
 ]
+
+const categories = () => styledProgrammes(CATEGORY_STYLES);
 
 const CAT_MAP = {
     research:             { label: 'Research',      color: 'bg-blue-100 text-blue-700',   dot: 'bg-blue-500'   },
@@ -117,7 +120,7 @@ export default function ResearchShowcase() {
                         </div>
                         <div className="h-8 w-px bg-gray-200" />
                         <div>
-                            <p className="text-2xl font-bold text-green-600">{CATEGORIES.slice(1).length}</p>
+                            <p className="text-2xl font-bold text-green-600">{categories().slice(1).length}</p>
                             <p className="text-xs text-gray-500">Research Areas</p>
                         </div>
                         <div className="h-8 w-px bg-gray-200" />
@@ -145,7 +148,7 @@ export default function ResearchShowcase() {
                         )}
                     </div>
                     <div className="flex gap-2 flex-wrap">
-                        {CATEGORIES.map(c => (
+                        {categories().map(c => (
                             <button
                                 key={c.value}
                                 onClick={() => setCategory(c.value)}

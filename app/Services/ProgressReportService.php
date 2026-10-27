@@ -8,6 +8,7 @@ use App\Models\BudgetMilestone;
 use App\Models\ProgressReport;
 use App\Models\Proposal;
 use App\Models\User;
+use App\Support\Programmes;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -28,12 +29,6 @@ class ProgressReportService
     private const GRACE_DAYS = 14;
 
     private const DUE_SOON_DAYS = 7;
-
-    private const DIRECTOR_ROLES = [
-        'research' => 'research_officer',
-        'community_engagement' => 'community_officer',
-        'technology_transfer' => 'technology_officer',
-    ];
 
     /**
      * Create (or re-date) the report periods for a funded project. Periods already
@@ -266,7 +261,7 @@ class ProgressReportService
     private function officersFor(Proposal $proposal): Collection
     {
         $officers = User::role(['college_officer', 'college_rtt_manager'])->where('status', 'active')->where('college_id', $proposal->college_id)->get();
-        $director = self::DIRECTOR_ROLES[$proposal->category] ?? null;
+        $director = Programmes::directorRoles($proposal->category);
         if ($director) {
             $officers = $officers->merge(User::role($director)->where('status', 'active')->get());
         }

@@ -15,6 +15,8 @@ import { get } from '../../lib/api'
 import { useToast } from '../../Components/Toast'
 import { getCategoryLabel } from '../../lib/utils'
 import { downloadFile } from '../../lib/download'
+import { currency, term } from '../../lib/terms'
+import { programmeKeys } from '../../lib/programmes'
 
 // One meaning per colour across the page: outcomes use status colours, single series use the primary.
 const C = {
@@ -36,9 +38,9 @@ const num = (v) => (v === null || v === undefined ? '—' : Number(v).toLocaleSt
 const money = (v) => {
     if (v === null || v === undefined) return '—'
     const n = Number(v)
-    if (n >= 1_000_000) return `ETB ${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`
-    if (n >= 1_000) return `ETB ${(n / 1_000).toFixed(0)}K`
-    return `ETB ${n.toLocaleString()}`
+    if (n >= 1_000_000) return `${currency()} ${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`
+    if (n >= 1_000) return `${currency()} ${(n / 1_000).toFixed(0)}K`
+    return `${currency()} ${n.toLocaleString()}`
 }
 const titleCase = (s) => (s ? s.replace(/\b\w/g, (c) => c.toUpperCase()) : '—')
 
@@ -106,7 +108,7 @@ function BreakdownTable({ rows, nameKey, format = (v) => v, emptyText, showAward
         <div className="overflow-x-auto">
             <table className="w-full min-w-130 text-sm">
                 <thead className="text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                    <tr>
+                    <tr><th className="pr-3 w-10 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">#</th>
                         <th className="pb-2 pr-3">Name</th>
                         <th className="w-1/3 pb-2 pr-3">Outcomes</th>
                         <th className="pb-2 pr-3 text-right">Submitted</th>
@@ -117,15 +119,15 @@ function BreakdownTable({ rows, nameKey, format = (v) => v, emptyText, showAward
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                    {rows.map((r) => (
-                        <tr key={r[nameKey]}>
+                    {rows.map((r, rowIdx) => (
+                        <tr key={r[nameKey]}><td className="py-2.5 pr-3 w-10 text-xs font-medium tabular-nums text-gray-400">{rowIdx + 1}</td>
                             <td className="py-2.5 pr-3 font-medium text-gray-800">{format(r[nameKey])}</td>
                             <td className="py-2.5 pr-3"><OutcomeBar row={r} /></td>
                             <td className="py-2.5 pr-3 text-right tabular-nums text-gray-700">{r.submitted}</td>
                             <td className="py-2.5 pr-3 text-right tabular-nums text-gray-700">{r.funded}</td>
                             <td className="py-2.5 pr-3 text-right tabular-nums text-gray-700">{r.rejected}</td>
                             <td className="py-2.5 text-right font-semibold tabular-nums text-gray-900" title={`${r.funded} of ${r.decided} decided`}>{pct(r.pass_rate)}</td>
-                            {showAwarded && <td className="py-2.5 pl-3 text-right tabular-nums text-gray-700" title={r.awarded ? `ETB ${Number(r.awarded).toLocaleString()}` : undefined}>{r.awarded ? money(r.awarded) : '—'}</td>}
+                            {showAwarded && <td className="py-2.5 pl-3 text-right tabular-nums text-gray-700" title={r.awarded ? `${currency()} ${Number(r.awarded).toLocaleString()}` : undefined}>{r.awarded ? money(r.awarded) : '—'}</td>}
                         </tr>
                     ))}
                 </tbody>
@@ -144,7 +146,7 @@ function CallComparison({ calls, onPick }) {
         <div className="-mx-5 overflow-x-auto px-5">
             <table className="w-full min-w-215 text-sm">
                 <thead className="text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                    <tr>
+                    <tr><th className="pr-3 w-10 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">#</th>
                         <th className="pb-2 pr-3">Call</th>
                         <th className="pb-2 pr-3 text-right">Applications</th>
                         {stageKeys.map((k) => <th key={k} className="pb-2 pr-3 text-right">{stageLabels[k]}</th>)}
@@ -154,11 +156,11 @@ function CallComparison({ calls, onPick }) {
                     </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                    {calls.map((c) => {
+                    {calls.map((c, rowIdx) => {
                         const stage = Object.fromEntries(c.stages.map((st) => [st.key, st.count]))
                         const used = c.budget_used_pct
                         return (
-                            <tr key={c.id} className="align-top">
+                            <tr key={c.id} className="align-top"><td className="py-2.5 pr-3 w-10 text-xs font-medium tabular-nums text-gray-400">{rowIdx + 1}</td>
                                 <td className="py-2.5 pr-3">
                                     <button onClick={() => onPick(c.id)} className="text-left font-medium text-gray-900 hover:text-indigo-700 hover:underline" title="Show this call across the dashboard">
                                         {c.title}
@@ -312,9 +314,9 @@ export default function Analytics() {
     const collegeRows = (data?.colleges ?? []).filter((c) => showAllColleges || c.submitted > 0)
     const collegeChart = (data?.colleges ?? []).filter((c) => c.submitted > 0).slice(0, 12)
     const scopeText = [
-        f.academic_year ? `${f.academic_year} academic year` : 'All academic years',
+        f.academic_year ? `${f.academic_year} academic year` : `All ${term('academic_year', { plural: true, lower: true })}`,
         f.category ? getCategoryLabel(f.category) : 'All categories',
-        f.college_id ? (data?.college_options?.find((c) => c.id === f.college_id)?.name ?? 'One college') : 'All colleges',
+        f.college_id ? (data?.college_options?.find((c) => c.id === f.college_id)?.name ?? 'One college') : `All ${term('college', { plural: true, lower: true })}`,
         f.proposal_call_id && (data?.call_options?.find((c) => c.id === f.proposal_call_id)?.title ?? 'One call'),
     ].filter(Boolean).join(' · ')
 
@@ -330,8 +332,8 @@ export default function Analytics() {
                 <div className="mt-5 flex flex-col gap-2 rounded-2xl border border-gray-200 bg-white p-3 sm:flex-row sm:items-center">
                     <Filter size={15} className="ml-1 hidden shrink-0 text-gray-400 sm:block" />
                     <div className="grid flex-1 grid-cols-2 gap-2 lg:grid-cols-4">
-                        <Select label="Academic year" value={filters.academic_year === 'all' ? '' : filters.academic_year} onChange={(v) => change('academic_year', v || 'all')}>
-                            <option value="">All years</option>
+                        <Select label={term('academic_year')} value={filters.academic_year === 'all' ? '' : filters.academic_year} onChange={(v) => change('academic_year', v || 'all')}>
+                            <option value="">All {term('academic_year', { plural: true, lower: true })}</option>
                             {(data?.academicYears ?? []).map((y) => (
                                 <option key={y} value={y}>{y}{y === f.current_academic_year ? ' (current)' : ''}</option>
                             ))}
@@ -339,12 +341,12 @@ export default function Analytics() {
                         {!f.category_locked && (
                             <Select label="Category" value={filters.category} onChange={(v) => change('category', v)}>
                                 <option value="">All categories</option>
-                                {['research', 'community_engagement', 'technology_transfer'].map((c) => <option key={c} value={c}>{getCategoryLabel(c)}</option>)}
+                                {programmeKeys().map((c) => <option key={c} value={c}>{getCategoryLabel(c)}</option>)}
                             </Select>
                         )}
                         {!f.college_locked && (
-                            <Select label="College" value={filters.college_id} onChange={(v) => change('college_id', v)}>
-                                <option value="">All colleges</option>
+                            <Select label={term('college')} value={filters.college_id} onChange={(v) => change('college_id', v)}>
+                                <option value="">All {term('college', { plural: true, lower: true })}</option>
                                 {(data?.college_options ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </Select>
                         )}

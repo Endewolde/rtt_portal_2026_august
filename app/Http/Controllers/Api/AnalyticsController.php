@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Exports\CallOutcomesExport;
 use App\Http\Controllers\Controller;
 use App\Services\AnalyticsService;
+use App\Support\Programmes;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -13,8 +14,6 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class AnalyticsController extends Controller
 {
-    private const CATEGORIES = ['research', 'community_engagement', 'technology_transfer'];
-
     /** Sent as academic_year to see every year; leaving it out means the current year. */
     private const ALL_YEARS = 'all';
 
@@ -92,7 +91,7 @@ class AnalyticsController extends Controller
     {
         $user = $request->user();
         $requestedYear = $request->input('academic_year');
-        $category = $request->_category_scope ?: (in_array($request->input('category'), self::CATEGORIES, true) ? $request->input('category') : null);
+        $category = $request->_category_scope ?: (in_array($request->input('category'), Programmes::keys(), true) ? $request->input('category') : null);
         $callId = $request->input('proposal_call_id');
 
         return [

@@ -57,7 +57,7 @@
     @if(!empty($allocated_amount))
     <div class="amount-box">
       <p class="amount-label">{{ __('Allocated Amount') }}</p>
-      <p class="amount-val"><span class="amount-currency">{{ __('ETB') }}</span>{{ number_format($allocated_amount, 2) }}</p>
+      <p class="amount-val"><span class="amount-currency">{{ \App\Support\Terms::currency() === 'ETB' ? __('ETB') : \App\Support\Terms::currency() }}</span>{{ number_format($allocated_amount, 2) }}</p>
     </div>
     @endif
 

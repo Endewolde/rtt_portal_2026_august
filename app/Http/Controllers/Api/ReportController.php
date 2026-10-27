@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Proposal;
 use App\Models\ReportSnapshot;
 use App\Services\ReportService;
+use App\Support\ReportTable;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -54,12 +55,12 @@ class ReportController extends Controller
             abort(404, 'Unknown report.');
         }
 
-        [$rows, $fields] = $this->tabulateResult($this->service->live($type, $this->liveFilters($request))['rows']);
+        [$rows, $fields] = ReportTable::tabulate($this->service->live($type, $this->liveFilters($request))['rows']);
         if (empty($rows)) {
             abort(422, 'There is nothing to export for these filters.');
         }
 
-        $columns = collect($fields)->mapWithKeys(fn ($f) => [$f => $this->columnLabel($f)])->all();
+        $columns = collect($fields)->mapWithKeys(fn ($f) => [$f => ReportTable::label($f)])->all();
 
         return Excel::download(new ReportSnapshotExport($rows, $columns), $type.'_'.now()->format('Ymd_His').'.xlsx');
     }
@@ -95,15 +96,7 @@ class ReportController extends Controller
             'category' => 'nullable|string|max:50',
         ]);
 
-        $scope = $request->user()->accessScope();
-        if ($scope->isCollege()) {
-            $filters['college_id'] = $scope->collegeId;
-        }
-        if ($request->_category_scope) {
-            $filters['category'] = $request->_category_scope;
-        }
-
-        return array_filter($filters);
+        return $this->service->scopedFilters($request->user(), $filters);
     }
 
     /** Whitelisted subjects/dimensions/metrics the report builder UI can offer. */
@@ -167,68 +160,16 @@ class ReportController extends Controller
             abort(422, 'This report has no data to export yet.');
         }
 
-        [$rows, $fields] = $this->tabulateResult($snapshot->result);
+        [$rows, $fields] = ReportTable::tabulate($snapshot->result);
 
         if (empty($rows)) {
             abort(422, 'This report type cannot be exported to Excel.');
         }
 
-        $columns = collect($fields)->mapWithKeys(fn ($f) => [$f => $this->columnLabel($f)])->all();
+        $columns = collect($fields)->mapWithKeys(fn ($f) => [$f => ReportTable::label($f)])->all();
         $filename = $snapshot->report_type.'_'.now()->format('Ymd_His').'.xlsx';
 
         return Excel::download(new ReportSnapshotExport($rows, $columns), $filename);
-    }
-
-    /**
-     * Normalize any report result shape into a flat [rows, fieldNames] pair.
-     * Handles the report-builder's {dimensions, metrics, rows} shape as well as the
-     * plain list-of-rows shape every other report type returns.
-     *
-     * @return array{0: array<int, array<string, mixed>>, 1: string[]}
-     */
-    private function tabulateResult(array $result): array
-    {
-        if (isset($result['rows']) && is_array($result['rows'])) {
-            $fields = array_merge($result['dimensions'] ?? [], $result['metrics'] ?? []);
-
-            return [$result['rows'], $fields];
-        }
-
-        if (array_is_list($result) && ! empty($result) && is_array($result[0])) {
-            // Ids are there for drill-down on screen, not for the spreadsheet.
-            return [$result, array_values(array_filter(array_keys($result[0]), fn ($f) => ! str_ends_with($f, '_id')))];
-        }
-
-        return [[], []];
-    }
-
-    private const COLUMN_LABELS = [
-        'college' => 'College', 'college_name' => 'College', 'category' => 'Category',
-        'status' => 'Status', 'academic_year' => 'Academic Year', 'level' => 'Level',
-        'complaint_type' => 'Complaint Type', 'stage' => 'Stage', 'code' => 'Code',
-        'count' => 'Count', 'total' => 'Total', 'total_proposals' => 'Total Proposals',
-        'total_submitted' => 'Total Submitted', 'total_accepted' => 'Total Accepted',
-        'funded' => 'Funded', 'funded_count' => 'Funded', 'rejected' => 'Rejected',
-        'rejected_count' => 'Rejected', 'accepted' => 'Accepted',
-        'submitted' => 'Submitted', 'validated' => 'Validated', 'under_review' => 'Under Review',
-        'archived' => 'Archived', 'unresolved' => 'Unresolved', 'resolved' => 'Resolved',
-        'dismissed' => 'Dismissed', 'level_1_college' => 'Level 1 (College)',
-        'level_2_officer' => 'Level 2 (Officer)', 'avg_resolution_days' => 'Avg Resolution (days)',
-        'approval_rate_percent' => 'Approval Rate (%)', 'rejection_rate_percent' => 'Rejection Rate (%)',
-        'pass_rate' => 'Pass Rate (%)', 'reviewer_name' => 'Reviewer', 'total_assigned' => 'Total Assigned',
-        'pending' => 'Pending', 'average_days_to_review' => 'Avg Days to Review',
-        'submitted_count' => 'Submitted', 'avg_days_to_review' => 'Avg Days to Review',
-        'proposal_title' => 'Proposal Title', 'tracker_number' => 'Tracker Number',
-        'allocated' => 'Allocated', 'disbursed' => 'Disbursed', 'settled' => 'Settled',
-        'utilization_percent' => 'Utilization (%)', 'outputs_produced' => 'Outputs Produced',
-        'publications_count' => 'Publications', 'total_awarded' => 'Total Awarded',
-        'proposals_submitted' => 'Proposals Submitted', 'proposals_accepted' => 'Proposals Accepted',
-        'stage_label' => 'Stage',
-    ];
-
-    private function columnLabel(string $key): string
-    {
-        return self::COLUMN_LABELS[$key] ?? ucwords(str_replace('_', ' ', $key));
     }
 
     /** Export proposals as an Excel file, filtered by status, college, category, and academic year. */
@@ -268,6 +209,9 @@ class ReportController extends Controller
         if ($request->filled('search')) {
             $term = '%'.$request->search.'%';
             $query->where(fn ($q) => $q->where('title', 'LIKE', $term)->orWhere('tracker_number', 'LIKE', $term));
+        }
+        if ($request->filled('sdg')) {
+            $query->whereJsonContains('sdgs', (int) $request->sdg);
         }
 
         $proposals = $query->orderByDesc('created_at')->get();

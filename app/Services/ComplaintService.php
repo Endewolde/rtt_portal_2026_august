@@ -7,18 +7,12 @@ use App\Exceptions\UnauthorizedResolutionException;
 use App\Models\Complaint;
 use App\Models\Proposal;
 use App\Models\User;
+use App\Support\Programmes;
 
 class ComplaintService
 {
     // Proposal statuses that qualify for Level 2 (post-funding) complaints
     private const FUNDED_STATUSES = ['funded', 'midterm_evaluation', 'completed', 'archived'];
-
-    // Category → officer role mapping for Level 2 routing
-    private const CATEGORY_OFFICER = [
-        'research' => 'research_officer',
-        'community_engagement' => 'community_officer',
-        'technology_transfer' => 'technology_officer',
-    ];
 
     public function __construct(
         private NotificationService $notificationService
@@ -227,7 +221,7 @@ class ComplaintService
 
     private function routeToOfficer(Proposal $proposal): ?User
     {
-        $role = self::CATEGORY_OFFICER[$proposal->category] ?? null;
+        $role = Programmes::directorRoles($proposal->category);
 
         if ($role) {
             return User::role($role)

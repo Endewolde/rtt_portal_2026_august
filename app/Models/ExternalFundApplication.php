@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -15,6 +16,25 @@ class ExternalFundApplication extends Model
     use HasFactory, HasUuids;
 
     protected $table = 'ef_applications';
+
+    /** The review stages, in order; every one must approve before the application can go to the donor. */
+    public const STAGES = ['department', 'college', 'research_office', 'management'];
+
+    /**
+     * Where each status may move next. "awarded" is reached only by recording the award itself.
+     *
+     * @var array<string, list<string>>
+     */
+    public const TRANSITIONS = [
+        'draft' => ['under_internal_review', 'withdrawn'],
+        'under_internal_review' => ['approved_for_submission', 'draft', 'withdrawn'],
+        'approved_for_submission' => ['submitted', 'under_internal_review', 'withdrawn'],
+        'submitted' => ['under_review', 'rejected', 'withdrawn'],
+        'under_review' => ['rejected', 'withdrawn'],
+        'awarded' => [],
+        'rejected' => [],
+        'withdrawn' => ['draft'],
+    ];
 
     protected $fillable = [
         'agency_id', 'opportunity_id', 'college_id', 'department_id',
@@ -96,5 +116,41 @@ class ExternalFundApplication extends Model
     public function documents(): MorphMany
     {
         return $this->morphMany(ExternalFundDocument::class, 'documentable');
+    }
+
+    /** Managers and module viewers see every application; anyone else only the ones they created or lead. */
+    public function scopeVisibleTo(Builder $query, User $user): Builder
+    {
+        if ($user->can('external_funds.manage') || $user->can('external_funds.view_any')) {
+            return $query;
+        }
+
+        return $query->where(fn (Builder $q) => $q->where('created_by', $user->id)->orWhere('pi_user_id', $user->id));
+    }
+
+    public function isVisibleTo(User $user): bool
+    {
+        return $user->can('external_funds.manage') || $user->can('external_funds.view_any')
+            || $this->created_by === $user->id || $this->pi_user_id === $user->id;
+    }
+
+    /**
+     * The current decision at each stage: the most recent review there wins, so a later
+     * "revision required" overrides an earlier approval.
+     *
+     * @return array<string, string>
+     */
+    public function stageDecisions(): array
+    {
+        return $this->reviews()->orderBy('reviewed_at')->orderBy('updated_at')->get()
+            ->groupBy('stage')
+            ->map(fn ($reviews) => $reviews->last()->status)
+            ->all();
+    }
+
+    /** @return list<string> */
+    public function approvedStages(): array
+    {
+        return array_values(array_intersect(self::STAGES, array_keys(array_filter($this->stageDecisions(), fn ($s) => $s === 'approved'))));
     }
 }

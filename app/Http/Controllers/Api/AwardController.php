@@ -7,12 +7,15 @@ use App\Models\Award;
 use App\Models\Proposal;
 use App\Services\AwardService;
 use App\Support\AuditLogger;
+use App\Support\Programmes;
+use App\Support\Terms;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class AwardController extends Controller
@@ -212,13 +215,7 @@ class AwardController extends Controller
 
         $proposals = $query->get();
 
-        $categoryLabels = [
-            'research' => 'Research',
-            'community_engagement' => 'Community Engagement',
-            'technology_transfer' => 'Technology Transfer',
-            'innovation' => 'Innovation',
-            'other' => 'Other',
-        ];
+        $categoryLabels = Programmes::labels();
 
         $categorySlug = $requestedCategory
             ? ($categoryLabels[$requestedCategory] ?? $requestedCategory)
@@ -240,7 +237,7 @@ class AwardController extends Controller
                 'Grant Reference', 'Title', 'Category', 'Principal Investigator', 'PI Email',
                 'Co-Investigators', 'Co-Investigator Emails',
                 'College', 'Department', 'Academic Year', 'Status',
-                'Awarded Amount (ETB)', 'Award Date', 'Approval Notes',
+                'Awarded Amount ('.Terms::currency().')', 'Award Date', 'Approval Notes',
                 'Contract Status', 'Contract Submitted', 'Contract Signed', 'Contract Signed By', 'Contract Rejection Reason',
             ]);
 
@@ -279,6 +276,68 @@ class AwardController extends Controller
      * Officers bulk-approve grant letters: saves template fields and generates one
      * PDF per funded proposal, stored on the private disk.
      */
+    private const LETTER_TEMPLATE_KEY = 'grant_letter_template';
+
+    /** The saved grant-letter template (signatory, title, file no, date, CC), shared by everyone who issues letters. */
+    public function letterTemplate(Request $request): JsonResponse
+    {
+        if (! $request->user()?->can('awards.letters')) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        $value = DB::table('app_settings')->where('key', self::LETTER_TEMPLATE_KEY)->value('value');
+        // The letterhead comes from Settings; it is not part of the data shared with every page.
+        $settings = DB::table('app_settings')
+            ->whereIn('key', ['organization_name', 'org_name_amharic', 'org_sub_amharic', 'address', 'fax', 'mail_from_address', 'system_logo'])
+            ->pluck('value', 'key');
+
+        return response()->json([
+            'data' => $value ? json_decode($value, true) : null,
+            'meta' => ['head' => [
+                'orgName' => $settings['organization_name'] ?? null,
+                'orgNameAmharic' => $settings['org_name_amharic'] ?? null,
+                'orgSubAmharic' => $settings['org_sub_amharic'] ?? null,
+                'address' => $settings['address'] ?? null,
+                'fax' => $settings['fax'] ?? null,
+                'email' => $settings['mail_from_address'] ?? null,
+                'logo' => $settings['system_logo'] ?? null,
+                'currencyName' => Terms::currencyName(),
+            ]],
+            'message' => '',
+            'errors' => [],
+        ]);
+    }
+
+    public function saveLetterTemplate(Request $request): JsonResponse
+    {
+        if (! $request->user()?->can('awards.letters')) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        $data = $request->validate([
+            'signatoryName' => 'required|string|max:255',
+            'signatoryTitle' => 'nullable|string|max:255',
+            'fileNo' => 'nullable|string|max:100',
+            'date' => 'nullable|string|max:100',
+            'cc' => 'nullable|array|max:20',
+            'cc.*' => 'string|max:255',
+        ]);
+        $data['savedAt'] = now()->toIso8601String();
+        $data['savedBy'] = $request->user()->name;
+
+        $row = ['value' => json_encode($data), 'updated_by' => $request->user()->id, 'updated_at' => now()];
+        if (DB::table('app_settings')->where('key', self::LETTER_TEMPLATE_KEY)->exists()) {
+            DB::table('app_settings')->where('key', self::LETTER_TEMPLATE_KEY)->update($row);
+        } else {
+            DB::table('app_settings')->insert($row + [
+                'id' => (string) Str::uuid(), 'key' => self::LETTER_TEMPLATE_KEY, 'type' => 'json',
+                'group' => 'grant_letters', 'description' => 'Grant letter template', 'created_at' => now(),
+            ]);
+        }
+
+        return response()->json(['data' => $data, 'message' => 'Template saved.', 'errors' => []]);
+    }
+
     public function approveLetters(Request $request): JsonResponse
     {
         $user = $request->user();
@@ -300,9 +359,12 @@ class AwardController extends Controller
             ->whereIn('key', ['organization_name', 'org_name_amharic', 'org_sub_amharic', 'address', 'fax', 'mail_from_address', 'system_logo'])
             ->pluck('value', 'key');
 
-        $awards = Award::whereHas('proposal', fn ($q) => $q->where('status', 'funded'))
-            ->with(['proposal.pi:id,name,email', 'proposal.members.user:id,name', 'proposal.college:id,name'])
-            ->get();
+        // Running projects within the signer's own scope — a college or programme
+        // issues its own letters and never overwrites another's.
+        $query = Award::whereHas('proposal', fn ($q) => $q->whereIn('status', ['funded', 'midterm_evaluation']))
+            ->with(['proposal.pi:id,name,email', 'proposal.members.user:id,name', 'proposal.college:id,name']);
+        $user->accessScope()->constrainThrough($query, 'proposal');
+        $awards = $query->get();
 
         $signatoryTitle = $request->signatoryTitle ?? 'Vice President, Research and Technology Transfer';
         $letterDate = $request->date ?? now()->format('d F Y');
@@ -316,7 +378,7 @@ class AwardController extends Controller
             }
 
             $amount = (float) $award->awarded_amount;
-            $amountFmt = 'ETB '.number_format($amount, 2).' ('.self::numberToWords($amount).' Ethiopian Birr)';
+            $amountFmt = Terms::money($amount).' ('.self::numberToWords($amount).' '.Terms::currencyName().')';
             $category = str_replace('_', ' ', $proposal->category ?? '');
 
             $members = [];
@@ -349,7 +411,9 @@ class AwardController extends Controller
                 'body' => $this->buildLetterBody($proposal, $amountFmt, $category, $settings),
             ])->setPaper('a4', 'portrait');
 
-            $path = 'grant-letters/'.$award->grant_reference.'.pdf';
+            // One file per award, even without a grant reference or with slashes in it.
+            $name = trim(preg_replace('/[^A-Za-z0-9._-]+/', '-', (string) $award->grant_reference), '-');
+            $path = 'grant-letters/'.($name !== '' ? $name.'-' : '').$award->id.'.pdf';
             Storage::disk('private')->put($path, $pdf->output());
 
             $award->update([

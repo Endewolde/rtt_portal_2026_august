@@ -11,6 +11,8 @@ export const ROUTE_ACCESS = [
     ['/admin/features',            'features.manage'],
     ['/admin/thematic-areas',      'thematic_areas.manage'],
     ['/admin/dropdown-options',    'lookup_options.update'],
+    ['/admin/integrations',        'integrations.manage'],
+    ['/admin/programmes',          'programmes.manage'],
     ['/admin/settings',            'settings.manage'],
     ['/admin/public-site',         'settings.manage'],
     ['/admin/system-monitor',      'system_monitor.view_any'],

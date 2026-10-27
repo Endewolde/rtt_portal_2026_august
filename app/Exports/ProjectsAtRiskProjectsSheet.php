@@ -4,6 +4,7 @@ namespace App\Exports;
 
 use App\Models\Proposal;
 use App\Services\ProjectRiskService;
+use App\Support\Terms;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
@@ -64,9 +65,9 @@ class ProjectsAtRiskProjectsSheet implements FromCollection, ShouldAutoSize, Wit
     public function headings(): array
     {
         return [
-            'Risk Level', 'Tracker Number', 'Title', 'Category', 'Status', 'PI', 'College',
+            'Risk Level', 'Tracker Number', 'Title', 'Category', 'Status', 'PI', Terms::college(),
             'Start Date', 'Planned End Date', 'Duration (months)', 'Days Left', 'Time Used (%)',
-            'Budget (ETB)', 'Released (ETB)', 'Released (%)', 'Reported Progress (%)', 'Reported Spending (%)',
+            'Budget ('.Terms::currency().')', 'Released ('.Terms::currency().')', 'Released (%)', 'Reported Progress (%)', 'Reported Spending (%)',
             'Last Report', 'Overdue Reports', 'Warnings', 'Warning Details',
         ];
     }

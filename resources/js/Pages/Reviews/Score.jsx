@@ -12,6 +12,7 @@ import { useConfirm } from '../../hooks/useConfirm';
 import api from '../../lib/api';
 import { useToast } from '../../Components/Toast';
 import ReviewerAgreementModal from '../../Components/ReviewerAgreementModal';
+import { currency, withCurrency } from '../../lib/terms';
 
 // ── Score colour ramp ─────────────────────────────────────────────────────────
 
@@ -720,14 +721,14 @@ export default function ReviewScore() {
                                                 )}
                                             </div>
                                             <span className="text-sm font-semibold text-gray-800 shrink-0 ml-6 tabular-nums">
-                                                {tr("ETB :amount", { amount: parseFloat(item.amount ?? 0).toLocaleString() })}
+                                                {withCurrency(tr("ETB :amount", { amount: parseFloat(item.amount ?? 0).toLocaleString() }))}
                                             </span>
                                         </div>
                                     ))}
                                     <div className="flex items-center justify-between px-4 py-3.5 bg-blue-600 rounded-xl text-white mt-3">
                                         <span className="text-sm font-bold">{tr("Total Budget Requested")}</span>
                                         <span className="text-base font-extrabold tabular-nums">
-                                            ETB {proposal.budgets.reduce((s, i) => s + parseFloat(i.amount ?? 0), 0).toLocaleString()}
+                                            {currency()} {proposal.budgets.reduce((s, i) => s + parseFloat(i.amount ?? 0), 0).toLocaleString()}
                                         </span>
                                     </div>
                                 </div>

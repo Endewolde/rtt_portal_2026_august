@@ -10,10 +10,11 @@ import PublicLayout from '../../Layouts/PublicLayout';
 import StatusBadge from '../../Components/StatusBadge';
 import { get } from '../../lib/api';
 import { timeAgo } from '../../lib/utils';
+import { styledProgrammes } from '../../lib/programmes';
 
 // ─── Config ────────────────────────────────────────────────────────────────────
 
-const CATEGORIES = [
+const CATEGORY_STYLES = [
     { value: 'research',             label: 'Research',        Icon: FlaskConical, color: '#3b82f6', bg: '#eff6ff' },
     { value: 'community_engagement', label: 'Community',       Icon: Users,        color: '#10b981', bg: '#f0fdf4' },
     { value: 'technology_transfer',  label: 'Tech Transfer',   Icon: TrendingUp,   color: '#8b5cf6', bg: '#f5f3ff' },
@@ -21,11 +22,13 @@ const CATEGORIES = [
     { value: 'other',                label: 'Other',           Icon: LayoutGrid,   color: '#64748b', bg: '#f8fafc' },
 ];
 
-const CAT_MAP = Object.fromEntries(CATEGORIES.map(c => [c.value, c]));
+const categories = () => styledProgrammes(CATEGORY_STYLES);
 
-const ARCHIVE_CATEGORIES = [
+const catMap = () => Object.fromEntries(categories().map(c => [c.value, c]));
+
+const archiveCategories = () => [
     { value: '', label: 'All Categories' },
-    ...CATEGORIES.map(c => ({ value: c.value, label: c.label })),
+    ...categories().map(c => ({ value: c.value, label: c.label })),
 ];
 
 // ─── Shared helpers ────────────────────────────────────────────────────────────
@@ -95,7 +98,8 @@ function CardSkeleton() {
 // ─── Archive Project Card ───────────────────────────────────────────────────────
 
 function ArchiveCard({ proposal: p }) {
-    const cat = CAT_MAP[p.category] ?? CAT_MAP.other;
+    const map = catMap();
+    const cat = map[p.category] ?? map.other;
     return (
         <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden
                         hover:shadow-md hover:shadow-gray-200/60 hover:-translate-y-0.5
@@ -494,7 +498,7 @@ function ArchiveSection() {
                         <BookOpen size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
                         <select value={filters.category} onChange={e => setFilter('category', e.target.value)}
                             className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 bg-white appearance-none">
-                            {ARCHIVE_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                            {archiveCategories().map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                         </select>
                     </div>
                     <div className="relative">

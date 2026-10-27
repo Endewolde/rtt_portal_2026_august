@@ -13,6 +13,7 @@ import AppLayout from '../../Layouts/AppLayout';
 import api from '../../lib/api';
 import { useToast } from '../../Components/Toast';
 import ConfirmDialog from '../../Components/ConfirmDialog';
+import { PageHeader, StatCard, Panel, RefreshButton, Skeleton, DataTable, EmptyState as KitEmpty } from '../../Components/Insights/Kit';
 import { cn, formatDate, truncate } from '../../lib/utils';
 
 // ─── Config ────────────────────────────────────────────────────────────────────
@@ -90,20 +91,52 @@ function CatBadge({ category }) {
     );
 }
 
+// Full class names only — Tailwind cannot see sizes built from a variable.
+const AVATAR_SIZES = { 6: 'w-6 h-6', 7: 'w-7 h-7', 8: 'w-8 h-8', 9: 'w-9 h-9', 10: 'w-10 h-10' };
+
 function Avatar({ name, size = 8 }) {
     const initials = (name ?? '?').split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
     const colors = ['from-indigo-500 to-violet-600', 'from-emerald-500 to-teal-600', 'from-orange-500 to-amber-600', 'from-pink-500 to-rose-600', 'from-blue-500 to-cyan-600'];
     const grad = colors[(name?.charCodeAt(0) ?? 0) % colors.length];
     return (
-        <div className={cn(`w-${size} h-${size} rounded-full bg-gradient-to-br flex items-center justify-center text-white font-bold text-xs shrink-0`, grad)}>
+        <div className={cn(AVATAR_SIZES[size] ?? AVATAR_SIZES[8], 'rounded-full bg-linear-to-br flex items-center justify-center text-white font-bold text-xs shrink-0', grad)}>
             {initials}
         </div>
     );
 }
 
-function Money({ amount, currency = 'USD' }) {
+function Money({ amount, currency }) {
     if (amount == null) return <span className="text-gray-400">—</span>;
-    return <span>{currency} {Number(amount).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>;
+    return <span>{currency ? `${currency} ` : ''}{Number(amount).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>;
+}
+
+/** The server's own message (e.g. "Insufficient award balance…") beats a generic one. */
+const apiMessage = (e, fallback) => e?.response?.data?.message || fallback;
+
+/** Waits until typing pauses, so every keystroke does not hit the server. */
+function useDebounced(value, delay = 350) {
+    const [debounced, setDebounced] = useState(value);
+    useEffect(() => {
+        const t = setTimeout(() => setDebounced(value), delay);
+        return () => clearTimeout(t);
+    }, [value, delay]);
+    return debounced;
+}
+
+/** Simple previous/next pager for a Laravel paginator. */
+function Pager({ meta, onPage }) {
+    if (!meta || (meta.last_page ?? 1) <= 1) return null;
+    return (
+        <div className="flex items-center justify-between gap-3 px-5 py-3 border-t border-gray-100 text-xs text-gray-500">
+            <span>{meta.from ?? 0}–{meta.to ?? 0} of {meta.total ?? 0}</span>
+            <div className="flex gap-1.5">
+                <button onClick={() => onPage(meta.current_page - 1)} disabled={meta.current_page <= 1}
+                    className="px-3 py-1.5 rounded-lg border border-gray-200 font-semibold hover:bg-gray-50 disabled:opacity-40">Previous</button>
+                <button onClick={() => onPage(meta.current_page + 1)} disabled={meta.current_page >= meta.last_page}
+                    className="px-3 py-1.5 rounded-lg border border-gray-200 font-semibold hover:bg-gray-50 disabled:opacity-40">Next</button>
+            </div>
+        </div>
+    );
 }
 
 function RowSkeleton({ cols = 6 }) {
@@ -225,6 +258,8 @@ function getWorkflowActions(item, onStatus, onAward, onReview) {
         actions.push({ label: 'Mark as Submitted to Agency', icon: Send, onClick: () => onStatus(item, 'submitted') });
     } else if (s === 'submitted') {
         actions.push({ label: 'Agency Now Reviewing', icon: Clock, onClick: () => onStatus(item, 'under_review') });
+        actions.push({ label: 'Record Award', icon: Award, onClick: () => onAward(item) });
+        actions.push({ label: 'Mark as Rejected by Agency', icon: XCircle, onClick: () => onStatus(item, 'rejected') });
     } else if (s === 'under_review') {
         actions.push({ label: 'Record Award', icon: Award, onClick: () => onAward(item) });
         actions.push({ label: 'Mark as Rejected by Agency', icon: XCircle, onClick: () => onStatus(item, 'rejected') });
@@ -478,11 +513,12 @@ function AwardModal({ application, onSave, onClose }) {
 function MilestoneForm({ onSave, onCancel }) {
     const [form, setForm] = useState({ title: '', due_date: '', description: '' });
     const [saving, setSaving] = useState(false);
+    const [problem, setProblem] = useState('');
 
     const save = async () => {
         if (!form.title || !form.due_date) return;
         setSaving(true);
-        try { await onSave(form); } catch {}
+        try { await onSave(form); } catch (e) { setProblem(apiMessage(e, 'Could not add the milestone.')); }
         setSaving(false);
     };
 
@@ -493,6 +529,7 @@ function MilestoneForm({ onSave, onCancel }) {
                 className="w-full text-base sm:text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
             <input type="date" value={form.due_date} onChange={e => setForm(p => ({ ...p, due_date: e.target.value }))}
                 className="w-full text-base sm:text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+            {problem && <p className="text-[11px] font-medium text-red-600">{problem}</p>}
             <div className="flex gap-2">
                 <button onClick={onCancel} className="flex-1 py-1.5 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">Cancel</button>
                 <button onClick={save} disabled={saving || !form.title || !form.due_date}
@@ -506,14 +543,17 @@ function MilestoneForm({ onSave, onCancel }) {
 
 // ─── Expenditure inline form ───────────────────────────────────────────────────
 
-function ExpenditureForm({ onSave, onCancel }) {
-    const [form, setForm] = useState({ description: '', amount: '', expense_date: '', category: 'other' });
+function ExpenditureForm({ remaining, currency, budgets = [], onSave, onCancel }) {
+    const [form, setForm] = useState({ description: '', amount: '', expense_date: new Date().toISOString().slice(0, 10), category: 'other', budget_id: '' });
     const [saving, setSaving] = useState(false);
+    const [problem, setProblem] = useState('');
+    const tooMuch = form.amount !== '' && Number(form.amount) > remaining;
 
     const save = async () => {
-        if (!form.description || !form.amount || !form.expense_date) return;
+        if (!form.description || !form.amount || !form.expense_date || tooMuch) return;
         setSaving(true);
-        try { await onSave(form); } catch {}
+        setProblem('');
+        try { await onSave({ ...form, budget_id: form.budget_id || null }); } catch (e) { setProblem(apiMessage(e, 'Could not record the expenditure.')); }
         setSaving(false);
     };
 
@@ -526,16 +566,32 @@ function ExpenditureForm({ onSave, onCancel }) {
                 <input type="number" value={form.amount} onChange={e => setForm(p => ({ ...p, amount: e.target.value }))}
                     placeholder="Amount *"
                     className="w-full text-base sm:text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-                <input type="date" value={form.expense_date} onChange={e => setForm(p => ({ ...p, expense_date: e.target.value }))}
+                <input type="date" value={form.expense_date} max={new Date().toISOString().slice(0, 10)} onChange={e => setForm(p => ({ ...p, expense_date: e.target.value }))}
                     className="w-full text-base sm:text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400" />
             </div>
-            <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
-                className="w-full text-base sm:text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
-                {BUDGET_CATEGORIES.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
-            </select>
+            <div className={cn('grid gap-2', budgets.length > 0 ? 'grid-cols-2' : 'grid-cols-1')}>
+                <select value={form.category} onChange={e => setForm(p => ({ ...p, category: e.target.value }))}
+                    className="w-full text-base sm:text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                    {BUDGET_CATEGORIES.map(c => <option key={c} value={c}>{c.charAt(0).toUpperCase() + c.slice(1)}</option>)}
+                </select>
+                {budgets.length > 0 && (
+                    <select value={form.budget_id} onChange={e => {
+                        const line = budgets.find(b => b.id === e.target.value);
+                        setForm(p => ({ ...p, budget_id: e.target.value, category: line?.category ?? p.category }));
+                    }}
+                        className="w-full text-base sm:text-xs border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                        <option value="">No budget line</option>
+                        {budgets.map(b => <option key={b.id} value={b.id}>{b.description}</option>)}
+                    </select>
+                )}
+            </div>
+            <p className={cn('text-[11px]', tooMuch ? 'font-semibold text-red-600' : 'text-gray-500')}>
+                {tooMuch ? 'More than the award has left — ' : 'Available: '}{currency} {Number(Math.max(remaining, 0)).toLocaleString()}
+            </p>
+            {problem && <p className="text-[11px] font-medium text-red-600">{problem}</p>}
             <div className="flex gap-2">
                 <button onClick={onCancel} className="flex-1 py-1.5 text-xs text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">Cancel</button>
-                <button onClick={save} disabled={saving || !form.description || !form.amount || !form.expense_date}
+                <button onClick={save} disabled={saving || tooMuch || !form.description || !form.amount || !form.expense_date}
                     className="flex-1 py-1.5 text-xs text-white bg-orange-500 rounded-lg hover:bg-orange-600 disabled:opacity-60 font-semibold transition-colors">
                     {saving ? 'Recording…' : 'Record Expenditure'}
                 </button>
@@ -554,18 +610,22 @@ function AwardDrawer({ award: initialAward, onClose, onUpdate }) {
     const [addMilestone, setAddMilestone] = useState(false);
     const [addExpenditure, setAddExpenditure] = useState(false);
     const [statusSaving, setStatusSaving] = useState(false);
+    const [budgets, setBudgets] = useState([]);
+    const [removing, setRemoving] = useState(null);
     const { success, error } = useToast();
 
     const loadDetails = useCallback(async () => {
         setLoading(true);
         try {
-            const [ml, ex] = await Promise.all([
+            const [ml, ex, full] = await Promise.all([
                 api.get(`/external-funds/awards/${award.id}/milestones`),
                 api.get(`/external-funds/awards/${award.id}/expenditures`),
+                api.get(`/external-funds/awards/${award.id}`),
             ]);
             setMilestones(ml.data.data ?? ml.data);
             setExpenditures(ex.data.data ?? ex.data);
-        } catch { error('Failed to load award details.'); }
+            setBudgets((full.data.data ?? full.data)?.budgets ?? []);
+        } catch (e) { error(apiMessage(e, 'Failed to load award details.')); }
         setLoading(false);
     }, [award.id]);
 
@@ -578,7 +638,7 @@ function AwardDrawer({ award: initialAward, onClose, onUpdate }) {
             setAward(r.data.data ?? r.data);
             success('Status updated.');
             onUpdate?.();
-        } catch { error('Failed to update status.'); }
+        } catch (e) { error(apiMessage(e, 'Failed to update status.')); }
         setStatusSaving(false);
     };
 
@@ -591,14 +651,21 @@ function AwardDrawer({ award: initialAward, onClose, onUpdate }) {
 
     const handleMilestoneToggle = async (m) => {
         const newStatus = m.status === 'completed' ? 'in_progress' : 'completed';
-        await api.put(`/external-funds/milestones/${m.id}`, { status: newStatus });
-        loadDetails();
+        try {
+            await api.put(`/external-funds/milestones/${m.id}`, { status: newStatus });
+            loadDetails();
+        } catch (e) { error(apiMessage(e, 'Could not update the milestone.')); }
     };
 
-    const handleDeleteMilestone = async (id) => {
-        await api.delete(`/external-funds/milestones/${id}`);
-        success('Milestone removed.');
-        loadDetails();
+    const confirmRemove = async () => {
+        const { kind, id } = removing;
+        try {
+            await api.delete(kind === 'milestone' ? `/external-funds/milestones/${id}` : `/external-funds/expenditures/${id}`);
+            success(kind === 'milestone' ? 'Milestone removed.' : 'Expenditure removed.');
+            loadDetails();
+            onUpdate?.();
+        } catch (e) { error(apiMessage(e, 'Could not remove it.')); }
+        setRemoving(null);
     };
 
     const handleAddExpenditure = async (form) => {
@@ -606,12 +673,15 @@ function AwardDrawer({ award: initialAward, onClose, onUpdate }) {
         success('Expenditure recorded.');
         setAddExpenditure(false);
         loadDetails();
+        onUpdate?.();
     };
 
     const totalSpent = expenditures.reduce((s, e) => s + parseFloat(e.amount ?? 0), 0);
     const amountAwarded = parseFloat(award.amount_awarded ?? 0);
     const utilPct = amountAwarded > 0 ? Math.min(Math.round((totalSpent / amountAwarded) * 100), 100) : 0;
-    const currency = award.currency ?? 'USD';
+    const currency = award.currency ?? '';
+    const remaining = amountAwarded - totalSpent;
+    const canSpend = award.status === 'active';
 
     return createPortal(
         <>
@@ -648,7 +718,7 @@ function AwardDrawer({ award: initialAward, onClose, onUpdate }) {
                             <p className="text-[11px] text-orange-600 mt-0.5">Spent</p>
                         </div>
                         <div className="bg-blue-50 rounded-xl p-3 text-center">
-                            <p className="text-base font-black text-blue-700 tabular-nums truncate">{Number(amountAwarded - totalSpent).toLocaleString()}</p>
+                            <p className={cn('text-base font-black tabular-nums truncate', remaining <= 0 ? 'text-red-600' : 'text-blue-700')}>{Number(remaining).toLocaleString()}</p>
                             <p className="text-[11px] text-blue-600 mt-0.5">Remaining</p>
                         </div>
                     </div>
@@ -730,18 +800,18 @@ function AwardDrawer({ award: initialAward, onClose, onUpdate }) {
                                         <button onClick={() => handleMilestoneToggle(m)}
                                             className={cn('w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-all',
                                                 m.status === 'completed' ? 'bg-emerald-500 border-emerald-500' :
-                                                    m.status === 'overdue' ? 'border-red-400 bg-red-50' : 'border-gray-300 hover:border-indigo-400')}>
+                                                    m.is_overdue ? 'border-red-400 bg-red-50' : 'border-gray-300 hover:border-indigo-400')}>
                                             {m.status === 'completed' && <CheckCheck size={9} className="text-white" />}
                                         </button>
                                         <div className="flex-1 min-w-0">
                                             <p className={cn('text-xs font-semibold truncate', m.status === 'completed' ? 'line-through text-gray-400' : 'text-gray-700')}>{m.title}</p>
                                         </div>
                                         <p className={cn('text-[11px] shrink-0',
-                                            m.status === 'overdue' ? 'text-red-500 font-bold' :
+                                            m.is_overdue ? 'text-red-500 font-bold' :
                                                 m.status === 'completed' ? 'text-gray-400' : 'text-gray-500')}>
-                                            {formatDate(m.due_date)}
+                                            {m.is_overdue ? 'Overdue · ' : ''}{formatDate(m.due_date)}
                                         </p>
-                                        <button onClick={() => handleDeleteMilestone(m.id)} aria-label="Remove milestone"
+                                        <button onClick={() => setRemoving({ kind: 'milestone', id: m.id, label: m.title })} aria-label="Remove milestone"
                                             className="p-1 text-gray-300 hover:text-red-400 transition-all sm:opacity-0 sm:group-hover:opacity-100">
                                             <X size={12} />
                                         </button>
@@ -760,13 +830,20 @@ function AwardDrawer({ award: initialAward, onClose, onUpdate }) {
                                     <span className="text-[11px] font-semibold text-gray-400 ml-1">{expenditures.length} records</span>
                                 )}
                             </p>
-                            <button onClick={() => setAddExpenditure(v => !v)}
-                                className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition-colors">
-                                <Plus size={11} /> Record
-                            </button>
+                            {canSpend ? (
+                                <button onClick={() => setAddExpenditure(v => !v)}
+                                    className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-semibold transition-colors">
+                                    <Plus size={11} /> Record
+                                </button>
+                            ) : (
+                                <span className="text-[11px] text-gray-400">Award is {AWARD_STATUSES[award.status]?.label?.toLowerCase() ?? award.status} — no new spending</span>
+                            )}
                         </div>
 
-                        {addExpenditure && <ExpenditureForm onSave={handleAddExpenditure} onCancel={() => setAddExpenditure(false)} />}
+                        {addExpenditure && canSpend && (
+                            <ExpenditureForm remaining={remaining} currency={currency} budgets={budgets}
+                                onSave={handleAddExpenditure} onCancel={() => setAddExpenditure(false)} />
+                        )}
 
                         {loading ? (
                             <div className="space-y-2">{[1, 2].map(i => <div key={i} className="h-10 bg-gray-50 rounded-lg animate-pulse" />)}</div>
@@ -775,14 +852,22 @@ function AwardDrawer({ award: initialAward, onClose, onUpdate }) {
                         ) : (
                             <div className="space-y-1.5">
                                 {expenditures.map(e => (
-                                    <div key={e.id} className="flex items-start gap-3 p-2.5 rounded-xl bg-gray-50">
+                                    <div key={e.id} className="group flex items-start gap-3 p-2.5 rounded-xl bg-gray-50">
                                         <div className="flex-1 min-w-0">
                                             <p className="text-xs font-semibold text-gray-700 truncate">{e.description}</p>
-                                            <p className="text-[11px] text-gray-400 mt-0.5 capitalize">{e.category} · {formatDate(e.expense_date)}{e.recordedBy ? ` · ${e.recordedBy.name}` : ''}</p>
+                                            <p className="text-[11px] text-gray-400 mt-0.5">
+                                                <span className="capitalize">{e.category}</span> · {formatDate(e.expense_date)}
+                                                {e.budget ? ` · ${e.budget.description}` : ''}
+                                                {(e.recorded_by ?? e.recordedBy) ? ` · ${(e.recorded_by ?? e.recordedBy).name}` : ''}
+                                            </p>
                                         </div>
                                         <p className="text-xs font-bold text-orange-700 tabular-nums shrink-0">
                                             {currency} {Number(e.amount).toLocaleString()}
                                         </p>
+                                        <button onClick={() => setRemoving({ kind: 'expenditure', id: e.id, label: e.description })} aria-label="Remove expenditure"
+                                            className="p-1 text-gray-300 hover:text-red-400 transition-all sm:opacity-0 sm:group-hover:opacity-100">
+                                            <X size={12} />
+                                        </button>
                                     </div>
                                 ))}
                             </div>
@@ -790,6 +875,17 @@ function AwardDrawer({ award: initialAward, onClose, onUpdate }) {
                     </div>
                 </div>
             </div>
+            <ConfirmDialog
+                open={!!removing}
+                onCancel={() => setRemoving(null)}
+                onConfirm={confirmRemove}
+                title={removing?.kind === 'milestone' ? 'Remove this milestone?' : 'Remove this expenditure?'}
+                description={removing?.kind === 'expenditure'
+                    ? `"${removing?.label}" will be taken off the award and its amount returned to the remaining balance.`
+                    : `"${removing?.label}" will be removed from the award's deliverables.`}
+                confirmLabel="Remove"
+                confirmVariant="danger"
+            />
         </>,
         document.body
     );
@@ -814,7 +910,11 @@ function ApplicationReviewDrawer({ application, onClose, onUpdate }) {
 
     useEffect(() => { load(); }, [load]);
 
-    const getReview = (stage) => reviews.find(r => r.stage === stage);
+    // Several people may review a stage over time; the most recent decision is the one that counts.
+    const getReview = (stage) => reviews
+        .filter(r => r.stage === stage)
+        .sort((a, b) => new Date(b.reviewed_at ?? b.updated_at) - new Date(a.reviewed_at ?? a.updated_at))[0];
+    const earlierCount = (stage) => Math.max(reviews.filter(r => r.stage === stage).length - 1, 0);
 
     const toggleForm = (stage) => {
         const existing = getReview(stage);
@@ -856,7 +956,7 @@ function ApplicationReviewDrawer({ application, onClose, onUpdate }) {
             onUpdate?.();
             onClose();
         } catch (e) {
-            error(e.response?.data?.message ?? 'Failed to update status.');
+            error(apiMessage(e, 'Failed to update status.'));
         }
     };
 
@@ -911,7 +1011,7 @@ function ApplicationReviewDrawer({ application, onClose, onUpdate }) {
                             <p className="text-gray-800 font-semibold truncate">{application.agency?.name || '—'}</p>
                         </div>
                         <div>
-                            <p className="text-gray-400 font-medium mb-0.5">Total Budget (USD)</p>
+                            <p className="text-gray-400 font-medium mb-0.5">Total Budget</p>
                             <p className="text-gray-800 font-semibold">{application.currency} {Number(application.amount_requested ?? 0).toLocaleString()}</p>
                         </div>
                         <div>
@@ -994,6 +1094,7 @@ function ApplicationReviewDrawer({ application, onClose, onUpdate }) {
                                                 <p className="text-[11px] text-gray-500 mt-2">
                                                     <span className="font-semibold text-gray-600">{review.reviewer?.name ?? 'Unknown'}</span>
                                                     {review.reviewed_at && <> · {formatDate(review.reviewed_at)}</>}
+                                                    {earlierCount(stage.key) > 0 && <> · {earlierCount(stage.key)} earlier decision{earlierCount(stage.key) > 1 ? 's' : ''}</>}
                                                 </p>
                                                 {review.comments && (
                                                     <p className="mt-1.5 text-xs text-gray-600 italic leading-relaxed">"{review.comments}"</p>
@@ -1064,132 +1165,129 @@ function ApplicationReviewDrawer({ application, onClose, onUpdate }) {
 
 // ─── Tab: Dashboard ────────────────────────────────────────────────────────────
 
-function DashboardTab() {
+function DashboardTab({ onOpen }) {
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
     const { error } = useToast();
 
-    useEffect(() => {
+    const load = useCallback(() => {
+        setLoading(true);
         api.get('/external-funds/dashboard')
             .then(r => setData(r.data.data ?? r.data))
-            .catch(() => error('Failed to load dashboard.'))
+            .catch(e => error(apiMessage(e, 'Failed to load dashboard.')))
             .finally(() => setLoading(false));
     }, []);
 
-    if (loading) {
-        return (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                {[...Array(8)].map((_, i) => (
-                    <div key={i} className="bg-white rounded-2xl border border-gray-100 p-4 animate-pulse h-24" />
-                ))}
-            </div>
-        );
-    }
+    useEffect(() => { load(); }, [load]);
 
     const awards = data?.awards ?? {};
     const apps = data?.applications ?? {};
-
-    const kpis = [
-        { label: 'Total Secured', value: `${(awards.total_secured ?? 0).toLocaleString()}`, sub: 'USD', icon: DollarSign, color: 'bg-emerald-500', ring: 'ring-emerald-100' },
-        { label: 'Active Grants', value: awards.active_count ?? 0, sub: 'grants', icon: Award, color: 'bg-blue-500', ring: 'ring-blue-100' },
-        { label: 'Total Awards', value: awards.total_count ?? 0, sub: 'all time', icon: Landmark, color: 'bg-indigo-500', ring: 'ring-indigo-100' },
-        { label: 'Pending Apps', value: apps.pending ?? 0, sub: 'awaiting', icon: Clock, color: 'bg-amber-500', ring: 'ring-amber-100' },
-        { label: 'Success Rate', value: `${data?.success_rate ?? 0}%`, sub: 'awarded/decided', icon: Target, color: 'bg-violet-500', ring: 'ring-violet-100' },
-        { label: 'Utilization', value: `${awards.utilization_pct ?? 0}%`, sub: 'of budget spent', icon: PiggyBank, color: 'bg-teal-500', ring: 'ring-teal-100' },
-        { label: 'Total Spent', value: `${(awards.total_spent ?? 0).toLocaleString()}`, sub: 'USD', icon: TrendingUp, color: 'bg-orange-500', ring: 'ring-orange-100' },
-        { label: 'Total Applications', value: apps.total ?? 0, sub: 'all time', icon: FileText, color: 'bg-pink-500', ring: 'ring-pink-100' },
-    ];
+    const currencies = data?.by_currency ?? [];
+    const main = currencies[0];
+    const money = (n, cur) => `${cur ?? ''} ${Number(n ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`.trim();
+    const otherCurrencies = currencies.length > 1 ? `+ ${currencies.slice(1).map(c => money(c.secured, c.currency)).join(', ')}` : null;
+    const utilisation = main?.secured > 0 ? Math.round((main.spent / main.secured) * 100) : 0;
+    const maxCollege = Math.max(...(data?.by_college ?? []).map(c => Number(c.total)), 1);
 
     return (
         <div className="space-y-6">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-                {kpis.map(({ label, value, sub, icon: Icon, color, ring }) => (
-                    <div key={label} className={cn('bg-white rounded-2xl border border-gray-100 p-3 sm:p-4 flex items-center gap-2.5 sm:gap-3 shadow-sm ring-1 min-w-0', ring)}>
-                        <div className={cn('w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0', color)}>
-                            <Icon size={17} className="text-white" />
-                        </div>
-                        <div className="min-w-0">
-                            <p className="text-lg sm:text-xl font-black text-gray-900 leading-none tabular-nums truncate">{value}</p>
-                            <p className="text-[11px] text-gray-500 mt-0.5 truncate">{label}</p>
-                        </div>
-                    </div>
-                ))}
+                <StatCard icon={DollarSign} color="emerald" loading={loading} label="Total secured"
+                    value={money(main?.secured, main?.currency)} hint={otherCurrencies ?? `${awards.total_count ?? 0} award${awards.total_count === 1 ? '' : 's'} all time`} />
+                <StatCard icon={Award} color="sky" loading={loading} label="Active grants"
+                    value={awards.active_count ?? 0} hint={main ? `${money(main.active, main.currency)} running` : ''} />
+                <StatCard icon={PiggyBank} color={utilisation > 90 ? 'red' : 'violet'} loading={loading} label="Spent"
+                    value={money(main?.spent, main?.currency)} hint={`${utilisation}% of secured funds`} />
+                <StatCard icon={Target} color="indigo" loading={loading} label="Success rate"
+                    value={`${data?.success_rate ?? 0}%`} hint="awarded ÷ decided by donors" />
+                <StatCard icon={Clock} color="amber" loading={loading} label="In the pipeline"
+                    value={apps.pending ?? 0} hint="draft → with the donor" />
+                <StatCard icon={ClipboardList} color="violet" loading={loading} label="Awaiting internal review"
+                    value={apps.by_status?.under_internal_review ?? 0} hint="need stage decisions" />
+                <StatCard icon={Flag} color={data?.overdue_milestones ? 'red' : 'slate'} loading={loading} label="Overdue milestones"
+                    value={data?.overdue_milestones ?? 0} hint={data?.overdue_milestones ? 'deliverables past due' : 'all on track'}
+                    hintTone={data?.overdue_milestones ? 'text-red-600 font-medium' : undefined} />
+                <StatCard icon={FileText} color="slate" loading={loading} label="Applications"
+                    value={apps.total ?? 0} hint="all time" />
             </div>
 
-            <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                    <div className="px-5 py-4 border-b border-gray-50 flex items-center gap-2">
-                        <Building2 size={14} className="text-indigo-500" />
-                        <h3 className="text-sm font-bold text-gray-800">Top Funding Agencies</h3>
-                    </div>
-                    <div className="divide-y divide-gray-50">
-                        {(data?.by_agency ?? []).length === 0
-                            ? <p className="text-xs text-gray-400 text-center py-8">No data yet.</p>
-                            : (data?.by_agency ?? []).map((a, i) => (
-                                <div key={i} className="flex items-center gap-3 px-5 py-3">
-                                    <span className="text-xs font-black text-gray-300 w-5 shrink-0">{i + 1}</span>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-semibold text-gray-800 truncate">{a.name}</p>
-                                        <p className="text-[11px] text-gray-400">{a.count} award{a.count !== 1 ? 's' : ''}</p>
-                                    </div>
-                                    <p className="text-sm font-bold text-emerald-700 tabular-nums shrink-0">
-                                        USD {Number(a.total).toLocaleString()}
-                                    </p>
-                                </div>
-                            ))
-                        }
-                    </div>
-                </div>
+            {currencies.length > 1 && (
+                <Panel title="By currency" subtitle="Totals are never added across currencies" icon={Banknote} bodyClassName="p-0">
+                    <DataTable
+                        numbered={false}
+                        rowKey={r => r.currency}
+                        rows={currencies}
+                        columns={[
+                            { key: 'currency', label: 'Currency', render: r => <span className="font-semibold text-gray-900">{r.currency}</span> },
+                            { key: 'count', label: 'Awards', align: 'right', render: r => r.count },
+                            { key: 'secured', label: 'Secured', align: 'right', render: r => Number(r.secured).toLocaleString() },
+                            { key: 'spent', label: 'Spent', align: 'right', render: r => Number(r.spent).toLocaleString() },
+                            { key: 'left', label: 'Remaining', align: 'right', render: r => Number(r.secured - r.spent).toLocaleString() },
+                        ]}
+                    />
+                </Panel>
+            )}
 
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                    <div className="px-5 py-4 border-b border-gray-50 flex items-center gap-2">
-                        <Calendar size={14} className="text-amber-500" />
-                        <h3 className="text-sm font-bold text-gray-800">Upcoming Milestones</h3>
-                        <span className="ml-auto text-[11px] text-gray-400">Next 30 days</span>
-                    </div>
-                    <div className="divide-y divide-gray-50 max-h-72 overflow-y-auto">
-                        {(data?.upcoming_milestones ?? []).length === 0
-                            ? <p className="text-xs text-gray-400 text-center py-8">No upcoming milestones.</p>
-                            : (data?.upcoming_milestones ?? []).map((m) => (
-                                <div key={m.id} className="flex items-start gap-3 px-5 py-3">
-                                    <div className={cn('w-2 h-2 rounded-full mt-1.5 shrink-0',
-                                        m.status === 'overdue' ? 'bg-red-500' : m.status === 'in_progress' ? 'bg-blue-500' : 'bg-amber-400')} />
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-xs font-semibold text-gray-800 truncate">{m.title}</p>
-                                        <p className="text-[11px] text-gray-400 truncate">{m.award?.award_number}</p>
-                                    </div>
-                                    <p className="text-[11px] text-gray-500 shrink-0">{formatDate(m.due_date)}</p>
+            <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
+                <Panel title="Top funding agencies" icon={Building2} bodyClassName="p-0"
+                    actions={<RefreshButton onClick={load} loading={loading} />}>
+                    {loading ? <div className="p-5"><Skeleton className="h-40" /></div>
+                        : (data?.by_agency ?? []).length === 0
+                            ? <KitEmpty icon={Building2} title="No awards yet" text="Agencies appear here once an award is recorded." />
+                            : (
+                                <div className="divide-y divide-gray-50">
+                                    {data.by_agency.map((a, i) => (
+                                        <div key={i} className="flex items-center gap-3 px-5 py-3">
+                                            <span className="text-xs font-bold text-gray-300 w-5 shrink-0 tabular-nums">{i + 1}</span>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-semibold text-gray-800 truncate">{a.name}</p>
+                                                <p className="text-[11px] text-gray-400">{a.count} award{a.count !== 1 ? 's' : ''}</p>
+                                            </div>
+                                            <p className="text-sm font-bold text-emerald-700 tabular-nums shrink-0">{money(a.total, a.currency)}</p>
+                                        </div>
+                                    ))}
                                 </div>
-                            ))
-                        }
-                    </div>
-                </div>
+                            )}
+                </Panel>
+
+                <Panel title="Upcoming milestones" subtitle="Due in the next 30 days" icon={Calendar} bodyClassName="p-0"
+                    actions={<button onClick={() => onOpen?.('awards')} className="text-xs font-semibold text-indigo-600 hover:text-indigo-800">Open awards</button>}>
+                    {loading ? <div className="p-5"><Skeleton className="h-40" /></div>
+                        : (data?.upcoming_milestones ?? []).length === 0
+                            ? <KitEmpty icon={Calendar} title="Nothing due soon" text="No deliverables fall due in the next 30 days." />
+                            : (
+                                <div className="divide-y divide-gray-50 max-h-72 overflow-y-auto">
+                                    {data.upcoming_milestones.map(m => (
+                                        <div key={m.id} className="flex items-start gap-3 px-5 py-3">
+                                            <div className={cn('w-2 h-2 rounded-full mt-1.5 shrink-0', m.status === 'in_progress' ? 'bg-sky-500' : 'bg-amber-400')} />
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-xs font-semibold text-gray-800 truncate">{m.title}</p>
+                                                <p className="text-[11px] text-gray-400 truncate">{m.award?.award_number} · {m.award?.title}</p>
+                                            </div>
+                                            <p className="text-[11px] text-gray-500 shrink-0">{formatDate(m.due_date)}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                </Panel>
             </div>
 
             {(data?.by_college ?? []).length > 0 && (
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                    <div className="px-5 py-4 border-b border-gray-50 flex items-center gap-2">
-                        <BarChart3 size={14} className="text-violet-500" />
-                        <h3 className="text-sm font-bold text-gray-800">Funding by College</h3>
-                    </div>
-                    <div className="p-5 space-y-3">
-                        {(data?.by_college ?? []).map((c, i) => {
-                            const max = data.by_college[0]?.total ?? 1;
-                            const pct = Math.round((c.total / max) * 100);
-                            return (
-                                <div key={i}>
-                                    <div className="flex justify-between gap-2 text-xs mb-1">
-                                        <span className="font-medium text-gray-700 truncate min-w-0">{c.name}</span>
-                                        <span className="font-bold text-gray-600 tabular-nums shrink-0 ml-2">USD {Number(c.total).toLocaleString()}</span>
-                                    </div>
-                                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                                        <div className="h-full bg-violet-500 rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
-                                    </div>
+                <Panel title="Funding by college" icon={BarChart3}>
+                    <div className="space-y-3">
+                        {data.by_college.map((c, i) => (
+                            <div key={i}>
+                                <div className="flex justify-between gap-2 text-xs mb-1">
+                                    <span className="font-medium text-gray-700 truncate min-w-0">{c.name}</span>
+                                    <span className="font-bold text-gray-600 tabular-nums shrink-0 ml-2">{money(c.total, c.currency)}</span>
                                 </div>
-                            );
-                        })}
+                                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                                    <div className="h-full bg-violet-500 rounded-full transition-all duration-700" style={{ width: `${Math.round((Number(c.total) / maxCollege) * 100)}%` }} />
+                                </div>
+                            </div>
+                        ))}
                     </div>
-                </div>
+                </Panel>
             )}
         </div>
     );
@@ -1350,12 +1448,12 @@ function ApplicationModal({ app, agencies, colleges, departments, onSave, onClos
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div>
-                            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Annual Budget (USD) *</label>
+                            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Annual Budget *</label>
                             <input type="number" {...f('annual_budget')} placeholder="0" className={cls} />
                             {err('annual_budget')}
                         </div>
                         <div>
-                            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Total Budget (USD) *</label>
+                            <label className="block text-xs font-semibold text-gray-700 mb-1.5">Total Budget *</label>
                             <input type="number" {...f('amount_requested')} placeholder="0" className={cls} />
                             <p className="text-[11px] text-gray-400 mt-0.5">Use current exchange rate if other currency</p>
                             {err('amount_requested')}
@@ -1541,6 +1639,7 @@ function ApplicationsTab() {
     const [meta, setMeta] = useState(null);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
+    const query = useDebounced(search.trim());
     const [statusF, setStatusF] = useState('');
     const [page, setPage] = useState(1);
     const [agencies, setAgencies] = useState([]);
@@ -1554,7 +1653,7 @@ function ApplicationsTab() {
     const load = useCallback(async () => {
         setLoading(true);
         const params = { page };
-        if (search) params.search = search;
+        if (query) params.search = query;
         if (statusF) params.status = statusF;
         try {
             const r = await api.get('/external-funds/applications', { params });
@@ -1563,7 +1662,7 @@ function ApplicationsTab() {
             if (pg?.total != null) setMeta(pg);
         } catch { error('Failed to load.'); }
         setLoading(false);
-    }, [page, search, statusF]);
+    }, [page, query, statusF]);
 
     useEffect(() => { load(); }, [load]);
     useEffect(() => {
@@ -1608,9 +1707,11 @@ function ApplicationsTab() {
     };
 
     const handleDelete = async (id) => {
-        await api.delete(`/external-funds/applications/${id}`);
-        success('Application deleted.');
-        load();
+        try {
+            await api.delete(`/external-funds/applications/${id}`);
+            success('Application deleted.');
+            load();
+        } catch (e) { error(apiMessage(e, 'Could not delete it.')); }
     };
 
     const totalPages = meta ? Math.ceil(meta.total / (meta.per_page ?? 25)) : 1;
@@ -1621,7 +1722,7 @@ function ApplicationsTab() {
     return (
         <div className="space-y-4">
             {/* RTT platform link banner */}
-            <div className="bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100 rounded-2xl px-4 sm:px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+            <div className="bg-linear-to-r from-indigo-50 to-blue-50 border border-indigo-100 rounded-2xl px-4 sm:px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
                 <div className="hidden sm:flex w-10 h-10 rounded-xl bg-indigo-100 items-center justify-center shrink-0">
                     <Link2 size={17} className="text-indigo-600" />
                 </div>
@@ -1828,6 +1929,7 @@ function AwardsTab() {
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
+    const query = useDebounced(search.trim());
     const [statusF, setStatusF] = useState('');
     const [page, setPage] = useState(1);
     const [meta, setMeta] = useState(null);
@@ -1837,7 +1939,7 @@ function AwardsTab() {
     const load = useCallback(async () => {
         setLoading(true);
         const params = { page };
-        if (search) params.search = search;
+        if (query) params.search = query;
         if (statusF) params.status = statusF;
         try {
             const r = await api.get('/external-funds/awards', { params });
@@ -1846,14 +1948,16 @@ function AwardsTab() {
             if (pg?.total != null) setMeta(pg);
         } catch { error('Failed to load.'); }
         setLoading(false);
-    }, [page, search, statusF]);
+    }, [page, query, statusF]);
 
     useEffect(() => { load(); }, [load]);
 
     const handleDelete = async (id) => {
-        await api.delete(`/external-funds/awards/${id}`);
-        success('Award deleted.');
-        load();
+        try {
+            await api.delete(`/external-funds/awards/${id}`);
+            success('Award deleted.');
+            load();
+        } catch (e) { error(apiMessage(e, 'Could not delete it.')); }
     };
 
     const totalPages = meta ? Math.ceil(meta.total / (meta.per_page ?? 25)) : 1;
@@ -1982,23 +2086,29 @@ function OpportunitiesTab() {
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
+    const query = useDebounced(search.trim());
     const [statusF, setStatusF] = useState('');
+    const [page, setPage] = useState(1);
+    const [meta, setMeta] = useState(null);
     const [agencies, setAgencies] = useState([]);
     const [modal, setModal] = useState(null);
     const [confirm, setConfirm] = useState(null);
 
     const load = useCallback(async () => {
         setLoading(true);
-        const params = {};
-        if (search) params.search = search;
+        const params = { page, per_page: 24 };
+        if (query) params.search = query;
         if (statusF) params.status = statusF;
         try {
             const r = await api.get('/external-funds/opportunities', { params });
             const d = r.data.data ?? r.data;
             setItems(Array.isArray(d) ? d : (d.data ?? []));
+            setMeta(Array.isArray(d) ? null : d);
         } catch { error('Failed to load.'); }
         setLoading(false);
-    }, [search, statusF]);
+    }, [page, query, statusF]);
+
+    useEffect(() => { setPage(1); }, [query, statusF]);
 
     useEffect(() => { load(); }, [load]);
     useEffect(() => {
@@ -2020,9 +2130,11 @@ function OpportunitiesTab() {
     };
 
     const handleDelete = async (id) => {
-        await api.delete(`/external-funds/opportunities/${id}`);
-        success('Opportunity deleted.');
-        load();
+        try {
+            await api.delete(`/external-funds/opportunities/${id}`);
+            success('Opportunity deleted.');
+            load();
+        } catch (e) { error(apiMessage(e, 'Could not delete it.')); }
     };
 
     const daysLeft = (deadline) => {
@@ -2111,6 +2223,8 @@ function OpportunitiesTab() {
                 </div>
             )}
 
+            <Pager meta={meta} onPage={setPage} />
+
             {modal && (
                 <OpportunityModal
                     opp={modal === 'create' ? null : modal}
@@ -2122,7 +2236,7 @@ function OpportunitiesTab() {
             <ConfirmDialog
                 open={!!confirm}
                 title="Delete Opportunity"
-                description="Are you sure you want to delete this funding opportunity?"
+                description="The opportunity is removed for good. If anyone has applied under it, close or cancel it instead."
                 confirmLabel="Delete"
                 onConfirm={() => { handleDelete(confirm); setConfirm(null); }}
                 onCancel={() => setConfirm(null)}
@@ -2235,18 +2349,24 @@ function AgenciesTab() {
     const [items, setItems] = useState([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
+    const query = useDebounced(search.trim());
+    const [page, setPage] = useState(1);
+    const [meta, setMeta] = useState(null);
     const [modal, setModal] = useState(null);
     const [confirm, setConfirm] = useState(null);
 
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const r = await api.get('/external-funds/agencies', { params: { search, per_page: 50 } });
+            const r = await api.get('/external-funds/agencies', { params: { search: query || undefined, page, per_page: 30 } });
             const d = r.data.data ?? r.data;
             setItems(Array.isArray(d) ? d : (d.data ?? []));
+            setMeta(Array.isArray(d) ? null : d);
         } catch { error('Failed to load.'); }
         setLoading(false);
-    }, [search]);
+    }, [query, page]);
+
+    useEffect(() => { setPage(1); }, [query]);
 
     useEffect(() => { load(); }, [load]);
 
@@ -2263,9 +2383,11 @@ function AgenciesTab() {
     };
 
     const handleDelete = async (id) => {
-        await api.delete(`/external-funds/agencies/${id}`);
-        success('Agency deleted.');
-        load();
+        try {
+            await api.delete(`/external-funds/agencies/${id}`);
+            success('Agency deleted.');
+            load();
+        } catch (e) { error(apiMessage(e, 'Could not delete it.')); }
     };
 
     const TYPE_COLORS = {
@@ -2359,6 +2481,8 @@ function AgenciesTab() {
                 }
             </div>
 
+            <Pager meta={meta} onPage={setPage} />
+
             {modal && (
                 <AgencyModal
                     agency={modal === 'create' ? null : modal}
@@ -2369,7 +2493,7 @@ function AgenciesTab() {
             <ConfirmDialog
                 open={!!confirm}
                 title="Delete Agency"
-                description="Deleting this agency will also remove all associated data."
+                description="Only an agency with no applications, awards or opportunities can be deleted. Otherwise, edit it and mark it inactive."
                 confirmLabel="Delete"
                 onConfirm={() => { handleDelete(confirm); setConfirm(null); }}
                 onCancel={() => setConfirm(null)}
@@ -2389,37 +2513,42 @@ const TABS = [
 ];
 
 export default function ExternalFunds() {
-    const [activeTab, setActiveTab] = useState('dashboard');
+    const initialTab = (() => {
+        const t = new URLSearchParams(window.location.search).get('tab');
+        return TABS.some(x => x.id === t) ? t : 'dashboard';
+    })();
+    const [activeTab, setActiveTab] = useState(initialTab);
+
+    // Keep the tab in the address so a refresh or shared link lands on the same place.
+    const openTab = (id) => {
+        setActiveTab(id);
+        const url = new URL(window.location.href);
+        if (id === 'dashboard') url.searchParams.delete('tab'); else url.searchParams.set('tab', id);
+        window.history.replaceState(window.history.state, '', url);
+    };
 
     return (
         <AppLayout breadcrumb="External Funds">
             <div className="max-w-7xl mx-auto space-y-5 sm:space-y-6 pb-10 min-w-0">
-                <div className="flex items-center gap-3 sm:gap-4">
-                    <div className="w-11 h-11 sm:w-12 sm:h-12 shrink-0 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-lg shadow-emerald-200">
-                        <Banknote size={22} className="text-white" />
-                    </div>
-                    <div className="min-w-0">
-                        <h1 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight">External Funds</h1>
-                        <p className="text-xs sm:text-sm text-gray-500 mt-0.5">Manage grants, funding agencies, applications, and award lifecycle</p>
+                <PageHeader icon={Banknote} color="emerald" title="External Funds"
+                    description="Donor applications, internal approval, awards and spending — in one place" />
+
+                <div className="-mx-4 px-4 md:mx-0 md:px-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden border-b border-gray-200">
+                    <div className="flex gap-1 w-max" role="tablist">
+                        {TABS.map(tab => (
+                            <button key={tab.id} role="tab" aria-selected={activeTab === tab.id} onClick={() => openTab(tab.id)}
+                                className={cn(
+                                    'flex items-center gap-2 px-3 sm:px-4 py-2.5 -mb-px border-b-2 text-sm font-semibold transition-colors whitespace-nowrap',
+                                    activeTab === tab.id ? 'border-emerald-600 text-emerald-700' : 'border-transparent text-gray-500 hover:text-gray-800 hover:border-gray-300',
+                                )}>
+                                <tab.icon size={14} />
+                                {tab.label}
+                            </button>
+                        ))}
                     </div>
                 </div>
 
-                <div className="-mx-5 px-5 md:mx-0 md:px-0 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                <div className="flex gap-1 p-1 bg-gray-100 rounded-xl w-max">
-                    {TABS.map(tab => (
-                        <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                            className={cn(
-                                'flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap',
-                                activeTab === tab.id ? 'bg-white text-emerald-700 shadow-sm' : 'text-gray-500 hover:text-gray-700',
-                            )}>
-                            <tab.icon size={14} />
-                            {tab.label}
-                        </button>
-                    ))}
-                </div>
-                </div>
-
-                {activeTab === 'dashboard'     && <DashboardTab />}
+                {activeTab === 'dashboard'     && <DashboardTab onOpen={openTab} />}
                 {activeTab === 'applications'  && <ApplicationsTab />}
                 {activeTab === 'awards'        && <AwardsTab />}
                 {activeTab === 'opportunities' && <OpportunitiesTab />}

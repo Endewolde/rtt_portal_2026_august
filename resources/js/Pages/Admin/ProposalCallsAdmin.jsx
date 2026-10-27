@@ -3,11 +3,13 @@ import {
     Megaphone, Plus, X, Search, Pencil, CheckCircle, XCircle,
     Eye, RefreshCw, Trash2, Upload, FileText, Download, Filter,
     Settings, AlertCircle, GraduationCap, Calendar, Clock,
-    AlignLeft, Users, Tag, ShieldCheck, BookOpen, ChevronRight, Wallet,
+    AlignLeft, Users, Tag, ShieldCheck, BookOpen, ChevronRight, Wallet, Copy, Loader2, ClipboardList, Route,
 } from 'lucide-react';
 import { Link, usePage } from '@inertiajs/react';
 import AppLayout from '../../Layouts/AppLayout';
 import ConfirmDialog from '../../Components/ConfirmDialog';
+import ApplicationFormBuilder from '../../Components/ApplicationFormBuilder';
+import ReviewRouteModal from '../../Components/ReviewRouteModal';
 import ViewToggle from '../../Components/ViewToggle';
 import { useViewPreference } from '../../hooks/useViewPreference';
 import api, { get, post, del } from '../../lib/api';
@@ -16,6 +18,8 @@ import { downloadFile } from '../../lib/download';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../Components/Toast';
 import { useConfirm } from '../../hooks/useConfirm';
+import { currency } from '../../lib/terms';
+import { programmes } from '../../lib/programmes';
 
 // Convert any date/datetime string to the YYYY-MM-DDTHH:mm format
 // required by datetime-local inputs.
@@ -32,13 +36,8 @@ function toDateTimeLocal(value) {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const CATEGORIES = [
-    { value: 'research',              label: 'Research' },
-    { value: 'community_engagement',  label: 'Community Engagement' },
-    { value: 'technology_transfer',   label: 'Technology Transfer' },
-    { value: 'innovation',            label: 'Innovation' },
-    { value: 'other',                 label: 'Other' },
-];
+/** The organisation's programmes as select options (Settings → Programmes). */
+const categoriesOptions = () => programmes({ includeInactive: false }).map((p) => ({ value: p.key, label: p.name }));
 
 const CATEGORY_COLORS = {
     research:             'bg-blue-100 text-blue-700',
@@ -268,7 +267,7 @@ function ProposalCallModal({ initial, defaultAcademicYear, onClose, onSaved }) {
                         <Field label="Category" icon={Tag} required error={errors.category?.[0]}>
                             <select value={form.category} onChange={(e) => set('category', e.target.value)}
                                 className={input(errors.category)}>
-                                {CATEGORIES.map((c) => (
+                                {categoriesOptions().map((c) => (
                                     <option key={c.value} value={c.value}>{c.label}</option>
                                 ))}
                             </select>
@@ -338,7 +337,7 @@ function ProposalCallModal({ initial, defaultAcademicYear, onClose, onSaved }) {
                             className={input(errors.max_proposals_per_pi)} />
                     </Field>
 
-                    <Field label="Total Funding Budget (ETB)" icon={Wallet} error={errors.funding_budget?.[0]}
+                    <Field label={`Total Funding Budget (${currency()})`} icon={Wallet} error={errors.funding_budget?.[0]}
                         hint="The money available to fund proposals from this call. Central Evaluation ranks passing proposals against it and warns before it is overspent. Leave blank if not fixed.">
                         <input type="number" min="0" step="1000" value={form.funding_budget}
                             onChange={(e) => set('funding_budget', e.target.value)}
@@ -444,6 +443,94 @@ function ProposalCallModal({ initial, defaultAcademicYear, onClose, onSaved }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
+/** Year arithmetic for "2026-2027"-style academic years and the dates/titles that go with them. */
+const nextAcademicYear = (ay) => {
+    const start = parseInt(String(ay).slice(0, 4), 10);
+    return Number.isFinite(start) ? `${start + 1}-${start + 2}` : ay;
+};
+const shiftDate = (value, years) => {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    d.setFullYear(d.getFullYear() + years);
+    const pad = (n) => String(n).padStart(2, '0');
+    // Local wall-clock time, as a datetime-local input expects.
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+
+/** Copy a call into a new draft for another academic year; everything else carries over. */
+function CopyCallModal({ call, onClose, onCopied }) {
+    const toast = useToast();
+    const [form, setForm] = useState(() => {
+        const year = nextAcademicYear(call.academic_year);
+        const shift = (parseInt(year, 10) || 0) - (parseInt(call.academic_year, 10) || 0);
+        const title = call.title?.includes(call.academic_year)
+            ? call.title.replace(call.academic_year, year)
+            : (call.title ?? '').replace(/\b(20\d{2})\b/g, (y) => String(Number(y) + shift));
+        return { academic_year: year, title, start_date: shiftDate(call.start_date, shift), end_date: shiftDate(call.end_date, shift) };
+    });
+    const [saving, setSaving] = useState(false);
+    const [errors, setErrors] = useState({});
+    const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
+
+    const submit = async () => {
+        setSaving(true);
+        setErrors({});
+        try {
+            const res = await post(`/proposal-calls/${call.id}/copy`, form);
+            toast.success(res.message ?? 'Call copied as a draft.');
+            onCopied(res.data);
+        } catch (err) {
+            setErrors(err.response?.data?.errors ?? {});
+            toast.error(err.response?.data?.message ?? 'Could not copy the call.');
+        }
+        setSaving(false);
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 backdrop-blur-sm sm:items-center sm:p-4">
+            <div role="dialog" aria-modal="true" className="w-full max-w-lg rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
+                <div className="flex items-start justify-between gap-3 border-b border-gray-100 px-6 py-5">
+                    <div className="flex items-start gap-3">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600"><Copy size={18} /></span>
+                        <div className="min-w-0">
+                            <h2 className="text-lg font-bold text-gray-900">Copy call</h2>
+                            <p className="truncate text-xs text-gray-500">From “{call.title}” · {call.academic_year}</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} aria-label="Close" className="rounded-lg p-1 text-gray-400 hover:bg-gray-100"><X size={16} /></button>
+                </div>
+                <div className="space-y-4 px-6 py-5">
+                    <Field label="New title" required error={errors.title?.[0]}>
+                        <input value={form.title} onChange={set('title')} className={input(errors.title)} />
+                    </Field>
+                    <Field label="Academic year" required error={errors.academic_year?.[0]} hint="Format: 2027-2028">
+                        <input value={form.academic_year} onChange={set('academic_year')} className={input(errors.academic_year)} />
+                    </Field>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        <Field label="Opens" error={errors.start_date?.[0]}>
+                            <input type="datetime-local" value={form.start_date} onChange={set('start_date')} className={input(errors.start_date)} />
+                        </Field>
+                        <Field label="Closes" error={errors.end_date?.[0]}>
+                            <input type="datetime-local" value={form.end_date} onChange={set('end_date')} className={input(errors.end_date)} />
+                        </Field>
+                    </div>
+                    <p className="rounded-xl bg-slate-50 px-4 py-3 text-xs leading-relaxed text-slate-600">
+                        The description, eligibility, category, budget, per-PI limit and guidelines PDF are copied. The new call starts as a <b>draft</b>, so nothing is published until you activate it.
+                    </p>
+                </div>
+                <div className="flex gap-3 border-t border-gray-100 px-6 py-4">
+                    <button onClick={onClose} className="flex-1 rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
+                    <button onClick={submit} disabled={saving || !form.title || !form.academic_year}
+                        className="inline-flex flex-[1.5] items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">
+                        {saving ? <Loader2 size={14} className="animate-spin" /> : <Copy size={14} />} Create draft copy
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function ProposalCallsAdmin() {
     const { hasPermission, accessScope } = useAuth();
     const toast                  = useToast();
@@ -464,6 +551,9 @@ export default function ProposalCallsAdmin() {
     const [showModal, setShowModal]       = useState(false);
     const [editCall, setEditCall]         = useState(null);
     const [confirmAction, setConfirmAction] = useState(null);
+    const [copying, setCopying]           = useState(null);
+    const [formFor, setFormFor]           = useState(null);
+    const [routeFor, setRouteFor]         = useState(null);
     const [acting, setActing]             = useState(false);
     const appSettings = usePage().props.app_settings ?? {}
     const defaultAcademicYear = appSettings.current_academic_year ?? ''
@@ -593,7 +683,7 @@ export default function ProposalCallsAdmin() {
                         <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}
                             className="pl-8 pr-8 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white max-w-36">
                             <option value="">All Categories</option>
-                            {CATEGORIES.map((c) => (
+                            {categoriesOptions().map((c) => (
                                 <option key={c.value} value={c.value}>{c.label}</option>
                             ))}
                         </select>
@@ -686,6 +776,21 @@ export default function ProposalCallsAdmin() {
                                         <Pencil size={13} />
                                     </button>
                                 )}
+                                {canManage && (
+                                    <button onClick={(e) => { e.stopPropagation(); setRouteFor(c); }} className={`p-1.5 rounded hover:text-violet-600 ${c.review_route ? 'text-violet-500' : 'text-gray-400'}`} title="Review route">
+                                        <Route size={13} />
+                                    </button>
+                                )}
+                                {canManage && (
+                                    <button onClick={(e) => { e.stopPropagation(); setFormFor(c); }} className={`p-1.5 rounded hover:text-indigo-600 ${c.application_form ? 'text-indigo-500' : 'text-gray-400'}`} title="Application form">
+                                        <ClipboardList size={13} />
+                                    </button>
+                                )}
+                                {canManage && (
+                                    <button onClick={(e) => { e.stopPropagation(); setCopying(c); }} className="p-1.5 text-gray-400 hover:text-indigo-600 rounded" title="Copy to a new call">
+                                        <Copy size={13} />
+                                    </button>
+                                )}
                                 {canManage && c.status === 'draft' && (
                                     <button onClick={(e) => { e.stopPropagation(); setConfirmAction({ type: 'activate', call: c }); }} className="p-1.5 text-gray-400 hover:text-green-600 rounded" title="Activate">
                                         <CheckCircle size={13} />
@@ -775,6 +880,24 @@ export default function ProposalCallsAdmin() {
                                                             <Pencil size={15} />
                                                         </button>
 
+                                                        <button onClick={() => setRouteFor(c)}
+                                                            className={`p-1.5 hover:text-violet-600 transition-colors rounded ${c.review_route ? 'text-violet-500' : 'text-gray-400'}`}
+                                                            title="Review route">
+                                                            <Route size={15} />
+                                                        </button>
+
+                                                        <button onClick={() => setFormFor(c)}
+                                                            className={`p-1.5 hover:text-indigo-600 transition-colors rounded ${c.application_form ? 'text-indigo-500' : 'text-gray-400'}`}
+                                                            title="Application form">
+                                                            <ClipboardList size={15} />
+                                                        </button>
+
+                                                        <button onClick={() => setCopying(c)}
+                                                            className="p-1.5 text-gray-400 hover:text-indigo-600 transition-colors rounded"
+                                                            title="Copy to a new call">
+                                                            <Copy size={15} />
+                                                        </button>
+
                                                         {c.status === 'draft' && (
                                                             <button onClick={() => setConfirmAction({ type: 'activate', call: c })}
                                                                 className="p-1.5 text-gray-400 hover:text-green-600 transition-colors rounded"
@@ -849,6 +972,21 @@ export default function ProposalCallsAdmin() {
                     onClose={() => { setShowModal(false); setEditCall(null); }}
                     onSaved={load}
                 />
+            )}
+
+            {routeFor && (
+                <ReviewRouteModal call={routeFor} onClose={() => setRouteFor(null)}
+                    onSaved={() => { setRouteFor(null); load(); }} />
+            )}
+
+            {formFor && (
+                <ApplicationFormBuilder call={formFor} onClose={() => setFormFor(null)}
+                    onSaved={() => { setFormFor(null); load(); }} />
+            )}
+
+            {copying && (
+                <CopyCallModal call={copying} onClose={() => setCopying(null)}
+                    onCopied={(newCall) => { setCopying(null); load(); if (newCall?.id) openEdit(newCall); }} />
             )}
 
             {/* Activate / close confirmation */}

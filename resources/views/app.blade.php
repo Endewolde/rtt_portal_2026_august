@@ -17,6 +17,7 @@
         });
     @endphp
 
+    <meta name="app-name" content="{{ $meta['system_name'] }}">
     <title inertia>{{ $meta['system_name'] }}</title>
 
     @if($meta['favicon'])

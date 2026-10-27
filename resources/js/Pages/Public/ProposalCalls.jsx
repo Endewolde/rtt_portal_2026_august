@@ -4,14 +4,17 @@ import PublicLayout from '../../Layouts/PublicLayout';
 import ProposalCallCard from '../../Components/ProposalCallCard';
 import { get } from '../../lib/api';
 import { cn } from '../../lib/utils';
+import { styledProgrammes } from '../../lib/programmes';
 
-const CATEGORIES = [
+const CATEGORY_STYLES = [
     { id: '',                    label: 'All Calls',           icon: LayoutGrid,  color: 'text-indigo-600',  active: 'bg-indigo-600 text-white border-indigo-600' },
     { id: 'research',            label: 'Research',            icon: Microscope,  color: 'text-blue-600',    active: 'bg-blue-600 text-white border-blue-600'    },
     { id: 'community_engagement',label: 'Community',           icon: Users,       color: 'text-emerald-600', active: 'bg-emerald-600 text-white border-emerald-600'},
     { id: 'technology_transfer', label: 'Technology Transfer', icon: Zap,         color: 'text-purple-600',  active: 'bg-purple-600 text-white border-purple-600' },
     { id: 'innovation',          label: 'Innovation',          icon: Lightbulb,   color: 'text-amber-600',   active: 'bg-amber-600 text-white border-amber-600'   },
 ];
+
+const categories = () => styledProgrammes(CATEGORY_STYLES, 'id');
 
 function SkeletonCard() {
     return (
@@ -130,7 +133,7 @@ export default function ProposalCalls() {
 
                 {/* Category pills */}
                 <div className="flex items-center gap-2 overflow-x-auto pb-1 mb-8 -mx-1 px-1 scrollbar-none">
-                    {CATEGORIES.map(cat => {
+                    {categories().map(cat => {
                         const active = category === cat.id;
                         const count  = cat.id === '' ? calls.length : calls.filter(c => c.category === cat.id).length;
                         return (

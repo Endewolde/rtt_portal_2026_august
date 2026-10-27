@@ -7,6 +7,7 @@ use App\Models\Proposal;
 use App\Models\ResearchOutput;
 use App\Models\User;
 use App\Services\ResearchOutputService;
+use App\Support\Programmes;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -22,12 +23,6 @@ class ResearcherProfileController extends Controller
 {
     /** Outputs shown publicly: checked by the college or approved. */
     private const PUBLIC_OUTPUT_STATUSES = ['verified', 'approved'];
-
-    private const CATEGORY_LABELS = [
-        'research' => 'Research',
-        'community_engagement' => 'Community Engagement',
-        'technology_transfer' => 'Technology Transfer',
-    ];
 
     /** The public directory: researchers who have switched their profile on. */
     public function index(Request $request): JsonResponse
@@ -101,7 +96,7 @@ class ResearcherProfileController extends Controller
             'projects' => $projects->map(fn (Proposal $p) => [
                 'tracker_number' => $p->tracker_number,
                 'title' => $p->title,
-                'category' => self::CATEGORY_LABELS[$p->category] ?? $p->category,
+                'category' => Programmes::label($p->category),
                 'academic_year' => $p->academic_year,
                 'theme' => $p->focus_area,
                 'role' => $p->pi_user_id === $user->id ? 'Principal Investigator' : 'Co-investigator',

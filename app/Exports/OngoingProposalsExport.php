@@ -3,6 +3,7 @@
 namespace App\Exports;
 
 use App\Models\Proposal;
+use App\Support\Terms;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
@@ -42,15 +43,15 @@ class OngoingProposalsExport implements FromCollection, ShouldAutoSize, WithHead
             'Category',
             'Status',
             'PI Name',
-            'College',
+            Terms::college(),
             'Funded Date',
             'Midterm Status',
             'Completion Workshop Status',
             'Contract Status',
             'Awaiting Disbursement',
             'Research Outputs',
-            'Budget Allocated (ETB)',
-            'Budget Utilized (ETB)',
+            'Budget Allocated ('.Terms::currency().')',
+            'Budget Utilized ('.Terms::currency().')',
         ];
     }
 

@@ -343,17 +343,17 @@ export default function SimilarityFlags() {
                         <div className="hidden sm:block overflow-x-auto">
                             <table className="w-full text-sm">
                                 <thead>
-                                    <tr className="bg-gray-50 border-b border-gray-200">
+                                    <tr className="bg-gray-50 border-b border-gray-200"><th className="px-4 py-3 w-10 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">#</th>
                                         {['Proposal', 'Title', 'Status', 'Similar To', 'Score', 'Risk', 'Checked', ''].map(h => (
                                             <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">{h}</th>
                                         ))}
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
-                                    {visible.map(f => (
+                                    {visible.map((f, rowIdx) => (
                                         <tr key={f.id}
                                             className={`hover:bg-orange-50/40 transition-colors cursor-pointer ${f.flagged ? 'bg-red-50/20' : ''}`}
-                                            onClick={() => setSelected(f)}>
+                                            onClick={() => setSelected(f)}><td className="px-4 py-3 w-10 text-xs font-medium tabular-nums text-gray-400">{rowIdx + 1}</td>
                                             <td className="px-4 py-3 whitespace-nowrap">
                                                 <span className="font-mono text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
                                                     {f.proposal?.tracker_number ?? '—'}

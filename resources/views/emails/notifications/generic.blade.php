@@ -42,7 +42,7 @@
            notification text arrives as $notification_message; $message is only a
            string when this view is rendered directly. The text is translated when
            it is one of the platform's fixed messages. --}}
-      {{ __($notification_message ?? (is_string($message ?? null) ? $message : 'You have a new notification from the RTT platform.')) }}
+      {!! nl2br(e(__($notification_message ?? (is_string($message ?? null) ? $message : 'You have a new notification from the RTT platform.')))) !!}
     </p>
 
     <hr class="divider">

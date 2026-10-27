@@ -20,6 +20,7 @@ class NotificationPreference extends Model
         'user_id',
         'email_enabled',
         'telegram_enabled',
+        'sms_enabled',
         'inapp_enabled',
         'events_config',
         'digest_frequency',
@@ -29,6 +30,7 @@ class NotificationPreference extends Model
     protected $casts = [
         'email_enabled' => 'boolean',
         'telegram_enabled' => 'boolean',
+        'sms_enabled' => 'boolean',
         'inapp_enabled' => 'boolean',
         'events_config' => 'array',
         'last_digest_sent_at' => 'datetime',

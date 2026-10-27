@@ -43,6 +43,17 @@ function buildNavItems(hasPermission) {
         { group: 'Proposals',  label: 'Proposal Calls',      href: '/proposal-calls',           icon: Megaphone },
         { group: 'Proposals',  label: 'Awarded Proposals',   href: '/admin/awarded',            icon: Trophy },
         { group: 'Proposals',  label: 'Completed Archive',   href: '/admin/completed-archive',  icon: Archive },
+        { group: 'Proposals',  label: 'Funded Proposals (mine)', href: '/my-research',          icon: Trophy },
+        { group: 'Proposals',  label: 'Contracts',           href: '/admin/contracts',          icon: ScrollText },
+        { group: 'Monitoring', label: 'Ongoing Proposals',   href: '/ongoing-proposals',        icon: TrendingUp },
+        { group: 'Monitoring', label: 'Projects at Risk',    href: '/projects-at-risk',         icon: AlertCircle },
+        { group: 'Monitoring', label: 'Progress Reports',    href: '/progress-reports',         icon: FileText },
+        { group: 'Reports',    label: 'Turnaround',          href: '/admin/turnaround',         icon: Clock },
+        { group: 'Reports',    label: 'Insights',            href: '/insights',                 icon: BarChart },
+        { group: 'Reports',    label: 'Annual RTT Report',   href: '/reports/annual',           icon: BookOpen },
+        { group: 'Admin',      label: 'Roles',               href: '/admin/roles',              icon: Shield },
+        { group: 'Navigation', label: 'Help Centre',         href: '/help',                     icon: BookOpen },
+        { group: 'Navigation', label: 'Mentorship',          href: '/mentorship',               icon: Users },
 
         { group: 'Review',     label: 'Validation Queue',    href: '/admin/validation-queue',   icon: CheckSquare },
         { group: 'Review',     label: 'Central Evaluation',  href: '/admin/central-evaluation', icon: ClipboardList },
@@ -89,6 +100,8 @@ export default function CommandPalette({ open, onClose }) {
     const { hasPermission } = useAuth()
     const [query, setQuery] = useState('')
     const [proposalResults, setProposalResults] = useState([])
+    const [peopleResults, setPeopleResults] = useState([])
+    const canSearchPeople = hasPermission('users.view_any')
     const [loading, setLoading] = useState(false)
     const [activeIdx, setActiveIdx] = useState(0)
     const inputRef = useRef(null)
@@ -110,6 +123,8 @@ export default function CommandPalette({ open, onClose }) {
         ...recent.map(r => ({ ...r, isRecent: true })),
         ...topNav.filter(n => !recent.find(r => r.href === n.href)),
         ...filteredNav,
+        // Same order as on screen, so the arrow keys follow what you see.
+        ...peopleResults.map(u => ({ label: u.name, href: `/admin/users/${u.id}`, sub: u.email, isPerson: true })),
         ...proposalResults.map(p => ({
             label: p.title,
             href: `/proposals/${p.id}`,
@@ -120,7 +135,7 @@ export default function CommandPalette({ open, onClose }) {
     ]
 
     useEffect(() => {
-        if (open) { setQuery(''); setProposalResults([]); setActiveIdx(0) }
+        if (open) { setQuery(''); setProposalResults([]); setPeopleResults([]); setActiveIdx(0) }
     }, [open])
 
     useEffect(() => {
@@ -128,14 +143,18 @@ export default function CommandPalette({ open, onClose }) {
     }, [open])
 
     useEffect(() => {
-        if (!query || query.length < 2) { setProposalResults([]); return }
+        if (!query || query.length < 2) { setProposalResults([]); setPeopleResults([]); return }
         const t = setTimeout(async () => {
             setLoading(true)
-            try {
-                const r = await get('/proposals', { search: query, per_page: 5 })
-                setProposalResults(r.data?.data?.data ?? r.data?.data ?? [])
-            } catch { setProposalResults([]) }
-            finally { setLoading(false) }
+            const [proposals, people] = await Promise.all([
+                get('/proposals', { search: query, per_page: 5 }).then(r => r.data?.data ?? r.data ?? []).catch(() => []),
+                canSearchPeople
+                    ? get('/users', { search: query, per_page: 5 }).then(r => (r.data?.data ?? r.data ?? []).slice(0, 5)).catch(() => [])
+                    : Promise.resolve([]),
+            ])
+            setProposalResults(Array.isArray(proposals) ? proposals : [])
+            setPeopleResults(Array.isArray(people) ? people : [])
+            setLoading(false)
         }, 280)
         return () => clearTimeout(t)
     }, [query])
@@ -196,7 +215,7 @@ export default function CommandPalette({ open, onClose }) {
                         value={query}
                         onChange={e => setQuery(e.target.value)}
                         onKeyDown={handleKey}
-                        placeholder="Search pages, proposals…"
+                        placeholder={canSearchPeople ? 'Search pages, proposals, people…' : 'Search pages, proposals…'}
                         className="flex-1 text-sm text-gray-800 placeholder-gray-400 bg-transparent outline-none"
                     />
                     {query ? (
@@ -292,6 +311,31 @@ export default function CommandPalette({ open, onClose }) {
                             })}
                         </div>
                     ))}
+
+                    {/* People results */}
+                    {peopleResults.length > 0 && (
+                        <div className="mt-1 border-t border-gray-100 pt-1">
+                            <p className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400">People</p>
+                            {peopleResults.map(u => {
+                                const idx = flatIdx++
+                                const isActive = idx === activeIdx
+                                return (
+                                    <button key={u.id} onClick={() => navigate({ href: `/admin/users/${u.id}`, label: u.name })}
+                                        onMouseEnter={() => setActiveIdx(idx)}
+                                        className={cn('w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors', isActive ? 'bg-indigo-50' : 'hover:bg-gray-50')}>
+                                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[10px] font-bold text-indigo-700">
+                                            {(u.name ?? '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase()}
+                                        </span>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm text-gray-800 truncate">{u.name}</p>
+                                            <p className="text-[10px] text-gray-400 truncate">{u.email}</p>
+                                        </div>
+                                        <ArrowRight size={11} className={cn('shrink-0 transition-opacity', isActive ? 'opacity-100 text-indigo-400' : 'opacity-0')} />
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    )}
 
                     {/* Proposal results */}
                     {proposalResults.length > 0 && (

@@ -6,6 +6,8 @@ import { get } from '../../lib/api';
 import { downloadFile } from '../../lib/download';
 import { useToast } from '../../Components/Toast';
 import { formatDate, formatCurrency, getCategoryLabel } from '../../lib/utils';
+import { term } from '../../lib/terms';
+import { programmeKeys } from '../../lib/programmes';
 
 const LEVELS = {
     high: { label: 'High risk', stripe: 'bg-red-500', pill: 'bg-red-50 text-red-700 ring-red-200', icon: AlertTriangle },
@@ -187,8 +189,10 @@ export default function ProjectsAtRisk() {
     const { error } = useToast();
     const [data, setData] = useState(null);
     const [loading, setLoading] = useState(true);
-    const [level, setLevel] = useState('all');
-    const [signal, setSignal] = useState(null);
+    // Links from the risk digest open the list already filtered (?level=high).
+    const linked = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+    const [level, setLevel] = useState(() => (['high', 'watch', 'on_track'].includes(linked.get('level')) ? linked.get('level') : 'all'));
+    const [signal, setSignal] = useState(() => linked.get('signal') || null);
     const [search, setSearch] = useState('');
     const [collegeId, setCollegeId] = useState('');
     const [category, setCategory] = useState('');
@@ -274,14 +278,14 @@ export default function ProjectsAtRisk() {
                             {!data?.college_scoped && (
                                 <select value={collegeId} onChange={(e) => setCollegeId(e.target.value)}
                                     className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-200">
-                                    <option value="">All colleges</option>
+                                    <option value="">All {term('college', { plural: true, lower: true })}</option>
                                     {(data?.colleges ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                                 </select>
                             )}
                             <select value={category} onChange={(e) => setCategory(e.target.value)}
                                 className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-200">
                                 <option value="">All categories</option>
-                                {['research', 'community_engagement', 'technology_transfer'].map((c) => <option key={c} value={c}>{getCategoryLabel(c)}</option>)}
+                                {programmeKeys().map((c) => <option key={c} value={c}>{getCategoryLabel(c)}</option>)}
                             </select>
                         </div>
 

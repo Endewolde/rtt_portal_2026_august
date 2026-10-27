@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\User;
+use App\Support\Terms;
 use Illuminate\Support\Facades\DB;
 
 class User360Service
@@ -464,7 +465,7 @@ class User360Service
                 $events[] = ['type' => 'budget_submitted', 'icon' => 'dollar', 'color' => 'amber',
                     'title' => 'Submitted budget request',
                     'description' => "{$b->tracker_number} — {$b->proposal_title}",
-                    'sub' => 'Round '.$b->funding_round.' · ETB '.number_format($b->total_amount, 2),
+                    'sub' => 'Round '.$b->funding_round.' · '.Terms::money($b->total_amount),
                     'date' => $b->submitted_at];
             });
 

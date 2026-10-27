@@ -13,6 +13,7 @@ import {
 import AppLayout from '../../Layouts/AppLayout';
 import { get } from '../../lib/api';
 import { cn, timeAgo } from '../../lib/utils';
+import { roleLabel } from '../../lib/roles';
 
 // ─── Resource → colour/icon mapping ──────────────────────────────────────────
 
@@ -381,7 +382,7 @@ function LogEntry({ log, expanded, onToggle }) {
                                 <span className="text-xs font-semibold text-gray-700">{log.actor.name}</span>
                                 {primaryRole && (
                                     <span className={cn('text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md', roleColor(primaryRole))}>
-                                        {primaryRole.replace(/_/g, ' ')}
+                                        {roleLabel(log.actor.roles[0])}
                                     </span>
                                 )}
                             </div>
@@ -465,7 +466,7 @@ function TopActorCard({ actor, total, rank }) {
             <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-white truncate">{u.name}</p>
                 {primaryRole && (
-                    <p className="text-[9px] text-white/40 truncate">{primaryRole.replace(/_/g, ' ')}</p>
+                    <p className="text-[9px] text-white/40 truncate">{roleLabel(u.roles[0])}</p>
                 )}
             </div>
             <span className="text-xs font-bold text-white/60 tabular-nums shrink-0">{total}</span>

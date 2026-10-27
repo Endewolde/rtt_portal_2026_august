@@ -2,11 +2,15 @@
 
 namespace App\Services;
 
+use App\Jobs\SendEmailNotificationJob;
+use App\Jobs\StoreInAppNotificationJob;
 use App\Models\ProgressReport;
 use App\Models\Proposal;
 use App\Models\ThresholdSetting;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Funded projects that need attention: each running project's time, money and
@@ -86,6 +90,21 @@ class ProjectRiskService
             ->map(fn (Proposal $proposal) => $this->assessOne($proposal, $midtermDays))
             ->sortBy([['rank', 'desc'], ['signal_count', 'desc'], ['elapsed_pct', 'desc']])
             ->values();
+    }
+
+    /**
+     * One running project's assessment, or null when it is not running (not yet
+     * funded, or already completed).
+     *
+     * @return array<string, mixed>|null
+     */
+    public function forProposal(Proposal $proposal): ?array
+    {
+        if (! in_array($proposal->status, self::RUNNING_STATUSES, true)) {
+            return null;
+        }
+
+        return $this->assess(Proposal::query()->whereKey($proposal->id))->first();
     }
 
     /** @return array<string, mixed> */
@@ -173,6 +192,8 @@ class ProjectRiskService
             'category' => $proposal->category,
             'status' => $proposal->status,
             'pi' => $proposal->pi ? trim(($proposal->pi->title ? $proposal->pi->title.' ' : '').$proposal->pi->name) : null,
+            'pi_user_id' => $proposal->pi_user_id,
+            'college_id' => $proposal->college_id,
             'college' => $proposal->college?->name,
             'start_date' => $start?->toDateString(),
             'end_date' => $end?->toDateString(),
@@ -191,6 +212,71 @@ class ProjectRiskService
             'signal_count' => count($signals),
             'signals' => $signals,
         ];
+    }
+
+    /**
+     * The weekly risk digest: every person who monitors projects hears about the
+     * high-risk ones in their own college and category, and each PI of a high-risk
+     * project hears what is wrong with theirs. Nobody is sent an empty digest.
+     *
+     * @return array{monitors: int, pis: int, high: int}
+     */
+    public function sendDigest(): array
+    {
+        $high = $this->assess(Proposal::query()->whereNull('proposals.deleted_at'))->where('level', 'high')->values();
+        $sent = ['monitors' => 0, 'pis' => 0, 'high' => $high->count()];
+        if ($high->isEmpty()) {
+            return $sent;
+        }
+
+        foreach (User::whoCan('monitoring.ongoing') as $monitor) {
+            $theirs = $high->filter(fn ($p) => $monitor->accessScope()->covers($p['college_id'], $p['category']))->values();
+            if ($theirs->isEmpty()) {
+                continue;
+            }
+
+            $lines = $theirs->take(8)->map(fn ($p) => "• {$p['tracker_number']} — {$p['title']}: ".collect($p['signals'])->pluck('label')->implode(', '));
+            $more = $theirs->count() > 8 ? "\n…and ".($theirs->count() - 8).' more.' : '';
+            $this->notify($monitor, 'risk_digest', [
+                'count' => $theirs->count(),
+                'url' => '/projects-at-risk?level=high',
+                'message' => "{$theirs->count()} funded project".($theirs->count() === 1 ? ' needs' : 's need')." attention this week:\n".$lines->implode("\n").$more,
+            ]);
+            $sent['monitors']++;
+        }
+
+        foreach ($high->groupBy('pi_user_id') as $piId => $projects) {
+            $pi = User::where('id', $piId)->where('status', 'active')->first();
+            if (! $pi) {
+                continue;
+            }
+            foreach ($projects as $p) {
+                $this->notify($pi, 'project_health_warning', [
+                    'proposal_id' => $p['id'],
+                    'tracker_number' => $p['tracker_number'],
+                    'message' => "Your project {$p['tracker_number']} needs attention: ".collect($p['signals'])->map(fn ($sig) => "{$sig['label']} — {$sig['detail']}")->implode(' '),
+                ]);
+                $sent['pis']++;
+            }
+        }
+
+        return $sent;
+    }
+
+    /** @param  array<string, mixed>  $data */
+    private function notify(User $user, string $event, array $data): void
+    {
+        try {
+            StoreInAppNotificationJob::dispatchSync($user->id, $event, $data);
+        } catch (\Throwable $e) {
+            Log::error("Risk notification ({$event}) failed: {$e->getMessage()}");
+        }
+
+        try {
+            SendEmailNotificationJob::deliver($user, $event, $data);
+        } catch (\Throwable $e) {
+            Log::error("Risk email ({$event}) failed: {$e->getMessage()}");
+        }
     }
 
     /**

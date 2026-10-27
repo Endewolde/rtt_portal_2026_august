@@ -13,12 +13,18 @@ class BudgetController extends Controller
     public function index(Request $request, string $applicationId): JsonResponse
     {
         $application = ExternalFundApplication::findOrFail($applicationId);
+        if (! $application->isVisibleTo($request->user())) {
+            return response()->json(['message' => 'Forbidden.'], 403);
+        }
 
         $budgets = $application->budgets()
             ->withSum('expenditures', 'amount')
             ->get();
 
-        return response()->json(['data' => $budgets, 'message' => '', 'errors' => [], 'meta' => []]);
+        return response()->json(['data' => $budgets, 'message' => '', 'errors' => [], 'meta' => [
+            'total_proposed' => (float) $budgets->sum('proposed_amount'),
+            'total_approved' => (float) $budgets->sum('approved_amount'),
+        ]]);
     }
 
     public function store(Request $request, string $applicationId): JsonResponse
@@ -72,7 +78,11 @@ class BudgetController extends Controller
             return response()->json(['message' => 'Forbidden.'], 403);
         }
 
-        ExternalFundBudget::findOrFail($id)->delete();
+        $budget = ExternalFundBudget::findOrFail($id);
+        if ($budget->expenditures()->exists()) {
+            return response()->json(['message' => 'Spending has been recorded against this budget line, so it cannot be deleted.', 'errors' => []], 422);
+        }
+        $budget->delete();
 
         return response()->json(['data' => null, 'message' => 'Budget line deleted.', 'errors' => [], 'meta' => []]);
     }

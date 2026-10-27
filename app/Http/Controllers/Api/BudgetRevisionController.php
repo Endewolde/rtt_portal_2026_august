@@ -9,6 +9,7 @@ use App\Models\Proposal;
 use App\Models\ProposalBudget;
 use App\Models\User;
 use App\Support\AuditLogger;
+use App\Support\Programmes;
 use App\Support\RejectionReasons;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -192,12 +193,7 @@ class BudgetRevisionController extends Controller
 
     private function notifyOfficers(Proposal $proposal, User $submitter, BudgetRevisionRequest $revision): void
     {
-        $roleMap = [
-            'research' => 'research_officer',
-            'community_engagement' => 'community_officer',
-            'technology_transfer' => 'technology_officer',
-        ];
-        $roles = array_values(array_filter(['central_officer', $roleMap[$proposal->category] ?? null]));
+        $roles = ['central_officer', ...Programmes::directorRoles($proposal->category)];
 
         foreach (User::role($roles)->where('status', 'active')->get()
             ->merge(User::customRoleHolders('budget_revisions.review', $proposal->college_id, $proposal->category))->unique('id') as $officer) {

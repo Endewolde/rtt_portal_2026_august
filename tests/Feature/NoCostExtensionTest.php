@@ -165,7 +165,7 @@ test('an officer can list no-cost extension requests', function () {
 
     $response = $this->actingAs($officer, 'sanctum')->getJson('/api/v1/no-cost-extensions')->assertOk();
 
-    expect(collect($response->json('data.data'))->pluck('proposal_id'))->toContain($proposal->id);
+    expect(collect($response->json('data'))->pluck('proposal_id'))->toContain($proposal->id);
 });
 
 // ─── approve() ───────────────────────────────────────────────────────────────

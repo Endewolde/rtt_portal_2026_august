@@ -9,6 +9,8 @@ import { get } from '../../lib/api';
 import { downloadFile } from '../../lib/download';
 import { getStatusLabel, getCategoryLabel, formatDate } from '../../lib/utils';
 import { useToast } from '../../Components/Toast';
+import { term } from '../../lib/terms';
+import { programmeKeys } from '../../lib/programmes';
 
 // 'draft' is deliberately excluded — a draft was never submitted, so it has no
 // place in a pipeline built to track submitted proposals (matches the backend,
@@ -26,7 +28,6 @@ const STAGE_COLORS = {
     completed: '#059669', rejected: '#ef4444', archived: '#64748b',
 };
 
-const CATEGORY_OPTIONS = ['research', 'community_engagement', 'technology_transfer'];
 
 const SORT_COLUMNS = [
     { key: 'tracker', label: 'Tracker' },
@@ -175,8 +176,8 @@ export default function ProposalPipeline() {
             <div className="mx-auto max-w-7xl space-y-6">
                 <PageHeader icon={Activity} color="violet" title="Proposal Pipeline"
                     description={`Every proposal’s current stage · ${data?.academic_year ?? 'selected'} academic year${data?.total != null ? ` · ${data.total} proposals` : ''}`}>
-                    <Select label="Academic year" value={academicYear} onChange={setAcademicYear}>
-                        <option value="">{data?.academic_year ? `Current (${data.academic_year})` : 'All years'}</option>
+                    <Select label={term('academic_year')} value={academicYear} onChange={setAcademicYear}>
+                        <option value="">{data?.academic_year ? `Current (${data.academic_year})` : `All ${term('academic_year', { plural: true, lower: true })}`}</option>
                         {(data?.academic_years ?? []).map((y) => <option key={y} value={y}>{y}</option>)}
                     </Select>
                     <RefreshButton onClick={() => load({ silent: true })} loading={refreshing} />
@@ -202,14 +203,14 @@ export default function ProposalPipeline() {
                                 {STAGE_ORDER.map((s) => <option key={s} value={s}>{getStatusLabel(s)}</option>)}
                             </Select>
                             {(collegeOptions.length > 1 || collegeId) && (
-                                <Select label="College" value={collegeId} onChange={setCollegeId}>
-                                    <option value="">All colleges</option>
+                                <Select label={term('college')} value={collegeId} onChange={setCollegeId}>
+                                    <option value="">All {term('college', { plural: true, lower: true })}</option>
                                     {collegeOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                                 </Select>
                             )}
                             <Select label="Category" value={category} onChange={setCategory}>
                                 <option value="">All categories</option>
-                                {CATEGORY_OPTIONS.map((c) => <option key={c} value={c}>{getCategoryLabel(c)}</option>)}
+                                {programmeKeys().map((c) => <option key={c} value={c}>{getCategoryLabel(c)}</option>)}
                             </Select>
                         </div>
                         {filtered && (

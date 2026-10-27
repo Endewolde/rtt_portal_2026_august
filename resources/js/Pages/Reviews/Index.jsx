@@ -1,15 +1,16 @@
 import { useState, useEffect } from 'react';
 import { translate as tr, Trans } from '../../lib/i18n'
-import { Link, usePage, router } from '@inertiajs/react';
+import { Link, router } from '@inertiajs/react';
 import {
     ClipboardCheck, Clock, AlertCircle, Download,
     CheckCircle2, ChevronRight, BookOpen, EyeOff,
     Presentation, Calendar, Shield, Star, ChevronDown, ChevronUp,
-    MessageSquare, Loader2, ShieldAlert, Send, ExternalLink, Lock,
+    MessageSquare, Loader2, ShieldAlert, Send, ExternalLink, Lock, CalendarDays, Award,
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
 import AppLayout from '../../Layouts/AppLayout';
 import ReviewCertificatesCard from '../../Components/ReviewCertificatesCard';
+import ReviewQualityCard from '../../Components/ReviewQualityCard';
 import ReviewerAgreementModal from '../../Components/ReviewerAgreementModal';
 import { useToast } from '../../Components/Toast';
 import { useFeature } from '../../hooks/useFeature';
@@ -56,6 +57,13 @@ const TABS = [
         description: 'Your submitted review scores and recommendations.',
         filter: a => a.status === 'submitted',
     },
+    {
+        key: 'record',
+        label: 'My record',
+        icon: Award,
+        color: 'amber',
+        description: 'How the office rated your reviews, and your certificates of review service.',
+    },
 ];
 
 function getDaysRemaining(dueDate) {
@@ -88,36 +96,27 @@ function DueBadge({ dueDate }) {
     );
 }
 
+/** The colour of a card's edge: done, overdue, due soon, or on track. */
 function urgencyStripe(daysLeft, isDone) {
-    if (isDone)            return 'border-l-4 border-l-emerald-400';
-    if (daysLeft === null) return 'border-l-4 border-l-gray-200';
-    if (daysLeft < 0)      return 'border-l-4 border-l-red-400';
-    if (daysLeft <= 3)     return 'border-l-4 border-l-orange-400';
-    return 'border-l-4 border-l-indigo-300';
+    if (isDone)            return 'bg-emerald-400';
+    if (daysLeft === null) return 'bg-gray-200';
+    if (daysLeft < 0)      return 'bg-red-500';
+    if (daysLeft <= 3)     return 'bg-orange-400';
+    return 'bg-indigo-400';
 }
 
-function StatsRow({ items }) {
-    const total     = items.length;
-    const pending   = items.filter(a => ['pending', 'in_progress', 'accepted'].includes(a.status)).length;
-    const completed = items.filter(a => a.status === 'submitted').length;
-    const overdue   = items.filter(a => {
-        const d = getDaysRemaining(a.due_date);
-        return d !== null && d < 0 && a.status !== 'submitted';
-    }).length;
-
+/** A progress ring: share of something done, with the share in the middle. */
+function ProgressRing({ value, size = 88, stroke = 8, track = 'rgba(255,255,255,0.2)', color = '#fff', children }) {
+    const r = (size - stroke) / 2;
+    const c = 2 * Math.PI * r;
     return (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-                { label: 'Total',     value: total,     bg: 'bg-slate-50',    text: 'text-slate-700',   border: 'border-slate-200'   },
-                { label: 'Pending',   value: pending,   bg: 'bg-amber-50',    text: 'text-amber-700',   border: 'border-amber-200'   },
-                { label: 'Completed', value: completed, bg: 'bg-emerald-50',  text: 'text-emerald-700', border: 'border-emerald-200' },
-                { label: 'Overdue',   value: overdue,   bg: 'bg-red-50',      text: 'text-red-700',     border: 'border-red-200'     },
-            ].map(stat => (
-                <div key={stat.label} className={`${stat.bg} border ${stat.border} rounded-2xl px-4 py-3.5 flex items-center justify-between`}>
-                    <span className="text-xs font-medium text-gray-500">{stat.label}</span>
-                    <span className={`text-2xl font-extrabold ${stat.text} tabular-nums`}>{stat.value}</span>
-                </div>
-            ))}
+        <div className="relative shrink-0" style={{ width: size, height: size }}>
+            <svg viewBox={`0 0 ${size} ${size}`} className="h-full w-full -rotate-90">
+                <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={track} strokeWidth={stroke} />
+                <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round"
+                    strokeDasharray={`${Math.max(0, Math.min(1, value)) * c} ${c}`} className="transition-all duration-700" />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center leading-none">{children}</div>
         </div>
     );
 }
@@ -188,8 +187,9 @@ function CompletedCard({ assignment }) {
                 : 'bg-gray-100 text-gray-600 border-gray-200';
 
     return (
-        <div className="bg-white rounded-2xl shadow-sm overflow-hidden border-l-4 border-l-emerald-400">
-            <div className="p-5">
+        <div className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition hover:shadow-md">
+            <span className="absolute inset-y-0 left-0 w-1 bg-emerald-400" />
+            <div className="p-5 pl-6">
                 <div className="flex items-start gap-4">
                     {/* Icon */}
                     <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${isDefence ? 'bg-blue-100' : 'bg-violet-100'}`}>
@@ -226,9 +226,11 @@ function CompletedCard({ assignment }) {
                     {/* Score summary */}
                     <div className="flex flex-col items-end gap-2 shrink-0">
                         {pct !== null && (
-                            <div className="text-right">
-                                <div className="text-xl font-extrabold text-emerald-600 tabular-nums leading-none">{pct}%</div>
-                                <div className="text-[10px] text-gray-400 mt-0.5">{tr(":totalScore/:maxScore pts", { totalScore: totalScore, maxScore: maxScore })}</div>
+                            <div className="flex items-center gap-2.5">
+                                <span className="text-right text-[10px] leading-tight text-gray-400">{tr(":totalScore/:maxScore pts", { totalScore: totalScore, maxScore: maxScore })}</span>
+                                <ProgressRing value={pct / 100} size={48} stroke={5} track="#eef0f3" color={pct >= 70 ? '#059669' : pct >= 50 ? '#4f46e5' : '#d97706'}>
+                                    <span className="text-[11px] font-bold tabular-nums text-gray-900">{pct}%</span>
+                                </ProgressRing>
                             </div>
                         )}
                         <button
@@ -451,82 +453,64 @@ function AssignmentCard({ assignment, tabKey, onCoiDeclared, onConflictReported 
         onConflictReported(assignment.id);
     };
 
-    return (
-        <div className={`relative bg-white rounded-2xl shadow-sm overflow-hidden transition-shadow hover:shadow-md ${stripe} ${isNew ? 'ring-2 ring-amber-300' : ''}`}>
-            {isNew && (
-                <div className="absolute top-3 right-3 flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-700 text-[11px] font-bold px-2 py-0.5 rounded-full z-10">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                    {tr("NEW")}
-                </div>
-            )}
-            <div className="p-5">
-                <div className="flex items-start gap-4">
-                    {/* Type icon */}
-                    <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${
-                        isDone
-                            ? 'bg-emerald-100'
-                            : isDefence ? 'bg-blue-100' : 'bg-violet-100'
-                    }`}>
-                        {isDone
-                            ? <CheckCircle2 size={18} className="text-emerald-600" />
-                            : isDefence
-                                ? <Presentation size={18} className="text-blue-600" />
-                                : <EyeOff size={18} className="text-violet-600" />
-                        }
-                    </div>
+    const overdue = !isDone && daysLeft !== null && daysLeft < 0;
+    const tone = isDone ? 'emerald' : isDefence ? 'blue' : 'violet';
+    const tile = { emerald: 'bg-emerald-100 text-emerald-600', blue: 'bg-blue-100 text-blue-600', violet: 'bg-violet-100 text-violet-600' }[tone];
 
-                    {/* Content */}
-                    <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap mb-1">
-                            <span className="font-mono text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
-                                {assignment.proposal?.tracker_number || 'N/A'}
+    return (
+        <article id={`assignment-${assignment.id}`}
+            className={`group relative scroll-mt-24 overflow-hidden rounded-2xl border bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${overdue ? 'border-red-200' : isNew ? 'border-amber-300 ring-2 ring-amber-100' : 'border-gray-200 hover:border-gray-300'}`}>
+            <span className={`absolute inset-y-0 left-0 w-1 ${stripe}`} />
+            <div className="flex flex-col gap-4 p-5 pl-6 sm:flex-row sm:items-center">
+                <div className="flex min-w-0 flex-1 items-start gap-4">
+                    <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition group-hover:scale-105 ${tile}`}>
+                        {isDone ? <CheckCircle2 size={20} /> : isDefence ? <Presentation size={20} /> : <EyeOff size={20} />}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="rounded-md bg-gray-900 px-1.5 py-0.5 font-mono text-[11px] font-bold text-white">{assignment.proposal?.tracker_number || 'N/A'}</span>
+                            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600">{getCategoryLabel(assignment.proposal?.category)}</span>
+                            <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${meta.bg} ${meta.text}`}>
+                                <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} /> {meta.label}
                             </span>
-                            <span className="text-xs text-gray-400">
-                                {getCategoryLabel(assignment.proposal?.category)}
-                            </span>
-                            <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${meta.bg} ${meta.text}`}>
-                                <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
-                                {meta.label}
-                            </span>
-                        </div>
-                        <h3 className="text-sm font-semibold text-gray-900 leading-snug mb-1 pr-4">
-                            {assignment.proposal?.title || 'Untitled Proposal'}
-                        </h3>
-                        <p className="text-xs text-gray-400">
-                            {assignment.evaluation_type?.label || assignment.evaluation_type?.name || 'Evaluation'}
-                            {assignment.proposal?.college?.name && (
-                                <span className="ml-2 text-gray-300">· {assignment.proposal.college.name}</span>
+                            {isNew && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800">
+                                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" /> {tr("NEW")}
+                                </span>
                             )}
+                        </div>
+                        <h3 className="mt-1.5 line-clamp-2 text-[15px] font-semibold leading-snug text-gray-900">{assignment.proposal?.title || 'Untitled Proposal'}</h3>
+                        <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+                            <span>{assignment.evaluation_type?.label || assignment.evaluation_type?.name || 'Evaluation'}</span>
+                            {assignment.proposal?.college?.name && <span className="text-gray-400">· {assignment.proposal.college.name}</span>}
+                            {assignment.assigned_at && <span className="text-gray-400">· {tr("Assigned :date", { date: formatDate(assignment.assigned_at) })}</span>}
                         </p>
                     </div>
+                </div>
 
-                    {/* Right side */}
-                    <div className="flex flex-col items-end gap-3 shrink-0">
-                        <DueBadge dueDate={assignment.due_date} />
-                        {isDone ? (
-                            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl">
-                                <CheckCircle2 size={13} /> {tr("Submitted")}
-                            </span>
-                        ) : hasReportedConflict ? (
-                            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-700 bg-red-50 border border-red-200 px-3 py-1.5 rounded-xl">
-                                <AlertCircle size={13} /> {tr("Conflict Reported")}
-                            </span>
-                        ) : (
-                            <Link
-                                href={`/reviews/${assignment.id}/score`}
-                                onClick={handleScoreClick}
-                                className={`inline-flex items-center gap-1.5 px-4 py-2 text-white rounded-xl text-xs font-semibold transition-colors shadow-sm ${
-                                    isDefence
-                                        ? 'bg-blue-600 hover:bg-blue-700 shadow-blue-200'
-                                        : 'bg-violet-600 hover:bg-violet-700 shadow-violet-200'
-                                }`}
-                            >
-                                <ClipboardCheck size={13} />
-                                {tr("Score Review")}
-                                <ChevronRight size={13} />
-                            </Link>
-                        )}
-                    </div>
+                <div className="flex shrink-0 items-center justify-between gap-3 border-t border-gray-100 pt-3 sm:flex-col sm:items-end sm:border-0 sm:pt-0">
+                    <DueBadge dueDate={assignment.due_date} />
+                    {isDone ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
+                            <CheckCircle2 size={13} /> {tr("Submitted")}
+                        </span>
+                    ) : hasReportedConflict ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+                            <AlertCircle size={13} /> {tr("Conflict Reported")}
+                        </span>
+                    ) : (
+                        <Link
+                            href={`/reviews/${assignment.id}/score`}
+                            onClick={handleScoreClick}
+                            className={`inline-flex items-center gap-1.5 rounded-xl bg-linear-to-r px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:shadow-md ${
+                                isDefence ? 'from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700' : 'from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700'
+                            }`}
+                        >
+                            <ClipboardCheck size={14} />
+                            {assignment.status === 'in_progress' ? tr("Continue review") : tr("Score Review")}
+                            <ChevronRight size={14} className="transition group-hover:translate-x-0.5" />
+                        </Link>
+                    )}
                 </div>
             </div>
 
@@ -538,7 +522,7 @@ function AssignmentCard({ assignment, tabKey, onCoiDeclared, onConflictReported 
                     onClose={() => setShowCoiModal(false)}
                 />
             )}
-        </div>
+        </article>
     );
 }
 
@@ -591,8 +575,8 @@ function AbstractReviewCard({ item, onSubmitted, index, total }) {
         if (!recommendation) { error('Please select a recommendation.'); return; }
         setSubmitting(true);
         try {
-            await api.post(`/reviewer/abstracts/${item.id}/review`, { score, recommendation, comments });
-            success('Review submitted.');
+            const res = await api.post(`/reviewer/abstracts/${item.id}/review`, { score, recommendation, comments });
+            success(res.data?.message ?? 'Review submitted.');
             onSubmitted();
         } catch (e) {
             error(e.response?.data?.message || 'Failed to submit review.');
@@ -600,8 +584,13 @@ function AbstractReviewCard({ item, onSubmitted, index, total }) {
         setSubmitting(false);
     };
 
-    const recColor = myReview?.recommendation === 'accept' ? 'emerald' :
-                     myReview?.recommendation === 'reject' ? 'red' : 'amber';
+    // Whole class names (not built from parts), so Tailwind generates them.
+    const REC_TONE = {
+        accept: { box: 'bg-emerald-50 border-emerald-200', icon: 'bg-emerald-600', title: 'text-emerald-800', sub: 'text-emerald-600' },
+        reject: { box: 'bg-red-50 border-red-200', icon: 'bg-red-600', title: 'text-red-800', sub: 'text-red-600' },
+        revise: { box: 'bg-amber-50 border-amber-200', icon: 'bg-amber-600', title: 'text-amber-800', sub: 'text-amber-600' },
+    };
+    const tone = REC_TONE[myReview?.recommendation] ?? REC_TONE.revise;
 
     return (
         <div className={cn(
@@ -686,19 +675,17 @@ function AbstractReviewCard({ item, onSubmitted, index, total }) {
                 <div className="border-t border-gray-100 pt-5">
                     {hasReview ? (
                         <div className="space-y-4">
-                            <div className={cn(
-                                `flex items-center gap-3 px-4 py-3 rounded-2xl border bg-${recColor}-50 border-${recColor}-200`,
-                            )}>
-                                <div className={cn(`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-${recColor}-600`)}>
+                            <div className={cn('flex items-center gap-3 px-4 py-3 rounded-2xl border', tone.box)}>
+                                <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center shrink-0', tone.icon)}>
                                     <CheckCircle2 size={17} className="text-white" />
                                 </div>
                                 <div>
-                                    <p className={cn(`text-sm font-bold text-${recColor}-800`)}>
+                                    <p className={cn('text-sm font-bold', tone.title)}>
                                         Review submitted — {myReview.recommendation === 'accept' ? 'Accept' :
                                             myReview.recommendation === 'reject' ? 'Reject' : 'Revise'}
                                     </p>
-                                    <p className={cn(`text-xs text-${recColor}-600 mt-0.5`)}>
-                                        {tr(":created_at · No further action needed", { created_at: formatDate(myReview.submitted_at ?? myReview.created_at) })}
+                                    <p className={cn('text-xs mt-0.5', tone.sub)}>
+                                        {tr(":created_at · Sent to the committee, which makes the final decision", { created_at: formatDate(myReview.submitted_at ?? myReview.created_at) })}
                                     </p>
                                 </div>
                             </div>
@@ -860,9 +847,9 @@ function AbstractReviewsPanel({ items, loading, onReload }) {
 
 export default function ReviewIndex() {
     const { error } = useToast();
-    const { app_settings } = usePage().props;
     const [allAssignments, setAllAssignments] = useState([]);
-    const [yearFilter, setYearFilter]         = useState(app_settings?.current_academic_year ?? '');
+    // Opens on the reviewer's latest year with assignments (not the system's year setting).
+    const [yearFilter, setYearFilter]         = useState('');
     const [loading, setLoading]               = useState(true);
     const [activeTab, setActiveTab]           = useState('blind');
     const [agreement, setAgreement]           = useState(null);
@@ -900,33 +887,76 @@ export default function ReviewIndex() {
 
     useEffect(() => {
         api.get('/review-assignments/my')
-            .then(res => setAllAssignments(res.data?.data ?? []))
+            .then(res => {
+                const list = res.data?.data ?? [];
+                setAllAssignments(list);
+                const years = [...new Set(list.map(a => a.proposal?.academic_year).filter(Boolean))].sort().reverse();
+                if (years.length > 1) {
+                    setYearFilter(years[0]);
+                    // Open the first tab with work waiting in that year.
+                    const inYear = list.filter(a => a.proposal?.academic_year === years[0]);
+                    const busy = TABS.find(t => t.filter && inYear.some(a => t.filter(a) && ['pending', 'in_progress', 'accepted'].includes(a.status)))
+                        ?? TABS.find(t => t.filter && inYear.some(t.filter));
+                    if (busy) setActiveTab(busy.key);
+                }
+            })
             .catch(() => error('Failed to load your review assignments.'))
             .finally(() => setLoading(false));
         loadAbstracts();
     }, []);
 
     const availableYears = [...new Set(allAssignments.map(a => a.proposal?.academic_year).filter(Boolean))].sort().reverse();
+    const latestYear     = availableYears[0] ?? null;
     const assignments    = yearFilter ? allAssignments.filter(a => a.proposal?.academic_year === yearFilter) : allAssignments;
+    const olderCount     = latestYear ? allAssignments.filter(a => a.proposal?.academic_year && a.proposal.academic_year !== latestYear).length : 0;
+    const latestCount    = latestYear ? allAssignments.filter(a => a.proposal?.academic_year === latestYear).length : 0;
 
     const currentTab  = TABS.find(t => t.key === activeTab);
     const tabItems    = currentTab?.filter ? assignments.filter(currentTab.filter) : [];
     const allTotal    = allAssignments.length + abstractItems.length;
 
-    const getCount   = tab => tab.key === 'abstracts' ? abstractItems.length : assignments.filter(tab.filter).length;
+    const getCount   = tab => tab.key === 'abstracts' ? abstractItems.length : tab.filter ? assignments.filter(tab.filter).length : 0;
     const getPending = tab => tab.key === 'abstracts'
         ? abstractItems.filter(i => !i.reviews?.some(r => r.submitted_at)).length
-        : assignments.filter(tab.filter).filter(a => ['pending', 'in_progress', 'accepted'].includes(a.status)).length;
-    const getNew     = tab => tab.key === 'abstracts' ? 0 : assignments.filter(tab.filter).filter(isNewAssignment).length;
+        : tab.filter ? assignments.filter(tab.filter).filter(a => ['pending', 'in_progress', 'accepted'].includes(a.status)).length : 0;
+    const getNew     = tab => tab.filter && tab.key !== 'abstracts' ? assignments.filter(tab.filter).filter(isNewAssignment).length : 0;
+
+    // The headline numbers for the year shown.
+    const isTodo     = (a) => ['pending', 'in_progress', 'accepted'].includes(a.status) && !a.coi_has_conflict;
+    const todo       = assignments.filter(isTodo);
+    const overdueN   = todo.filter(a => { const d = getDaysRemaining(a.due_date); return d !== null && d < 0; }).length;
+    const dueWeekN   = todo.filter(a => { const d = getDaysRemaining(a.due_date); return d !== null && d >= 0 && d <= 7; }).length;
+    const submittedN = assignments.filter(a => a.status === 'submitted').length;
+    const progress   = assignments.length ? submittedN / assignments.length : 0;
+    const nextUp     = [...todo].sort((x, y) => (x.due_date ? new Date(x.due_date) : Infinity) - (y.due_date ? new Date(y.due_date) : Infinity))[0];
+    const nextUpTab  = nextUp ? TABS.find(t => t.filter && t.filter(nextUp))?.key : null;
+    const nextUpDays = nextUp ? getDaysRemaining(nextUp.due_date) : null;
+
+    const openNextUp = () => {
+        if (!nextUp) return;
+        if (nextUpTab) setActiveTab(nextUpTab);
+        setTimeout(() => {
+            const el = document.getElementById(`assignment-${nextUp.id}`);
+            el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el?.classList.add('ring-4', 'ring-indigo-200');
+            setTimeout(() => el?.classList.remove('ring-4', 'ring-indigo-200'), 1600);
+        }, 60);
+    };
+
+    const TONE = {
+        violet:  { text: 'text-violet-700', chip: 'bg-violet-100 text-violet-700', bar: 'bg-violet-600' },
+        blue:    { text: 'text-blue-700', chip: 'bg-blue-100 text-blue-700', bar: 'bg-blue-600' },
+        amber:   { text: 'text-amber-700', chip: 'bg-amber-100 text-amber-700', bar: 'bg-amber-500' },
+        emerald: { text: 'text-emerald-700', chip: 'bg-emerald-100 text-emerald-700', bar: 'bg-emerald-600' },
+    };
 
     if (loading || abstractsLoading) {
         return (
             <AppLayout breadcrumb="Reviews">
-                <div className="p-8 flex items-center justify-center min-h-64">
-                    <div className="flex flex-col items-center gap-3">
-                        <div className="w-9 h-9 border-[3px] border-blue-600 border-t-transparent rounded-full animate-spin" />
-                        <p className="text-sm text-gray-400">{tr("Loading assignments…")}</p>
-                    </div>
+                <div className="mx-auto max-w-5xl space-y-5 p-4 sm:p-6">
+                    <div className="h-36 animate-pulse rounded-2xl bg-linear-to-br from-indigo-200 to-violet-200" />
+                    <div className="h-12 w-2/3 animate-pulse rounded-2xl bg-gray-100" />
+                    {[0, 1, 2].map(i => <div key={i} className="h-28 animate-pulse rounded-2xl bg-gray-100" />)}
                 </div>
             </AppLayout>
         );
@@ -934,17 +964,65 @@ export default function ReviewIndex() {
 
     return (
         <AppLayout breadcrumb="Reviews">
-            <div className="p-6 max-w-5xl mx-auto space-y-6">
+            <div className="mx-auto max-w-5xl space-y-5 p-4 sm:p-6">
+                {/* ── Header: who, how far, what is waiting ───────────────── */}
+                <section className="relative overflow-hidden rounded-2xl bg-linear-to-br from-indigo-600 via-violet-600 to-fuchsia-600 px-5 py-4 text-white shadow-lg shadow-indigo-200 sm:px-6">
+                    <span aria-hidden className="pointer-events-none absolute -right-12 -top-16 h-44 w-44 rounded-full bg-white/10" />
+                    <span aria-hidden className="pointer-events-none absolute -bottom-24 left-1/3 h-56 w-56 rounded-full bg-white/5" />
+                    <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="min-w-0">
+                            <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-white/70"><Shield size={12} /> {tr("Reviewer workspace")}</p>
+                            <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{tr("My Review Assignments")}</h1>
+                            <p className="text-sm text-white/80">
+                                {todo.length
+                                    ? tr(":count waiting for your score", { count: todo.length })
+                                    : allTotal ? tr("You are all caught up — nothing waiting.") : tr("No assignments yet")}
+                                {yearFilter ? ` · ${yearFilter}` : availableYears.length > 1 ? ` · ${tr("All years")}` : ''}
+                            </p>
+                            <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                                {availableYears.length > 1 && (
+                                    <select value={yearFilter} onChange={e => { setYearFilter(e.target.value); setActiveTab('blind'); }} aria-label={tr("Academic year")}
+                                        className="rounded-lg border border-white/25 bg-white/15 px-2.5 py-1.5 text-xs font-medium text-white backdrop-blur focus:outline-none focus:ring-2 focus:ring-white/40 [&>option]:text-gray-900">
+                                        <option value="">{tr("All Years")}</option>
+                                        {availableYears.map(y => <option key={y} value={y}>{y === latestYear ? `${y} · ${tr("latest")}` : y}</option>)}
+                                    </select>
+                                )}
+                                <a href={`/api/v1/calendar/export?token=${localStorage.getItem('rtt_token') ?? ''}`}
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/25 bg-white/15 px-2.5 py-1.5 text-xs font-semibold text-white backdrop-blur transition hover:bg-white/25">
+                                    <Download size={13} /> {tr("Export iCal")}
+                                </a>
+                            </div>
+                        </div>
+                        <ProgressRing value={progress} size={72} stroke={7}>
+                            <span className="text-base font-bold tabular-nums">{Math.round(progress * 100)}%</span>
+                            <span className="mt-0.5 text-[8px] font-medium uppercase tracking-wide text-white/70">{tr(":done of :total done", { done: submittedN, total: assignments.length })}</span>
+                        </ProgressRing>
+                    </div>
+                    <div className="relative mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        {[
+                            { label: tr("To score"), value: todo.length, icon: ClipboardCheck },
+                            { label: tr("Due this week"), value: dueWeekN, icon: Clock },
+                            { label: tr("Overdue"), value: overdueN, icon: AlertCircle, alert: overdueN > 0 },
+                            { label: tr("Submitted"), value: submittedN, icon: CheckCircle2 },
+                        ].map(t => (
+                            <div key={t.label} className={`flex items-center justify-between gap-2 rounded-xl px-3 py-1.5 backdrop-blur ${t.alert ? 'bg-red-500/30 ring-1 ring-red-200/50' : 'bg-white/15 ring-1 ring-white/15'}`}>
+                                <p className="flex items-center gap-1.5 text-[11px] font-medium text-white/80"><t.icon size={12} /> {t.label}</p>
+                                <p className="text-lg font-bold tabular-nums">{t.value}</p>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+
                 {agreement && !agreement.accepted && (
                     <div className="flex flex-col gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex items-start gap-3">
-                            <Lock size={18} className="mt-0.5 shrink-0 text-indigo-600" />
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white"><Lock size={16} /></span>
                             <div>
                                 <p className="text-sm font-semibold text-indigo-900">{tr("Accept the :academic_year confidentiality agreement", { academic_year: agreement.academic_year })}</p>
                                 <p className="text-xs text-indigo-700">{tr("You'll need to accept it once this year before opening any proposal to review.")}</p>
                             </div>
                         </div>
-                        <button onClick={() => setShowAgreement(true)} className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">Read &amp; accept</button>
+                        <button onClick={() => setShowAgreement(true)} className="shrink-0 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700">Read &amp; accept</button>
                     </div>
                 )}
                 {showAgreement && (
@@ -953,51 +1031,49 @@ export default function ReviewIndex() {
                         onClose={() => setShowAgreement(false)}
                     />
                 )}
-                <ReviewCertificatesCard />
 
-                {/* ── Page header ─────────────────────────────────────────── */}
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                        <div className="h-11 w-11 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-200 shrink-0">
-                            <Shield size={20} className="text-white" />
-                        </div>
-                        <div>
-                            <h1 className="text-xl font-bold text-gray-900">{tr("My Review Assignments")}</h1>
-                            <p className="text-sm text-gray-400 mt-0.5">
-                                {allTotal} total assignment{allTotal !== 1 ? 's' : ''} across all phases
+                {/* ── Which year is shown ──────────────────────────────────── */}
+                {availableYears.length > 1 && (
+                    <div className={`flex flex-col gap-2 rounded-2xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between ${yearFilter === latestYear ? 'border-indigo-100 bg-white' : 'border-amber-200 bg-amber-50'}`}>
+                        <p className="flex items-center gap-2 text-sm">
+                            <CalendarDays size={16} className={yearFilter === latestYear ? 'text-indigo-500' : 'text-amber-600'} />
+                            {yearFilter === latestYear ? (
+                                <span className="text-gray-700"><b className="text-gray-900">{tr("Showing your latest assignments — :year", { year: latestYear })}</b> <span className="text-gray-500">· {tr(":count this year, :older from earlier years", { count: latestCount, older: olderCount })}</span></span>
+                            ) : (
+                                <span className="text-amber-900"><b>{yearFilter ? tr("You are viewing :year", { year: yearFilter }) : tr("You are viewing all years")}</b> · {tr("Your latest assignments are in :year (:count).", { year: latestYear, count: latestCount })}</span>
+                            )}
+                        </p>
+                        {yearFilter === latestYear
+                            ? <button onClick={() => setYearFilter('')} className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50">{tr("Show all years")}</button>
+                            : <button onClick={() => setYearFilter(latestYear)} className="shrink-0 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-600">{tr("Go to the latest year")}</button>}
+                    </div>
+                )}
+
+                {/* ── Next up: the most urgent review ───────────────────────── */}
+                {nextUp && (
+                    <section className="flex flex-col gap-4 rounded-2xl border border-indigo-100 bg-linear-to-r from-indigo-50 via-white to-white p-5 shadow-sm sm:flex-row sm:items-center">
+                        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-md shadow-indigo-200"><Star size={20} /></span>
+                        <div className="min-w-0 flex-1">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-600">
+                                {tr("Next up")}{nextUpDays !== null && ` · ${nextUpDays < 0 ? tr("overdue by :d days", { d: Math.abs(nextUpDays) }) : nextUpDays === 0 ? tr("due today") : tr("due in :d days", { d: nextUpDays })}`}
                             </p>
+                            <p className="mt-0.5 line-clamp-1 text-sm font-semibold text-gray-900">{nextUp.proposal?.title || 'Untitled Proposal'}</p>
+                            <p className="text-xs text-gray-500"><span className="font-mono font-semibold text-gray-700">{nextUp.proposal?.tracker_number}</span> · {nextUp.evaluation_type?.label || nextUp.evaluation_type?.name}</p>
                         </div>
-                    </div>
-                    <div className="flex items-center gap-2 sm:shrink-0">
-                        {availableYears.length > 1 && (
-                            <select
-                                value={yearFilter}
-                                onChange={e => { setYearFilter(e.target.value); setActiveTab('blind'); }}
-                                className="flex-1 sm:flex-none text-sm border border-gray-200 rounded-xl px-3 py-2.5 sm:py-2 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                            >
-                                <option value="">{tr("All Years")}</option>
-                                {availableYears.map(y => (
-                                    <option key={y} value={y}>{y}</option>
-                                ))}
-                            </select>
-                        )}
-                        <a
-                            href={`/api/v1/calendar/export?token=${localStorage.getItem('rtt_token') ?? ''}`}
-                            className="flex items-center justify-center gap-1.5 text-xs font-semibold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-3.5 py-2.5 sm:py-2 rounded-xl transition-colors shrink-0"
-                        >
-                            <Download size={13} /> {tr("Export iCal")}
-                        </a>
-                    </div>
-                </div>
+                        <button onClick={openNextUp} className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-gray-800">
+                            {tr("Go to it")} <ChevronRight size={15} />
+                        </button>
+                    </section>
+                )}
 
                 {/* ── Empty state (no assignments at all) ──────────────────── */}
                 {allTotal === 0 && (
-                    <div className="bg-white border border-gray-200 rounded-2xl p-14 text-center">
-                        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <ClipboardCheck size={28} className="text-gray-300" />
+                    <div className="rounded-3xl border border-dashed border-gray-300 bg-white p-14 text-center">
+                        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50">
+                            <ClipboardCheck size={28} className="text-indigo-400" />
                         </div>
-                        <h3 className="text-gray-700 font-semibold mb-1.5">{tr("No assignments yet")}</h3>
-                        <p className="text-sm text-gray-400 max-w-xs mx-auto leading-relaxed">
+                        <h3 className="mb-1.5 font-semibold text-gray-800">{tr("No assignments yet")}</h3>
+                        <p className="mx-auto max-w-xs text-sm leading-relaxed text-gray-500">
                             {tr("You have no review assignments at the moment. Check back after proposals are assigned for review.")}
                         </p>
                     </div>
@@ -1006,108 +1082,68 @@ export default function ReviewIndex() {
                 {allTotal > 0 && (
                     <>
                         {/* ── Tabs ─────────────────────────────────────────── */}
-                        <div className="-mx-4 px-4 sm:mx-0 sm:px-0 overflow-x-auto">
-                            <div className="flex gap-2 p-1 bg-gray-100 rounded-2xl w-fit">
-                                {TABS.map(tab => {
-                                    const count    = getCount(tab);
-                                    const pending  = getPending(tab);
-                                    const newCount = getNew(tab);
-                                    const isActive = activeTab === tab.key;
-                                    const Icon = tab.icon;
+                        <div className="sticky top-0 z-10 -mx-4 bg-gray-50/90 px-4 py-2 backdrop-blur sm:mx-0 sm:rounded-2xl sm:px-0">
+                            <div className="overflow-x-auto">
+                                <div role="tablist" className="flex w-fit gap-1 rounded-2xl border border-gray-200 bg-white p-1 shadow-sm">
+                                    {TABS.map(tab => {
+                                        const count    = getCount(tab);
+                                        const pending  = getPending(tab);
+                                        const newCount = getNew(tab);
+                                        const isActive = activeTab === tab.key;
+                                        const Icon = tab.icon;
+                                        const t = TONE[tab.color];
 
-                                    return (
-                                        <button
-                                            key={tab.key}
-                                            onClick={() => setActiveTab(tab.key)}
-                                            className={`relative flex items-center gap-2 sm:gap-2.5 px-3.5 sm:px-5 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${
-                                                isActive
-                                                    ? 'bg-white shadow-sm text-gray-900'
-                                                    : 'text-gray-500 hover:text-gray-700'
-                                            }`}
-                                        >
-                                            <Icon size={15} className={isActive
-                                                ? tab.color === 'violet' ? 'text-violet-600'
-                                                    : tab.color === 'emerald' ? 'text-emerald-600'
-                                                    : tab.color === 'amber' ? 'text-amber-600'
-                                                    : 'text-blue-600'
-                                                : 'text-gray-400'} />
-                                            {tab.label}
-                                            {count > 0 && (
-                                                <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${
-                                                    isActive
-                                                        ? tab.color === 'violet'  ? 'bg-violet-100 text-violet-700'
-                                                        : tab.color === 'emerald' ? 'bg-emerald-100 text-emerald-700'
-                                                        : tab.color === 'amber' ? 'bg-amber-100 text-amber-700'
-                                                        : 'bg-blue-100 text-blue-700'
-                                                        : 'bg-gray-200 text-gray-600'
-                                                }`}>
-                                                    {count}
-                                                </span>
-                                            )}
-                                            {newCount > 0 && !isActive && (
-                                                <span className="absolute top-1 right-1 flex h-2.5 w-2.5">
-                                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
-                                                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500" />
-                                                </span>
-                                            )}
-                                            {pending > 0 && !isActive && newCount === 0 && (
-                                                <span className="absolute top-1 right-1 w-2 h-2 bg-amber-400 rounded-full" />
-                                            )}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-
-                        {/* ── Tab description + context banner ─────────────── */}
-                        {currentTab && (
-                            <div className={`rounded-2xl border px-5 py-4 flex items-start gap-3 ${
-                                activeTab === 'blind'     ? 'bg-violet-50 border-violet-200' :
-                                activeTab === 'defence'   ? 'bg-blue-50 border-blue-200' :
-                                activeTab === 'abstracts' ? 'bg-amber-50 border-amber-200' :
-                                                             'bg-emerald-50 border-emerald-200'
-                            }`}>
-                                <currentTab.icon size={18} className={`mt-0.5 shrink-0 ${
-                                    activeTab === 'blind'     ? 'text-violet-500' :
-                                    activeTab === 'defence'   ? 'text-blue-500' :
-                                    activeTab === 'abstracts' ? 'text-amber-500' :
-                                                                 'text-emerald-500'
-                                }`} />
-                                <div>
-                                    <p className={`text-sm font-semibold ${
-                                        activeTab === 'blind'     ? 'text-violet-800' :
-                                        activeTab === 'defence'   ? 'text-blue-800' :
-                                        activeTab === 'abstracts' ? 'text-amber-800' :
-                                                                     'text-emerald-800'
-                                    }`}>
-                                        {currentTab.label}
-                                    </p>
-                                    <p className={`text-xs mt-0.5 ${
-                                        activeTab === 'blind'     ? 'text-violet-600' :
-                                        activeTab === 'defence'   ? 'text-blue-600' :
-                                        activeTab === 'abstracts' ? 'text-amber-600' :
-                                                                     'text-emerald-600'
-                                    }`}>
-                                        {currentTab.description}
-                                    </p>
+                                        return (
+                                            <button key={tab.key} role="tab" aria-selected={isActive} onClick={() => setActiveTab(tab.key)}
+                                                className={`relative flex items-center gap-2 whitespace-nowrap rounded-xl px-3.5 py-2 text-sm font-semibold transition-all sm:px-4 ${isActive ? 'bg-gray-900 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}>
+                                                <Icon size={15} className={isActive ? 'text-white' : t.text} />
+                                                {tab.label}
+                                                {count > 0 && (
+                                                    <span className={`rounded-full px-1.5 py-0.5 text-[11px] font-bold tabular-nums ${isActive ? 'bg-white/20 text-white' : t.chip}`}>{count}</span>
+                                                )}
+                                                {newCount > 0 && !isActive && (
+                                                    <span className="absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5">
+                                                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
+                                                        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500" />
+                                                    </span>
+                                                )}
+                                                {pending > 0 && !isActive && newCount === 0 && (
+                                                    <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-amber-400" />
+                                                )}
+                                            </button>
+                                        );
+                                    })}
                                 </div>
                             </div>
-                        )}
+                            {currentTab && <p className="mt-2 px-1 text-xs text-gray-500">{currentTab.description}</p>}
+                        </div>
 
                         {/* ── Abstract review panel (separate data source) ─── */}
                         {activeTab === 'abstracts' && (
                             <AbstractReviewsPanel items={abstractItems} loading={abstractsLoading} onReload={loadAbstracts} />
                         )}
 
-                        {/* ── Stats (active/pending tabs only) ─────────────── */}
-                        {activeTab !== 'abstracts' && tabItems.length > 0 && activeTab !== 'completed' && <StatsRow items={tabItems} />}
+                        {/* ── My record: ratings and certificates ───────────── */}
+                        {activeTab === 'record' && (
+                            <div>
+                                <div className="peer grid items-stretch gap-5 empty:hidden lg:grid-cols-2 [&>*:only-child]:lg:col-span-2">
+                                    <ReviewQualityCard />
+                                    <ReviewCertificatesCard />
+                                </div>
+                                <div className="hidden rounded-2xl border border-dashed border-gray-300 bg-white p-12 text-center peer-empty:block">
+                                    <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-50"><Award size={22} className="text-amber-400" /></span>
+                                    <p className="text-sm font-semibold text-gray-600">{tr("Nothing on your record yet")}</p>
+                                    <p className="mt-1 text-xs text-gray-400">{tr("Ratings of your reviews and your certificates appear here once you have submitted reviews.")}</p>
+                                </div>
+                            </div>
+                        )}
 
                         {/* ── Empty tab state ────────────────────────────────── */}
-                        {activeTab !== 'abstracts' && tabItems.length === 0 && (
-                            <div className="bg-white border border-dashed border-gray-300 rounded-2xl p-12 text-center">
-                                <currentTab.icon size={28} className="text-gray-300 mx-auto mb-3" />
-                                <p className="text-sm font-medium text-gray-500">{tr("No :label assignments", { label: currentTab.label })}</p>
-                                <p className="text-xs text-gray-400 mt-1">{tr("Assignments for this phase will appear here.")}</p>
+                        {activeTab !== 'abstracts' && activeTab !== 'record' && tabItems.length === 0 && (
+                            <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-12 text-center">
+                                <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-gray-50"><currentTab.icon size={22} className="text-gray-300" /></span>
+                                <p className="text-sm font-semibold text-gray-600">{tr("No :label assignments", { label: currentTab.label })}</p>
+                                <p className="mt-1 text-xs text-gray-400">{tr("Assignments for this phase will appear here.")}</p>
                             </div>
                         )}
 
@@ -1136,6 +1172,7 @@ export default function ReviewIndex() {
                         )}
                     </>
                 )}
+
             </div>
         </AppLayout>
     );

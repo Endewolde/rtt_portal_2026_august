@@ -11,7 +11,10 @@ import AppLayout from '../../Layouts/AppLayout';
 import StatusBadge from '../../Components/StatusBadge';
 import WorkflowBreadcrumb from '../../Components/WorkflowBreadcrumb';
 import ViewToggle from '../../Components/ViewToggle';
-import FilterBar from '../../Components/FilterBar';
+import { PageHeader, RefreshButton } from '../../Components/Insights/Kit';
+import StageFilters from '../../Components/Review/StageFilters';
+import DownloadMenu from '../../Components/Finance/DownloadMenu';
+import ProposalHover from '../../Components/Finance/ProposalHover';
 import ProposalTable from '../../Components/ProposalTable';
 import { useViewPreference } from '../../hooks/useViewPreference';
 import api from '../../lib/api';
@@ -89,12 +92,13 @@ const STATUS_LABEL = {
 
 function StatCard({ icon: Icon, label, value, sub, color, onClick }) {
     const colors = {
-        indigo: { bg: 'bg-indigo-50', icon: 'bg-indigo-100 text-indigo-600', val: 'text-indigo-700' },
-        purple: { bg: 'bg-purple-50', icon: 'bg-purple-100 text-purple-600', val: 'text-purple-700' },
-        blue:   { bg: 'bg-blue-50',   icon: 'bg-blue-100 text-blue-600',    val: 'text-blue-700'   },
-        red:    { bg: 'bg-red-50',    icon: 'bg-red-100 text-red-500',      val: 'text-red-600'    },
-        gray:   { bg: 'bg-gray-50',   icon: 'bg-gray-100 text-gray-500',    val: 'text-gray-700'   },
-    }[color] ?? { bg: 'bg-gray-50', icon: 'bg-gray-100 text-gray-500', val: 'text-gray-700' };
+        indigo: { bar: 'bg-indigo-500', icon: 'bg-indigo-100 text-indigo-600' },
+        purple: { bar: 'bg-violet-500', icon: 'bg-violet-100 text-violet-600' },
+        green:  { bar: 'bg-emerald-500', icon: 'bg-emerald-100 text-emerald-600' },
+        blue:   { bar: 'bg-sky-500',    icon: 'bg-sky-100 text-sky-600' },
+        red:    { bar: 'bg-red-500',    icon: 'bg-red-100 text-red-600' },
+        gray:   { bar: 'bg-gray-300',   icon: 'bg-gray-100 text-gray-500' },
+    }[color] ?? { bar: 'bg-gray-300', icon: 'bg-gray-100 text-gray-500' };
 
     const Tag = onClick ? 'button' : 'div';
 
@@ -102,16 +106,15 @@ function StatCard({ icon: Icon, label, value, sub, color, onClick }) {
         <Tag
             type={onClick ? 'button' : undefined}
             onClick={onClick}
-            className={`${colors.bg} border border-white rounded-2xl px-5 py-4 flex items-center gap-4 w-full text-left transition-all duration-150 active:scale-95 hover:shadow-sm touch-manipulation ${onClick ? 'cursor-pointer' : ''}`}
+            className={`relative h-full w-full overflow-hidden rounded-2xl border border-gray-200 bg-white p-4 text-left transition ${onClick ? 'cursor-pointer hover:-translate-y-0.5 hover:shadow-md' : ''}`}
         >
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${colors.icon}`}>
-                <Icon size={18} />
+            <span className={`absolute inset-y-0 left-0 w-1 ${colors.bar}`} />
+            <div className="flex items-center justify-between gap-2">
+                <span className="truncate text-xs font-medium text-gray-500">{label}</span>
+                <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${colors.icon}`}><Icon size={15} /></span>
             </div>
-            <div>
-                <p className="text-xs text-gray-500 font-medium">{label}</p>
-                <p className={`text-2xl font-bold leading-none mt-0.5 ${colors.val}`}>{value}</p>
-                {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
-            </div>
+            <p className="mt-1.5 truncate text-2xl font-bold tabular-nums text-gray-900">{value}</p>
+            <p className="mt-0.5 min-h-4 truncate text-[11px] text-gray-400">{sub ?? (onClick ? 'Click to jump there' : '')}</p>
         </Tag>
     );
 }
@@ -615,9 +618,9 @@ function AwaitingRow({ proposal }) {
                 <div className="flex items-center gap-4 flex-1 min-w-0 px-5 py-4">
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <span className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-1 rounded-lg shrink-0">
+                            <ProposalHover id={proposal.id} className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-1 rounded-lg shrink-0">
                                 {proposal.tracker_number}
-                            </span>
+                            </ProposalHover>
                             <span className="text-xs text-gray-400">{getCategoryLabel(proposal.category)}</span>
                             <StatusBadge status={proposal.status} />
                             {urgency && (
@@ -669,9 +672,9 @@ function ReviewCard({ proposal, onReassign, onExtend, onAddReviewer, onRemove })
                 <div className="flex items-start justify-between gap-4 flex-1 px-5 py-4">
                     <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <span className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-1 rounded-lg shrink-0">
+                            <ProposalHover id={proposal.id} className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-1 rounded-lg shrink-0">
                                 {proposal.tracker_number}
-                            </span>
+                            </ProposalHover>
                             <span className="text-xs text-gray-400">{getCategoryLabel(proposal.category)}</span>
                             <StatusBadge status={proposal.status} />
                             {proposal.review_disagreement_flagged_at && !proposal.review_disagreement_resolved_at && (
@@ -810,6 +813,7 @@ export default function BlindReview() {
     const [yearFilter, setYearFilter]            = useState(app_settings?.current_academic_year ?? '');
     const [categoryFilter, setCategoryFilter]    = useState('');
     const [collegeFilter, setCollegeFilter]      = useState('');
+    const [search, setSearch]                    = useState('');
     const [loading, setLoading]                  = useState(true);
     const [reassignModal, setReassignModal]       = useState(null);
     const [addReviewerModal, setAddReviewerModal] = useState(null);
@@ -859,10 +863,12 @@ export default function BlindReview() {
     const availableCategories = [...new Set(allProposals.map(p => p.category).filter(Boolean))].sort();
     const availableColleges   = [...new Map(allProposals.filter(p => p.college).map(p => [p.college.id, p.college])).values()]
         .sort((a, b) => a.name.localeCompare(b.name));
-    const proposals = allProposals
-        .filter(p => !yearFilter || p.academic_year === yearFilter)
-        .filter(p => !categoryFilter || p.category === categoryFilter)
-        .filter(p => !collegeFilter || p.college_id === collegeFilter);
+    const q = search.trim().toLowerCase();
+    const matchesOthers = p => (!categoryFilter || p.category === categoryFilter)
+        && (!collegeFilter || p.college_id === collegeFilter)
+        && (!q || [p.tracker_number, p.title, p.pi?.name].some(v => v?.toLowerCase().includes(q)));
+    const proposals = allProposals.filter(p => (!yearFilter || p.academic_year === yearFilter) && matchesOthers(p));
+    const hiddenByYear = yearFilter ? allProposals.filter(p => p.academic_year !== yearFilter && matchesOthers(p)).length : 0;
 
     // ── Data slices ──
     const validated   = proposals.filter(p => p.status === 'validated');
@@ -905,72 +911,35 @@ export default function BlindReview() {
                 )}
 
                 {/* ── Page header ── */}
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-6 gap-4">
-                    <div className="flex items-center gap-4">
-                        <div className="h-12 w-12 bg-indigo-600 rounded-2xl flex items-center justify-center shrink-0 shadow-sm shadow-indigo-200">
-                            <EyeOff size={22} className="text-white" />
-                        </div>
-                        <div>
-                            <h1 className="text-xl font-bold text-gray-900">Blind Review Management</h1>
-                            <p className="text-sm text-gray-500 mt-0.5">Assign reviewers to validated proposals and track review progress</p>
-                        </div>
-                    </div>
-                    <FilterBar
-                        accent="indigo"
-                        activeCount={[collegeFilter, categoryFilter, yearFilter].filter(Boolean).length}
-                        trailing={
-                            <>
-                                <ViewToggle view={view} onChange={setView} />
-                                <button onClick={load}
-                                    className="flex items-center gap-2 px-3.5 py-2.5 sm:py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors font-medium shrink-0">
-                                    <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
-                                    <span className="hidden sm:inline">Refresh</span>
-                                </button>
-                            </>
-                        }
-                    >
-                        {availableColleges.length > 1 && (
-                            <select
-                                value={collegeFilter}
-                                onChange={e => { setCollegeFilter(e.target.value); setActiveTab('active'); }}
-                                className="w-full sm:w-auto text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                            >
-                                <option value="">All Colleges</option>
-                                {availableColleges.map(c => (
-                                    <option key={c.id} value={c.id}>{c.name}</option>
-                                ))}
-                            </select>
-                        )}
-                        {availableCategories.length > 1 && (
-                            <select
-                                value={categoryFilter}
-                                onChange={e => { setCategoryFilter(e.target.value); setActiveTab('active'); }}
-                                className="w-full sm:w-auto text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                            >
-                                <option value="">All Categories</option>
-                                {availableCategories.map(c => (
-                                    <option key={c} value={c}>{getCategoryLabel(c)}</option>
-                                ))}
-                            </select>
-                        )}
-                        {availableYears.length > 0 && (
-                            <select
-                                value={yearFilter}
-                                onChange={e => { setYearFilter(e.target.value); setActiveTab('active'); }}
-                                className="w-full sm:w-auto text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300"
-                            >
-                                <option value="">All Years</option>
-                                {availableYears.map(y => (
-                                    <option key={y} value={y}>{y}</option>
-                                ))}
-                            </select>
-                        )}
-                    </FilterBar>
+                <div className="mb-5 space-y-4">
+                    <PageHeader icon={EyeOff} color="indigo" title="Blind Review"
+                        description="Assign anonymous reviewers to validated proposals and follow every review to a decision.">
+                        <DownloadMenu filename="blind-review" title="Blind review" subtitle={yearFilter || 'All years'} rows={proposals} columns={[
+                            { label: 'Tracker', value: (p) => p.tracker_number },
+                            { label: 'Title', value: (p) => p.title },
+                            { label: 'Programme', value: (p) => getCategoryLabel(p.category) },
+                            { label: 'College', value: (p) => p.college?.name },
+                            { label: 'Stage', value: (p) => (p.status === 'validated' ? 'Awaiting reviewers' : 'Under blind review') },
+                            { label: 'Reviewers', value: (p) => blindAssignments(p).length },
+                            { label: 'Submitted', value: (p) => blindAssignments(p).filter((a) => a.status === 'submitted').length },
+                            { label: 'Overdue', value: (p) => blindAssignments(p).filter((a) => a.due_date && daysUntil(a.due_date) < 0 && a.status !== 'submitted').length },
+                            { label: 'Reviewers disagree', value: (p) => (p.review_disagreement_flagged_at && !p.review_disagreement_resolved_at ? 'Yes' : '') },
+                        ]} />
+                        <ViewToggle view={view} onChange={setView} />
+                        <RefreshButton onClick={load} loading={loading} />
+                    </PageHeader>
+                    <StageFilters
+                        search={search} onSearch={(v) => { setSearch(v); }}
+                        colleges={availableColleges} college={collegeFilter} onCollege={(v) => { setCollegeFilter(v); setActiveTab('active'); }}
+                        programmes={availableCategories} programme={categoryFilter} onProgramme={(v) => { setCategoryFilter(v); setActiveTab('active'); }}
+                        years={availableYears} year={yearFilter} onYear={(v) => { setYearFilter(v); setActiveTab('active'); }}
+                        hiddenByYear={hiddenByYear}
+                        onClear={() => { setSearch(''); setCollegeFilter(''); setCategoryFilter(''); }} />
                 </div>
 
                 {/* ── Stat cards ── */}
                 {!loading && allProposals.length > 0 && (
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
                         <StatCard icon={Shield}      label="Awaiting Assignment" value={validated.length}   color="indigo"
                             onClick={validated.length > 0 ? () => jumpToSection(awaitingSectionRef) : undefined} />
                         <StatCard icon={EyeOff}      label="Under Review"        value={underReview.length} color="purple"

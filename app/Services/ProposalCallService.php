@@ -5,7 +5,9 @@ namespace App\Services;
 use App\Models\Proposal;
 use App\Models\ProposalCall;
 use App\Models\User;
+use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class ProposalCallService
@@ -21,6 +23,57 @@ class ProposalCallService
         $data['is_open'] = false;
 
         return ProposalCall::create($data);
+    }
+
+    /**
+     * Start a new draft call from an existing one: the same content and settings,
+     * moved to a new academic year. By default the dates move forward by the same
+     * number of years and any year written in the title follows; the guidelines PDF
+     * is copied so the new call can change it without touching the old one.
+     *
+     * @param  array{academic_year?: string, title?: string, start_date?: string, end_date?: string}  $overrides
+     */
+    public function copy(ProposalCall $source, array $overrides, User $createdBy): ProposalCall
+    {
+        $fromYear = (int) substr((string) $source->academic_year, 0, 4);
+        $academicYear = $overrides['academic_year'] ?? ($fromYear ? ($fromYear + 1).'-'.($fromYear + 2) : $source->academic_year);
+        $shift = max(0, (int) substr($academicYear, 0, 4) - $fromYear);
+
+        $title = $overrides['title'] ?? $this->shiftYearsInText((string) $source->title, (string) $source->academic_year, $academicYear, $shift);
+
+        $call = $this->create([
+            'academic_year' => $academicYear,
+            'category' => $source->category,
+            'title' => $title,
+            'description' => $source->description,
+            'eligibility' => $source->eligibility,
+            'start_date' => isset($overrides['start_date']) ? Carbon::parse($overrides['start_date']) : $source->start_date?->copy()->addYears($shift),
+            'end_date' => isset($overrides['end_date']) ? Carbon::parse($overrides['end_date']) : $source->end_date?->copy()->addYears($shift),
+            'max_proposals_per_pi' => $source->max_proposals_per_pi,
+            'funding_budget' => $source->funding_budget,
+            'application_form' => $source->application_form,
+            'review_route' => $source->review_route,
+        ], $createdBy);
+
+        if ($source->guidelines_file && Storage::disk('private')->exists($source->guidelines_file)) {
+            $path = "proposal-calls/{$call->id}/guidelines/".basename($source->guidelines_file);
+            Storage::disk('private')->copy($source->guidelines_file, $path);
+            $call->update(['guidelines_file' => $path]);
+        }
+
+        return $call->fresh();
+    }
+
+    /** "Research Call 2026-2027" → "Research Call 2027-2028"; a lone "2026" moves too. */
+    private function shiftYearsInText(string $text, string $fromYear, string $toYear, int $shift): string
+    {
+        if ($fromYear && str_contains($text, $fromYear)) {
+            return str_replace($fromYear, $toYear, $text);
+        }
+
+        return $shift > 0
+            ? preg_replace_callback('/\b(20\d{2})\b/', fn ($m) => (string) ((int) $m[1] + $shift), $text)
+            : $text;
     }
 
     /**

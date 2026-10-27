@@ -76,6 +76,7 @@ return [
             'proposals.track' => ['label' => 'Track by tracker number', 'description' => 'Look up a proposal\'s stage.'],
             'proposals.export' => ['label' => 'Export proposals', 'description' => 'Download proposal lists.'],
             'proposals.validate' => ['label' => 'Validate submissions', 'description' => 'Validate, return for correction or reject new submissions.'],
+            'proposal_messages.staff' => ['label' => 'Message research teams', 'description' => 'Read and write the message thread on proposals within scope, to ask for and give clarifications.', 'roles' => [...$A, ...$D, $CO, $M]],
             'proposals.reopen' => ['label' => 'Reopen rejected proposals', 'description' => 'Reopen a rejected proposal for reconsideration.', 'roles' => ['super_admin', 'central_officer', ...$D]],
             'proposal_calls.view_any' => ['label' => 'See proposal calls', 'description' => 'Open the list of calls.'],
             'proposal_calls.create' => ['label' => 'Create calls', 'description' => 'Create and publish proposal calls.'],
@@ -140,9 +141,10 @@ return [
         ],
 
         'Monitoring' => [
-            'monitoring.ongoing' => ['label' => 'Ongoing proposals', 'description' => 'Monitor every funded project.', 'roles' => [...$A, ...$D, $CO]],
+            'monitoring.ongoing' => ['label' => 'Ongoing proposals', 'description' => 'Monitor every funded project.', 'roles' => [...$A, ...$D, $CO, $M]],
             'monitoring.archive' => ['label' => 'Archive completed projects', 'description' => 'Move completed projects to the archive.', 'roles' => ['super_admin', 'central_officer']],
             'monitoring.legacy_grants' => ['label' => 'Grant legacy projects', 'description' => 'Add older grants that predate the platform.', 'roles' => $A],
+            'reviews.rate_quality' => ['label' => 'Rate review quality', 'description' => 'Rate submitted reviews as useful, adequate or thin; ratings feed reviewer matching.', 'roles' => [...$A, ...$D]],
             'progress_reports.review' => ['label' => 'Review progress reports', 'description' => 'Accept or return quarterly reports.', 'roles' => [...$A, ...$D, $CO, $M]],
             'midterm_evaluations.view_any' => ['label' => 'See mid-term evaluations', 'description' => 'Open Mid-term Evaluations.'],
             'midterm_evaluations.create' => ['label' => 'Schedule mid-term evaluations', 'description' => 'Schedule and record mid-terms.'],
@@ -230,6 +232,8 @@ return [
             'lookup_options.create' => ['label' => 'Add dropdown options', 'description' => 'Add new form choices.'],
             'lookup_options.delete' => ['label' => 'Delete dropdown options', 'description' => 'Remove form choices.'],
             'lookup_options.reorder' => ['label' => 'Reorder dropdown options', 'description' => 'Change the order of form choices.'],
+            'programmes.manage' => ['label' => 'Manage funding programmes', 'description' => 'Add, rename and switch off the funding programmes proposals are submitted under.', 'roles' => ['super_admin', 'admin', 'central_officer']],
+            'integrations.manage' => ['label' => 'API keys and webhooks', 'description' => 'Create API keys for other systems and webhooks that notify them of changes.', 'roles' => ['super_admin', 'admin']],
             'settings.manage' => ['label' => 'Platform settings', 'description' => 'Settings, public site, broadcast email.'],
             'settings.restricted' => ['label' => 'Restricted settings', 'description' => 'Security, backups, integrations and other super-admin settings.', 'roles' => ['super_admin']],
             'features.manage' => ['label' => 'Feature management', 'description' => 'Switch modules and features on or off for everyone.', 'roles' => ['super_admin']],

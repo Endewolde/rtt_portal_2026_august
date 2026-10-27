@@ -5,8 +5,8 @@ import FilterBar from '../../Components/FilterBar';
 import { useToast } from '../../Components/Toast';
 import { get, post } from '../../lib/api';
 import { formatDate, timeAgo, getCategoryLabel } from '../../lib/utils';
+import { programmeKeys } from '../../lib/programmes';
 
-const CATEGORY_OPTIONS = ['research', 'community_engagement', 'technology_transfer'];
 
 const STATUS_META = {
     overdue: { label: 'Overdue', dot: 'bg-red-500', text: 'text-red-700', bg: 'bg-red-50', border: 'border-red-200' },
@@ -140,7 +140,7 @@ function DeadlinesTable({ assignments, loading, onRemind, sortKey, sortDir, onSo
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                         <thead>
-                            <tr className="bg-gray-50 border-b border-gray-200">
+                            <tr className="bg-gray-50 border-b border-gray-200"><th className="px-4 py-3 w-10 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">#</th>
                                 <th className="px-4 py-3 w-10">
                                     <input
                                         type="checkbox"
@@ -163,7 +163,7 @@ function DeadlinesTable({ assignments, loading, onRemind, sortKey, sortDir, onSo
                             {assignments.map((a, i) => {
                                 const overdue = daysOverdue(a.due_date);
                                 return (
-                                    <tr key={a.id} className={`transition-colors hover:bg-amber-50/40 ${selected.has(a.id) ? 'bg-amber-50/60' : i % 2 === 0 ? '' : 'bg-gray-50/40'}`}>
+                                    <tr key={a.id} className={`transition-colors hover:bg-amber-50/40 ${selected.has(a.id) ? 'bg-amber-50/60' : i % 2 === 0 ? '' : 'bg-gray-50/40'}`}><td className="px-4 py-3 w-10 text-xs font-medium tabular-nums text-gray-400">{i + 1}</td>
                                         <td className="px-4 py-3">
                                             <input
                                                 type="checkbox"
@@ -475,7 +475,7 @@ export default function ReviewDeadlines() {
                                 className="w-full sm:w-auto text-sm border border-gray-200 rounded-xl px-3 py-2 text-gray-600 bg-white focus:outline-none focus:ring-2 focus:ring-amber-300"
                             >
                                 <option value="">All Categories</option>
-                                {CATEGORY_OPTIONS.map(c => <option key={c} value={c}>{getCategoryLabel(c)}</option>)}
+                                {programmeKeys().map(c => <option key={c} value={c}>{getCategoryLabel(c)}</option>)}
                             </select>
                         </FilterBar>
                     </div>

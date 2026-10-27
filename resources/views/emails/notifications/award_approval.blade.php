@@ -70,7 +70,7 @@
       <div class="row"><label>{{ __('Tracker No.') }}</label><span style="font-family:monospace;font-weight:700;color:#064e3b;">{{ $tracker_number }}</span></div>
       @endif
       @if(!empty($awarded_amount))
-      <div class="row"><label>{{ __('Awarded Amount') }}</label><span class="amount-highlight">ETB {{ number_format($awarded_amount, 2) }}</span></div>
+      <div class="row"><label>{{ __('Awarded Amount') }}</label><span class="amount-highlight">{{ \App\Support\Terms::currency() }} {{ number_format($awarded_amount, 2) }}</span></div>
       @endif
     </div>
 

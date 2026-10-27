@@ -73,7 +73,7 @@ export default function ResetPassword() {
     }
 
     if (!token || !email) return (
-        <GuestLayout panelHeading="Invalid Link" panelSubtext="This password reset link is missing required information.">
+        <GuestLayout card panelHeading="Invalid Link" panelSubtext="This password reset link is missing required information.">
             <div className="text-center py-6">
                 <div className="mx-auto mb-4 h-16 w-16 rounded-2xl bg-red-50 flex items-center justify-center">
                     <AlertCircle size={28} className="text-red-500" />
@@ -90,7 +90,7 @@ export default function ResetPassword() {
     )
 
     if (success) return (
-        <GuestLayout panelHeading="Password Updated" panelSubtext="Your new password is ready. Sign in to continue.">
+        <GuestLayout card panelHeading="Password Updated" panelSubtext="Your new password is ready. Sign in to continue.">
             <div className="text-center py-4">
                 <div className="mx-auto mb-5 h-16 w-16 rounded-2xl bg-emerald-50 flex items-center justify-center">
                     <CheckCircle size={30} className="text-emerald-500" />
@@ -110,7 +110,7 @@ export default function ResetPassword() {
     )
 
     return (
-        <GuestLayout
+        <GuestLayout card
             panelHeading="Set New Password"
             panelSubtext="Choose a strong password you haven't used before."
         >

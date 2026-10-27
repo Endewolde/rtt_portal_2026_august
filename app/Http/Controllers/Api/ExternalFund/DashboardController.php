@@ -7,12 +7,18 @@ use App\Models\ExternalFundApplication;
 use App\Models\ExternalFundAward;
 use App\Models\ExternalFundMilestone;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
 {
-    public function metrics(): JsonResponse
+    public function metrics(Request $request): JsonResponse
     {
+        $user = $request->user();
+        if (! $user->can('external_funds.view_any') && ! $user->can('external_funds.manage') && ! $user->can('external_funds.expenditure')) {
+            return response()->json(['message' => 'Forbidden.'], 403);
+        }
+
         // Application counts by status
         $applicationCounts = ExternalFundApplication::query()
             ->selectRaw('status, COUNT(*) as count')
@@ -22,13 +28,13 @@ class DashboardController extends Controller
 
         // Award totals
         $awardStats = ExternalFundAward::query()
-            ->selectRaw('
+            ->selectRaw("
                 COUNT(*) as total_awards,
                 SUM(amount_awarded) as total_secured,
-                SUM(CASE WHEN status = "active" THEN amount_awarded ELSE 0 END) as active_amount,
-                COUNT(CASE WHEN status = "active" THEN 1 END) as active_count,
-                COUNT(CASE WHEN status = "completed" THEN 1 END) as completed_count
-            ')
+                SUM(CASE WHEN status = 'active' THEN amount_awarded ELSE 0 END) as active_amount,
+                COUNT(CASE WHEN status = 'active' THEN 1 END) as active_count,
+                COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_count
+            ")
             ->first();
 
         // Total expenditures across all awards
@@ -43,8 +49,8 @@ class DashboardController extends Controller
         // Funding by agency (top 5)
         $byAgency = ExternalFundAward::query()
             ->join('ef_agencies', 'ef_awards.agency_id', '=', 'ef_agencies.id')
-            ->selectRaw('ef_agencies.name, ef_agencies.acronym, SUM(ef_awards.amount_awarded) as total, COUNT(*) as count')
-            ->groupBy('ef_agencies.id', 'ef_agencies.name', 'ef_agencies.acronym')
+            ->selectRaw('ef_agencies.name, ef_agencies.acronym, ef_awards.currency, SUM(ef_awards.amount_awarded) as total, COUNT(*) as count')
+            ->groupBy('ef_agencies.id', 'ef_agencies.name', 'ef_agencies.acronym', 'ef_awards.currency')
             ->orderByDesc('total')
             ->limit(5)
             ->get();
@@ -53,8 +59,8 @@ class DashboardController extends Controller
         $byCollege = ExternalFundApplication::query()
             ->join('ef_awards', 'ef_applications.id', '=', 'ef_awards.application_id')
             ->join('colleges', 'ef_applications.college_id', '=', 'colleges.id')
-            ->selectRaw('colleges.name, SUM(ef_awards.amount_awarded) as total, COUNT(*) as count')
-            ->groupBy('colleges.id', 'colleges.name')
+            ->selectRaw('colleges.name, ef_awards.currency, SUM(ef_awards.amount_awarded) as total, COUNT(*) as count')
+            ->groupBy('colleges.id', 'colleges.name', 'ef_awards.currency')
             ->orderByDesc('total')
             ->limit(5)
             ->get();
@@ -67,6 +73,25 @@ class DashboardController extends Controller
             ->orderBy('due_date')
             ->limit(10)
             ->get();
+
+        // Money is only added up within one currency — mixing birr and dollars gives a meaningless total.
+        $spentByAward = DB::table('ef_expenditures')->selectRaw('award_id, SUM(amount) as spent')->groupBy('award_id')->pluck('spent', 'award_id');
+        $byCurrency = ExternalFundAward::query()->get(['id', 'currency', 'amount_awarded', 'status'])
+            ->groupBy(fn ($a) => strtoupper($a->currency ?: 'ETB'))
+            ->map(fn ($awards, $currency) => [
+                'currency' => $currency,
+                'secured' => round((float) $awards->sum('amount_awarded'), 2),
+                'active' => round((float) $awards->where('status', 'active')->sum('amount_awarded'), 2),
+                'spent' => round((float) $awards->sum(fn ($a) => (float) ($spentByAward[$a->id] ?? 0)), 2),
+                'count' => $awards->count(),
+            ])
+            ->sortByDesc('secured')
+            ->values();
+
+        $overdueMilestones = ExternalFundMilestone::query()
+            ->where('status', '!=', 'completed')
+            ->whereDate('due_date', '<', now())
+            ->count();
 
         // Applications by category
         $byCategory = ExternalFundApplication::query()
@@ -98,6 +123,9 @@ class DashboardController extends Controller
                         : 0,
                 ],
                 'success_rate' => $successRate,
+                'by_currency' => $byCurrency,
+                'currency' => $byCurrency->first()['currency'] ?? 'ETB',
+                'overdue_milestones' => $overdueMilestones,
                 'by_agency' => $byAgency,
                 'by_college' => $byCollege,
                 'by_category' => $byCategory,

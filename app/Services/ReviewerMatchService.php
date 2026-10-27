@@ -38,6 +38,7 @@ class ReviewerMatchService
                 'reviewAssignments as on_time_assignments' => fn ($q) => $q->where('status', 'submitted')
                     ->whereColumn('submitted_at', '<=', 'due_date'),
             ])
+            ->withAvg('reviewAssignments as quality_average', 'quality_rating')
             ->get(['id', 'name', 'title', 'email', 'avatar', 'expertise', 'department_id', 'affiliation']);
 
         $cap = (int) (ThresholdSetting::where('key', 'max_reviewer_active_assignments')->value('value') ?? 5);
@@ -82,8 +83,13 @@ class ReviewerMatchService
             // reviewer, capped so it can never fully cancel out a genuine expertise match.
             $workloadPenalty = min($reviewer->active_assignments, 5) * 0.15;
 
+            // Quality: how useful the office found their past reviews (1 thin – 3 useful).
+            // Unrated reviewers stay neutral; a "useful" record lifts, a "thin" one lowers.
+            $quality = $reviewer->quality_average !== null ? round((float) $reviewer->quality_average, 2) : null;
+            $qualityFactor = $quality === null ? 0 : ($quality - 2) * 0.5;
+
             $matchScore = $matched->count();
-            $compositeScore = round($matchScore + ($reliabilityFactor * 0.9) - $workloadPenalty, 3);
+            $compositeScore = round($matchScore + ($reliabilityFactor * 0.9) + $qualityFactor - $workloadPenalty, 3);
 
             return [
                 'id' => $reviewer->id,
@@ -101,6 +107,7 @@ class ReviewerMatchService
                 'active_assignments' => $reviewer->active_assignments,
                 'completed_assignments' => $reviewer->completed_assignments,
                 'on_time_rate' => $onTimeRate,
+                'quality_average' => $quality,
                 'composite_score' => $compositeScore,
             ];
         })

@@ -23,22 +23,18 @@ class ActionCountController extends Controller
         $isResearch = in_array('research_officer', $roles);
         $isCommunity = in_array('community_officer', $roles);
         $isTechnology = in_array('technology_officer', $roles);
-        $isOfficer = $isResearch || $isCommunity || $isTechnology;
+        // Directors of a programme: the three built-in director roles, or any role scoped to one programme.
+        $isOfficer = $isResearch || $isCommunity || $isTechnology || $user->accessScope()->isCategory();
         $isCollegeStaff = in_array('college_officer', $roles);
         $isRttManager = in_array('college_rtt_manager', $roles);
         $isFinance = in_array('support_officer', $roles);
         $isPI = in_array('staff', $roles);
 
-        $officerCategories = [];
-        if ($isResearch) {
-            $officerCategories[] = 'research';
-        }
-        if ($isCommunity) {
-            $officerCategories[] = 'community_engagement';
-        }
-        if ($isTechnology) {
-            $officerCategories[] = 'technology_transfer';
-        }
+        $officerCategories = $user->accessScope()->isCategory() ? $user->accessScope()->categories : array_values(array_filter([
+            $isResearch ? 'research' : null,
+            $isCommunity ? 'community_engagement' : null,
+            $isTechnology ? 'technology_transfer' : null,
+        ]));
 
         // ── Helper: scope a proposals query by this user's role ───────────────
         // $alias is the table name or alias used for the proposals table in the query.

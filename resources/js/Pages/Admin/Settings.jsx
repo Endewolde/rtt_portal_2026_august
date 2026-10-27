@@ -1,19 +1,21 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { cn } from '../../lib/utils'
 import RichTextEditor from '../../Components/RichTextEditor'
+import BroadcastComposer from '../../Components/BroadcastComposer'
 import {
     Settings, Shield, Users, Mail, HardDrive, Server,
     Palette, BookOpen, Activity, Database, Puzzle,
     Globe, Layout, FileText, Star, Bell,
     ChevronRight, Save, RefreshCw, AlertTriangle,
     Eye, EyeOff, Upload, Info, CheckCircle2,
-    ToggleLeft, ToggleRight, Zap, X, Send, Plus,
+    ToggleLeft, ToggleRight, Zap, X, Send, Plus, MessageSquare,
 } from 'lucide-react'
 import AppLayout from '../../Layouts/AppLayout'
 import { useToast } from '../../Components/Toast'
 import { useConfirm } from '../../hooks/useConfirm'
 import { useAuth } from '../../hooks/useAuth'
 import api from '../../lib/api'
+import PublicSiteEditor from '../../Components/PublicSiteEditor'
 
 // ─── Section metadata ─────────────────────────────────────────────────────────
 
@@ -74,6 +76,8 @@ const KEY_LABELS = {
     default_language: 'Default Language', default_timezone: 'Default Timezone',
     date_format: 'Date Format', time_format: 'Time Format',
     currency_format: 'Currency', current_academic_year: 'Current Academic Year',
+    term_college: 'Name for colleges', term_department: 'Name for departments',
+    term_academic_year: 'Name for the academic year', currency_code: 'Currency code', currency_name: 'Currency name',
     password_min_length: 'Min Password Length', password_require_uppercase: 'Require Uppercase',
     password_require_numbers: 'Require Numbers', password_require_symbols: 'Require Symbols',
     password_expiration_days: 'Password Expires (days)', mfa_enabled: 'MFA Enabled',
@@ -90,6 +94,8 @@ const KEY_LABELS = {
     mail_username: 'Mail Username', mail_password: 'Mail Password',
     mail_encryption: 'Encryption', mail_from_address: 'From Address', mail_from_name: 'From Name',
     sms_gateway: 'SMS Gateway', telegram_bot_token: 'Telegram Bot Token',
+    sms_enabled: 'Send SMS Notifications', africastalking_username: "Africa's Talking Username", africastalking_api_key: "Africa's Talking API Key",
+    africastalking_sender_id: 'SMS Sender ID', sms_events: 'Events Sent by SMS',
     announcement_message: 'Announcement Message', announcement_active: 'Announcement Active',
     max_upload_size_mb: 'Max Upload Size (MB)', allowed_file_types: 'Allowed File Types',
     file_storage: 'Storage Driver', file_retention_days: 'File Retention (days)',
@@ -249,7 +255,9 @@ const NUMBER_RANGES = {
 }
 
 // Keys that are internal / legacy and should not appear in the UI
-const HIDDEN_KEYS = new Set(['site_name', 'combined_decision_mode'])
+// currency_format was never used; the currency is currency_code / currency_name.
+// currency_format and sms_gateway were never used (see currency_code and the africastalking_* keys).
+const HIDDEN_KEYS = new Set(['site_name', 'combined_decision_mode', 'currency_format', 'sms_gateway'])
 
 // Rendered as a bespoke card selector (see the Review Thresholds section) rather
 // than the generic dropdown, since this decision materially changes real funding
@@ -558,82 +566,6 @@ function LogoUpload({ settingKey, value, onUploaded }) {
 
 // ─── Hero slider image upload ─────────────────────────────────────────────────
 
-function SlideImageUpload({ slideIndex, currentUrl, onUploaded }) {
-    const inputRef = useRef(null)
-    const [uploading, setUploading] = useState(false)
-    const { success, error } = useToast()
-    const settingKey = `slider_slide_${slideIndex}_image`
-
-    const handleFile = async (file) => {
-        if (!file) return
-        setUploading(true)
-        const fd = new FormData()
-        fd.append('file', file)
-        fd.append('key', settingKey)
-        try {
-            const res = await api.post('/settings/upload-asset', fd, {
-                headers: { 'Content-Type': 'multipart/form-data' },
-            })
-            const url = res.data?.data?.url ?? ''
-            onUploaded(settingKey, url)
-            success('Slide image uploaded.')
-        } catch (err) {
-            error(err.response?.data?.message ?? 'Upload failed. Max 5 MB, JPEG/PNG/WebP.')
-        }
-        setUploading(false)
-        if (inputRef.current) inputRef.current.value = ''
-    }
-
-    const handleRemove = async () => {
-        try {
-            await api.put(`/settings/app/${settingKey}`, { value: '' })
-            onUploaded(settingKey, '')
-            success('Slide image removed.')
-        } catch {
-            error('Failed to remove image.')
-        }
-    }
-
-    return (
-        <div className="py-3 border-b border-gray-100">
-            <p className="text-sm font-medium text-gray-900 mb-0.5">Background Image</p>
-            <p className="text-xs text-gray-400 mb-2">
-                Full-screen photo background. Recommended: <span className="font-semibold text-gray-500">1920 × 700 px</span> landscape.
-                Leave empty to use the animated gradient. Max 5 MB · JPEG, PNG, WebP.
-            </p>
-            {currentUrl ? (
-                <div className="relative rounded-xl overflow-hidden border border-gray-200 h-32 group">
-                    <img src={currentUrl} alt="Slide background" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                        <button
-                            onClick={() => inputRef.current?.click()}
-                            disabled={uploading}
-                            className="flex items-center gap-1 px-3 py-1.5 bg-white rounded-lg text-xs font-semibold text-gray-800 hover:bg-gray-100 disabled:opacity-50">
-                            <Upload size={11} /> Replace
-                        </button>
-                        <button
-                            onClick={handleRemove}
-                            className="flex items-center gap-1 px-3 py-1.5 bg-red-600 rounded-lg text-xs font-semibold text-white hover:bg-red-700">
-                            <X size={11} /> Remove
-                        </button>
-                    </div>
-                </div>
-            ) : (
-                <div
-                    onClick={() => !uploading && inputRef.current?.click()}
-                    className="flex flex-col items-center justify-center gap-2 py-6 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/50 transition-all">
-                    {uploading
-                        ? <div className="w-5 h-5 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-                        : <Upload size={18} className="text-gray-400" />}
-                    <span className="text-xs text-gray-400">{uploading ? 'Uploading…' : 'Click to upload (1920 × 700 px recommended)'}</span>
-                </div>
-            )}
-            <input ref={inputRef} type="file" accept="image/jpeg,image/jpg,image/png,image/webp" className="hidden"
-                onChange={e => handleFile(e.target.files?.[0])} />
-        </div>
-    )
-}
-
 // ─── Sidebar color section ────────────────────────────────────────────────────
 
 const SIDEBAR_PRESETS = [
@@ -728,37 +660,6 @@ function SidebarColorSection({ currentValue, onSave }) {
 
 // ─── Public Site panel ───────────────────────────────────────────────────────
 
-const PUBLIC_HERO_KEYS = [
-    { key: 'public_hero_badge',         type: 'string',   hint: 'Small chip above the headline.' },
-    { key: 'public_hero_heading',        type: 'string',   hint: 'First line of the headline (plain text).' },
-    { key: 'public_hero_highlight',      type: 'string',   hint: 'Second line shown in gradient colour.' },
-    { key: 'public_hero_subtitle',       type: 'textarea', hint: 'Supporting paragraph below the headline.' },
-    { key: 'public_hero_cta_primary',    type: 'string',   hint: 'Label for the primary action button.' },
-    { key: 'public_hero_cta_secondary',  type: 'string',   hint: 'Label for the secondary action button.' },
-]
-
-const PUBLIC_VISIBILITY_KEYS = [
-    { key: 'public_show_stats',        label: 'Statistics Strip'        },
-    { key: 'public_show_open_calls',   label: 'Open Calls Section'      },
-    { key: 'public_show_how_it_works', label: 'How It Works Section'    },
-    { key: 'public_show_features',     label: 'Platform Features'       },
-    { key: 'public_show_cta',          label: 'CTA Banner'              },
-]
-
-const PUBLIC_STEPS = [1, 2, 3, 4]
-
-const DEFAULT_NAV_LABELS = ['Home', 'Open Calls', 'Explore', 'Repository', 'Track Proposal']
-const DEFAULT_NAV_HREFS  = ['/', '/proposal-calls/public', '/explore', '/repository', '/tracker']
-
-const SOCIAL_KEYS = [
-    { key: 'public_social_telegram',  placeholder: 'https://t.me/yourgroup'          },
-    { key: 'public_social_facebook',  placeholder: 'https://facebook.com/yourpage'    },
-    { key: 'public_social_twitter',   placeholder: 'https://x.com/yourhandle'         },
-    { key: 'public_social_linkedin',  placeholder: 'https://linkedin.com/company/...' },
-    { key: 'public_social_instagram', placeholder: 'https://instagram.com/yourhandle' },
-    { key: 'public_social_youtube',   placeholder: 'https://youtube.com/@yourchannel' },
-]
-
 // ── Email Settings Panel ──────────────────────────────────────────────────────
 
 const DRIVER_OPTIONS = [
@@ -772,7 +673,6 @@ const ENCRYPTION_OPTIONS = [
     { val: 'ssl', label: 'SSL (port 465)' },
     { val: '',    label: 'None'           },
 ]
-const ROLES_LIST = ['admin','central_officer','research_officer','community_officer','technology_officer','college_officer','support_officer','staff','guest']
 
 function Field({ label: lbl, hint, children }) {
     return (
@@ -813,6 +713,87 @@ function SectionCard({ icon: Icon, color, title, subtitle, children, action }) {
     )
 }
 
+/** Africa's Talking settings, which events send a text, and a test message. */
+function SmsSettingsCard({ values, onChange, onSave }) {
+    const { success, error } = useToast()
+    const enabled = values.sms_enabled === 'true' || values.sms_enabled === true
+    const [phone, setPhone] = useState('')
+    const [sending, setSending] = useState(false)
+    const [saving, setSaving] = useState(null)
+    const configured = !!(values.africastalking_username && values.africastalking_api_key)
+
+    const save = async (key) => {
+        setSaving(key)
+        await onSave(key, values[key] ?? '')
+        setSaving(null)
+    }
+
+    const sendTest = async () => {
+        setSending(true)
+        try {
+            const r = await api.post('/settings/test-sms', { phone })
+            success(r.data?.message ?? 'Test SMS sent.')
+        } catch (e) {
+            error(e.response?.data?.message ?? 'The test SMS could not be sent.')
+        }
+        setSending(false)
+    }
+
+    const fields = [
+        ['africastalking_username', 'Username', 'text', 'Use "sandbox" while testing'],
+        ['africastalking_api_key', 'API key', 'password', 'From your Africa\'s Talking dashboard'],
+        ['africastalking_sender_id', 'Sender ID', 'text', 'Optional — an approved name or short code'],
+    ]
+
+    return (
+        <SectionCard icon={MessageSquare} color="bg-orange-50/50" title="SMS (Africa's Talking)"
+            subtitle="Text messages for the most important events — awards, decisions, review assignments"
+            action={
+                <button
+                    onClick={() => { const next = enabled ? 'false' : 'true'; onChange('sms_enabled', next); onSave('sms_enabled', next) }}
+                    disabled={!enabled && !configured}
+                    title={!enabled && !configured ? 'Enter the username and API key first' : undefined}
+                    className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all disabled:opacity-50 ${enabled ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+                    {enabled ? <ToggleRight size={15} /> : <ToggleLeft size={15} />} {enabled ? 'On' : 'Off'}
+                </button>
+            }>
+            <div className="grid gap-3 sm:grid-cols-3">
+                {fields.map(([key, label, type, hint]) => (
+                    <Field key={key} label={label} hint={hint}>
+                        <div className="flex gap-2">
+                            <Input type={type} value={values[key] ?? ''} onChange={e => onChange(key, e.target.value)} className="flex-1" autoComplete="off" />
+                            <button onClick={() => save(key)} disabled={saving === key}
+                                className="shrink-0 rounded-lg border border-gray-200 px-2.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+                                {saving === key ? '…' : 'Save'}
+                            </button>
+                        </div>
+                    </Field>
+                ))}
+            </div>
+            <Field label="Events sent by SMS" hint="Event names separated by commas. Keep this short — every text costs money.">
+                <div className="flex gap-2">
+                    <textarea rows={2} value={values.sms_events ?? ''} onChange={e => onChange('sms_events', e.target.value)}
+                        className="flex-1 rounded-xl border border-gray-200 px-3 py-2 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-orange-200" />
+                    <button onClick={() => save('sms_events')} disabled={saving === 'sms_events'}
+                        className="shrink-0 self-start rounded-lg border border-gray-200 px-2.5 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50">
+                        {saving === 'sms_events' ? '…' : 'Save'}
+                    </button>
+                </div>
+            </Field>
+            <div className="flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-end">
+                <Field label="Send a test SMS to" hint="09…, 07… or +251…">
+                    <Input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="0911 234 567" className="flex-1" />
+                </Field>
+                <button onClick={sendTest} disabled={sending || !phone.trim() || !configured}
+                    className="flex items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60 sm:shrink-0">
+                    {sending ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} />} Send test SMS
+                </button>
+            </div>
+            <p className="text-xs text-gray-400">People need a phone number on their profile, and can switch SMS off for themselves in their notification settings.</p>
+        </SectionCard>
+    )
+}
+
 function EmailSettingsPanel({ values, onChange, onSave, colleges, isAdmin = false }) {
     const { success, error } = useToast()
     const [smtpSaving,   setSmtpSaving]   = useState(false)
@@ -820,62 +801,7 @@ function EmailSettingsPanel({ values, onChange, onSave, colleges, isAdmin = fals
     const [testing,      setTesting]      = useState(false)
     const [testResult,   setTestResult]   = useState(null)   // { ok, message, detail }
     const [showPass,     setShowPass]     = useState(false)
-    const [broadcast,    setBroadcast]    = useState({ to: 'all', role: '', college_id: '', email: '', subject: '', message: '' })
-    const [sending,      setSending]      = useState(false)
-    const [sendResult,   setSendResult]   = useState(null)   // { sent, failed, total, message }
-    const [emailError,   setEmailError]   = useState('')     // inline error for specific email field
     const [testEmail,    setTestEmail]    = useState('')
-
-    // User search for specific-recipient mode
-    const [userSearch,       setUserSearch]       = useState('')
-    const [userResults,      setUserResults]      = useState([])
-    const [userSearching,    setUserSearching]    = useState(false)
-    const [selectedUser,     setSelectedUser]     = useState(null)
-    const [userDropdownOpen, setUserDropdownOpen] = useState(false)
-    const userSearchRef  = useRef(null)
-    const userSearchTimer = useRef(null)
-
-    useEffect(() => {
-        const handleClickOutside = (e) => {
-            if (userSearchRef.current && !userSearchRef.current.contains(e.target)) {
-                setUserDropdownOpen(false)
-            }
-        }
-        document.addEventListener('mousedown', handleClickOutside)
-        return () => document.removeEventListener('mousedown', handleClickOutside)
-    }, [])
-
-    const searchUsers = (q) => {
-        setUserSearch(q)
-        clearTimeout(userSearchTimer.current)
-        if (!q.trim()) { setUserResults([]); setUserDropdownOpen(false); return }
-        userSearchTimer.current = setTimeout(async () => {
-            setUserSearching(true)
-            try {
-                const r = await api.get(`/users?search=${encodeURIComponent(q)}&per_page=10`)
-                const users = r.data?.data?.data ?? []
-                setUserResults(users.filter(u => !u.roles?.some(r => r.name === 'super_admin')))
-                setUserDropdownOpen(true)
-            } catch { setUserResults([]) }
-            setUserSearching(false)
-        }, 300)
-    }
-
-    const selectUser = (u) => {
-        setSelectedUser(u)
-        setBroadcast(b => ({ ...b, email: u.email }))
-        setEmailError('')
-        setUserDropdownOpen(false)
-        setUserSearch('')
-        setUserResults([])
-    }
-
-    const clearSelectedUser = () => {
-        setSelectedUser(null)
-        setBroadcast(b => ({ ...b, email: '' }))
-        setUserSearch('')
-        setUserResults([])
-    }
 
     const driver = values.mail_driver || 'smtp'
     const isSmtp = driver === 'smtp'
@@ -907,33 +833,6 @@ function EmailSettingsPanel({ values, onChange, onSave, colleges, isAdmin = fals
         setTesting(false)
     }
 
-    const sendBroadcast = async () => {
-        const messageText = broadcast.message.replace(/<[^>]*>/g, '').trim()
-        if (!broadcast.subject.trim() || !messageText) {
-            error('Subject and message are required.')
-            return
-        }
-        setEmailError('')
-        setSendResult(null)
-        setSending(true)
-        try {
-            const r = await api.post('/settings/send-email', broadcast)
-            const stats = r.data?.data ?? r.data ?? {}
-            setSendResult({ ok: true, message: r.data?.message ?? r.message, sent: stats.sent ?? 0, failed: stats.failed ?? 0 })
-            if ((stats.failed ?? 0) === 0) {
-                setBroadcast(b => ({ ...b, subject: '', message: '' }))
-            }
-        } catch (e) {
-            const msg = e.response?.data?.message ?? 'Failed to send emails.'
-            const fieldErr = e.response?.data?.errors?.email?.[0]
-            if (fieldErr) {
-                setEmailError(fieldErr)
-            } else {
-                setSendResult({ ok: false, message: msg })
-            }
-        }
-        setSending(false)
-    }
 
     return (
         <div className="space-y-4">
@@ -1049,6 +948,8 @@ function EmailSettingsPanel({ values, onChange, onSave, colleges, isAdmin = fals
                 </div>
             </SectionCard>
 
+            <SmsSettingsCard values={values} onChange={onChange} onSave={onSave} />
+
             {/* ── Test Connection ─────────────────────────────────────────── */}
             <SectionCard icon={Zap} color="bg-green-50/50" title="Test Connection" subtitle="Send a test email to verify your SMTP setup">
                 <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
@@ -1093,187 +994,13 @@ function EmailSettingsPanel({ values, onChange, onSave, colleges, isAdmin = fals
             </>)}
 
             {/* ── Broadcast Email ─────────────────────────────────────────── */}
-            <SectionCard icon={Send} color="bg-indigo-50/50" title="Send Broadcast Email" subtitle="Reach users by group, role, college, or individually">
-                <div>
-                    <p className="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">Send To</p>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                        {[
-                            { val: 'all',        label: 'All Users',     icon: '👥' },
-                            { val: 'by_role',    label: 'By Role',       icon: '🛡️' },
-                            { val: 'by_college', label: 'By College',    icon: '🏛️' },
-                            { val: 'specific',   label: 'Specific User', icon: '👤' },
-                        ].map(({ val, label: lbl, icon }) => (
-                            <button key={val}
-                                onClick={() => {
-                                    setBroadcast(b => ({ ...b, to: val, email: '' }))
-                                    if (val !== 'specific') { setSelectedUser(null); setUserSearch(''); setUserResults([]) }
-                                }}
-                                className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-sm font-semibold transition-all ${
-                                    broadcast.to === val
-                                        ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-200'
-                                        : 'bg-white text-gray-600 border-gray-200 hover:border-indigo-300'
-                                }`}
-                            >
-                                <span>{icon}</span> <span>{lbl}</span>
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                {broadcast.to === 'by_role' && (
-                    <Field label="Role">
-                        <select value={broadcast.role} onChange={e => setBroadcast(b => ({ ...b, role: e.target.value }))}
-                            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-gray-50 focus:bg-white focus:border-blue-400 outline-none">
-                            <option value="">— Select role —</option>
-                            {ROLES_LIST.map(r => <option key={r} value={r}>{r.replace(/_/g, ' ')}</option>)}
-                        </select>
-                    </Field>
-                )}
-                {broadcast.to === 'by_college' && (
-                    <Field label="College">
-                        <select value={broadcast.college_id} onChange={e => setBroadcast(b => ({ ...b, college_id: e.target.value }))}
-                            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm bg-gray-50 focus:bg-white focus:border-blue-400 outline-none">
-                            <option value="">— Select college —</option>
-                            {colleges.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                        </select>
-                    </Field>
-                )}
-                {broadcast.to === 'specific' && (
-                    <div ref={userSearchRef} className="relative">
-                        <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">Recipient</label>
-
-                        {selectedUser ? (
-                            <div className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border ${emailError ? 'border-red-400 bg-red-50' : 'border-indigo-300 bg-indigo-50'}`}>
-                                <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-semibold text-gray-800 truncate">{selectedUser.name}</p>
-                                    <p className="text-xs text-gray-500 truncate">{selectedUser.email}</p>
-                                </div>
-                                <button type="button" onClick={clearSelectedUser}
-                                    className="shrink-0 p-1 rounded-lg text-gray-400 hover:text-red-500 hover:bg-white transition-colors">
-                                    <X size={14} />
-                                </button>
-                            </div>
-                        ) : (
-                            <div className="relative">
-                                <input
-                                    type="text"
-                                    value={userSearch}
-                                    onChange={e => searchUsers(e.target.value)}
-                                    onFocus={() => userResults.length > 0 && setUserDropdownOpen(true)}
-                                    placeholder="Search by name or email…"
-                                    className={`w-full border rounded-xl px-3 py-2.5 text-sm bg-gray-50 focus:bg-white focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition-colors ${emailError ? 'border-red-400' : 'border-gray-200'}`}
-                                />
-                                {userSearching && (
-                                    <RefreshCw size={13} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 animate-spin" />
-                                )}
-                                {userDropdownOpen && userResults.length > 0 && (
-                                    <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden max-h-56 overflow-y-auto">
-                                        {userResults.map(u => (
-                                            <button key={u.id} type="button"
-                                                onMouseDown={() => selectUser(u)}
-                                                className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-indigo-50 text-left transition-colors">
-                                                <div className="h-8 w-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-bold shrink-0">
-                                                    {u.name?.charAt(0).toUpperCase()}
-                                                </div>
-                                                <div className="min-w-0">
-                                                    <p className="text-sm font-semibold text-gray-800 truncate">{u.name}</p>
-                                                    <p className="text-xs text-gray-400 truncate">{u.email}</p>
-                                                </div>
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-                                {userDropdownOpen && !userSearching && userResults.length === 0 && userSearch.trim() && (
-                                    <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg px-4 py-3 text-sm text-gray-400">
-                                        No users found for "{userSearch}"
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {emailError && (
-                            <p className="flex items-center gap-1.5 text-xs text-red-600 mt-1.5">
-                                <AlertTriangle size={11} /> {emailError}
-                            </p>
-                        )}
-                    </div>
-                )}
-
-                <Field label="Subject">
-                    <Input value={broadcast.subject} onChange={e => setBroadcast(b => ({ ...b, subject: e.target.value }))} placeholder="Subject line…" />
-                </Field>
-
-                <Field label="Message">
-                    <RichTextEditor
-                        value={broadcast.message}
-                        onChange={html => setBroadcast(b => ({ ...b, message: html }))}
-                        placeholder="Write your message here…"
-                    />
-                </Field>
-
-                {sendResult && (
-                    <div className={`rounded-xl border overflow-hidden ${
-                        sendResult.ok ? 'border-emerald-200' : 'border-red-200'
-                    }`}>
-                        {/* Header */}
-                        <div className={`flex items-center gap-3 px-4 py-3 ${sendResult.ok ? 'bg-emerald-50' : 'bg-red-50'}`}>
-                            <div className={`shrink-0 h-7 w-7 rounded-lg flex items-center justify-center ${sendResult.ok ? 'bg-emerald-100' : 'bg-red-100'}`}>
-                                {sendResult.ok
-                                    ? <CheckCircle2 size={14} className="text-emerald-600" />
-                                    : <AlertTriangle size={14} className="text-red-500" />
-                                }
-                            </div>
-                            <div>
-                                <p className={`text-sm font-semibold ${sendResult.ok ? 'text-emerald-800' : 'text-red-800'}`}>
-                                    {sendResult.ok ? 'Delivery complete' : 'Send failed'}
-                                </p>
-                                <p className={`text-xs mt-0.5 ${sendResult.ok ? 'text-emerald-600' : 'text-red-600'}`}>
-                                    {sendResult.message}
-                                </p>
-                            </div>
-                        </div>
-                        {/* Stats row */}
-                        {sendResult.ok && (
-                            <div className="grid grid-cols-2 divide-x divide-gray-100 border-t border-gray-100 bg-white">
-                                <div className="flex items-center gap-3 px-5 py-3">
-                                    <div className="h-8 w-8 rounded-full bg-emerald-100 flex items-center justify-center shrink-0">
-                                        <CheckCircle2 size={15} className="text-emerald-600" />
-                                    </div>
-                                    <div>
-                                        <p className="text-xl font-extrabold text-emerald-700 tabular-nums">{sendResult.sent ?? 0}</p>
-                                        <p className="text-[11px] text-gray-500 font-medium">Delivered</p>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-3 px-5 py-3">
-                                    <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 ${
-                                        (sendResult.failed ?? 0) > 0 ? 'bg-red-100' : 'bg-gray-100'
-                                    }`}>
-                                        <AlertTriangle size={15} className={(sendResult.failed ?? 0) > 0 ? 'text-red-500' : 'text-gray-400'} />
-                                    </div>
-                                    <div>
-                                        <p className={`text-xl font-extrabold tabular-nums ${(sendResult.failed ?? 0) > 0 ? 'text-red-600' : 'text-gray-400'}`}>
-                                            {sendResult.failed ?? 0}
-                                        </p>
-                                        <p className="text-[11px] text-gray-500 font-medium">Failed</p>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                )}
-
-                <div className="flex justify-end">
-                    <button onClick={sendBroadcast} disabled={sending}
-                        className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 disabled:opacity-60 shadow-sm shadow-indigo-200 transition-all">
-                        {sending ? <RefreshCw size={13} className="animate-spin" /> : <Send size={13} />}
-                        {sending ? 'Sending…' : 'Send Email'}
-                    </button>
-                </div>
+            <SectionCard icon={Send} color="bg-indigo-50/50" title="Send Broadcast Email" subtitle="Reach everyone, roles, colleges, ready-made groups, or chosen people — with a live recipient count">
+                <BroadcastComposer colleges={colleges} />
             </SectionCard>
 
             {!isAdmin && (
             <SectionCard icon={Bell} color="bg-purple-50/50" title="Notification Channels" subtitle="Active delivery channels for system events">
-                <div className="grid sm:grid-cols-3 gap-3">
+                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
                     {[
                         {
                             label: 'Email',
@@ -1288,6 +1015,13 @@ function EmailSettingsPanel({ values, onChange, onSave, colleges, isAdmin = fals
                             detail: values.telegram_bot_token ? 'Bot token configured' : 'Set Telegram Bot Token in Integrations',
                             color: values.telegram_bot_token ? 'bg-sky-50 border-sky-200 text-sky-700' : 'bg-gray-50 border-gray-200 text-gray-500',
                             dot: values.telegram_bot_token ? 'bg-sky-500' : 'bg-gray-300',
+                        },
+                        {
+                            label: 'SMS',
+                            status: values.sms_enabled === 'true' ? 'active' : 'inactive',
+                            detail: values.sms_enabled === 'true' ? "Africa's Talking" : 'Off — switch on in the SMS card above',
+                            color: values.sms_enabled === 'true' ? 'bg-orange-50 border-orange-200 text-orange-700' : 'bg-gray-50 border-gray-200 text-gray-500',
+                            dot: values.sms_enabled === 'true' ? 'bg-orange-500' : 'bg-gray-300',
                         },
                         {
                             label: 'In-App',
@@ -1312,78 +1046,6 @@ function EmailSettingsPanel({ values, onChange, onSave, colleges, isAdmin = fals
             </SectionCard>
             )}
 
-        </div>
-    )
-}
-
-// ── Extracted field components (must live outside PublicSitePanel so React
-//    doesn't unmount/remount the input on every parent re-render) ──────────────
-
-function PubTextField({ fieldKey, type, hint, value, saving, onChange, onSave }) {
-    const lbl = KEY_LABELS[fieldKey] ?? fieldKey
-    return (
-        <div className="py-3 border-b border-gray-100 last:border-0">
-            <p className="text-sm font-medium text-gray-900">{lbl}</p>
-            {hint && <p className="text-xs text-gray-400 mt-0.5 mb-2">{hint}</p>}
-            <div className="flex gap-2 mt-1.5">
-                {type === 'textarea' ? (
-                    <textarea
-                        value={value ?? ''}
-                        onChange={e => onChange(fieldKey, e.target.value)}
-                        rows={2}
-                        placeholder={`Enter ${lbl.toLowerCase()}…`}
-                        className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm resize-none
-                                   focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                ) : (
-                    <input
-                        type="text"
-                        value={value ?? ''}
-                        onChange={e => onChange(fieldKey, e.target.value)}
-                        placeholder={`Enter ${lbl.toLowerCase()}…`}
-                        className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm
-                                   focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                )}
-                <button
-                    onClick={() => onSave(fieldKey)}
-                    disabled={saving}
-                    className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-xl
-                               text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 shrink-0">
-                    {saving ? <RefreshCw size={12} className="animate-spin" /> : <Save size={12} />}
-                    {saving ? 'Saving…' : 'Save'}
-                </button>
-            </div>
-        </div>
-    )
-}
-
-function PubColorField({ fieldKey, hint, value, saving, onChange, onSave }) {
-    const lbl = KEY_LABELS[fieldKey] ?? fieldKey
-    return (
-        <div className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
-            <div>
-                <p className="text-sm font-medium text-gray-900">{lbl}</p>
-                {hint && <p className="text-xs text-gray-400 mt-0.5">{hint}</p>}
-            </div>
-            <div className="flex items-center gap-2">
-                <input
-                    type="color"
-                    value={value || '#0f172a'}
-                    onChange={e => onChange(fieldKey, e.target.value)}
-                    onBlur={e => onSave(fieldKey, e.target.value)}
-                    className="w-10 h-8 rounded cursor-pointer border border-gray-300"
-                />
-                <span className="text-xs font-mono text-gray-400 w-16">{value || '#0f172a'}</span>
-                <button
-                    onClick={() => onSave(fieldKey)}
-                    disabled={saving}
-                    className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-xl
-                               text-xs font-semibold hover:bg-blue-700 disabled:opacity-50">
-                    {saving ? <RefreshCw size={12} className="animate-spin" /> : <Save size={12} />}
-                    {saving ? 'Saving…' : 'Save'}
-                </button>
-            </div>
         </div>
     )
 }
@@ -1489,392 +1151,6 @@ function DeveloperCreditsEditor({ currentValue, onSave, disabled = false }) {
                     </button>
                 </div>
             )}
-        </div>
-    )
-}
-
-function PublicSitePanel({ values, onChange, onSave, isAdmin = false }) {
-    const [saving, setSaving] = useState({})
-    const { success, error }  = useToast()
-
-    const save = async (key, val) => {
-        const v = val ?? values[key] ?? ''
-        setSaving(p => ({ ...p, [key]: true }))
-        try {
-            await onSave(key, v)
-            success(`"${KEY_LABELS[key] ?? key}" saved.`)
-        } catch {
-            error('Failed to save.')
-        }
-        setSaving(p => ({ ...p, [key]: false }))
-    }
-
-    const toggle = (key) => {
-        const next = values[key] === 'false' ? 'true' : 'true'
-        // visibility keys default to visible (true) unless explicitly set to 'false'
-        const current = values[key]
-        const nextVal = current === 'false' ? 'true' : 'false'
-        onChange(key, nextVal)
-        save(key, nextVal)
-    }
-
-    const tf = (fieldKey, type = 'string', hint) => (
-        <PubTextField
-            key={fieldKey}
-            fieldKey={fieldKey}
-            type={type}
-            hint={hint}
-            value={values[fieldKey]}
-            saving={!!saving[fieldKey]}
-            onChange={onChange}
-            onSave={save}
-        />
-    )
-
-    const cf = (fieldKey, hint) => (
-        <PubColorField
-            key={fieldKey}
-            fieldKey={fieldKey}
-            hint={hint}
-            value={values[fieldKey]}
-            saving={!!saving[fieldKey]}
-            onChange={onChange}
-            onSave={save}
-        />
-    )
-
-    return (
-        <div className="space-y-4">
-            {/* Preview link */}
-            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl px-5 py-3
-                            flex items-center justify-between">
-                <p className="text-sm text-emerald-800 font-medium">
-                    Changes appear on the public homepage instantly after saving.
-                </p>
-                <a href="/" target="_blank" rel="noopener noreferrer"
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 text-white
-                               rounded-lg text-xs font-semibold hover:bg-emerald-700 transition-colors">
-                    <Eye size={13} /> Preview
-                </a>
-            </div>
-
-            {/* ── Header & nav ── */}
-            <div className="bg-white border border-gray-200 rounded-2xl px-5 py-2">
-                <div className="flex items-center gap-2 py-3 border-b border-gray-100">
-                    <Layout size={15} className="text-emerald-600" />
-                    <h3 className="text-sm font-bold text-gray-800">Header Bar</h3>
-                    <p className="text-xs text-gray-400 ml-1">— top utility bar text</p>
-                </div>
-                {tf('public_header_tagline', 'string', 'Text shown in the thin bar above the main navigation (e.g. "WSU — Research & Technology Transfer Platform").')}
-                {tf('public_header_subtitle', 'string', 'Line under the university name next to the logo (default "Research & Technology Transfer").')}
-                {tf('public_footer_tagline', 'string', 'Secondary text shown at the bottom-right of the footer (e.g. "Research & Technology Transfer Platform").')}
-            </div>
-
-            {/* ── Hero Slider ── */}
-            <div className="bg-white border border-gray-200 rounded-2xl px-5 py-2">
-                <div className="flex items-center gap-2 py-3 border-b border-gray-100">
-                    <Layout size={15} className="text-emerald-600" />
-                    <h3 className="text-sm font-bold text-gray-800">Hero Slider</h3>
-                    <p className="text-xs text-gray-400 ml-1">— auto-rotating slides</p>
-                </div>
-
-                {/* Slide count picker */}
-                <div className="flex items-center justify-between py-3 border-b border-gray-100">
-                    <div>
-                        <p className="text-sm font-medium text-gray-900">Number of Slides</p>
-                        <p className="text-xs text-gray-400 mt-0.5">How many slides to show on the homepage (1–6)</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        {[1,2,3,4,5,6].map(n => {
-                            const active = parseInt(values['slider_slide_count'] || 4) === n
-                            return (
-                                <button
-                                    key={n}
-                                    onClick={() => { onChange('slider_slide_count', String(n)); save('slider_slide_count', String(n)) }}
-                                    className={`w-8 h-8 rounded-lg text-sm font-bold transition-all ${active
-                                        ? 'bg-emerald-600 text-white shadow-sm'
-                                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
-                                    {n}
-                                </button>
-                            )
-                        })}
-                    </div>
-                </div>
-
-                {Array.from({ length: parseInt(values['slider_slide_count'] || 4) }, (_, i) => i + 1).map(n => (
-                    <div key={n} className="py-4 border-b border-gray-100 last:border-0 space-y-0">
-                        {/* Slide header */}
-                        <div className="flex items-center gap-2 mb-1">
-                            <span className="inline-flex items-center justify-center w-5 h-5 rounded-md text-white text-[10px] font-bold"
-                                style={{ background: values[`slider_slide_${n}_color`] || '#6366f1' }}>
-                                {n}
-                            </span>
-                            <p className="text-xs font-bold text-gray-600 uppercase tracking-wide">Slide {n}</p>
-                        </div>
-
-                        {/* Image upload */}
-                        <SlideImageUpload
-                            slideIndex={n}
-                            currentUrl={values[`slider_slide_${n}_image`]}
-                            onUploaded={(key, url) => { onChange(key, url) }}
-                        />
-
-                        {/* Text fields */}
-                        {tf(`slider_slide_${n}_eyebrow`,   'string',   'Small badge above the headline (e.g. "Research Funding").')}
-                        {tf(`slider_slide_${n}_heading`,   'string',   'First line of headline (plain text).')}
-                        {tf(`slider_slide_${n}_highlight`, 'string',   'Second line shown in accent colour gradient.')}
-                        {tf(`slider_slide_${n}_subtitle`,  'textarea', 'Supporting paragraph below the headline.')}
-
-                        {/* Buttons */}
-                        <div className="grid grid-cols-2 gap-3 py-2 border-b border-gray-100">
-                            <div>
-                                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Primary Button</p>
-                                {tf(`slider_slide_${n}_cta1_text`, 'string')}
-                                {tf(`slider_slide_${n}_cta1_href`, 'string')}
-                            </div>
-                            <div>
-                                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-1">Secondary Button</p>
-                                {tf(`slider_slide_${n}_cta2_text`, 'string')}
-                                {tf(`slider_slide_${n}_cta2_href`, 'string')}
-                            </div>
-                        </div>
-
-                        {/* Style */}
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>{tf(`slider_slide_${n}_icon`,  'string', 'Single emoji (e.g. 🔬).')}</div>
-                            <div>{tf(`slider_slide_${n}_color`, 'string', 'Hex accent colour (e.g. #10b981).')}</div>
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            {/* ── Navigation ── */}
-            <div className="bg-white border border-gray-200 rounded-2xl px-5 py-2">
-                <div className="flex items-center gap-2 py-3 border-b border-gray-100">
-                    <Layout size={15} className="text-emerald-600" />
-                    <h3 className="text-sm font-bold text-gray-800">Navigation Menu</h3>
-                    <p className="text-xs text-gray-400 ml-1">— customise labels, links, and visibility</p>
-                </div>
-                {[1, 2, 3, 4, 5, 6, 7].map(n => {
-                    const on = values[`public_nav_item_${n}_show`] !== 'false'
-                    return (
-                        <div key={n} className="py-3 border-b border-gray-100 last:border-0">
-                            <div className="flex items-center justify-between mb-2">
-                                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
-                                    Item {n} <span className="font-normal text-gray-400 normal-case">
-                                        (default: {DEFAULT_NAV_LABELS[n - 1]})
-                                    </span>
-                                </p>
-                                <button
-                                    onClick={() => {
-                                        const nextVal = on ? 'false' : 'true'
-                                        onChange(`public_nav_item_${n}_show`, nextVal)
-                                        save(`public_nav_item_${n}_show`, nextVal)
-                                    }}
-                                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold ${
-                                        on ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'
-                                    }`}>
-                                    {on ? <><ToggleRight size={13} /> Visible</> : <><ToggleLeft size={13} /> Hidden</>}
-                                </button>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                                <PubTextField
-                                    fieldKey={`public_nav_item_${n}_label`}
-                                    type="string"
-                                    value={values[`public_nav_item_${n}_label`]}
-                                    saving={!!saving[`public_nav_item_${n}_label`]}
-                                    onChange={onChange}
-                                    onSave={save}
-                                />
-                                <PubTextField
-                                    fieldKey={`public_nav_item_${n}_href`}
-                                    type="string"
-                                    hint={DEFAULT_NAV_HREFS[n - 1]}
-                                    value={values[`public_nav_item_${n}_href`]}
-                                    saving={!!saving[`public_nav_item_${n}_href`]}
-                                    onChange={onChange}
-                                    onSave={save}
-                                />
-                            </div>
-                        </div>
-                    )
-                })}
-            </div>
-
-            {/* ── Colours ── */}
-            <div className="bg-white border border-gray-200 rounded-2xl px-5 py-2">
-                <div className="flex items-center gap-2 py-3 border-b border-gray-100">
-                    <Palette size={15} className="text-emerald-600" />
-                    <h3 className="text-sm font-bold text-gray-800">Colours</h3>
-                    <p className="text-xs text-gray-400 ml-1">— nav accent uses Appearance → Primary Color</p>
-                </div>
-                {cf('public_topbar_bg',   'Top utility bar background colour.')}
-                {cf('public_topbar_text', 'Top utility bar text and link colour.')}
-                {cf('public_hero_bg',     'Hero section dark background colour.')}
-                {cf('public_cards_bg',    'Open Calls section background colour.')}
-                {cf('public_features_bg', 'Platform Features section background colour.')}
-                {cf('public_footer_bg',   'Footer background colour.')}
-            </div>
-
-            {/* ── Social Links ── */}
-            <div className="bg-white border border-gray-200 rounded-2xl px-5 py-2">
-                <div className="flex items-center gap-2 py-3 border-b border-gray-100">
-                    <Globe size={15} className="text-emerald-600" />
-                    <h3 className="text-sm font-bold text-gray-800">Social Links</h3>
-                    <p className="text-xs text-gray-400 ml-1">— shown as icons in the footer</p>
-                </div>
-                {SOCIAL_KEYS.map(({ key, placeholder }) => (
-                    <div key={key} className="py-3 border-b border-gray-100 last:border-0">
-                        <p className="text-sm font-medium text-gray-900 mb-1.5">{KEY_LABELS[key] ?? key}</p>
-                        <div className="flex gap-2">
-                            <input
-                                type="url"
-                                value={values[key] ?? ''}
-                                onChange={e => onChange(key, e.target.value)}
-                                placeholder={placeholder}
-                                className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm
-                                           focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            />
-                            <button
-                                onClick={() => save(key)}
-                                disabled={!!saving[key]}
-                                className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-xl
-                                           text-xs font-semibold hover:bg-blue-700 disabled:opacity-50 shrink-0">
-                                {saving[key] ? <RefreshCw size={12} className="animate-spin" /> : <Save size={12} />}
-                                {saving[key] ? 'Saving…' : 'Save'}
-                            </button>
-                        </div>
-                    </div>
-                ))}
-            </div>
-
-            {/* ── Developer Credits ── */}
-            <DeveloperCreditsEditor
-                currentValue={values.developer_credits}
-                onSave={(val) => save('developer_credits', val)}
-                disabled={isAdmin}
-            />
-
-            {/* ── Downloads ── */}
-            <div className="bg-white border border-gray-200 rounded-2xl px-5 py-2">
-                <div className="flex items-center gap-2 py-3 border-b border-gray-100">
-                    <FileText size={15} className="text-emerald-600" />
-                    <h3 className="text-sm font-bold text-gray-800">Downloads Menu</h3>
-                    <p className="text-xs text-gray-400 ml-1">— appears as a dropdown in the public nav bar when at least one item is set</p>
-                </div>
-                {[1, 2, 3, 4, 5, 6, 7, 8].map(n => {
-                    const showKey = `public_download_${n}_show`
-                    const on = values[showKey] !== 'false'
-                    return (
-                        <div key={n} className="py-3 border-b border-gray-100 last:border-0">
-                            <div className="flex items-center justify-between mb-2">
-                                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">Item {n}</p>
-                                <button
-                                    onClick={() => {
-                                        const nextVal = on ? 'false' : 'true'
-                                        onChange(showKey, nextVal)
-                                        save(showKey, nextVal)
-                                    }}
-                                    className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold ${
-                                        on ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'
-                                    }`}
-                                >
-                                    {on ? <><ToggleRight size={13} /> Visible</> : <><ToggleLeft size={13} /> Hidden</>}
-                                </button>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                                <PubTextField
-                                    fieldKey={`public_download_${n}_title`}
-                                    type="string"
-                                    hint="Display name (e.g. Proposal Template)"
-                                    value={values[`public_download_${n}_title`]}
-                                    saving={!!saving[`public_download_${n}_title`]}
-                                    onChange={onChange}
-                                    onSave={save}
-                                />
-                                <PubTextField
-                                    fieldKey={`public_download_${n}_url`}
-                                    type="string"
-                                    hint="Full URL to the file or page"
-                                    value={values[`public_download_${n}_url`]}
-                                    saving={!!saving[`public_download_${n}_url`]}
-                                    onChange={onChange}
-                                    onSave={save}
-                                />
-                            </div>
-                            <div className="mt-2">
-                                <PubTextField
-                                    fieldKey={`public_download_${n}_desc`}
-                                    type="string"
-                                    hint="Short description (optional)"
-                                    value={values[`public_download_${n}_desc`]}
-                                    saving={!!saving[`public_download_${n}_desc`]}
-                                    onChange={onChange}
-                                    onSave={save}
-                                />
-                            </div>
-                        </div>
-                    )
-                })}
-            </div>
-
-            {/* ── Section visibility ── */}
-            <div className="bg-white border border-gray-200 rounded-2xl px-5 py-2">
-                <div className="flex items-center gap-2 py-3 border-b border-gray-100">
-                    <Eye size={15} className="text-emerald-600" />
-                    <h3 className="text-sm font-bold text-gray-800">Section Visibility</h3>
-                </div>
-                {PUBLIC_VISIBILITY_KEYS.map(({ key, label: lbl }) => {
-                    const on = values[key] !== 'false'
-                    return (
-                        <div key={key}
-                            className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
-                            <p className="text-sm font-medium text-gray-900">{lbl}</p>
-                            <button
-                                onClick={() => toggle(key)}
-                                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs
-                                            font-semibold transition-all ${
-                                    on ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                                       : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                                }`}>
-                                {on ? <><ToggleRight size={15} /> Visible</>
-                                    : <><ToggleLeft size={15} /> Hidden</>}
-                            </button>
-                        </div>
-                    )
-                })}
-            </div>
-
-            {/* ── How It Works steps ── */}
-            <div className="bg-white border border-gray-200 rounded-2xl px-5 py-2">
-                <div className="flex items-center gap-2 py-3 border-b border-gray-100">
-                    <FileText size={15} className="text-emerald-600" />
-                    <h3 className="text-sm font-bold text-gray-800">How It Works Steps</h3>
-                </div>
-                {PUBLIC_STEPS.map(i => (
-                    <div key={i}>
-                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wide pt-3 pb-0.5">
-                            Step {i}
-                        </p>
-                        {tf(`public_step_${i}_title`)}
-                        {tf(`public_step_${i}_desc`, 'textarea')}
-                    </div>
-                ))}
-            </div>
-
-            {/* ── CTA & features text ── */}
-            <div className="bg-white border border-gray-200 rounded-2xl px-5 py-2">
-                <div className="flex items-center gap-2 py-3 border-b border-gray-100">
-                    <Star size={15} className="text-emerald-600" />
-                    <h3 className="text-sm font-bold text-gray-800">CTA Banner &amp; Features Section</h3>
-                </div>
-                {tf('public_features_title')}
-                {tf('public_features_subtitle', 'textarea')}
-                {tf('public_cta_title')}
-                {tf('public_cta_subtitle', 'textarea')}
-                {tf('public_cta_primary')}
-                {tf('public_cta_secondary')}
-            </div>
         </div>
     )
 }
@@ -2320,7 +1596,7 @@ export default function SettingsPage() {
                                 <h2 className="text-base font-bold text-gray-900">{section?.label}</h2>
                                 <p className="text-xs text-gray-400">
                                     {activeSection === 'public_site'
-                                        ? 'Hero, visibility, steps & CTA'
+                                        ? 'Header, hero slider, menu, sections, colours & social links'
                                         : activeSection === 'email'
                                         ? 'SMTP, broadcast mail & notification channels'
                                         : `${Object.keys(groupData).filter(k => groupData[k]?.type !== 'file' && !HIDDEN_KEYS.has(k)).length} settings`
@@ -2334,12 +1610,13 @@ export default function SettingsPage() {
                                 <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
                             </div>
                         ) : activeSection === 'public_site' ? (
-                            <PublicSitePanel
-                                values={values}
-                                onChange={handleChange}
-                                onSave={handleSave}
-                                isAdmin={isAdmin}
-                            />
+                            <PublicSiteEditor>
+                                <DeveloperCreditsEditor
+                                    currentValue={values.developer_credits}
+                                    onSave={(val) => { handleChange('developer_credits', val); return handleSave('developer_credits', val) }}
+                                    disabled={isAdmin}
+                                />
+                            </PublicSiteEditor>
                         ) : activeSection === 'email' ? (
                             <EmailSettingsPanel
                                 values={values}

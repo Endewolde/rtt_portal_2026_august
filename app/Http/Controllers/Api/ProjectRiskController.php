@@ -6,8 +6,10 @@ use App\Exports\ProjectsAtRiskExport;
 use App\Exports\ProjectsAtRiskProjectsSheet;
 use App\Http\Controllers\Controller;
 use App\Models\Proposal;
+use App\Services\ProgressReportService;
 use App\Services\ProjectRiskService;
 use App\Support\PdfAssets;
+use App\Support\Terms;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -45,6 +47,23 @@ class ProjectRiskController extends Controller
             'errors' => [],
             'meta' => [],
         ]);
+    }
+
+    /**
+     * One project's health, for its own page: the research team sees their warnings,
+     * and so does anyone who monitors projects in that college and category.
+     */
+    public function health(Request $request, string $id, ProgressReportService $access): JsonResponse
+    {
+        $proposal = Proposal::findOrFail($id);
+        $user = $request->user();
+
+        $monitors = $user->can('monitoring.ongoing') && $user->accessScope()->covers($proposal->college_id, $proposal->category);
+        if (! $access->isTeamMember($proposal, $user) && ! $access->canReview($proposal, $user) && ! $monitors) {
+            return $this->forbidden();
+        }
+
+        return response()->json(['data' => $this->risks->forProposal($proposal), 'message' => '', 'errors' => [], 'meta' => []]);
     }
 
     /** The list as filtered on the page, as an Excel workbook, a CSV file or a PDF report. */
@@ -141,7 +160,7 @@ class ProjectRiskController extends Controller
         $category = $request->_category_scope ?: $request->input('category');
 
         return array_values(array_filter([
-            'College: '.($collegeId ? (DB::table('colleges')->where('id', $collegeId)->value('name') ?? '—') : 'All colleges'),
+            Terms::college().': '.($collegeId ? (DB::table('colleges')->where('id', $collegeId)->value('name') ?? '—') : 'All '.strtolower(Terms::college(true))),
             'Category: '.($category ? ucwords(str_replace('_', ' ', $category)) : 'All categories'),
             ! empty($filters['level']) ? 'Level: '.ProjectRiskService::LEVEL_LABELS[$filters['level']] : null,
             ! empty($filters['signal']) ? 'Warning: '.ProjectRiskService::SIGNAL_LABELS[$filters['signal']] : null,

@@ -4,6 +4,7 @@ import { FlaskConical, Menu, X, Search, Download, ChevronDown, Clock, Calendar, 
 import { get } from '../lib/api';
 import { useT } from '../lib/i18n';
 import LanguageSwitch from '../Components/LanguageSwitch';
+import { NAV_DEFAULTS } from '../lib/publicSite';
 
 // ─── Inline social SVG icons ──────────────────────────────────────────────────
 
@@ -485,17 +486,7 @@ function ConferencesDropdown({ conferences, loading, primaryColor, currentPath }
 
 // ─── Default nav items ────────────────────────────────────────────────────────
 
-const DEFAULT_NAV = [
-    { href: '/',                       label: 'Home'                  },
-    { href: '/proposal-calls/public',  label: 'Open Calls'            },
-    { href: '/conferences',            label: 'Conferences'           },
-    { href: '/explore',                label: 'Explore'               },
-    { href: '/funding-opportunities',  label: 'Funding Opportunities' },
-    { href: '/repository',             label: 'Repository'            },
-    { href: '/tracker',                label: 'Track Proposal'        },
-    // New items go last: settings refer to items by position.
-    { href: '/researchers',            label: 'Researchers'           },
-];
+const DEFAULT_NAV = NAV_DEFAULTS;
 
 // ─── Layout ───────────────────────────────────────────────────────────────────
 

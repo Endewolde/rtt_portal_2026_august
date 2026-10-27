@@ -580,7 +580,7 @@ export default function ProposalCallSubmissions() {
                             <div className="hidden overflow-x-auto lg:block">
                                 <table className="w-full text-sm">
                                     <thead>
-                                        <tr className="border-b border-gray-100 bg-gray-50/60 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                                        <tr className="border-b border-gray-100 bg-gray-50/60 text-left text-xs font-semibold uppercase tracking-wide text-gray-500"><th className="px-4 py-3 w-10 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">#</th>
                                             {canValidate && <th className="w-10 px-4 py-3" />}
                                             <th className="px-4 py-3">Proposal</th>
                                             <th className="px-4 py-3">Principal Investigator</th>
@@ -592,10 +592,10 @@ export default function ProposalCallSubmissions() {
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y divide-gray-100">
-                                        {visible.map((p) => {
+                                        {visible.map((p, rowIdx) => {
                                             const days = daysInStage(p);
                                             return (
-                                                <tr key={p.id} className={`transition-colors hover:bg-gray-50/70 ${selected.has(p.id) ? 'bg-blue-50/40' : ''}`}>
+                                                <tr key={p.id} className={`transition-colors hover:bg-gray-50/70 ${selected.has(p.id) ? 'bg-blue-50/40' : ''}`}><td className="px-4 py-3 w-10 text-xs font-medium tabular-nums text-gray-400">{rowIdx + 1}</td>
                                                     {canValidate && (
                                                         <td className="px-4 py-3">
                                                             {p.status === 'submitted' && (

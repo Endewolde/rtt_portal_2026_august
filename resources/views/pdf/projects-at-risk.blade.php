@@ -151,7 +151,7 @@ table.list tr { page-break-inside: avoid; }
                         <td>{!! $bar($p['elapsed_pct'], 'b-time') !!}</td>
                         <td>
                             {!! $bar($p['released_pct'], 'b-money') !!}
-                            <div class="muted">{{ number_format($p['released']) }} / {{ number_format($p['budget']) }} ETB</div>
+                            <div class="muted">{{ number_format($p['released']) }} / {{ number_format($p['budget']) }} {{ \App\Support\Terms::currency() }}</div>
                         </td>
                         <td>{!! $bar($p['reported_progress'], 'b-work') !!}</td>
                         <td>

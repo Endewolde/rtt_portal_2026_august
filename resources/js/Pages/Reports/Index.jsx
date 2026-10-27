@@ -3,15 +3,17 @@ import { usePage, Link, router } from '@inertiajs/react';
 import {
     BarChart2, RefreshCw, Sliders, ArrowRight, ArrowLeft, FileSpreadsheet, CheckCircle2, Loader2,
     Search, LineChart as LineIcon, Gauge, Wallet, ShieldAlert, Inbox, History, Link2, Bookmark, X, MousePointerClick,
-    RotateCcw, ExternalLink, ChevronDown, Radio,
+    RotateCcw, ExternalLink, ChevronDown, Radio, Globe2, CalendarClock, Mail, Pause, Play, Send, Trash2,
 } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import InsightsNav from '../../Components/InsightsNav';
-import { post, get } from '../../lib/api';
+import { post, get, put, del } from '../../lib/api';
 import { downloadFile } from '../../lib/download';
 import { formatDateTime, timeAgo, getStatusLabel, getCategoryLabel } from '../../lib/utils';
 import { REPORT_META, COLOR_MAP, DownloadExcelButton, renderChart, reportKpis } from '../../Components/Reports/ReportShared';
 import { useToast } from '../../Components/Toast';
+import { term } from '../../lib/terms';
+import { programmeKeys } from '../../lib/programmes';
 
 /** The report library, grouped the way people look for reports. */
 const GROUPS = [
@@ -19,9 +21,9 @@ const GROUPS = [
     { key: 'performance', label: 'Performance', icon: Gauge, types: ['college_performance', 'reviewer_workload'] },
     { key: 'finance', label: 'Finance', icon: Wallet, types: ['budget_utilization'] },
     { key: 'quality', label: 'Quality & Service', icon: ShieldAlert, types: ['complaint_summary'] },
+    { key: 'impact', label: 'Impact', icon: Globe2, types: ['sdg_alignment'] },
 ];
 const ALL_TYPES = GROUPS.flatMap((g) => g.types);
-const CATEGORIES = ['research', 'community_engagement', 'technology_transfer'];
 
 /** What clicking a bar or row opens, per report. */
 const DRILL_HINT = {
@@ -34,6 +36,7 @@ const DRILL_HINT = {
     reviewer_workload: "Click a reviewer to open their profile",
     budget_utilization: 'Click a project to open it',
     complaint_summary: 'Click a college to open Complaints',
+    sdg_alignment: 'Click a goal to see the proposals tagged with it',
 };
 
 const KPI_TONES = {
@@ -89,6 +92,167 @@ function useFilterOptions() {
         get('/reports/live-options').then((r) => r.data && setOptions(r.data)).catch(() => {});
     }, []);
     return options;
+}
+
+// ─── Scheduled emails ─────────────────────────────────────────────────────────
+
+const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+/** Set up a weekly or monthly email of this report, with the filters on screen. */
+function ScheduleModal({ type, filters, onClose, onSaved }) {
+    const { success, error } = useToast();
+    const [form, setForm] = useState({ frequency: 'weekly', weekday: 1, day_of_month: 1, format: 'pdf' });
+    const [saving, setSaving] = useState(false);
+    const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+    const scope = [filters.academic_year || `All ${term('academic_year', { plural: true, lower: true })}`, filters.category ? getCategoryLabel(filters.category) : 'All categories'].join(' · ');
+
+    const save = async () => {
+        setSaving(true);
+        try {
+            const res = await post('/report-subscriptions', {
+                report_type: type,
+                filters,
+                frequency: form.frequency,
+                format: form.format,
+                ...(form.frequency === 'weekly' ? { weekday: Number(form.weekday) } : { day_of_month: Number(form.day_of_month) }),
+            });
+            success(res.message ?? 'Scheduled.');
+            onSaved?.();
+            onClose();
+        } catch (e) {
+            error(e.response?.data?.message ?? 'Could not schedule this report.');
+        }
+        setSaving(false);
+    };
+
+    const choice = (active) => `flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition ${active ? 'border-indigo-500 bg-indigo-50 text-indigo-700 ring-1 ring-indigo-500' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`;
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 backdrop-blur-sm sm:items-center sm:p-4">
+            <div role="dialog" aria-modal="true" className="w-full max-w-md rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
+                <div className="flex items-start justify-between gap-3 border-b border-gray-100 px-6 py-5">
+                    <div className="flex items-start gap-3">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600"><CalendarClock size={18} /></span>
+                        <div>
+                            <h2 className="text-lg font-bold text-gray-900">Email this report</h2>
+                            <p className="text-xs text-gray-500">{REPORT_META[type]?.label} · {scope}</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} aria-label="Close" className="rounded-lg p-1 text-gray-400 hover:bg-gray-100"><X size={16} /></button>
+                </div>
+                <div className="space-y-5 px-6 py-5">
+                    <div>
+                        <p className="mb-2 text-xs font-semibold text-gray-700">How often</p>
+                        <div className="flex gap-2">
+                            <button onClick={() => set('frequency', 'weekly')} className={choice(form.frequency === 'weekly')}>Weekly</button>
+                            <button onClick={() => set('frequency', 'monthly')} className={choice(form.frequency === 'monthly')}>Monthly</button>
+                        </div>
+                    </div>
+                    {form.frequency === 'weekly' ? (
+                        <div>
+                            <p className="mb-2 text-xs font-semibold text-gray-700">On</p>
+                            <div className="grid grid-cols-7 gap-1">
+                                {WEEKDAYS.map((d, i) => (
+                                    <button key={d} onClick={() => set('weekday', i + 1)} title={d}
+                                        className={`rounded-lg py-2 text-xs font-semibold transition ${Number(form.weekday) === i + 1 ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+                                        {d.slice(0, 2)}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    ) : (
+                        <label className="block">
+                            <span className="mb-2 block text-xs font-semibold text-gray-700">On day</span>
+                            <select value={form.day_of_month} onChange={(e) => set('day_of_month', e.target.value)}
+                                className="w-full rounded-xl border border-gray-200 px-3 py-2 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-200">
+                                {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => <option key={d} value={d}>{d}{d > 28 ? ' (or the last day)' : ''}</option>)}
+                            </select>
+                        </label>
+                    )}
+                    <div>
+                        <p className="mb-2 text-xs font-semibold text-gray-700">As</p>
+                        <div className="flex gap-2">
+                            <button onClick={() => set('format', 'pdf')} className={choice(form.format === 'pdf')}>PDF</button>
+                            <button onClick={() => set('format', 'xlsx')} className={choice(form.format === 'xlsx')}>Excel</button>
+                        </div>
+                    </div>
+                    <p className="rounded-xl bg-slate-50 px-4 py-3 text-xs leading-relaxed text-slate-600">
+                        Sent early in the morning with that day’s figures, to your own email. You can pause or remove it from the Reports page.
+                    </p>
+                </div>
+                <div className="flex gap-3 border-t border-gray-100 px-6 py-4">
+                    <button onClick={onClose} className="flex-1 rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
+                    <button onClick={save} disabled={saving}
+                        className="inline-flex flex-[1.5] items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">
+                        {saving ? <Loader2 size={14} className="animate-spin" /> : <CalendarClock size={14} />} Schedule
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+/** The person's scheduled report emails, with pause, send-now and remove. */
+function ScheduledEmails() {
+    const { success, error } = useToast();
+    const [items, setItems] = useState(null);
+    const [busy, setBusy] = useState(null);
+
+    const load = useCallback(() => get('/report-subscriptions').then((r) => setItems(r.data ?? [])).catch(() => setItems([])), []);
+    useEffect(() => { load(); }, [load]);
+
+    const act = async (id, request) => {
+        setBusy(id);
+        try {
+            const res = await request();
+            if (res?.message) success(res.message);
+            load();
+        } catch (e) {
+            error(e.response?.data?.message ?? 'That did not work.');
+        }
+        setBusy(null);
+    };
+
+    if (items === null) return null;
+
+    return (
+        <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+            <div className="flex items-center gap-2 border-b border-gray-100 px-5 py-4">
+                <Mail size={16} className="text-gray-400" />
+                <h2 className="font-semibold text-gray-900">Scheduled emails</h2>
+                <span className="text-xs text-gray-400">· reports sent to you automatically</span>
+            </div>
+            {items.length === 0 ? (
+                <div className="flex flex-col items-center px-6 py-10 text-center">
+                    <CalendarClock size={22} className="text-gray-300" />
+                    <p className="mt-2 text-sm text-gray-500">Nothing scheduled.</p>
+                    <p className="mt-0.5 text-xs text-gray-400">Open a report and use “Schedule” to get it by email every week or month.</p>
+                </div>
+            ) : (
+                <ul className="divide-y divide-gray-100">
+                    {items.map((s) => (
+                        <li key={s.id} className={`flex flex-wrap items-center gap-3 px-5 py-3 ${s.active ? '' : 'opacity-60'}`}>
+                            <ReportIcon type={s.report_type} size="sm" />
+                            <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-medium text-gray-900">{s.report_label}</p>
+                                <p className="truncate text-xs text-gray-400">
+                                    {s.schedule}{s.active && s.next_run ? ` · next ${new Date(s.next_run).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}` : ''}{!s.active ? ' · paused' : ''}
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-1">
+                                <button onClick={() => act(s.id, () => post(`/report-subscriptions/${s.id}/send`, {}))} disabled={busy === s.id} title="Send it now"
+                                    className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-indigo-600 disabled:opacity-50"><Send size={15} /></button>
+                                <button onClick={() => act(s.id, () => put(`/report-subscriptions/${s.id}`, { active: !s.active }))} disabled={busy === s.id} title={s.active ? 'Pause' : 'Resume'}
+                                    className="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50">{s.active ? <Pause size={15} /> : <Play size={15} />}</button>
+                                <button onClick={() => act(s.id, () => del(`/report-subscriptions/${s.id}`))} disabled={busy === s.id} title="Remove"
+                                    className="rounded-lg p-2 text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"><Trash2 size={15} /></button>
+                            </div>
+                        </li>
+                    ))}
+                </ul>
+            )}
+        </section>
+    );
 }
 
 // ─── Drill-down drawer ────────────────────────────────────────────────────────
@@ -303,6 +467,7 @@ function ReportView({ type, initialFilters }) {
     const [saving, setSaving] = useState(false);
     const [exporting, setExporting] = useState(false);
     const [drill, setDrill] = useState(null);
+    const [scheduling, setScheduling] = useState(false);
     const request = useRef(0);
 
     const params = useMemo(() => Object.fromEntries(Object.entries(filters).filter(([, v]) => v)), [filters]);
@@ -368,20 +533,22 @@ function ReportView({ type, initialFilters }) {
         switch (type) {
             case 'proposal_count_by_category':
             case 'approval_rate_by_category':
-                return setDrill({ title: getCategoryLabel(row.category), subtitle: filters.academic_year || 'All years', params: { ...base, category: row.category } });
+                return setDrill({ title: getCategoryLabel(row.category), subtitle: filters.academic_year || `All ${term('academic_year', { plural: true, lower: true })}`, params: { ...base, category: row.category } });
             case 'proposal_count_by_college':
             case 'college_performance':
-                return row.college_id && setDrill({ title: row.college_name, subtitle: filters.academic_year || 'All years', params: { ...base, college_id: row.college_id } });
+                return row.college_id && setDrill({ title: row.college_name, subtitle: filters.academic_year || `All ${term('academic_year', { plural: true, lower: true })}`, params: { ...base, college_id: row.college_id } });
             case 'proposal_trend_by_year':
-                return setDrill({ title: `Academic year ${row.academic_year}`, subtitle: filters.college_id ? collegeName(filters.college_id) : 'All colleges', params: { ...base, academic_year: row.academic_year } });
+                return setDrill({ title: `Academic year ${row.academic_year}`, subtitle: filters.college_id ? collegeName(filters.college_id) : `All ${term('college', { plural: true, lower: true })}`, params: { ...base, academic_year: row.academic_year } });
             case 'review_progress_pipeline':
-                return setDrill({ title: getStatusLabel(row.stage), subtitle: filters.academic_year || 'All years', params: { ...base, status: row.stage } });
+                return setDrill({ title: getStatusLabel(row.stage), subtitle: filters.academic_year || `All ${term('academic_year', { plural: true, lower: true })}`, params: { ...base, status: row.stage } });
             case 'budget_utilization':
                 return row.proposal_id && router.visit(`/proposals/${row.proposal_id}`);
             case 'reviewer_workload':
                 return row.reviewer_id && router.visit(`/admin/users/${row.reviewer_id}`);
             case 'complaint_summary':
                 return router.visit('/complaints');
+            case 'sdg_alignment':
+                return setDrill({ title: `SDG ${row.sdg}: ${row.goal}`, subtitle: filters.academic_year || 'All years', params: { ...base, sdg: row.sdg } });
             default:
                 return null;
         }
@@ -430,6 +597,10 @@ function ReportView({ type, initialFilters }) {
                                 className="inline-flex items-center justify-center rounded-xl border border-gray-200 bg-white p-2 text-gray-600 hover:bg-gray-50">
                                 <Link2 size={15} />
                             </button>
+                            <button onClick={() => setScheduling(true)} title="Email this report every week or month"
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                                <CalendarClock size={14} /> <span className="hidden sm:inline">Schedule</span>
+                            </button>
                             <SavedVersions type={type} versions={versions} viewing={viewing} onView={setViewing} onLive={() => setViewing(null)} />
                             {viewing ? <DownloadExcelButton snapshot={viewing} /> : (
                                 <>
@@ -453,21 +624,21 @@ function ReportView({ type, initialFilters }) {
                     <div className="flex flex-col gap-2 border-t border-gray-100 bg-gray-50/60 px-5 py-3 sm:flex-row sm:items-center">
                         <div className={`grid flex-1 gap-2 ${options.college_scoped || options.category_scope ? 'sm:grid-cols-2' : 'sm:grid-cols-3'}`}>
                             {type !== 'proposal_trend_by_year' && (
-                                <FilterSelect label="Academic year" value={filters.academic_year} onChange={(v) => setFilter('academic_year', v)}>
-                                    <option value="">All academic years</option>
+                                <FilterSelect label={term('academic_year')} value={filters.academic_year} onChange={(v) => setFilter('academic_year', v)}>
+                                    <option value="">All {term('academic_year', { plural: true, lower: true })}</option>
                                     {options.years.map((y) => <option key={y} value={y}>{y}</option>)}
                                 </FilterSelect>
                             )}
                             {!options.college_scoped && (
-                                <FilterSelect label="College" value={filters.college_id} onChange={(v) => setFilter('college_id', v)}>
-                                    <option value="">All colleges</option>
+                                <FilterSelect label={term('college')} value={filters.college_id} onChange={(v) => setFilter('college_id', v)}>
+                                    <option value="">All {term('college', { plural: true, lower: true })}</option>
                                     {options.colleges.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                                 </FilterSelect>
                             )}
                             {!options.category_scope && (
                                 <FilterSelect label="Category" value={filters.category} onChange={(v) => setFilter('category', v)}>
                                     <option value="">All categories</option>
-                                    {CATEGORIES.map((c) => <option key={c} value={c}>{getCategoryLabel(c)}</option>)}
+                                    {programmeKeys().map((c) => <option key={c} value={c}>{getCategoryLabel(c)}</option>)}
                                 </FilterSelect>
                             )}
                         </div>
@@ -521,6 +692,7 @@ function ReportView({ type, initialFilters }) {
             </div>
 
             {drill && <DrillDrawer drill={drill} onClose={() => setDrill(null)} />}
+            {scheduling && <ScheduleModal type={type} filters={params} onClose={() => setScheduling(false)} />}
         </div>
     );
 }
@@ -658,6 +830,8 @@ function LibraryView() {
                     )}
                 </section>
             </div>
+
+            <ScheduledEmails />
         </div>
     );
 }

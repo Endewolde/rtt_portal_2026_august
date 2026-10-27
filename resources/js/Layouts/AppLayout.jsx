@@ -5,7 +5,7 @@ import {
     CheckSquare, ClipboardCheck, AlertCircle, AlertTriangle,
     PieChart, DollarSign, CreditCard, CheckCircle,
     Activity, Award, BookOpen, Database, FileLock2, LifeBuoy,
-    BarChart, BarChart2, TrendingUp, TrendingDown, ChartNoAxesCombined,
+    BarChart, BarChart2, TrendingUp, TrendingDown, ChartNoAxesCombined, Handshake, Webhook, Layers,
     Users, Building, Building2, Shield, Settings, Bell, Key,
     Globe, LogOut, FlaskConical, Brain, ChevronLeft, ChevronRight, X, Menu,
     FolderOpen, EyeOff, Presentation, ClipboardList,
@@ -36,6 +36,8 @@ import api from '../lib/api'
 import { canOpenPath } from '../lib/routeAccess'
 import { translate as tr } from '../lib/i18n'
 import LanguageSwitch from '../Components/LanguageSwitch'
+import { term } from '../lib/terms'
+import { roleLabel, rememberRoleLabels } from '../lib/roles';
 
 // Sub-feature gate per page — mirrors every hasSubFeature(...) check already used to
 // hide/show the matching sidebar nav item below. Turning a sub-feature off in Feature
@@ -125,8 +127,8 @@ function UnauthorizedView({ user, reason }) {
                         : (<>
                             You don't have permission to view this page.
                             {roles.length > 0 && (
-                                <> Your current role is <strong className="text-gray-700 capitalize">
-                                    {roles[0]?.replace(/_/g, ' ')}
+                                <> Your current role is <strong className="text-gray-700">
+                                    {roleLabel(roles[0])}
                                 </strong>.</>
                             )}
                         </>)
@@ -258,7 +260,7 @@ const ICONS = {
     BadgeDollarSign, Trophy, Archive, ListChecks, ShieldCheck,
     Globe, CalendarDays, Banknote, Landmark,
     FlaskConical, Brain, MessageSquareHeart, Scale, ScrollText, Milestone, FileBarChart2, FolderSearch,
-    HelpCircle, Sliders, Clock, FileSignature, ShieldAlert, CalendarClock, CalendarPlus, Timer, UserPlus,
+    HelpCircle, Sliders, Clock, FileSignature, ShieldAlert, CalendarClock, CalendarPlus, Timer, UserPlus, Handshake, Webhook, Layers,
     BuildingOffice: Building2,
 }
 
@@ -279,21 +281,6 @@ const GROUP_ICONS = {
 }
 
 // ─── Role labels ──────────────────────────────────────────────────────────────
-
-const ROLE_LABELS = {
-    super_admin:        'Super Admin',
-    admin:              'Admin',
-    central_officer:    'Central Officer',
-    research_officer:   'Research Officer',
-    community_officer:  'Community Officer',
-    technology_officer: 'Technology Officer',
-    college_officer:    'College Officer',
-    college_rtt_manager: 'College RTT Manager',
-    finance_officer:    'Finance Officer',
-    support_officer:    'Support Officer',
-    staff:              'Staff',
-    guest:              'Guest',
-}
 
 const ROLE_COLORS = {
     super_admin:        'from-red-500 to-rose-600',
@@ -323,11 +310,12 @@ function UserMenu({ user, logout, unreadNotifications, isSuperAdmin, collapsed, 
         return () => document.removeEventListener('mousedown', close)
     }, [])
 
+    rememberRoleLabels(user?.role_labels)
     const roles    = user?.roles?.map(r => typeof r === 'string' ? r : r.name) ?? []
     const role     = roles[0] ?? 'guest'
     const initials = (user?.name ?? 'U').split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()
     const gradient = ROLE_COLORS[role] ?? ROLE_COLORS.default
-    const allRolesLabel = roles.map(r => ROLE_LABELS[r] ?? r.replace(/_/g, ' ')).join(', ')
+    const allRolesLabel = roles.map(roleLabel).join(', ')
 
     return (
         <div ref={ref} className="relative">
@@ -720,6 +708,7 @@ export default function AppLayout({ children, breadcrumb }) {
             items: [
                 { label: 'Dashboard',       href: '/dashboard',      icon: 'LayoutDashboard', show: true },
                 { label: 'My Research Hub', href: '/researcher-hub', icon: 'Brain',           show: true },
+                { label: 'Mentorship',      href: '/mentorship',     icon: 'Handshake',       show: true },
                 { label: 'Calendar',        href: '/calendar',       icon: 'CalendarDays',    show: true },
                 { label: 'Help Centre',     href: '/help',           icon: 'LifeBuoy',        show: true },
             ],
@@ -981,11 +970,11 @@ export default function AppLayout({ children, breadcrumb }) {
                     show: canOpen('/admin/turnaround'),
                 },
                 {
-                    label: 'College Phase Completion', href: '/admin/college-phase-completion', icon: 'ListChecks',
+                    label: `${term('college')} Phase Completion`, href: '/admin/college-phase-completion', icon: 'ListChecks',
                     show: canOpen('/admin/college-phase-completion') && hasSubFeature('reports.analytics'),
                 },
                 {
-                    label: 'College Dashboard', href: '/reports/college-dashboard', icon: 'Building2',
+                    label: `${term('college')} Dashboard`, href: '/reports/college-dashboard', icon: 'Building2',
                     show: canOpen('/reports/college-dashboard'),
                 },
                 {
@@ -1036,11 +1025,11 @@ export default function AppLayout({ children, breadcrumb }) {
                 { label: 'Roles',       href: '/admin/roles',      icon: 'ShieldCheck', show: canOpen('/admin/roles') },
                 { label: 'Permissions', href: '/admin/permissions', icon: 'Key',         show: canOpen('/admin/permissions') },
                 {
-                    label: 'Colleges', href: '/admin/colleges', icon: 'Building',
+                    label: term('college', { plural: true }), href: '/admin/colleges', icon: 'Building',
                     show: canOpen('/admin/colleges'),
                 },
                 {
-                    label: 'Departments', href: '/admin/departments', icon: 'BuildingOffice',
+                    label: term('department', { plural: true }), href: '/admin/departments', icon: 'BuildingOffice',
                     show: canOpen('/admin/departments'),
                 },
                 {
@@ -1074,6 +1063,8 @@ export default function AppLayout({ children, breadcrumb }) {
             items: [
                 { label: 'General',       href: '/admin/settings',      icon: 'Settings',    show: canOpen('/admin/settings') },
                 { label: 'Public Site',    href: '/admin/public-site',   icon: 'Globe',       show: canOpen('/admin/public-site') },
+                { label: 'Programmes',     href: '/admin/programmes',    icon: 'Layers',      show: canOpen('/admin/programmes') },
+                { label: 'API & Webhooks', href: '/admin/integrations',  icon: 'Webhook',     show: canOpen('/admin/integrations') },
                 { label: 'Login Notices',  href: '/admin/login-notices', icon: 'Megaphone',   show: canOpen('/admin/login-notices') },
                 { label: 'FAQs',           href: '/admin/faqs',          icon: 'HelpCircle',  show: canOpen('/admin/faqs') },
                 { label: 'Help Articles',  href: '/admin/help-articles', icon: 'BookOpen',    show: canOpen('/admin/help-articles') },
@@ -1097,13 +1088,14 @@ export default function AppLayout({ children, breadcrumb }) {
     }, [allowedRoutesKey]) // eslint-disable-line react-hooks/exhaustive-deps
     const hideMobileNav = useCallback(() => setMobileOpen(false), [])
 
+    rememberRoleLabels(user?.role_labels)
     const roles      = user?.roles?.map(r => typeof r === 'string' ? r : r.name) ?? []
     const primaryRole = roles[0] ?? 'guest'
     const gradient    = ROLE_COLORS[primaryRole] ?? ROLE_COLORS.default
     const initials    = (user?.name ?? 'U').split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase()
-    const roleLabel   = roles.length > 1
-        ? roles.map(r => ROLE_LABELS[r] ?? r.replace(/_/g, ' ')).join(' · ')
-        : (ROLE_LABELS[primaryRole] ?? primaryRole.replace(/_/g, ' '))
+    const rolesText   = roles.length > 1
+        ? roles.map(roleLabel).join(' · ')
+        : roleLabel(primaryRole)
 
     return (
         <OnboardingProvider
@@ -1373,7 +1365,7 @@ export default function AppLayout({ children, breadcrumb }) {
                                         {user?.name}
                                     </p>
                                     <p className={cn('text-[10px] truncate capitalize', sc.userRole)}>
-                                        {roleLabel}
+                                        {rolesText}
                                     </p>
                                 </div>
                             </Link>
@@ -1528,7 +1520,10 @@ export default function AppLayout({ children, breadcrumb }) {
                     file inputs) are placed within this scrolling panel. Without it they are placed
                     against the whole document and stretch it, leaving blank space below the app. */}
                 <main className="relative flex-1 overflow-y-auto p-5 md:p-6">
-                    {!authReady
+                    {/* A signed-in user's saved permissions already allow this page: show it
+                        at once and let the fresh /auth/me check finish in the background. Only a
+                        page the saved data would refuse waits, so there is no false "denied" flash. */}
+                    {!authReady && !(user && routeAllowed)
                         ? (
                             <div className="flex items-center justify-center h-full">
                                 <div className="flex flex-col items-center gap-3 text-gray-400">

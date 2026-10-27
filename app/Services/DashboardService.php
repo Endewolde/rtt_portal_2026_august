@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\User;
+use App\Support\Programmes;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
@@ -240,13 +241,10 @@ class DashboardService
         return $months->map(function ($m) use ($counts) {
             $d = $counts->get($m['month'], collect());
 
-            return [
-                'month' => $m['label'],
-                'research' => $d->where('category', 'research')->sum('count'),
-                'community_engagement' => $d->where('category', 'community_engagement')->sum('count'),
-                'technology_transfer' => $d->where('category', 'technology_transfer')->sum('count'),
-                'total' => $d->sum('count'),
-            ];
+            // One column per programme, so new programmes appear on the dashboard chart too.
+            return ['month' => $m['label']]
+                + collect(Programmes::keys())->mapWithKeys(fn ($key) => [$key => $d->where('category', $key)->sum('count')])->all()
+                + ['total' => $d->sum('count')];
         })->values()->toArray();
     }
 }

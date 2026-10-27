@@ -169,6 +169,7 @@ class AuthController extends Controller
 
         return array_merge($user->toArray(), [
             'roles' => $user->getRoleNames()->values()->toArray(),
+            'role_labels' => $user->roles->mapWithKeys(fn ($r) => [$r->name => $r->label ?? str($r->name)->headline()->toString()])->all(),
             'permissions' => $user->getAllPermissions()->pluck('name')->values()->toArray(),
             'access_scope' => $user->accessScope()->toArray(),
             'subscription' => $subscription,

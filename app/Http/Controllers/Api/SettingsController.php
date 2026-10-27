@@ -7,12 +7,13 @@ use App\Jobs\SendRawMailJob;
 use App\Models\AppSetting;
 use App\Models\ThresholdSetting;
 use App\Models\User;
+use App\Services\BroadcastService;
 use App\Services\MailConfigService;
 use App\Services\ReviewScoreService;
-use App\Support\QueueWorker;
+use App\Services\SmsService;
+use App\Support\Terms;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -23,7 +24,7 @@ use Illuminate\Support\Str;
 
 class SettingsController extends Controller
 {
-    public function __construct(private ReviewScoreService $reviewScoreService) {}
+    public function __construct(private ReviewScoreService $reviewScoreService, private BroadcastService $broadcasts) {}
 
     /** Threshold/decision-mode keys whose review-pipeline effects can go stale. */
     private const REVIEW_DECISION_KEYS = ['blind_threshold', 'defence_threshold', 'combined_threshold', 'combined_decision_mode'];
@@ -172,6 +173,18 @@ class SettingsController extends Controller
             $request->validate(['value' => $thresholdRules[$key]]);
         }
 
+        // The organisation's own words and currency (see App\Support\Terms).
+        $termRules = [
+            'term_college' => ['required', 'string', 'max:40'],
+            'term_department' => ['required', 'string', 'max:40'],
+            'term_academic_year' => ['required', 'string', 'max:40'],
+            'currency_code' => ['required', 'string', 'regex:/^[A-Za-z]{3}$/'],
+            'currency_name' => ['required', 'string', 'max:40'],
+        ];
+        if (isset($termRules[$key])) {
+            $request->validate(['value' => $termRules[$key]]);
+        }
+
         $value = $request->value;
         $userId = $user->id;
 
@@ -232,6 +245,8 @@ class SettingsController extends Controller
         // Bust all caches so the new value is served on the next request
         Cache::forget('inertia_app_settings');
         Cache::forget('blade_app_meta');
+        Terms::forget();
+        Cache::forget(SmsService::CACHE_KEY);
 
         // Bust OAuth credential caches when provider keys change
         if (str_starts_with($key, 'microsoft_') || $key === 'microsoft_sso_enabled') {
@@ -317,11 +332,74 @@ class SettingsController extends Controller
         }
     }
 
+    /**
+     * Save the public site editor in one go: every changed homepage setting, validated
+     * by its kind (colours, links, on/off), then caches cleared once.
+     */
+    public function updatePublicSite(Request $request): JsonResponse
+    {
+        if (! $request->user()?->can('settings.manage')) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+        $settings = $request->validate(['settings' => ['required', 'array', 'max:400']])['settings'];
+
+        $errors = [];
+        foreach ($settings as $key => $value) {
+            $value = is_bool($value) ? ($value ? 'true' : 'false') : (string) ($value ?? '');
+            if (! preg_match('/^(public_[a-z0-9_]+|slider_slide_count|slider_slide_[1-6]_[a-z0-9_]+)$/', (string) $key)) {
+                $errors[$key] = 'Not a public site setting.';
+            } elseif ($value !== '' && (str_ends_with($key, '_bg') || str_ends_with($key, '_text') && str_starts_with($key, 'public_topbar') || preg_match('/^slider_slide_\d_color$/', $key)) && ! preg_match('/^#[0-9a-fA-F]{3,8}$/', $value)) {
+                $errors[$key] = 'Use a colour like #0f172a.';
+            } elseif ($value !== '' && (str_ends_with($key, '_href') || str_ends_with($key, '_cta1_href') || str_ends_with($key, '_cta2_href')) && ! preg_match('#^(/|https?://|mailto:)#', $value)) {
+                $errors[$key] = 'Links start with /, http:// or https://.';
+            } elseif ($value !== '' && str_starts_with($key, 'public_social_') && ! preg_match('#^https?://#', $value)) {
+                $errors[$key] = 'Social links must be full addresses starting with https://.';
+            } elseif (str_ends_with($key, '_show') && ! in_array($value, ['true', 'false'], true)) {
+                $errors[$key] = 'Must be on or off.';
+            } elseif ($key === 'slider_slide_count' && ! in_array($value, ['1', '2', '3', '4', '5', '6'], true)) {
+                $errors[$key] = 'Between 1 and 6 slides.';
+            } elseif (mb_strlen($value) > 5000) {
+                $errors[$key] = 'Too long.';
+            }
+        }
+        if ($errors) {
+            return response()->json(['message' => 'Some values need fixing: '.collect($errors)->map(fn ($e, $k) => "{$k} — {$e}")->first(), 'errors' => $errors], 422);
+        }
+
+        $userId = $request->user()->id;
+        DB::transaction(function () use ($settings, $userId) {
+            foreach ($settings as $key => $value) {
+                $value = is_bool($value) ? ($value ? 'true' : 'false') : (string) ($value ?? '');
+                $type = str_ends_with($key, '_show') ? 'boolean'
+                    : (preg_match('/(_bg|_color|_text)$/', $key) && ! str_contains($key, 'cta') ? 'color'
+                    : (preg_match('/(_desc|_subtitle)$/', $key) ? 'textarea' : 'string'));
+                $setting = AppSetting::firstOrCreate(
+                    ['key' => $key],
+                    ['value' => '', 'type' => $type, 'group' => str_starts_with($key, 'public_') ? 'public_site' : 'general', 'description' => $key]
+                );
+                $setting->update(['value' => $value, 'updated_by' => $userId]);
+            }
+        });
+
+        Cache::forget('inertia_app_settings');
+        Cache::forget('blade_app_meta');
+
+        return response()->json(['data' => ['saved' => count($settings)], 'message' => count($settings).' change'.(count($settings) === 1 ? '' : 's').' saved — live on the public site now.', 'errors' => []]);
+    }
+
     public function updateBulk(Request $request): JsonResponse
     {
         if (! $request->user()?->can('settings.restricted')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
+
+        $request->validate([
+            'settings.term_college' => ['sometimes', 'required', 'string', 'max:40'],
+            'settings.term_department' => ['sometimes', 'required', 'string', 'max:40'],
+            'settings.term_academic_year' => ['sometimes', 'required', 'string', 'max:40'],
+            'settings.currency_code' => ['sometimes', 'required', 'string', 'regex:/^[A-Za-z]{3}$/'],
+            'settings.currency_name' => ['sometimes', 'required', 'string', 'max:40'],
+        ]);
 
         $settings = $request->input('settings', []);
         $userId = $request->user()->id;
@@ -337,6 +415,8 @@ class SettingsController extends Controller
 
         Cache::forget('inertia_app_settings');
         Cache::forget('blade_app_meta');
+        Terms::forget();
+        Cache::forget(SmsService::CACHE_KEY);
         Artisan::call('config:clear');
         Artisan::call('cache:clear');
 
@@ -402,6 +482,28 @@ class SettingsController extends Controller
             'errors' => [],
             'meta' => [],
         ]);
+    }
+
+    /** Send a test text message to check the Africa's Talking settings. */
+    public function testSms(Request $request): JsonResponse
+    {
+        if (! $request->user()?->can('settings.manage')) {
+            return response()->json(['data' => null, 'message' => 'Forbidden.', 'errors' => []], 403);
+        }
+
+        $phone = $request->validate(['phone' => ['required', 'string', 'max:20']])['phone'];
+        Cache::forget(SmsService::CACHE_KEY);
+        $sms = app(SmsService::class);
+
+        if (! SmsService::normalize($phone)) {
+            return response()->json(['data' => null, 'message' => 'That does not look like a phone number. Use 09…, 07… or +251….', 'errors' => []], 422);
+        }
+
+        $sent = $sms->send($phone, 'Test message from '.(AppSetting::where('key', 'system_name')->value('value') ?: 'the RTT Platform').'. SMS is working.');
+
+        return $sent
+            ? response()->json(['data' => null, 'message' => 'Test SMS sent to '.SmsService::normalize($phone).'.', 'errors' => []])
+            : response()->json(['data' => null, 'message' => 'The gateway did not accept the message. Check the username, API key and sender ID.', 'errors' => []], 422);
     }
 
     public function testEmail(Request $request): JsonResponse
@@ -530,114 +632,106 @@ class SettingsController extends Controller
 
     // ── Broadcast email ───────────────────────────────────────────────────────
 
+    /** Who a broadcast would reach: the count and the first few names, before anything is sent. */
+    public function previewBroadcast(Request $request): JsonResponse
+    {
+        if (! $request->user()?->can('settings.manage')) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+        $audience = $request->validate($this->audienceRules());
+        $recipients = $this->broadcasts->recipients($audience);
+
+        return response()->json([
+            'data' => [
+                'count' => $recipients->count(),
+                'sample' => $recipients->take(6)->map(fn ($u) => ['name' => $u->name, 'email' => $u->email])->values(),
+                'audience' => $this->broadcasts->describe($audience),
+            ],
+            'message' => '',
+            'errors' => [],
+        ]);
+    }
+
+    /** The latest broadcasts, for the history list under the composer. */
+    public function broadcastHistory(Request $request): JsonResponse
+    {
+        if (! $request->user()?->can('settings.manage')) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        return response()->json(['data' => $this->broadcasts->history(), 'message' => '', 'errors' => []]);
+    }
+
+    /**
+     * Send a broadcast email — or, with "test", only to yourself to see how it looks.
+     * Emails go out in the background, so even a large audience never times out.
+     */
     public function sendBroadcastEmail(Request $request): JsonResponse
     {
         if (! $request->user()?->can('settings.manage')) {
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
-        $request->validate([
-            'to' => 'required|in:all,by_role,by_college,specific',
-            'role' => 'required_if:to,by_role|string|nullable',
-            'college_id' => 'required_if:to,by_college|uuid|nullable',
-            'email' => 'required_if:to,specific|email|nullable',
+        $data = $request->validate($this->audienceRules() + [
             'subject' => 'required|string|max:255',
-            'message' => 'required|string',
+            'message' => 'required|string|max:100000',
+            'test' => 'sometimes|boolean',
+            'in_app' => 'sometimes|boolean',
         ]);
 
-        // Validate the specific recipient exists in the database
-        if ($request->to === 'specific') {
-            $exists = User::where('email', $request->email)->exists();
-            if (! $exists) {
-                return response()->json([
-                    'message' => "No user found with email \"{$request->email}\". Check the address and try again.",
-                    'errors' => ['email' => ['No user found with this email address.']],
-                ], 422);
-            }
+        if (($data['to'] ?? null) === 'specific' && ! empty($data['email']) && ! User::where('email', $data['email'])->exists()) {
+            return response()->json([
+                'message' => "No user found with email \"{$data['email']}\". Check the address and try again.",
+                'errors' => ['email' => ['No user found with this email address.']],
+            ], 422);
         }
 
         app(MailConfigService::class)->applyFromDatabase();
 
-        $recipients = $this->resolveBroadcastRecipients($request->all());
+        if ($request->boolean('test')) {
+            $me = $request->user();
+            SendRawMailJob::deliver(
+                view('emails.broadcast', ['recipientName' => $me->name, 'subject' => '[Test] '.$data['subject'], 'body' => $data['message'], 'senderName' => config('mail.from.name')])->render(),
+                $me->email,
+                $me->name,
+                '[Test] '.$data['subject'],
+            );
 
+            return response()->json(['data' => ['queued' => 1, 'total' => 1, 'test' => true], 'message' => "A test copy is on its way to {$me->email}.", 'errors' => []]);
+        }
+
+        $recipients = $this->broadcasts->recipients($data);
         if ($recipients->isEmpty()) {
-            return response()->json([
-                'message' => 'No active recipients found for the selected target.',
-                'errors' => [],
-            ], 422);
+            return response()->json(['message' => 'No active recipients found for the selected audience.', 'errors' => []], 422);
         }
 
-        // With a queue worker running, hand each email to the queue and return straight away.
-        if (QueueWorker::isAlive()) {
-            foreach ($recipients as $user) {
-                SendRawMailJob::dispatch(
-                    view('emails.broadcast', [
-                        'recipientName' => $user->name,
-                        'subject' => $request->subject,
-                        'body' => $request->message,
-                        'senderName' => config('mail.from.name'),
-                    ])->render(),
-                    $user->email,
-                    $user->name,
-                    $request->subject,
-                );
-            }
+        $this->broadcasts->send($recipients, $data['subject'], $data['message'], $request->user(), $data, $request->boolean('in_app'));
 
-            return response()->json([
-                'data' => ['sent' => 0, 'queued' => $recipients->count(), 'failed' => 0, 'total' => $recipients->count()],
-                'message' => "Sending to {$recipients->count()} recipient".($recipients->count() !== 1 ? 's' : '').' in the background. Check System Monitor → Email for delivery.',
-                'errors' => [],
-                'meta' => [],
-            ]);
-        }
-
-        $sent = 0;
-        $failed = 0;
-        $errors = [];
-
-        foreach ($recipients as $user) {
-            try {
-                Mail::html(
-                    view('emails.broadcast', [
-                        'recipientName' => $user->name,
-                        'subject' => $request->subject,
-                        'body' => $request->message,
-                        'senderName' => config('mail.from.name'),
-                    ])->render(),
-                    function ($msg) use ($user, $request) {
-                        $msg->to($user->email, $user->name)
-                            ->subject($request->subject);
-                    }
-                );
-                $sent++;
-            } catch (\Exception $e) {
-                Log::error("Broadcast email failed for {$user->email}: ".$e->getMessage());
-                $errors[] = $user->email;
-                $failed++;
-            }
-        }
-
-        $summary = "Delivered to {$sent} recipient".($sent !== 1 ? 's' : '').'.';
-        if ($failed > 0) {
-            $summary .= " {$failed} failed — check mail logs.";
-        }
+        $n = $recipients->count();
 
         return response()->json([
-            'data' => ['sent' => $sent, 'failed' => $failed, 'total' => $recipients->count()],
-            'message' => $summary,
+            'data' => ['queued' => $n, 'total' => $n, 'sent' => 0, 'failed' => 0],
+            'message' => "Sending to {$n} recipient".($n === 1 ? '' : 's').' in the background. Delivery is tracked in System Monitor → Email.',
             'errors' => [],
             'meta' => [],
         ]);
     }
 
-    private function resolveBroadcastRecipients(array $payload): Collection
+    /** @return array<string, mixed> */
+    private function audienceRules(): array
     {
-        return match ($payload['to']) {
-            'all' => User::whereNotNull('email')->where('status', 'active')->get(['id', 'name', 'email']),
-            'by_role' => User::role($payload['role'] ?? '')->where('status', 'active')->get(['id', 'name', 'email']),
-            'by_college' => User::where('college_id', $payload['college_id'])->where('status', 'active')->get(['id', 'name', 'email']),
-            'specific' => User::where('email', $payload['email'])->get(['id', 'name', 'email']),
-            default => collect(),
-        };
+        return [
+            'to' => 'required|in:all,by_role,by_college,specific,segment',
+            'role' => 'nullable|string|exists:roles,name',
+            'roles' => 'required_if:to,by_role|array|nullable',
+            'roles.*' => 'string|exists:roles,name',
+            'college_id' => 'nullable|uuid',
+            'college_ids' => 'required_if:to,by_college|array|nullable',
+            'college_ids.*' => 'uuid|exists:colleges,id',
+            'user_ids' => 'nullable|array|max:500',
+            'user_ids.*' => 'uuid',
+            'email' => 'nullable|email',
+            'segment' => 'required_if:to,segment|nullable|in:'.implode(',', array_keys(BroadcastService::SEGMENTS)),
+        ];
     }
 }

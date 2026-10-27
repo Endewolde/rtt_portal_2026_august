@@ -39,7 +39,23 @@ export const DOC_TYPES = [
     },
 ];
 
-export default function Step5Documents({ proposalId, onComplete, initialUploads }) {
+const CALL_DOC_ACCEPT = { pdf: '.pdf', office: '.pdf,.doc,.docx,.xls,.xlsx', image: '.pdf,.png,.jpg,.jpeg', any: '*' };
+
+/** The standard documents plus any the call asks for (Calls → Application form). */
+export function docTypesFor(call) {
+    const extra = (call?.application_form?.documents ?? []).map((d) => ({
+        key:         `call_${d.key}`,
+        label:       d.label,
+        description: d.description || 'Requested by this call',
+        accept:      CALL_DOC_ACCEPT[d.accept] ?? '.pdf',
+        maxMB:       10,
+        required:    !!d.required,
+        fromCall:    true,
+    }));
+    return [...DOC_TYPES, ...extra];
+}
+
+export default function Step5Documents({ proposalId, onComplete, initialUploads, docTypes = DOC_TYPES }) {
     const toast = useToast();
     const [uploads, setUploads] = useState(initialUploads ?? {});
     const [saving, setSaving]   = useState(false);
@@ -87,7 +103,7 @@ export default function Step5Documents({ proposalId, onComplete, initialUploads 
         if (inputRefs.current[key]) inputRefs.current[key].value = '';
     };
 
-    const requiredDone = DOC_TYPES.filter((d) => d.required).every((d) => uploads[d.key]?.status === 'done');
+    const requiredDone = docTypes.filter((d) => d.required).every((d) => uploads[d.key]?.status === 'done');
 
     const handleSave = async () => {
         setSaving(true);
@@ -112,7 +128,7 @@ export default function Step5Documents({ proposalId, onComplete, initialUploads 
             </div>
 
             <div className="space-y-4">
-                {DOC_TYPES.map((dt) => {
+                {docTypes.map((dt) => {
                     const u        = uploads[dt.key];
                     const isDone   = u?.status === 'done';
                     const isUp     = u?.status === 'uploading';

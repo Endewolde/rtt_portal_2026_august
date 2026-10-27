@@ -11,6 +11,7 @@ use App\Models\Proposal;
 use App\Models\ReviewAssignment;
 use App\Models\User;
 use App\Support\AuditLogger;
+use App\Support\Programmes;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -27,12 +28,6 @@ class DefenceDeadlineService
     public const CENTRAL_ROLES = ['super_admin', 'admin', 'central_officer'];
 
     /** Category director role for each proposal category. */
-    public const DIRECTOR_ROLE_FOR_CATEGORY = [
-        'research' => 'research_officer',
-        'community_engagement' => 'community_officer',
-        'technology_transfer' => 'technology_officer',
-    ];
-
     private const REMINDER_HOURS_BEFORE_DEADLINE = 24;
 
     private const DATE_FORMAT = 'D, M j, Y g:i A';
@@ -354,7 +349,7 @@ class DefenceDeadlineService
     {
         $approvers = User::role(self::CENTRAL_ROLES)->where('status', 'active')->get();
 
-        $directorRole = self::DIRECTOR_ROLE_FOR_CATEGORY[$proposal->category] ?? null;
+        $directorRole = Programmes::directorRoles($proposal->category);
         if ($directorRole) {
             $approvers = $approvers->merge(User::role($directorRole)->where('status', 'active')->get());
         }
@@ -365,12 +360,7 @@ class DefenceDeadlineService
 
     private function directorLabel(?Proposal $proposal): string
     {
-        return match ($proposal?->category) {
-            'research' => 'Research Director',
-            'community_engagement' => 'Community Engagement Director',
-            'technology_transfer' => 'Technology Transfer Director',
-            default => 'category director',
-        };
+        return $proposal?->category ? Programmes::label($proposal->category).' Director' : 'programme director';
     }
 
     private function notify(User $user, string $event, array $data): void

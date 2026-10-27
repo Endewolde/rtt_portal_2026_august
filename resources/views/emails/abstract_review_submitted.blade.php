@@ -50,7 +50,7 @@
   <div class="body">
     <p style="font-size:14px;color:#374151;margin:0 0 16px;">Hi <strong>{{ $admin->name }}</strong>,</p>
     <p style="font-size:14px;color:#4b5563;line-height:1.7;margin:0 0 20px;">
-      A reviewer has submitted their evaluation for the abstract below. The abstract status has been updated automatically.
+      A reviewer has submitted their evaluation for the abstract below. The decision is yours — open Abstracts in the admin area to accept, request a revision or reject.
     </p>
 
     @php
@@ -76,7 +76,7 @@
       <div class="row"><label>Submitter</label><span style="font-weight:600;color:#0f172a;">{{ $abstract->submitter_name }}</span></div>
       <div class="row"><label>Reviewer</label><span style="font-weight:600;color:#0f172a;">{{ $reviewer->name }}</span></div>
       <div class="row"><label>Score</label><span style="font-weight:700;color:#1e40af;">{{ $reviewData['score'] ?? '—' }} / 10</span></div>
-      <div class="row"><label>New Status</label><span style="font-weight:600;color:#0f172a;">{{ ucwords(str_replace('_',' ', $abstract->status)) }}</span></div>
+      <div class="row"><label>Current Status</label><span style="font-weight:600;color:#0f172a;">{{ ucwords(str_replace('_',' ', $abstract->status)) }}</span></div>
     </div>
 
     @if(!empty($reviewData['comments']))

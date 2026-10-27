@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Support\Access\PermissionCatalog;
+use App\Support\Programmes;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,10 +19,14 @@ class RoleController extends Controller
 {
     public function index(): JsonResponse
     {
+        // Count real, current users only — a role row left behind by a removed user
+        // must not inflate the number.
         $userCounts = DB::table('model_has_roles')
-            ->where('model_type', User::class)
-            ->selectRaw('role_id, count(*) as total')
-            ->groupBy('role_id')
+            ->join('users', 'users.id', '=', 'model_has_roles.model_id')
+            ->where('model_has_roles.model_type', User::class)
+            ->whereNull('users.deleted_at')
+            ->selectRaw('model_has_roles.role_id as role_id, count(distinct users.id) as total')
+            ->groupBy('model_has_roles.role_id')
             ->pluck('total', 'role_id');
         $systemRoles = PermissionCatalog::systemRoles();
 
@@ -38,6 +43,27 @@ class RoleController extends Controller
             });
 
         return response()->json(['data' => $roles, 'message' => '', 'errors' => [], 'meta' => []]);
+    }
+
+    /**
+     * Who holds a role, for the hover card on the Roles page: the first 50 by name,
+     * plus how many there are in all.
+     */
+    public function users(Request $request, string $id): JsonResponse
+    {
+        if (! $request->user()->can('roles.manage')) {
+            return response()->json(['message' => 'Unauthorized.'], 403);
+        }
+
+        $role = Role::findOrFail($id);
+        $query = User::role($role->name);
+
+        return response()->json([
+            'data' => (clone $query)->orderBy('name')->limit(50)->get(['id', 'name', 'email']),
+            'message' => '',
+            'errors' => [],
+            'meta' => ['total' => $query->count()],
+        ]);
     }
 
     /**
@@ -81,7 +107,7 @@ class RoleController extends Controller
         return response()->json(['data' => [
             'groups' => $groups,
             'scopes' => collect(config('access.scopes'))->map(fn ($meta, $key) => ['value' => $key, ...$meta])->values(),
-            'categories' => collect(config('access.categories'))->map(fn ($label, $key) => ['value' => $key, 'label' => $label])->values(),
+            'categories' => collect(Programmes::labels())->map(fn ($label, $key) => ['value' => $key, 'label' => $label])->values(),
         ], 'message' => '', 'errors' => [], 'meta' => []]);
     }
 
@@ -224,7 +250,7 @@ class RoleController extends Controller
             'label' => ['required', 'string', 'max:100'],
             'description' => ['nullable', 'string', 'max:500'],
             'scope' => ['required', Rule::in(array_keys(config('access.scopes')))],
-            'scope_category' => ['nullable', 'required_if:scope,category', Rule::in(array_keys(config('access.categories')))],
+            'scope_category' => ['nullable', 'required_if:scope,category', Rule::in(Programmes::keys())],
         ]);
 
         return [

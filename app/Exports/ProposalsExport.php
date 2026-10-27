@@ -3,6 +3,7 @@
 namespace App\Exports;
 
 use App\Models\Proposal;
+use App\Support\Terms;
 use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\ShouldAutoSize;
@@ -43,10 +44,10 @@ class ProposalsExport implements FromCollection, ShouldAutoSize, WithHeadings, W
             'PI Name',
             'PI Email',
             'PI Gender',
-            'College',
-            'Department',
-            'Academic Year',
-            'Budget Total (ETB)',
+            Terms::college(),
+            Terms::department(),
+            Terms::academicYear(),
+            'Budget Total ('.Terms::currency().')',
             'Submitted At',
             'Last Updated',
         ];

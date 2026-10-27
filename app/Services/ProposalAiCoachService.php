@@ -9,6 +9,7 @@ use App\Models\ProposalBudget;
 use App\Models\ProposalDocument;
 use App\Models\User;
 use App\Support\DocumentText;
+use App\Support\Terms;
 use Illuminate\Support\Str;
 
 /**
@@ -129,7 +130,7 @@ EOT;
             'DURATION: '.($proposal->duration_months ? "{$proposal->duration_months} months" : '—'),
             'KEYWORDS: '.($proposal->keywords ?: '—'),
             'ABSTRACT: '.($proposal->abstract ?: 'Not provided'),
-            'BUDGET (ETB, total '.number_format((float) $budget->sum('amount'), 2)."):\n".($budget->isEmpty() ? 'No budget lines yet.' : $budget->map(
+            'BUDGET ('.Terms::currency().', total '.number_format((float) $budget->sum('amount'), 2)."):\n".($budget->isEmpty() ? 'No budget lines yet.' : $budget->map(
                 fn ($b) => "- {$b->category}: {$b->item_description} — ".number_format((float) $b->amount, 2).($b->justification ? " (justification: {$b->justification})" : '')
             )->implode("\n")),
             $documentText ? "FULL PROPOSAL DOCUMENT:\n{$documentText}" : 'FULL PROPOSAL DOCUMENT: not uploaded yet.',

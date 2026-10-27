@@ -17,6 +17,7 @@ import api from '../../lib/api'
 import { useAuth } from '../../hooks/useAuth'
 import { usePage } from '@inertiajs/react'
 import { formatCurrency, getStatusColor, getStatusLabel, timeAgo, cn } from '../../lib/utils'
+import { roleLabel, rememberRoleLabels } from '../../lib/roles';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -648,6 +649,7 @@ export default function Dashboard() {
         }).catch(() => {}).finally(() => setLoading(false))
     }, [])
 
+    rememberRoleLabels(user?.role_labels)
     const roles           = user?.roles?.map(r => typeof r === 'string' ? r : r.name) ?? []
     // Which dashboard to show follows what the user can do, not their role name.
     const isAdmin         = hasPermission('proposals.validate')
@@ -808,8 +810,8 @@ export default function Dashboard() {
                                         <Building2 size={11} />
                                         {settings.organization_name}
                                     </span>
-                                    <span className="bg-white/15 backdrop-blur-sm rounded-full px-3 py-1 text-xs font-medium text-white capitalize">
-                                        {roles[0]?.replace(/_/g, ' ') ?? 'User'}
+                                    <span className="bg-white/15 backdrop-blur-sm rounded-full px-3 py-1 text-xs font-medium text-white">
+                                        {roles[0] ? roleLabel(roles[0]) : 'User'}
                                     </span>
                                     {stats.active_calls > 0 && (
                                         <span className="bg-green-400/30 backdrop-blur-sm rounded-full px-3 py-1 text-xs font-medium text-white">

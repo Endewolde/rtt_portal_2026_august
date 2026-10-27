@@ -13,6 +13,9 @@ class ExternalFundMilestone extends Model
 
     protected $table = 'ef_milestones';
 
+    /** Overdue is worked out from the due date, never stored, so it cannot go stale. */
+    protected $appends = ['is_overdue'];
+
     protected $fillable = [
         'award_id', 'title', 'description',
         'due_date', 'completed_at', 'status',

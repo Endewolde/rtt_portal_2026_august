@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
     ShieldCheck, Plus, Trash2, RefreshCw, Save, Copy, Users, Lock, Search, X,
-    ChevronDown, ChevronRight, Globe, Building2, Tag, User as UserIcon, Undo2, Info,
+    ChevronDown, ChevronRight, Globe, Building2, Tag, User as UserIcon, Undo2, Info, Mail, Loader2,
 } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import api from '../../lib/api';
@@ -166,10 +166,88 @@ function CreateRoleModal({ open, initial, roles, catalog, onClose, onCreated }) 
     );
 }
 
+/**
+ * Hover card listing who holds a role (name and email). Users are fetched once per
+ * role and kept for the rest of the visit.
+ */
+function RoleUsersCard({ hover, cache, onEnter, onLeave }) {
+    const entry = cache[hover.role.id];
+    const width = 300;
+    const left = Math.min(hover.rect.right + 8, window.innerWidth - width - 8);
+    const top = Math.max(8, Math.min(hover.rect.top, window.innerHeight - 340));
+    const initials = (name) => (name ?? '?').split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+
+    return (
+        <div role="tooltip" onMouseEnter={onEnter} onMouseLeave={onLeave} style={{ left, top, width }}
+            className="fixed z-50 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between gap-2 border-b border-gray-100 bg-gray-50/80 px-4 py-2.5">
+                <p className="truncate text-sm font-semibold text-gray-900">{hover.role.label}</p>
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-gray-600 ring-1 ring-gray-200">
+                    <Users size={10} /> {entry?.total ?? hover.role.users_count}
+                </span>
+            </div>
+            {!entry ? (
+                <div className="flex items-center justify-center gap-2 px-4 py-6 text-xs text-gray-400"><Loader2 size={14} className="animate-spin" /> Loading users…</div>
+            ) : entry.error ? (
+                <p className="px-4 py-6 text-center text-xs text-gray-500">The users could not be loaded.</p>
+            ) : entry.users.length === 0 ? (
+                <p className="px-4 py-6 text-center text-xs text-gray-500">Nobody holds this role yet.</p>
+            ) : (
+                <>
+                    <ul className="max-h-64 divide-y divide-gray-50 overflow-y-auto">
+                        {entry.users.map((u) => (
+                            <li key={u.id} className="flex items-center gap-2.5 px-4 py-2">
+                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-[10px] font-bold text-indigo-700">{initials(u.name)}</span>
+                                <div className="min-w-0">
+                                    <p className="truncate text-xs font-semibold text-gray-800">{u.name}</p>
+                                    <a href={`mailto:${u.email}`} className="flex items-center gap-1 truncate text-[11px] text-gray-500 hover:text-indigo-600">
+                                        <Mail size={9} className="shrink-0" /> <span className="truncate">{u.email}</span>
+                                    </a>
+                                </div>
+                            </li>
+                        ))}
+                    </ul>
+                    {entry.total > entry.users.length && (
+                        <p className="border-t border-gray-100 px-4 py-2 text-center text-[11px] text-gray-500">and {entry.total - entry.users.length} more</p>
+                    )}
+                </>
+            )}
+        </div>
+    );
+}
+
 export default function Roles() {
     const { success, error } = useToast();
 
     const [roles, setRoles]           = useState([]);
+    const [hover, setHover]           = useState(null);
+    const [roleUsers, setRoleUsers]   = useState({});
+    const hoverTimer                  = useRef(null);
+
+    const showUsers = (role, el) => {
+        clearTimeout(hoverTimer.current);
+        hoverTimer.current = setTimeout(() => {
+            setHover({ role, rect: el.getBoundingClientRect() });
+            if (!roleUsers[role.id]) {
+                api.get(`/roles/${role.id}/users`)
+                    .then((r) => setRoleUsers((m) => ({ ...m, [role.id]: { users: r.data?.data ?? [], total: r.data?.meta?.total ?? 0 } })))
+                    .catch(() => setRoleUsers((m) => ({ ...m, [role.id]: { users: [], total: 0, error: true } })));
+            }
+        }, 300);
+    };
+    const hideUsers = () => {
+        clearTimeout(hoverTimer.current);
+        hoverTimer.current = setTimeout(() => setHover(null), 150);
+    };
+    const keepUsers = () => clearTimeout(hoverTimer.current);
+    useEffect(() => () => clearTimeout(hoverTimer.current), []);
+    // The card is placed beside the row; close it rather than let it drift on scroll.
+    useEffect(() => {
+        if (!hover) return undefined;
+        const close = (e) => { if (!e.target?.closest?.('[role="tooltip"]')) setHover(null); };
+        window.addEventListener('scroll', close, true);
+        return () => window.removeEventListener('scroll', close, true);
+    }, [hover]);
     const [catalog, setCatalog]       = useState(null);
     const [loading, setLoading]       = useState(true);
     const [roleSearch, setRoleSearch] = useState('');
@@ -331,6 +409,8 @@ export default function Roles() {
         const on = role.id === selectedId;
         return (
             <button type="button" onClick={() => trySelect(role)}
+                onMouseEnter={(e) => showUsers(role, e.currentTarget)} onMouseLeave={hideUsers}
+                onFocus={(e) => showUsers(role, e.currentTarget)} onBlur={hideUsers}
                 className={cn('w-full text-left flex items-start gap-3 px-4 py-3 transition-colors border-l-[3px]',
                     on ? 'bg-indigo-50 border-l-indigo-600' : 'border-l-transparent hover:bg-gray-50')}>
                 <div className={cn('h-8 w-8 rounded-lg shrink-0 flex items-center justify-center text-[11px] font-bold',
@@ -594,6 +674,7 @@ export default function Roles() {
                     onCancel={() => setDeleteTarget(null)}
                 />
             )}
+            {hover && <RoleUsersCard hover={hover} cache={roleUsers} onEnter={keepUsers} onLeave={hideUsers} />}
         </AppLayout>
     );
 }

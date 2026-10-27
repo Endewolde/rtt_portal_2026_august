@@ -28,6 +28,8 @@ class Proposal extends Model
         'title',
         'abstract',
         'keywords',
+        'sdgs',
+        'call_answers',
         'status',
         'pi_user_id',
         'college_id',
@@ -71,6 +73,8 @@ class Proposal extends Model
     protected $casts = [
         'wizard_completed_steps' => 'array',
         'draft_data' => 'array',
+        'sdgs' => 'array',
+        'call_answers' => 'array',
         'ethical_clearance_required' => 'boolean',
         'ethical_clearance_expiry' => 'date',
         'ethical_clearance_submitted_at' => 'datetime',
@@ -200,6 +204,11 @@ class Proposal extends Model
     public function budgetAllocations(): HasMany
     {
         return $this->hasMany(BudgetAllocation::class);
+    }
+
+    public function budgetMilestones(): HasMany
+    {
+        return $this->hasMany(BudgetMilestone::class);
     }
 
     public function completionWorkshop(): HasOne

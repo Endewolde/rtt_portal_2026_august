@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Support\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class DeadlineExtensionController extends Controller
@@ -64,18 +65,23 @@ class DeadlineExtensionController extends Controller
             return response()->json(['message' => 'Unauthorized.'], 403);
         }
 
-        $extensions = DeadlineExtensionRequest::with([
-            'proposal:id,tracker_number,title,category,college_id,proposal_call_id',
+        // Every request within the officer's scope, newest first; the page filters and counts them.
+        $query = DeadlineExtensionRequest::with([
+            'proposal:id,tracker_number,title,category,college_id,proposal_call_id,pi_user_id,academic_year,status,extended_deadline',
             'proposal.college:id,name',
             'proposal.proposalCall:id,title,end_date',
             'requestedBy:id,name,email',
             'resolvedBy:id,name',
         ])
             ->when($request->status, fn ($q, $s) => $q->where('status', $s))
-            ->orderByDesc('created_at')
-            ->paginate(20);
+            ->orderByDesc('created_at');
+        $request->user()->accessScope()->constrainThrough($query, 'proposal');
+        $extensions = $query->limit(500)->get();
 
-        return response()->json(['data' => $extensions]);
+        return response()->json([
+            'data' => $extensions,
+            'meta' => ['counts' => $extensions->countBy('status')],
+        ]);
     }
 
     /** Officer grants or denies an extension request. */
@@ -93,6 +99,10 @@ class DeadlineExtensionController extends Controller
 
         $extension = DeadlineExtensionRequest::with('proposal')->findOrFail($id);
 
+        if (! $extension->proposal || ! $request->user()->accessScope()->covers($extension->proposal->college_id, $extension->proposal->category)) {
+            return response()->json(['message' => 'This request is outside your area.'], 403);
+        }
+
         if ($extension->status !== 'pending') {
             return response()->json(['message' => 'This extension request has already been resolved.'], 422);
         }
@@ -101,17 +111,19 @@ class DeadlineExtensionController extends Controller
             ? ($validated['granted_until'] ?? $extension->requested_until)
             : null;
 
-        $extension->update([
-            'status' => $validated['decision'],
-            'resolved_by' => $request->user()->id,
-            'resolution_notes' => $validated['resolution_notes'],
-            'granted_until' => $grantedUntil,
-            'resolved_at' => now(),
-        ]);
+        DB::transaction(function () use ($extension, $validated, $request, $grantedUntil) {
+            $extension->update([
+                'status' => $validated['decision'],
+                'resolved_by' => $request->user()->id,
+                'resolution_notes' => $validated['resolution_notes'],
+                'granted_until' => $grantedUntil,
+                'resolved_at' => now(),
+            ]);
 
-        if ($validated['decision'] === 'approved') {
-            $extension->proposal->update(['extended_deadline' => $grantedUntil]);
-        }
+            if ($validated['decision'] === 'approved') {
+                $extension->proposal->update(['extended_deadline' => $grantedUntil]);
+            }
+        });
 
         $pi = $extension->proposal->pi;
         if ($pi) {
@@ -138,18 +150,8 @@ class DeadlineExtensionController extends Controller
 
     private function notifyOfficers(Proposal $proposal, User $submitter): void
     {
-        $roleMap = [
-            'research' => 'research_officer',
-            'community_engagement' => 'community_officer',
-            'technology_transfer' => 'technology_officer',
-        ];
-        $role = $roleMap[$proposal->category] ?? null;
-        if (! $role) {
-            return;
-        }
-
-        $officers = User::role($role)->where('status', 'active')->get()
-            ->merge(User::customRoleHolders('deadline_extensions.resolve', $proposal->college_id, $proposal->category))->unique('id');
+        // Everyone who may decide it: the central office and the programme's director.
+        $officers = User::whoCan('deadline_extensions.resolve', $proposal->college_id, $proposal->category);
         foreach ($officers as $officer) {
             try {
                 SendEmailNotificationJob::deliver($officer, 'deadline_extension_requested', [

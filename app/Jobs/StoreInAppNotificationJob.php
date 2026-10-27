@@ -3,12 +3,14 @@
 namespace App\Jobs;
 
 use App\Models\User;
+use App\Services\SmsService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class StoreInAppNotificationJob implements ShouldQueue
@@ -28,13 +30,20 @@ class StoreInAppNotificationJob implements ShouldQueue
     public function handle(): void
     {
         DB::table('notifications')->insert([
-            'id'              => Str::uuid()->toString(),
+            'id' => Str::uuid()->toString(),
             'notifiable_type' => User::class,
-            'notifiable_id'   => $this->userId,
-            'type'            => $this->event,
-            'data'            => json_encode($this->data),
-            'read_at'         => null,
-            'created_at'      => now(),
+            'notifiable_id' => $this->userId,
+            'type' => $this->event,
+            'data' => json_encode($this->data),
+            'read_at' => null,
+            'created_at' => now(),
         ]);
+
+        // The most important events also go out by SMS (when switched on in Settings).
+        try {
+            app(SmsService::class)->notifyIfWanted($this->userId, $this->event, $this->data);
+        } catch (\Throwable $e) {
+            Log::warning("SMS for {$this->event} skipped: {$e->getMessage()}");
+        }
     }
 }
