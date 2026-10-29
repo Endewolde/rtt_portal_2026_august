@@ -562,6 +562,14 @@ const BUILDER_LABELS = {
     count: 'Count', funded_count: 'Funded', rejected_count: 'Rejected',
     avg_resolution_days: 'Avg Resolution (days)', submitted_count: 'Submitted',
     avg_days_to_review: 'Avg Days to Review',
+    department: 'Department', department_id: 'Department', call: 'Call', proposal_call_id: 'Call',
+    research_type: 'Research Type', focus_area: 'Focus Area', pi_gender: 'PI Gender',
+    submitted_month: 'Month Submitted', raised_month: 'Month Raised', assigned_month: 'Month Assigned',
+    reviewer: 'Reviewer', review_type: 'Review Type', reviewer_kind: 'Internal / External',
+    under_review_count: 'Under Review', completed_count: 'Completed', success_rate: 'Success Rate',
+    total_budget: 'Total Budget', avg_budget: 'Avg Budget', open_count: 'Still Open', resolved_count: 'Resolved',
+    escalated_count: 'Escalated', overdue_count: 'Overdue', declined_count: 'Declined', completion_rate: 'Completion Rate',
+    review_workload: 'Review Workload',
 };
 
 export function builderLabel(key) {

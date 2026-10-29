@@ -106,7 +106,12 @@ class ReportController extends Controller
             abort(403, 'Unauthorized.');
         }
 
-        return response()->json(['data' => $this->service->builderOptions(), 'message' => '', 'errors' => [], 'meta' => []]);
+        return response()->json([
+            'data' => $this->service->builderOptions(),
+            'message' => '',
+            'errors' => [],
+            'meta' => ['choices' => $this->service->builderChoices($request->user())],
+        ]);
     }
 
     public function generate(Request $request): JsonResponse

@@ -304,10 +304,10 @@ const COLORS = {
     gray:    { icon: 'bg-gray-100 text-gray-500',     border: 'border-l-gray-400',    progress: 'bg-gray-400',    badge: 'text-gray-600 bg-gray-100'     },
 }
 
-function getCfg(type)   { return TYPE_CFG[type] ?? TYPE_CFG.default }
-function getColors(type) { return COLORS[getCfg(type).color] ?? COLORS.gray }
-function getMessage(type, data) { return getCfg(type).template(data ?? {}) }
-function getActionUrl(type, data) { return getCfg(type).actionUrl(data ?? {}) }
+export function getCfg(type)   { return TYPE_CFG[type] ?? TYPE_CFG.default }
+export function getColors(type) { return COLORS[getCfg(type).color] ?? COLORS.gray }
+export function getMessage(type, data) { return getCfg(type).template(data ?? {}) }
+export function getActionUrl(type, data) { return getCfg(type).actionUrl(data ?? {}) }
 
 function groupByDate(items) {
     const today     = new Date(); today.setHours(0, 0, 0, 0)

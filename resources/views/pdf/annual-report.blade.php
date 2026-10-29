@@ -1,573 +1,309 @@
+@php
+    use App\Support\Programmes;
+
+    /*
+     * Laid out with tables only: dompdf does not support flexbox or grid, so every
+     * row of cards, bar and two-column block here is a table.
+     */
+    $fmt = fn ($n) => number_format((float) $n);
+    $money = fn ($n) => number_format((float) $n, 0);
+    $pct = fn ($part, $whole) => $whole > 0 ? round(($part / $whole) * 100) : 0;
+    $nice = fn ($key) => ucwords(str_replace('_', ' ', (string) $key));
+    $statusLabel = fn ($s) => [
+        'submitted' => 'Submitted', 'validated' => 'Validated', 'under_blind_review' => 'Under blind review',
+        'blind_review_passed' => 'Passed blind review', 'under_open_defence' => 'Under open defence',
+        'accepted' => 'Accepted', 'funded' => 'Funded', 'midterm_evaluation' => 'Mid-term evaluation',
+        'completed' => 'Completed', 'archived' => 'Archived', 'rejected' => 'Rejected',
+    ][$s] ?? $nice($s);
+    $palette = ['#2563eb', '#7c3aed', '#059669', '#d97706', '#dc2626', '#0891b2'];
+    $fundedRate = $pct($proposals['funded'], $proposals['total']);
+    arsort($proposals['by_status']);
+    arsort($proposals['by_category']);
+    arsort($outputs['by_type']);
+    arsort($impacts['by_type']);
+    $unavailable = $unavailable ?? [];
+@endphp
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
 <title>Annual RTT Report {{ $academic_year }}</title>
 <style>
+@unless($standardFontsOnly ?? false)
 @include('pdf.partials.fonts')
-* { margin:0; padding:0; box-sizing:border-box; }
+@endunless
+@page { margin: 34px 0 48px; }
+/* Not "*": in dompdf that also matches the page and wipes the @page margins. */
+body, div, h1, p, table, td, th, img { margin: 0; padding: 0; }
+body { font-family: 'DejaVu Sans', 'Noto Sans Ethiopic', sans-serif; font-size: 9pt; color: #1e293b; line-height: 1.45; }
+table { border-collapse: collapse; width: 100%; }
+td, th { vertical-align: top; }
 
-body {
-    font-family: 'DejaVu Sans', Arial, 'Noto Sans Ethiopic', sans-serif;
-    font-size: 9.5pt;
-    color: #1e293b;
-    background: #fff;
-    line-height: 1.5;
-}
+.wrap { padding: 0 40px; }
 
-.page { padding: 0; }
+/* Letterhead band */
+.band { background: #1e3a8a; color: #fff; padding: 30px 40px 26px; margin-top: -34px; }
+.band .org { font-size: 8pt; letter-spacing: 1.5px; text-transform: uppercase; color: #bfdbfe; font-weight: bold; }
+.band h1 { font-size: 22pt; font-weight: bold; margin-top: 6px; }
+.band .sub { font-size: 10pt; color: #dbeafe; margin-top: 2px; }
+.band .logo { width: 58px; height: 58px; }
+.meta { margin-top: 18px; border-top: 1px solid #3b5bb5; }
+.meta td { padding-top: 10px; width: 25%; }
+.meta .k { font-size: 6.5pt; text-transform: uppercase; letter-spacing: 1px; color: #93c5fd; }
+.meta .v { font-size: 9.5pt; font-weight: bold; color: #fff; margin-top: 1px; }
 
-/* ── Cover band ──────────────────────────────────────────── */
-.cover {
-    background: #1e3a8a;
-    padding: 36px 48px 28px;
-    position: relative;
-    overflow: hidden;
-}
-.cover-accent {
-    position: absolute;
-    right: -40px; top: -40px;
-    width: 180px; height: 180px;
-    border-radius: 50%;
-    background: rgba(255,255,255,0.06);
-}
-.cover-accent2 {
-    position: absolute;
-    left: -20px; bottom: -30px;
-    width: 120px; height: 120px;
-    border-radius: 50%;
-    background: rgba(255,255,255,0.04);
-}
-.cover-tag {
-    font-size: 7.5pt;
-    font-weight: bold;
-    color: #93c5fd;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    margin-bottom: 6px;
-}
-.cover-title {
-    font-size: 22pt;
-    font-weight: bold;
-    color: #ffffff;
-    line-height: 1.2;
-    margin-bottom: 4px;
-}
-.cover-sub {
-    font-size: 10pt;
-    color: #bfdbfe;
-    margin-bottom: 16px;
-}
-.cover-meta {
-    display: flex;
-    gap: 24px;
-    border-top: 1px solid rgba(255,255,255,0.15);
-    padding-top: 14px;
-    margin-top: 6px;
-}
-.cover-meta-item { }
-.cover-meta-label { font-size: 7pt; color: #93c5fd; text-transform: uppercase; letter-spacing: 0.1em; }
-.cover-meta-value { font-size: 9pt; color: #fff; font-weight: bold; margin-top: 1px; }
+/* Section headings */
+.section { margin-top: 22px; }
+.section-title { font-size: 12pt; font-weight: bold; color: #1e3a8a; padding-bottom: 5px; border-bottom: 2px solid #dbeafe; margin-bottom: 10px; }
+.section-title .n { color: #93c5fd; font-size: 10pt; padding-right: 6px; }
+.lead { font-size: 8.5pt; color: #64748b; margin: -4px 0 10px; }
 
-/* ── Body ────────────────────────────────────────────────── */
-.body { padding: 32px 48px 40px; }
+/* Stat cards: one table row, four cells */
+.cards { border-collapse: separate; border-spacing: 8px 0; margin: 0 -8px; }
+.card { background: #f8fafc; border: 1px solid #e2e8f0; border-top: 3px solid #2563eb; padding: 9px 11px; width: 25%; }
+.card .v { font-size: 16pt; font-weight: bold; color: #0f172a; line-height: 1.1; }
+.card .k { font-size: 7.5pt; color: #64748b; margin-top: 3px; }
+.card .h { font-size: 7pt; color: #94a3b8; margin-top: 1px; }
+.card .v.money { font-size: 12.5pt; white-space: nowrap; }
+.card .v.money small { font-size: 8pt; color: #64748b; font-weight: normal; }
 
-/* ── Section heading ─────────────────────────────────────── */
-.section { margin-bottom: 28px; }
-.section-head {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 14px;
-}
-.section-num {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 20px; height: 20px;
-    border-radius: 50%;
-    background: #1e3a8a;
-    color: #fff;
-    font-size: 7.5pt;
-    font-weight: bold;
-    flex-shrink: 0;
-}
-.section-title {
-    font-size: 11pt;
-    font-weight: bold;
-    color: #1e3a8a;
-    flex: 1;
-    border-bottom: 2px solid #dbeafe;
-    padding-bottom: 4px;
-}
+/* Bar rows */
+.bars td { padding: 3px 0; font-size: 8.5pt; }
+.bars .label { width: 36%; padding-right: 8px; color: #334155; }
+.bars .track { background: #eef2f7; height: 9px; }
+.bars .fill { height: 9px; }
+.bars .num { width: 16%; text-align: right; font-weight: bold; color: #0f172a; padding-left: 8px; white-space: nowrap; }
+.bars .num span { font-weight: normal; color: #94a3b8; }
 
-/* ── KPI cards ───────────────────────────────────────────── */
-.kpi-row { display: flex; gap: 10px; margin-bottom: 14px; }
-.kpi {
-    flex: 1;
-    border-radius: 8px;
-    padding: 12px 14px;
-    border-left: 4px solid transparent;
-}
-.kpi-blue   { background: #eff6ff; border-color: #3b82f6; }
-.kpi-green  { background: #f0fdf4; border-color: #22c55e; }
-.kpi-violet { background: #f5f3ff; border-color: #8b5cf6; }
-.kpi-amber  { background: #fffbeb; border-color: #f59e0b; }
-.kpi-red    { background: #fef2f2; border-color: #ef4444; }
-.kpi-cyan   { background: #ecfeff; border-color: #06b6d4; }
-.kpi-purple { background: #faf5ff; border-color: #a855f7; }
+/* Data tables */
+.data th { background: #f1f5f9; color: #475569; font-size: 7.5pt; text-transform: uppercase; letter-spacing: .5px; text-align: left; padding: 6px 8px; border-bottom: 1px solid #e2e8f0; }
+.data td { padding: 6px 8px; border-bottom: 1px solid #f1f5f9; font-size: 8.5pt; }
+.data .r { text-align: right; }
+.data tr.total td { font-weight: bold; background: #f8fafc; border-top: 1px solid #e2e8f0; }
 
-.kpi-value {
-    font-size: 18pt;
-    font-weight: bold;
-    line-height: 1;
-    margin-bottom: 3px;
-}
-.kpi-blue   .kpi-value { color: #1d4ed8; }
-.kpi-green  .kpi-value { color: #15803d; }
-.kpi-violet .kpi-value { color: #6d28d9; }
-.kpi-amber  .kpi-value { color: #b45309; }
-.kpi-red    .kpi-value { color: #b91c1c; }
-.kpi-cyan   .kpi-value { color: #0e7490; }
-.kpi-purple .kpi-value { color: #7e22ce; }
+.two td.col { width: 50%; }
+.two td.col + td.col { padding-left: 18px; }
+.sub-title { font-size: 9pt; font-weight: bold; color: #334155; margin-bottom: 6px; }
+.empty { color: #94a3b8; font-style: italic; font-size: 8.5pt; padding: 6px 0; }
+.note { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; padding: 8px 10px; font-size: 8.5pt; margin-top: 16px; }
+.pill { font-size: 7pt; padding: 1px 6px; background: #e2e8f0; color: #334155; }
 
-.kpi-label { font-size: 7.5pt; color: #64748b; }
-.kpi-badge {
-    display: inline-block;
-    font-size: 6.5pt;
-    font-weight: bold;
-    padding: 1px 6px;
-    border-radius: 10px;
-    background: rgba(0,0,0,0.07);
-    color: #475569;
-    margin-top: 3px;
-}
-
-/* ── Category bars ───────────────────────────────────────── */
-.cat-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 12px;
-    background: #f8fafc;
-    border-radius: 6px;
-    margin-bottom: 6px;
-    border-left: 3px solid #3b82f6;
-}
-.cat-label { font-size: 9pt; color: #334155; flex: 1; }
-.cat-bar-wrap { width: 100px; background: #e2e8f0; border-radius: 3px; height: 6px; }
-.cat-bar { height: 6px; border-radius: 3px; background: #3b82f6; }
-.cat-val { font-size: 9pt; font-weight: bold; color: #1e293b; width: 24px; text-align: right; }
-.cat-pct { font-size: 7.5pt; color: #94a3b8; width: 30px; text-align: right; }
-
-@php
-$catColors = ['#3b82f6','#8b5cf6','#f59e0b','#10b981','#ef4444','#06b6d4'];
-@endphp
-
-/* ── Finance blocks ──────────────────────────────────────── */
-.finance-row { display: flex; gap: 10px; margin-bottom: 14px; }
-.finance-block {
-    flex: 1;
-    padding: 12px 14px;
-    border-radius: 8px;
-    border: 1px solid #e2e8f0;
-}
-.finance-block-label { font-size: 7.5pt; color: #64748b; margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.05em; }
-.finance-block-value { font-size: 12pt; font-weight: bold; }
-.fb-amber { background: #fffbeb; border-color: #fde68a; }
-.fb-amber .finance-block-value { color: #b45309; }
-.fb-green { background: #f0fdf4; border-color: #bbf7d0; }
-.fb-green .finance-block-value { color: #15803d; }
-.fb-blue { background: #eff6ff; border-color: #bfdbfe; }
-.fb-blue .finance-block-value { color: #1d4ed8; }
-
-.util-label { display: flex; justify-content: space-between; font-size: 8.5pt; color: #475569; margin-bottom: 5px; }
-.util-pct { font-weight: bold; color: #b45309; }
-.util-track { background: #e2e8f0; border-radius: 4px; height: 10px; overflow: hidden; }
-.util-fill { height: 10px; border-radius: 4px; background: linear-gradient(90deg, #f59e0b, #fbbf24); }
-.util-ticks { display: flex; justify-content: space-between; font-size: 6.5pt; color: #cbd5e1; margin-top: 3px; }
-
-/* ── Table ───────────────────────────────────────────────── */
-table { width: 100%; border-collapse: collapse; font-size: 8.5pt; }
-thead tr { background: #1e3a8a; }
-th { color: #fff; padding: 7px 10px; text-align: left; font-size: 8pt; font-weight: bold; }
-tbody tr:nth-child(odd)  td { background: #f8fafc; }
-tbody tr:nth-child(even) td { background: #fff; }
-td { padding: 7px 10px; border-bottom: 1px solid #f1f5f9; color: #334155; }
-.tr { text-align: right; }
-.tc { text-align: center; }
-
-/* ── Output/impact rows ──────────────────────────────────── */
-.output-row {
-    display: flex; align-items: center; gap: 10px;
-    padding: 8px 12px;
-    border-radius: 6px;
-    background: #f8fafc;
-    margin-bottom: 5px;
-    border-left: 3px solid #8b5cf6;
-}
-.output-label { flex: 1; font-size: 9pt; color: #334155; }
-.output-bar-wrap { width: 80px; background: #e2e8f0; border-radius: 3px; height: 5px; }
-.output-bar { height: 5px; border-radius: 3px; background: #8b5cf6; }
-.output-val { font-size: 9pt; font-weight: bold; color: #1e293b; width: 20px; text-align: right; }
-
-/* ── College row ─────────────────────────────────────────── */
-.college-row {
-    display: flex; align-items: center; gap: 10px;
-    padding: 9px 12px;
-    border-radius: 6px;
-    background: #f8fafc;
-    margin-bottom: 6px;
-    border-left: 3px solid #10b981;
-}
-.college-name { flex: 1; font-size: 9pt; font-weight: bold; color: #1e293b; }
-.college-stat { text-align: right; min-width: 44px; }
-.college-stat-val { font-size: 10pt; font-weight: bold; color: #1e3a8a; }
-.college-stat-sub { font-size: 7pt; color: #94a3b8; }
-.college-rate-wrap { width: 60px; background: #e2e8f0; border-radius: 3px; height: 6px; }
-.college-rate-fill { height: 6px; border-radius: 3px; background: #10b981; }
-
-/* ── Badge ───────────────────────────────────────────────── */
-.badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 7.5pt; font-weight: bold; }
-.badge-green { background: #dcfce7; color: #15803d; }
-.badge-slate { background: #f1f5f9; color: #475569; }
-
-/* ── Two-col ─────────────────────────────────────────────── */
-.two-col { display: flex; gap: 14px; }
-.col { flex: 1; }
-.col-title { font-size: 9pt; font-weight: bold; color: #475569; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #e2e8f0; }
-
-/* ── Empty state ─────────────────────────────────────────── */
-.empty { font-size: 8.5pt; color: #94a3b8; font-style: italic; padding: 8px 0; }
-
-/* ── Divider ─────────────────────────────────────────────── */
-.divider { border:none; border-top: 1px solid #f1f5f9; margin: 20px 0; }
-
-/* ── Page break & margins ────────────────────────────────── */
-@page { margin: 20px 48px 24px; }
-
-.section        { page-break-inside: avoid; }
-.kpi-row        { page-break-inside: avoid; }
-.finance-row    { page-break-inside: avoid; }
-.two-col        { page-break-inside: avoid; }
-.college-row    { page-break-inside: avoid; }
-.section-head   { page-break-after: avoid; }
-
-/* Fixed page header — DomPDF repeats position:fixed on every page */
-#running-header {
-    position: fixed;
-    top: -20px;
-    left: 0; right: 0;
-    height: 36px;
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    border-bottom: 1.5px solid #1e3a8a;
-    padding-bottom: 5px;
-    font-size: 7.5pt;
-    color: #64748b;
-}
-#running-header .rh-left { font-weight: bold; color: #1e3a8a; }
-#running-header .rh-right { color: #94a3b8; }
-
-/* ── Footer ──────────────────────────────────────────────── */
-.footer {
-    margin-top: 32px;
-    padding: 12px 48px;
-    background: #f8fafc;
-    border-top: 2px solid #1e3a8a;
-    display: flex;
-    justify-content: space-between;
-    font-size: 7.5pt;
-    color: #64748b;
-}
+.footer { position: fixed; bottom: -30px; left: 0; right: 0; height: 18px; padding: 6px 40px 0; border-top: 1px solid #e2e8f0; font-size: 7pt; color: #94a3b8; }
+.footer .pg:after { content: counter(page); }
+.page-body { padding-bottom: 6px; }
+.keep { page-break-inside: avoid; }
 </style>
 </head>
 <body>
-<div class="page">
 
-{{-- ── Cover ─────────────────────────────────────────────── --}}
-<div class="cover">
-    <div class="cover-accent"></div>
-    <div class="cover-accent2"></div>
-    <div class="cover-tag">{{ $org_name }}</div>
-    <div class="cover-title">Annual RTT Report</div>
-    <div class="cover-sub">{{ $academic_year }} &nbsp;·&nbsp; Research, Technology Transfer &amp; Innovation</div>
-    <div class="cover-meta">
-        <div class="cover-meta-item">
-            <div class="cover-meta-label">Period</div>
-            <div class="cover-meta-value">Jul {{ $start_year }} – Jun {{ $end_year }}</div>
-        </div>
-        <div class="cover-meta-item">
-            <div class="cover-meta-label">Proposals</div>
-            <div class="cover-meta-value">{{ $proposals['total'] }} Submitted</div>
-        </div>
-        <div class="cover-meta-item">
-            <div class="cover-meta-label">Funded</div>
-            <div class="cover-meta-value">{{ $proposals['funded'] }} Projects</div>
-        </div>
-        <div class="cover-meta-item">
-            <div class="cover-meta-label">Generated</div>
-            <div class="cover-meta-value">{{ $generated_at }}</div>
-        </div>
-    </div>
+<div class="footer">
+    <table><tr>
+        <td>{{ $org_name }} · Annual RTT Report {{ $academic_year }}</td>
+        <td style="text-align:right">Generated {{ $generated_at }} · Page <span class="pg"></span></td>
+    </tr></table>
 </div>
 
-{{-- Fixed running header — appears on every page via DomPDF position:fixed --}}
-<div id="running-header">
-    <span class="rh-left">{{ $org_name }} &nbsp;·&nbsp; Annual RTT Report {{ $academic_year }}</span>
-    <span class="rh-right">{{ $generated_at }}</span>
+{{-- ── Letterhead ─────────────────────────────────────────────── --}}
+<div class="band">
+    <table><tr>
+        <td>
+            <div class="org">{{ $org_name }}</div>
+            <h1>Annual RTT Report</h1>
+            <div class="sub">Academic year {{ $academic_year }} · Research, Community Engagement &amp; Technology Transfer</div>
+        </td>
+        @if(!empty($logo))
+            <td style="width:64px; text-align:right"><img class="logo" src="{{ $logo }}" alt=""></td>
+        @endif
+    </tr></table>
+    <table class="meta"><tr>
+        <td><div class="k">Period</div><div class="v">Jul {{ $start_year }} – Jun {{ $end_year }}</div></td>
+        <td><div class="k">Proposals submitted</div><div class="v">{{ $fmt($proposals['total']) }}</div></td>
+        <td><div class="k">Projects funded</div><div class="v">{{ $fmt($proposals['funded']) }}@if($proposals['total']) ({{ $fundedRate }}%)@endif</div></td>
+        <td><div class="k">Research outputs</div><div class="v">{{ $fmt($outputs['total']) }}</div></td>
+    </tr></table>
 </div>
 
-<div class="body" style="padding-top: 24px;">
+<div class="wrap page-body">
 
-{{-- ── 1. Proposal Summary ──────────────────────────────── --}}
+@if(!empty($unavailable))
+    <div class="note"><b>Part of this report could not be compiled</b> ({{ implode(', ', array_map($nice, $unavailable)) }}) and is shown as empty. The error has been logged for the administrator.</div>
+@endif
+
+{{-- ── 1. Proposals ───────────────────────────────────────────── --}}
 <div class="section">
-    <div class="section-head">
-        <div class="section-num">1</div>
-        <div class="section-title">Proposal Summary</div>
-    </div>
+    <div class="section-title"><span class="n">01</span> Proposals</div>
+    <table class="cards"><tr>
+        <td class="card" style="border-top-color:#2563eb"><div class="v">{{ $fmt($proposals['total']) }}</div><div class="k">Submitted</div><div class="h">Excluding drafts</div></td>
+        <td class="card" style="border-top-color:#059669"><div class="v">{{ $fmt($proposals['funded']) }}</div><div class="k">Funded</div><div class="h">{{ $proposals['total'] ? $fundedRate.'% of submitted' : '—' }}</div></td>
+        <td class="card" style="border-top-color:#7c3aed"><div class="v">{{ $fmt($proposals['completed']) }}</div><div class="k">Completed</div><div class="h">Projects closed this year</div></td>
+        <td class="card" style="border-top-color:#dc2626"><div class="v">{{ $fmt($proposals['rejected']) }}</div><div class="k">Rejected</div><div class="h">{{ $proposals['total'] ? $pct($proposals['rejected'], $proposals['total']).'% of submitted' : '—' }}</div></td>
+    </tr></table>
 
-    {{-- KPI row --}}
-    <div class="kpi-row">
-        <div class="kpi kpi-blue">
-            <div class="kpi-value">{{ $proposals['total'] }}</div>
-            <div class="kpi-label">Total Submitted</div>
-        </div>
-        <div class="kpi kpi-green">
-            <div class="kpi-value">{{ $proposals['funded'] }}</div>
-            <div class="kpi-label">Funded</div>
-            @if($proposals['total'] > 0)
-            <div class="kpi-badge">{{ round(($proposals['funded'] / $proposals['total']) * 100) }}% rate</div>
+    <table class="two" style="margin-top:14px"><tr>
+        <td class="col keep">
+            <div class="sub-title">By programme</div>
+            @if(empty($proposals['by_category']))
+                <div class="empty">No proposals this year.</div>
+            @else
+                <table class="bars">
+                    @foreach($proposals['by_category'] as $category => $count)
+                        @php $share = $pct($count, $proposals['total']); @endphp
+                        <tr>
+                            <td class="label">{{ Programmes::label($category) }}</td>
+                            <td><div class="track"><div class="fill" style="width:{{ max($share, 1) }}%; background:{{ $palette[$loop->index % count($palette)] }}"></div></div></td>
+                            <td class="num">{{ $fmt($count) }} <span>{{ $share }}%</span></td>
+                        </tr>
+                    @endforeach
+                </table>
             @endif
-        </div>
-        <div class="kpi kpi-violet">
-            <div class="kpi-value">{{ $proposals['completed'] }}</div>
-            <div class="kpi-label">Completed</div>
-        </div>
-        <div class="kpi kpi-red">
-            <div class="kpi-value">{{ $proposals['rejected'] }}</div>
-            <div class="kpi-label">Rejected</div>
-        </div>
-    </div>
+        </td>
+        <td class="col keep">
+            <div class="sub-title">Where they are now</div>
+            @if(empty($proposals['by_status']))
+                <div class="empty">No proposals this year.</div>
+            @else
+                <table class="bars">
+                    @foreach($proposals['by_status'] as $status => $count)
+                        @php $share = $pct($count, $proposals['total']); @endphp
+                        <tr>
+                            <td class="label">{{ $statusLabel($status) }}</td>
+                            <td><div class="track"><div class="fill" style="width:{{ max($share, 1) }}%; background:#64748b"></div></div></td>
+                            <td class="num">{{ $fmt($count) }} <span>{{ $share }}%</span></td>
+                        </tr>
+                    @endforeach
+                </table>
+            @endif
+        </td>
+    </tr></table>
+</div>
 
-    {{-- By category --}}
-    @if(!empty($proposals['by_category']))
-    @php $catIdx = 0; $catColors = ['#3b82f6','#8b5cf6','#f59e0b','#10b981','#ef4444','#06b6d4']; @endphp
-    @foreach($proposals['by_category'] as $category => $count)
-    @php
-        $pct = $proposals['total'] > 0 ? round(($count / $proposals['total']) * 100) : 0;
-        $col = $catColors[$catIdx % count($catColors)];
-        $catIdx++;
-    @endphp
-    <div class="cat-row" style="border-left-color: {{ $col }};">
-        <div class="cat-label">{{ ucwords(str_replace('_', ' ', $category)) }}</div>
-        <div class="cat-bar-wrap"><div class="cat-bar" style="width:{{ $pct }}%; background:{{ $col }};"></div></div>
-        <div class="cat-val">{{ $count }}</div>
-        <div class="cat-pct">{{ $pct }}%</div>
-    </div>
-    @endforeach
+{{-- ── 2. Colleges ────────────────────────────────────────────── --}}
+<div class="section">
+    <div class="section-title"><span class="n">02</span> Colleges</div>
+    @if(empty($colleges))
+        <div class="empty">No proposals from any college this year.</div>
+    @else
+        <table class="data">
+            <thead><tr><th style="width:38%">College</th><th class="r" style="width:12%">Submitted</th><th class="r" style="width:10%">Funded</th><th class="r" style="width:12%">Success</th><th>Share of submissions</th></tr></thead>
+            <tbody>
+                @foreach($colleges as $c)
+                    @php $share = $pct($c['submitted'], $proposals['total']); @endphp
+                    <tr class="keep">
+                        <td>{{ $c['name'] }}</td>
+                        <td class="r">{{ $fmt($c['submitted']) }}</td>
+                        <td class="r">{{ $fmt($c['funded']) }}</td>
+                        <td class="r">{{ $pct($c['funded'], $c['submitted']) }}%</td>
+                        <td><table><tr><td style="padding:0"><div class="track" style="background:#eef2f7;height:7px;margin-top:4px"><div style="height:7px;width:{{ max($share, 1) }}%;background:#2563eb"></div></div></td><td style="padding:0 0 0 6px;width:30px;text-align:right;color:#64748b">{{ $share }}%</td></tr></table></td>
+                    </tr>
+                @endforeach
+                <tr class="total">
+                    <td>All colleges</td>
+                    <td class="r">{{ $fmt(array_sum(array_column($colleges, 'submitted'))) }}</td>
+                    <td class="r">{{ $fmt(array_sum(array_column($colleges, 'funded'))) }}</td>
+                    <td class="r">{{ $pct(array_sum(array_column($colleges, 'funded')), array_sum(array_column($colleges, 'submitted'))) }}%</td>
+                    <td></td>
+                </tr>
+            </tbody>
+        </table>
     @endif
 </div>
 
-<hr class="divider">
-
-{{-- ── 2. Finance & Budget ──────────────────────────────── --}}
-<div class="section">
-    <div class="section-head">
-        <div class="section-num">2</div>
-        <div class="section-title">Finance &amp; Budget</div>
-    </div>
-
-    <div class="finance-row">
-        <div class="finance-block fb-amber">
-            <div class="finance-block-label">Total Allocated ({{ \App\Support\Terms::currency() }})</div>
-            <div class="finance-block-value">{{ number_format($finance['allocated'], 0) }}</div>
-        </div>
-        <div class="finance-block fb-green">
-            <div class="finance-block-label">Total Disbursed ({{ \App\Support\Terms::currency() }})</div>
-            <div class="finance-block-value">{{ number_format($finance['disbursed'], 0) }}</div>
-        </div>
-        <div class="finance-block fb-blue">
-            <div class="finance-block-label">Remaining Balance ({{ \App\Support\Terms::currency() }})</div>
-            <div class="finance-block-value">{{ number_format($finance['allocated'] - $finance['disbursed'], 0) }}</div>
-        </div>
-    </div>
-
-    <div class="finance-row" style="margin-top: 8px;">
-        <div class="finance-block fb-amber">
-            <div class="finance-block-label">Awarded to Projects ({{ \App\Support\Terms::currency() }})</div>
-            <div class="finance-block-value">{{ number_format($finance['awarded'] ?? 0, 0) }}</div>
-        </div>
-        <div class="finance-block fb-green">
-            <div class="finance-block-label">Spent &amp; Verified ({{ \App\Support\Terms::currency() }})</div>
-            <div class="finance-block-value">{{ number_format($finance['settled'] ?? 0, 0) }}</div>
-        </div>
-        <div class="finance-block fb-blue">
-            <div class="finance-block-label">Paid of Awarded</div>
-            <div class="finance-block-value">{{ $finance['paid_of_awarded'] ?? 0 }}%</div>
-        </div>
-    </div>
-
-    <div class="util-label">
-        <span>Budget Utilization Rate</span>
-        <span class="util-pct">{{ $finance['utilization'] }}%</span>
-    </div>
-    <div class="util-track">
-        <div class="util-fill" style="width: {{ min($finance['utilization'], 100) }}%;"></div>
-    </div>
-    <div class="util-ticks">
-        <span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span>
-    </div>
-</div>
-
-<hr class="divider">
-
-{{-- ── 3. Review Activity ───────────────────────────────── --}}
-<div class="section">
-    <div class="section-head">
-        <div class="section-num">3</div>
-        <div class="section-title">Review Activity</div>
-    </div>
-
-    <div class="kpi-row">
-        <div class="kpi kpi-blue">
-            <div class="kpi-value">{{ $reviews['total'] }}</div>
-            <div class="kpi-label">Assignments</div>
-        </div>
-        <div class="kpi kpi-green">
-            <div class="kpi-value">{{ $reviews['completed'] }}</div>
-            <div class="kpi-label">Completed</div>
-        </div>
-        <div class="kpi kpi-amber">
-            <div class="kpi-value">{{ $reviews['rate'] }}%</div>
-            <div class="kpi-label">Completion Rate</div>
-        </div>
-        <div class="kpi kpi-violet">
-            <div class="kpi-value">{{ $reviews['total'] - $reviews['completed'] }}</div>
-            <div class="kpi-label">Pending</div>
-        </div>
-    </div>
-</div>
-
-<hr class="divider">
-
-{{-- ── 4. Research Outputs & Impacts ───────────────────── --}}
-<div class="section">
-    <div class="section-head">
-        <div class="section-num">4</div>
-        <div class="section-title">Research Outputs &amp; Impacts</div>
-    </div>
-
-    <div class="two-col">
-        <div class="col">
-            <div class="col-title">Outputs &nbsp;({{ $outputs['total'] }} total)</div>
-            @if(!empty($outputs['by_type']))
-                @php $oIdx = 0; $oColors = ['#8b5cf6','#3b82f6','#10b981','#f59e0b']; @endphp
-                @foreach($outputs['by_type'] as $type => $count)
-                @php $oPct = $outputs['total'] > 0 ? round(($count/$outputs['total'])*100) : 0; $oCol = $oColors[$oIdx % count($oColors)]; $oIdx++; @endphp
-                <div class="output-row" style="border-left-color:{{ $oCol }};">
-                    <div class="output-label">{{ ucwords(str_replace('_',' ',$type)) }}</div>
-                    <div class="output-bar-wrap"><div class="output-bar" style="width:{{ $oPct }}%; background:{{ $oCol }};"></div></div>
-                    <div class="output-val">{{ $count }}</div>
-                </div>
-                @endforeach
-            @else
-                <div class="empty">No outputs recorded.</div>
-            @endif
-        </div>
-        <div class="col">
-            <div class="col-title">Impacts &nbsp;({{ $impacts['total'] }} total)</div>
-            @if(!empty($impacts['by_type']))
-                @php $iIdx = 0; $iColors = ['#10b981','#8b5cf6','#3b82f6','#f59e0b']; @endphp
-                @foreach($impacts['by_type'] as $type => $count)
-                @php $iPct = $impacts['total'] > 0 ? round(($count/$impacts['total'])*100) : 0; $iCol = $iColors[$iIdx % count($iColors)]; $iIdx++; @endphp
-                <div class="output-row" style="border-left-color:{{ $iCol }};">
-                    <div class="output-label">{{ ucwords(str_replace('_',' ',$type)) }}</div>
-                    <div class="output-bar-wrap"><div class="output-bar" style="width:{{ $iPct }}%; background:{{ $iCol }};"></div></div>
-                    <div class="output-val">{{ $count }}</div>
-                </div>
-                @endforeach
-            @else
-                <div class="empty">No impacts recorded.</div>
-            @endif
-        </div>
-    </div>
-</div>
-
-{{-- ── 5. College Performance ───────────────────────────── --}}
-@if(!empty($colleges))
-<hr class="divider">
-<div class="section">
-    <div class="section-head">
-        <div class="section-num">5</div>
-        <div class="section-title">College Performance</div>
-    </div>
-
-    @php $cColors = ['#3b82f6','#8b5cf6','#f59e0b','#10b981','#ef4444','#06b6d4']; $cIdx = 0; @endphp
-    @foreach($colleges as $college)
-    @php $rate = $college['submitted'] > 0 ? round(($college['funded']/$college['submitted'])*100) : 0; $cCol = $cColors[$cIdx % count($cColors)]; $cIdx++; @endphp
-    <div class="college-row" style="border-left-color: {{ $cCol }};">
-        <div class="college-name">{{ $college['name'] }}</div>
-        <div style="width:70px;">
-            <div class="college-rate-wrap"><div class="college-rate-fill" style="width:{{ $rate }}%; background:{{ $cCol }};"></div></div>
-            <div style="font-size:7pt; color:#64748b; margin-top:2px;">{{ $rate }}% funded</div>
-        </div>
-        <div class="college-stat">
-            <div class="college-stat-val" style="color:{{ $cCol }};">{{ $college['submitted'] }}</div>
-            <div class="college-stat-sub">submitted</div>
-        </div>
-        <div class="college-stat">
-            <div class="college-stat-val" style="color:#15803d;">{{ $college['funded'] }}</div>
-            <div class="college-stat-sub">funded</div>
-        </div>
-    </div>
-    @endforeach
-</div>
-@endif
-
-{{-- ── 6. Proposal Calls ────────────────────────────────── --}}
-@if(!empty($calls))
-<hr class="divider">
-<div class="section">
-    <div class="section-head">
-        <div class="section-num">6</div>
-        <div class="section-title">Proposal Calls Issued</div>
-    </div>
-
-    <table>
-        <thead>
-            <tr>
-                <th>Title</th>
-                <th>Category</th>
-                <th class="tc">Status</th>
-                <th class="tr">Deadline</th>
-            </tr>
-        </thead>
-        <tbody>
-        @foreach($calls as $call)
+{{-- ── 3. Finance ─────────────────────────────────────────────── --}}
+<div class="section keep">
+    <div class="section-title"><span class="n">03</span> Finance</div>
+    <table class="cards"><tr>
+        <td class="card" style="border-top-color:#d97706"><div class="v money"><small>ETB</small> {{ $money($finance['allocated']) }}</div><div class="k">Budget allocated</div></td>
+        <td class="card" style="border-top-color:#2563eb"><div class="v money"><small>ETB</small> {{ $money($finance['awarded']) }}</div><div class="k">Awarded to projects</div></td>
+        <td class="card" style="border-top-color:#059669"><div class="v money"><small>ETB</small> {{ $money($finance['disbursed']) }}</div><div class="k">Disbursed</div><div class="h">{{ $finance['paid_of_awarded'] }}% of awarded</div></td>
+        <td class="card" style="border-top-color:#7c3aed"><div class="v money"><small>ETB</small> {{ $money($finance['settled']) }}</div><div class="k">Spent &amp; verified</div></td>
+    </tr></table>
+    <table class="bars" style="margin-top:12px">
         <tr>
-            <td>{{ $call['title'] }}</td>
-            <td>{{ ucwords(str_replace('_', ' ', $call['category'] ?? '')) }}</td>
-            <td class="tc">
-                <span class="badge {{ $call['status'] === 'active' ? 'badge-green' : 'badge-slate' }}">
-                    {{ ucfirst($call['status'] ?? '') }}
-                </span>
-            </td>
-            <td class="tr">{{ $call['end_date'] ? \Carbon\Carbon::parse($call['end_date'])->format('d M Y') : '—' }}</td>
+            <td class="label" style="width:40%">Budget utilisation <span style="color:#94a3b8">· disbursed of allocated</span></td>
+            <td><div class="track"><div class="fill" style="width:{{ min(100, max($finance['utilization'], 1)) }}%; background:#d97706"></div></div></td>
+            <td class="num">{{ $finance['utilization'] }}%</td>
         </tr>
-        @endforeach
-        </tbody>
+        <tr>
+            <td class="label" style="width:40%">Paid of awarded <span style="color:#94a3b8">· disbursed of awarded</span></td>
+            <td><div class="track"><div class="fill" style="width:{{ min(100, max($finance['paid_of_awarded'], 1)) }}%; background:#059669"></div></div></td>
+            <td class="num">{{ $finance['paid_of_awarded'] }}%</td>
+        </tr>
     </table>
 </div>
-@endif
 
-</div>{{-- /body --}}
+{{-- ── 4. Reviews ─────────────────────────────────────────────── --}}
+<div class="section keep">
+    <div class="section-title"><span class="n">04</span> Peer review</div>
+    <table class="cards"><tr>
+        <td class="card" style="border-top-color:#2563eb"><div class="v">{{ $fmt($reviews['total']) }}</div><div class="k">Reviews assigned</div><div class="h">Excluding declined &amp; cancelled</div></td>
+        <td class="card" style="border-top-color:#059669"><div class="v">{{ $fmt($reviews['completed']) }}</div><div class="k">Completed</div></td>
+        <td class="card" style="border-top-color:#d97706"><div class="v">{{ $reviews['rate'] }}%</div><div class="k">Completion rate</div></td>
+        <td class="card" style="border-top-color:#7c3aed"><div class="v">{{ $fmt($reviews['reviewers']) }}</div><div class="k">Reviewers involved</div></td>
+    </tr></table>
+</div>
 
-{{-- ── Footer ───────────────────────────────────────────── --}}
-<div class="footer">
-    <span>{{ $org_name }} &nbsp;·&nbsp; Annual RTT Report {{ $academic_year }}</span>
-    <span>Confidential &nbsp;·&nbsp; Generated {{ $generated_at }}</span>
+{{-- ── 5. Outputs and impacts ─────────────────────────────────── --}}
+<div class="section keep">
+    <div class="section-title"><span class="n">05</span> Research outputs &amp; impact</div>
+    <table class="two"><tr>
+        <td class="col">
+            <div class="sub-title">Outputs · {{ $fmt($outputs['total']) }}</div>
+            @if(empty($outputs['by_type']))
+                <div class="empty">No outputs recorded.</div>
+            @else
+                <table class="bars">
+                    @foreach($outputs['by_type'] as $type => $count)
+                        @php $share = $pct($count, $outputs['total']); @endphp
+                        <tr>
+                            <td class="label">{{ $nice($type) }}</td>
+                            <td><div class="track"><div class="fill" style="width:{{ max($share, 1) }}%; background:{{ $palette[$loop->index % count($palette)] }}"></div></div></td>
+                            <td class="num">{{ $fmt($count) }}</td>
+                        </tr>
+                    @endforeach
+                </table>
+            @endif
+        </td>
+        <td class="col">
+            <div class="sub-title">Impacts · {{ $fmt($impacts['total']) }}</div>
+            @if(empty($impacts['by_type']))
+                <div class="empty">No impacts recorded.</div>
+            @else
+                <table class="bars">
+                    @foreach($impacts['by_type'] as $type => $count)
+                        @php $share = $pct($count, $impacts['total']); @endphp
+                        <tr>
+                            <td class="label">{{ $nice($type) }}</td>
+                            <td><div class="track"><div class="fill" style="width:{{ max($share, 1) }}%; background:{{ $palette[($loop->index + 2) % count($palette)] }}"></div></div></td>
+                            <td class="num">{{ $fmt($count) }}</td>
+                        </tr>
+                    @endforeach
+                </table>
+            @endif
+        </td>
+    </tr></table>
+</div>
+
+{{-- ── 6. Calls ───────────────────────────────────────────────── --}}
+<div class="section">
+    <div class="section-title"><span class="n">06</span> Calls for proposals</div>
+    @if(empty($calls))
+        <div class="empty">No calls were opened for this academic year.</div>
+    @else
+        <table class="data">
+            <thead><tr><th>Call</th><th>Programme</th><th>Open</th><th>Close</th><th>Status</th></tr></thead>
+            <tbody>
+                @foreach($calls as $call)
+                    <tr class="keep">
+                        <td>{{ $call['title'] }}</td>
+                        <td>{{ Programmes::label($call['category']) }}</td>
+                        <td style="white-space:nowrap">{{ $call['start_date'] ? \Illuminate\Support\Carbon::parse($call['start_date'])->format('d M Y') : '—' }}</td>
+                        <td style="white-space:nowrap">{{ $call['end_date'] ? \Illuminate\Support\Carbon::parse($call['end_date'])->format('d M Y') : '—' }}</td>
+                        <td><span class="pill">{{ $nice($call['status']) }}</span></td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+    @endif
 </div>
 
 </div>

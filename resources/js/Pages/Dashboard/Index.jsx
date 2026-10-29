@@ -18,6 +18,8 @@ import { useAuth } from '../../hooks/useAuth'
 import { usePage } from '@inertiajs/react'
 import { formatCurrency, getStatusColor, getStatusLabel, timeAgo, cn } from '../../lib/utils'
 import { roleLabel, rememberRoleLabels } from '../../lib/roles';
+import { programmes, programmeColor, programmeLabel } from '../../lib/programmes';
+import { getCfg, getColors, getMessage, getActionUrl } from '../../Components/NotificationBell';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -43,10 +45,12 @@ const STATUS_LABEL = {
     archived:           'Archived',
 }
 
-const PIPELINE_COLORS = [
-    '#6366f1','#3b82f6','#f59e0b','#f97316',
-    '#10b981','#059669','#0d9488','#ef4444','#64748b',
-]
+/** One colour per stage, so a stage keeps its colour as others come and go. */
+const STATUS_COLOR = {
+    draft: '#cbd5e1', submitted: '#93c5fd', validated: '#60a5fa', under_blind_review: '#6366f1',
+    blind_review_passed: '#818cf8', under_open_defence: '#a855f7', accepted: '#f59e0b', funded: '#10b981',
+    midterm_evaluation: '#14b8a6', completed: '#059669', archived: '#64748b', rejected: '#ef4444',
+}
 
 const CARD_COLORS = {
     indigo:  { border: 'border-l-4 border-l-indigo-500',  iconBg: 'bg-indigo-50',  iconColor: 'text-indigo-600'  },
@@ -133,7 +137,7 @@ function SectionCard({ title, action, children, className = '' }) {
 
 // ─── Trend chart ─────────────────────────────────────────────────────────────
 
-function TrendChart({ data, loading, primaryColor }) {
+function TrendChart({ data, loading }) {
     const last6 = data.slice(-6)
 
     if (loading) return (
@@ -146,9 +150,14 @@ function TrendChart({ data, loading, primaryColor }) {
     if (!hasData) return (
         <div className="flex flex-col items-center justify-center py-12 text-gray-400">
             <BarChart2 size={32} className="mb-2 opacity-30" />
-            <p className="text-sm">{tr("No submission data yet")}</p>
+            <p className="text-sm">{tr("No submissions in the last 6 months")}</p>
         </div>
     )
+
+    // Every programme the server counts (Female Call included), not a fixed three.
+    const keys = Object.keys(last6[0] ?? {}).filter(k => k !== 'month' && k !== 'total')
+    const shown = keys.filter(k => last6.some(r => r[k] > 0))
+    const series = (shown.length ? shown : keys).map(k => ({ key: k, label: programmeLabel(k), color: programmeColor(k) }))
 
     return (
         <div className="px-3 pb-4">
@@ -161,18 +170,12 @@ function TrendChart({ data, loading, primaryColor }) {
                         contentStyle={{ borderRadius: 12, border: '1px solid #e5e7eb', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                         cursor={{ fill: '#f9fafb' }}
                     />
-                    <Bar dataKey="research"             name="Research"   fill={primaryColor ?? '#6366f1'} radius={[4,4,0,0]} />
-                    <Bar dataKey="community_engagement" name="Community"  fill="#10b981"                  radius={[4,4,0,0]} />
-                    <Bar dataKey="technology_transfer"  name="Technology" fill="#f59e0b"                  radius={[4,4,0,0]} />
+                    {series.map(p => <Bar key={p.key} dataKey={p.key} name={p.label} stackId="programmes" fill={p.color} />)}
                 </BarChart>
             </ResponsiveContainer>
-            <div className="flex items-center justify-center gap-4 mt-1">
-                {[
-                    { label: 'Research',   color: primaryColor ?? '#6366f1' },
-                    { label: 'Community',  color: '#10b981' },
-                    { label: 'Technology', color: '#f59e0b' },
-                ].map(l => (
-                    <div key={l.label} className="flex items-center gap-1.5">
+            <div className="mt-1 flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+                {series.map(l => (
+                    <div key={l.key} className="flex items-center gap-1.5">
                         <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: l.color }} />
                         <span className="text-[11px] text-gray-500">{l.label}</span>
                     </div>
@@ -187,7 +190,8 @@ function TrendChart({ data, loading, primaryColor }) {
 function PipelineDonut({ statusCounts, loading }) {
     const entries = Object.entries(statusCounts)
         .filter(([, v]) => v > 0)
-        .map(([k, v]) => ({ name: STATUS_LABEL[k] ?? k, value: v }))
+        .map(([k, v]) => ({ key: k, name: STATUS_LABEL[k] ?? getStatusLabel(k), value: v }))
+        .sort((a, b) => Object.keys(STATUS_COLOR).indexOf(a.key) - Object.keys(STATUS_COLOR).indexOf(b.key))
 
     const total = entries.reduce((s, e) => s + e.value, 0)
 
@@ -210,9 +214,7 @@ function PipelineDonut({ statusCounts, loading }) {
                         <PieChart>
                             <Pie data={entries} dataKey="value" cx="50%" cy="50%"
                                 innerRadius={44} outerRadius={64} paddingAngle={2} startAngle={90} endAngle={-270}>
-                                {entries.map((_, i) => (
-                                    <Cell key={i} fill={PIPELINE_COLORS[i % PIPELINE_COLORS.length]} />
-                                ))}
+                                {entries.map(e => <Cell key={e.key} fill={STATUS_COLOR[e.key] ?? '#94a3b8'} />)}
                             </Pie>
                             <Tooltip contentStyle={{ borderRadius: 10, fontSize: 11, border: '1px solid #e5e7eb' }} />
                         </PieChart>
@@ -225,10 +227,10 @@ function PipelineDonut({ statusCounts, loading }) {
             </div>
             {/* Legend */}
             <div className="space-y-1.5">
-                {entries.map((e, i) => (
-                    <div key={e.name} className="flex items-center gap-2">
+                {entries.map(e => (
+                    <div key={e.key} className="flex items-center gap-2">
                         <span className="h-2.5 w-2.5 rounded-full shrink-0"
-                            style={{ backgroundColor: PIPELINE_COLORS[i % PIPELINE_COLORS.length] }} />
+                            style={{ backgroundColor: STATUS_COLOR[e.key] ?? '#94a3b8' }} />
                         <span className="text-xs text-gray-600 flex-1 truncate">{e.name}</span>
                         <div className="flex items-center gap-1.5">
                             <span className="text-xs font-bold text-gray-800">{e.value}</span>
@@ -247,12 +249,14 @@ function PipelineDonut({ statusCounts, loading }) {
 
 function BudgetSummary({ data, loading }) {
     const allocated = parseFloat(data?.total_allocated ?? 0)
+    const awarded   = parseFloat(data?.total_awarded   ?? 0)
     const disbursed = parseFloat(data?.total_disbursed ?? 0)
     const settled   = parseFloat(data?.total_settled   ?? 0)
     const pct       = allocated > 0 ? Math.min(100, Math.round((disbursed / allocated) * 100)) : 0
 
     const rows = [
-        { label: 'Allocated', value: allocated, color: 'bg-indigo-500', pct: 100 },
+        { label: 'Allocated', value: allocated, color: 'bg-indigo-500', pct: allocated > 0 ? 100 : 0 },
+        { label: 'Awarded to projects', value: awarded, color: 'bg-violet-500', pct: allocated > 0 ? Math.min(100, (awarded / allocated) * 100) : 0 },
         { label: 'Disbursed', value: disbursed, color: 'bg-emerald-500', pct: allocated > 0 ? Math.min(100, (disbursed / allocated) * 100) : 0 },
         { label: 'Settled',   value: settled,   color: 'bg-cyan-500',   pct: allocated > 0 ? Math.min(100, (settled   / allocated) * 100) : 0 },
     ]
@@ -391,25 +395,25 @@ function NotificationsPanel({ notifications, loading }) {
 
     return (
         <div className="divide-y divide-gray-50">
-            {notifications.slice(0, 6).map(n => (
-                <div key={n.id}
-                    className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50/80 transition-colors">
-                    <div className="h-2 w-2 rounded-full bg-indigo-400 shrink-0 mt-2" />
-                    <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-gray-700 capitalize leading-snug">
-                            {n.data?.message ?? n.type?.replace(/_/g, ' ')}
-                        </p>
-                        <div className="flex items-center gap-1.5 mt-1">
-                            {n.data?.tracker_number && (
-                                <span className="text-[10px] font-mono text-indigo-500 bg-indigo-50 px-1.5 py-0.5 rounded">
-                                    {n.data.tracker_number}
-                                </span>
-                            )}
-                            <span className="text-[10px] text-gray-400">{timeAgo(n.created_at)}</span>
+            {notifications.slice(0, 6).map(n => {
+                const cfg = getCfg(n.type)
+                const Icon = cfg.icon
+                // Same wording and link as the notification bell.
+                const message = n.data?.message || getMessage(n.type, n.data)
+                return (
+                    <Link key={n.id} href={getActionUrl(n.type, n.data) || '/notifications'}
+                        className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50/80 transition-colors">
+                        <span className={cn('mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg', getColors(n.type).icon)}>
+                            {Icon ? <Icon size={13} /> : <Bell size={13} />}
+                        </span>
+                        <div className="flex-1 min-w-0">
+                            <p className="text-[11px] font-semibold text-gray-500">{cfg.label}</p>
+                            <p className="line-clamp-2 text-xs leading-snug text-gray-800">{message}</p>
+                            <p className="mt-0.5 text-[10px] text-gray-400">{timeAgo(n.created_at)}</p>
                         </div>
-                    </div>
-                </div>
-            ))}
+                    </Link>
+                )
+            })}
         </div>
     )
 }
@@ -462,7 +466,7 @@ function QuickActionsBanner({ isAdmin, isPI, isReviewer, isFinance }) {
 }
 
 // Standalone card variant (prominent colored buttons)
-function QuickActions({ isAdmin, isPI, isReviewer, isFinance, isCollegeOfficer }) {
+function quickActions({ isAdmin, isPI, isReviewer, isFinance, isCollegeOfficer }) {
     const actions = isAdmin ? [
         { label: 'Validation Queue', href: '/admin/validation-queue', icon: ClipboardCheck },
         { label: 'Proposal Calls',   href: '/proposal-calls',        icon: Megaphone },
@@ -473,17 +477,23 @@ function QuickActions({ isAdmin, isPI, isReviewer, isFinance, isCollegeOfficer }
         { label: 'New Application', href: '/proposals/create', icon: FileText },
         { label: 'My Proposals',    href: '/my-proposals',     icon: Activity },
         { label: 'Track Proposal',  href: '/tracker',          icon: Search },
-    ] : isReviewer ? [
-        { label: 'My Reviews',      href: '/reviews',          icon: ClipboardCheck },
-        { label: 'My Proposals',    href: '/my-proposals',     icon: FileText },
-    ] : isFinance ? [
-        { label: 'Disbursements',   href: '/disbursements',    icon: DollarSign },
-        { label: 'Settlements',     href: '/settlements',      icon: FileText },
     ] : isCollegeOfficer ? [
         { label: 'College Proposals', href: '/proposals',        icon: Building2 },
         { label: 'Budget Requests',   href: '/budget-requests',  icon: DollarSign },
+    ] : isFinance ? [
+        { label: 'Disbursements',   href: '/disbursements',    icon: DollarSign },
+        { label: 'Settlements',     href: '/settlements',      icon: FileText },
     ] : []
 
+    // Anyone with reviews to do gets a way straight to them.
+    if (isReviewer && !actions.some(a => a.href === '/reviews')) {
+        actions.unshift({ label: 'My Reviews', href: '/reviews', icon: ClipboardCheck })
+    }
+
+    return actions
+}
+
+function QuickActions({ actions }) {
     if (!actions.length) return null
 
     return (
@@ -509,7 +519,7 @@ function QuickActions({ isAdmin, isPI, isReviewer, isFinance, isCollegeOfficer }
 
 // ─── My Proposals list (PI) ───────────────────────────────────────────────────
 
-function MyProposalsList({ proposals, loading }) {
+function MyProposalsList({ proposals, loading, emptyText }) {
     if (loading) return (
         <div className="divide-y divide-gray-50">
             {[1,2,3].map(i => (
@@ -527,18 +537,20 @@ function MyProposalsList({ proposals, loading }) {
     if (!proposals?.length) return (
         <div className="flex flex-col items-center justify-center py-10 text-gray-400">
             <FileText size={28} className="mb-2 opacity-30" />
-            <p className="text-sm">{tr("No proposals yet")}</p>
-            <Link href="/proposals/create"
-                className="mt-2 text-xs font-semibold text-indigo-600 hover:text-indigo-800">
-                {tr("Submit your first proposal →")}
-            </Link>
+            <p className="text-sm">{emptyText ?? tr("No proposals yet")}</p>
+            {!emptyText && (
+                <Link href="/proposals/create"
+                    className="mt-2 text-xs font-semibold text-indigo-600 hover:text-indigo-800">
+                    {tr("Submit your first proposal →")}
+                </Link>
+            )}
         </div>
     )
 
     return (
         <div className="divide-y divide-gray-50">
             {proposals.slice(0, 6).map(p => (
-                <div key={p.id}
+                <Link key={p.id} href={`/proposals/${p.id}`}
                     className="flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50/80 transition-colors group">
                     <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-gray-800 truncate group-hover:text-indigo-700 transition-colors">
@@ -552,71 +564,8 @@ function MyProposalsList({ proposals, loading }) {
                     )}>
                         {getStatusLabel(p.status)}
                     </span>
-                </div>
+                </Link>
             ))}
-        </div>
-    )
-}
-
-// ─── Reviewer queue (enhanced) ────────────────────────────────────────────────
-
-function ReviewQueue({ queue, loading }) {
-    if (loading) return (
-        <div className="divide-y divide-gray-50">
-            {[1,2,3].map(i => (
-                <div key={i} className="flex items-center gap-3 px-5 py-3.5">
-                    <div className="flex-1 space-y-1.5">
-                        <Skeleton className="h-3 w-3/4" />
-                        <Skeleton className="h-2.5 w-32" />
-                    </div>
-                    <Skeleton className="h-7 w-14 rounded-xl" />
-                </div>
-            ))}
-        </div>
-    )
-
-    if (!queue?.length) return (
-        <div className="flex flex-col items-center justify-center py-10 text-gray-400">
-            <CheckCircle2 size={28} className="mb-2 opacity-30 text-green-400" />
-            <p className="text-sm">{tr("No reviews assigned")}</p>
-        </div>
-    )
-
-    return (
-        <div className="divide-y divide-gray-50">
-            {queue.slice(0, 6).map(a => {
-                const overdue = a.days_remaining != null && a.days_remaining < 0
-                const urgent  = a.days_remaining != null && a.days_remaining >= 0 && a.days_remaining <= 3
-                return (
-                    <div key={a.assignment_id}
-                        className="flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50/80 transition-colors">
-                        <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-gray-800 truncate">{a.title}</p>
-                            <div className="flex items-center gap-2 mt-0.5">
-                                <span className="text-[11px] font-mono text-indigo-400">{a.tracker_number}</span>
-                                {a.days_remaining != null && (
-                                    <span className={cn(
-                                        'text-[10px] px-1.5 py-0.5 rounded font-semibold',
-                                        overdue ? 'bg-red-50 text-red-600'
-                                        : urgent ? 'bg-amber-50 text-amber-700'
-                                        : 'bg-gray-50 text-gray-500'
-                                    )}>
-                                        {overdue
-                                            ? `${Math.abs(a.days_remaining)}d overdue`
-                                            : `${a.days_remaining}d left`
-                                        }
-                                    </span>
-                                )}
-                            </div>
-                        </div>
-                        <Link href={`/reviews/${a.assignment_id}/score`}
-                            className="shrink-0 px-3 py-1.5 bg-indigo-600 text-white text-xs font-semibold
-                                       rounded-xl hover:bg-indigo-700 transition-colors">
-                            {tr("Score")}
-                        </Link>
-                    </div>
-                )
-            })}
         </div>
     )
 }
@@ -654,9 +603,8 @@ export default function Dashboard() {
     // Which dashboard to show follows what the user can do, not their role name.
     const isAdmin         = hasPermission('proposals.validate')
     const isPI            = accessScope.type === 'own' && hasPermission('proposals.submit')
-    const isReviewer      = false
     const isFinance       = !isAdmin && hasPermission('funds.disburse')
-    const isCollegeOfficer = accessScope.type === 'college' && hasPermission('reviews.manage')
+    const isCollegeOfficer = accessScope.type === 'college'
 
     const statusCounts  = widgets.proposals_by_status ?? {}
     const trendData     = widgets.proposal_trend_chart ?? []
@@ -664,30 +612,36 @@ export default function Dashboard() {
     const notifications = widgets.recent_notifications ?? []
     const budgetSummary = widgets.budget_utilization_summary ?? {}
     const myProposals   = widgets.my_proposals ?? []
-    const reviewerQueue = widgets.reviewer_queue ?? []
-
-    const totalUnderReview = (statusCounts.under_blind_review ?? 0) + (statusCounts.under_open_defence ?? 0)
+    const collegeProposals = widgets.college_proposals ?? []
+    const headline      = widgets.headline ?? {}
+    const budgetWidget  = widgets.budget_utilization_summary
+    // Reviewing is something people do, not a role: anyone with reviews to do sees them.
+    const isReviewer    = (pendingTasks.reviews_pending ?? 0) > 0
+    const actions       = quickActions({ isAdmin, isPI, isReviewer, isFinance, isCollegeOfficer })
+    const visibleTasks  = Object.entries(pendingTasks).filter(([key]) => TASK_DEFS[key])
+    const taskTotal     = visibleTasks.reduce((sum, [, n]) => sum + (n ?? 0), 0)
+    const yearLabel     = headline.academic_year ?? settings.current_academic_year
 
     // ─── Stat cards config ────────────────────────────────────────────────────
     const statCards = isAdmin ? [
         {
-            label: 'Total Proposals', value: stats.total_proposals,
-            subLabel: `AY ${settings.current_academic_year}`,
+            label: 'Submitted', value: headline.submitted,
+            subLabel: `AY ${yearLabel}`,
             icon: FileText, colorKey: 'indigo', href: '/proposals',
         },
         {
-            label: 'Active Calls', value: stats.active_calls,
+            label: 'Active Calls', value: headline.active_calls,
             subLabel: 'Open for submissions',
             icon: Megaphone, colorKey: 'emerald', href: '/proposal-calls',
         },
         {
-            label: 'Under Review', value: totalUnderReview,
-            subLabel: 'Blind review + open defence',
-            icon: Search, colorKey: 'purple', href: '/admin/blind-review',
+            label: 'In Evaluation', value: headline.under_review,
+            subLabel: 'From validation to central evaluation',
+            icon: Search, colorKey: 'purple', href: '/proposals',
         },
         {
-            label: 'Funded', value: stats.funded,
-            subLabel: `${stats.colleges ?? 0} colleges`,
+            label: 'Funded', value: headline.funded,
+            subLabel: 'Funded, ongoing or completed',
             icon: Award, colorKey: 'amber', href: '/admin/awarded',
         },
     ] : isPI ? [
@@ -711,22 +665,6 @@ export default function Dashboard() {
             subLabel: 'Active grants',
             icon: Award, colorKey: 'amber', href: '/my-proposals',
         },
-    ] : isReviewer ? [
-        {
-            label: 'Assigned', value: reviewerQueue.length,
-            subLabel: 'Total reviews',
-            icon: ClipboardCheck, colorKey: 'blue', href: '/reviews',
-        },
-        {
-            label: 'Pending', value: pendingTasks.reviews_pending ?? 0,
-            subLabel: 'Not yet scored',
-            icon: FileText, colorKey: 'amber', href: '/reviews',
-        },
-        {
-            label: 'Overdue', value: pendingTasks.reviews_overdue ?? 0,
-            subLabel: 'Past due date',
-            icon: AlertCircle, colorKey: 'red', href: '/reviews',
-        },
     ] : isFinance ? [
         {
             label: 'Disbursements', value: pendingTasks.disbursements_pending ?? 0,
@@ -740,13 +678,13 @@ export default function Dashboard() {
         },
     ] : isCollegeOfficer ? [
         {
-            label: 'College Proposals', value: myProposals.length,
-            subLabel: 'All time',
+            label: 'Submitted', value: headline.submitted,
+            subLabel: `College · AY ${yearLabel}`,
             icon: Building2, colorKey: 'indigo', href: '/proposals',
         },
         {
-            label: 'Under Review', value: myProposals.filter(p => ['under_blind_review','under_open_defence'].includes(p.status)).length,
-            subLabel: 'In evaluation',
+            label: 'In Evaluation', value: headline.under_review,
+            subLabel: 'Being reviewed now',
             icon: Search, colorKey: 'purple', href: '/proposals',
         },
         {
@@ -755,29 +693,24 @@ export default function Dashboard() {
             icon: DollarSign, colorKey: 'amber', href: '/budget-requests',
         },
         {
-            label: 'Funded', value: myProposals.filter(p => ['funded','midterm_evaluation','completed'].includes(p.status)).length,
-            subLabel: 'Active grants',
+            label: 'Funded', value: headline.funded,
+            subLabel: 'Funded, ongoing or completed',
             icon: Award, colorKey: 'emerald', href: '/proposals',
         },
     ] : []
 
     // ─── Banner right-side mini stats ──────────────────────────────────────────
-    const bannerStats = isAdmin && !loading ? [
-        { label: 'Proposals', value: stats.total_proposals ?? 0 },
-        { label: 'Funded',    value: stats.funded ?? 0 },
-        { label: 'Colleges',  value: stats.colleges ?? 0 },
-    ] : isPI && !loading ? [
+    const bannerStats = loading ? [] : (isAdmin || isCollegeOfficer) ? [
+        { label: 'Submitted', value: headline.submitted ?? 0 },
+        { label: 'In evaluation', value: headline.under_review ?? 0 },
+        { label: 'Funded', value: headline.funded ?? 0 },
+    ] : isPI ? [
         { label: 'Total', value: myProposals.length },
         { label: 'Funded', value: myProposals.filter(p => ['funded','midterm_evaluation','completed'].includes(p.status)).length },
         { label: 'Drafts', value: pendingTasks.drafts_in_progress ?? 0 },
-    ] : isReviewer && !loading ? [
-        { label: 'Assigned', value: reviewerQueue.length },
-        { label: 'Pending',  value: pendingTasks.reviews_pending ?? 0 },
-        { label: 'Overdue',  value: pendingTasks.reviews_overdue ?? 0 },
-    ] : isCollegeOfficer && !loading ? [
-        { label: 'Proposals', value: myProposals.length },
-        { label: 'Funded',    value: myProposals.filter(p => ['funded','midterm_evaluation','completed'].includes(p.status)).length },
-        { label: 'Requests',  value: pendingTasks.budget_requests_pending ?? 0 },
+    ] : isReviewer ? [
+        { label: 'Reviews to do', value: pendingTasks.reviews_pending ?? 0 },
+        { label: 'Overdue', value: pendingTasks.reviews_overdue ?? 0 },
     ] : []
 
     return (
@@ -800,7 +733,7 @@ export default function Dashboard() {
                                     <Calendar size={12} />
                                     <span>{new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
                                     <span className="opacity-40">·</span>
-                                    <span>{tr("AY :current_academic_year", { current_academic_year: settings.current_academic_year })}</span>
+                                    <span>{tr("AY :current_academic_year", { current_academic_year: yearLabel })}</span>
                                 </div>
                                 <h1 className="text-xl sm:text-2xl font-bold text-white mb-3">
                                     {greeting()}, {user?.name?.split(' ')[0] ?? 'User'}! 👋
@@ -813,9 +746,9 @@ export default function Dashboard() {
                                     <span className="bg-white/15 backdrop-blur-sm rounded-full px-3 py-1 text-xs font-medium text-white">
                                         {roles[0] ? roleLabel(roles[0]) : 'User'}
                                     </span>
-                                    {stats.active_calls > 0 && (
+                                    {(headline.active_calls ?? stats.active_calls) > 0 && (
                                         <span className="bg-green-400/30 backdrop-blur-sm rounded-full px-3 py-1 text-xs font-medium text-white">
-                                            {stats.active_calls} active call{stats.active_calls !== 1 ? 's' : ''}
+                                            {headline.active_calls ?? stats.active_calls} active call{(headline.active_calls ?? stats.active_calls) !== 1 ? 's' : ''}
                                         </span>
                                     )}
                                 </div>
@@ -854,9 +787,11 @@ export default function Dashboard() {
                 )}
 
                 {/* ── Quick Actions card ──────────────────────────────────── */}
-                <SectionCard title={tr("Quick Actions")}>
-                    <QuickActions isAdmin={isAdmin} isPI={isPI} isReviewer={isReviewer} isFinance={isFinance} isCollegeOfficer={isCollegeOfficer} />
-                </SectionCard>
+                {actions.length > 0 && (
+                    <SectionCard title={tr("Quick Actions")}>
+                        <QuickActions actions={actions} />
+                    </SectionCard>
+                )}
 
                 {/* ── Main 2-column layout ────────────────────────────────── */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
@@ -865,12 +800,12 @@ export default function Dashboard() {
                     <div className="lg:col-span-2 space-y-5">
 
                         {/* Trend chart (admin / central_officer) */}
-                        {isAdmin && (
+                        {(loading ? isAdmin : widgets.proposal_trend_chart) && (
                             <SectionCard
                                 title={tr("Proposal Submissions")}
                                 action={<span className="text-xs text-gray-400 font-medium">{tr("Last 6 months")}</span>}
                             >
-                                <TrendChart data={trendData} loading={loading} primaryColor={settings.primary_color} />
+                                <TrendChart data={trendData} loading={loading} />
                             </SectionCard>
                         )}
 
@@ -900,36 +835,7 @@ export default function Dashboard() {
                                     </Link>
                                 }
                             >
-                                <MyProposalsList proposals={myProposals} loading={loading} />
-                            </SectionCard>
-                        )}
-
-                        {/* Review queue (reviewer) */}
-                        {isReviewer && (
-                            <SectionCard
-                                title={tr("Review Queue")}
-                                action={
-                                    <Link href="/reviews"
-                                        className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1">
-                                        {tr("View all")} <ChevronRight size={11} />
-                                    </Link>
-                                }
-                            >
-                                <ReviewQueue queue={reviewerQueue} loading={loading} />
-                            </SectionCard>
-                        )}
-
-                        {/* Budget utilization (finance) */}
-                        {isFinance && !isAdmin && (
-                            <SectionCard
-                                title={tr("Budget Utilization")}
-                                action={
-                                    <span className="text-xs text-gray-400 font-medium">
-                                        {tr("FY :current_academic_year", { current_academic_year: budgetSummary.fiscal_year ?? settings.current_academic_year })}
-                                    </span>
-                                }
-                            >
-                                <BudgetSummary data={budgetSummary} loading={loading} />
+                                <MyProposalsList proposals={collegeProposals} loading={loading} emptyText={tr("No proposals from your college yet")} />
                             </SectionCard>
                         )}
 
@@ -939,7 +845,7 @@ export default function Dashboard() {
                             action={
                                 <span className="text-xs text-gray-400 font-medium flex items-center gap-1">
                                     <Clock size={11} />
-                                    {Object.values(pendingTasks).reduce((s, v) => s + (v ?? 0), 0)} items
+                                    {taskTotal} {taskTotal === 1 ? 'item' : 'items'}
                                 </span>
                             }
                         >
@@ -956,12 +862,12 @@ export default function Dashboard() {
                         </SectionCard>
 
                         {/* Budget summary (admin / finance) */}
-                        {(isAdmin || isFinance) && (
+                        {(loading ? (isAdmin || isFinance) : budgetWidget) && (
                             <SectionCard
                                 title={tr("Budget Summary")}
                                 action={
                                     <span className="text-xs text-gray-400 font-medium">
-                                        {tr("FY :current_academic_year", { current_academic_year: budgetSummary.fiscal_year ?? settings.current_academic_year })}
+                                        {tr("AY :current_academic_year", { current_academic_year: budgetSummary.fiscal_year ?? yearLabel })}
                                     </span>
                                 }
                             >

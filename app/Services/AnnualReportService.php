@@ -3,33 +3,56 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class AnnualReportService
 {
     /** A proposal counts as funded from the award onwards, including after it moves on to mid-term or completion. */
     private const FUNDED_STATUSES = ['funded', 'midterm_evaluation', 'completed', 'archived'];
 
+    /**
+     * Each section with what it shows when it can't be compiled, so one broken
+     * section leaves the rest of the report readable instead of failing it all.
+     */
+    private const EMPTY_SECTIONS = [
+        'proposals' => ['total' => 0, 'funded' => 0, 'completed' => 0, 'rejected' => 0, 'by_status' => [], 'by_category' => []],
+        'finance' => ['allocated' => 0, 'awarded' => 0, 'disbursed' => 0, 'settled' => 0, 'utilization' => 0, 'paid_of_awarded' => 0],
+        'reviews' => ['total' => 0, 'completed' => 0, 'rate' => 0, 'reviewers' => 0],
+        'outputs' => ['total' => 0, 'by_type' => []],
+        'impacts' => ['total' => 0, 'by_type' => []],
+        'colleges' => [],
+        'calls' => [],
+    ];
+
     public function compile(int $startYear, int $endYear): array
     {
         $ay = "{$startYear}-{$endYear}"; // e.g. "2026-2027" — matches proposals.academic_year
 
-        return [
+        $report = [
             'academic_year' => $ay,
             'start_year' => $startYear,
             'end_year' => $endYear,
-            'proposals' => $this->proposals($ay),
-            'finance' => $this->finance($ay),
-            'reviews' => $this->reviews($ay),
-            'outputs' => $this->outputs($ay),
-            'impacts' => $this->impacts($ay),
-            'colleges' => $this->colleges($ay),
-            'calls' => $this->calls($ay),
+        ];
+        $unavailable = [];
+
+        foreach (self::EMPTY_SECTIONS as $section => $empty) {
+            try {
+                $report[$section] = $this->{$section}($ay);
+            } catch (\Throwable $e) {
+                Log::error("Annual report {$ay}: the {$section} section failed — {$e->getMessage()}", ['exception' => $e]);
+                $report[$section] = $empty;
+                $unavailable[] = $section;
+            }
+        }
+
+        return $report + [
+            'unavailable' => $unavailable,
             'generated_at' => now()->format('d M Y H:i'),
         ];
     }
 
     /** @return array<string, mixed> */
-    private function proposals(string $ay): array
+    protected function proposals(string $ay): array
     {
         $byStatus = DB::table('proposals')
             ->where('academic_year', $ay)
@@ -60,7 +83,7 @@ class AnnualReportService
     }
 
     /** @return array<string, mixed> */
-    private function finance(string $ay): array
+    public function finance(string $ay): array
     {
         // budget_allocations uses fiscal_year in the same "YYYY-YYYY" format
         $allocated = (float) DB::table('budget_allocations')
@@ -100,7 +123,7 @@ class AnnualReportService
     }
 
     /** @return array<string, mixed> */
-    private function reviews(string $ay): array
+    protected function reviews(string $ay): array
     {
         $base = DB::table('review_assignments')
             ->join('proposals', 'review_assignments.proposal_id', '=', 'proposals.id')
@@ -120,7 +143,7 @@ class AnnualReportService
     }
 
     /** @return array<string, mixed> */
-    private function outputs(string $ay): array
+    protected function outputs(string $ay): array
     {
         $byType = DB::table('research_outputs')
             ->join('proposals', 'research_outputs.proposal_id', '=', 'proposals.id')
@@ -134,7 +157,7 @@ class AnnualReportService
     }
 
     /** @return array<string, mixed> */
-    private function impacts(string $ay): array
+    protected function impacts(string $ay): array
     {
         $byType = DB::table('research_impacts')
             ->join('proposals', 'research_impacts.proposal_id', '=', 'proposals.id')
@@ -148,7 +171,7 @@ class AnnualReportService
     }
 
     /** @return array<array<string, mixed>> */
-    private function colleges(string $ay): array
+    protected function colleges(string $ay): array
     {
         return DB::table('proposals')
             ->join('colleges', 'proposals.college_id', '=', 'colleges.id')
@@ -164,7 +187,7 @@ class AnnualReportService
     }
 
     /** @return array<array<string, mixed>> */
-    private function calls(string $ay): array
+    protected function calls(string $ay): array
     {
         return DB::table('proposal_calls')
             ->where('academic_year', $ay)

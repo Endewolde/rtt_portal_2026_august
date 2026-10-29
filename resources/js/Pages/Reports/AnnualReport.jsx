@@ -115,6 +115,12 @@ export default function AnnualReport() {
                     </div>
                 ) : data && (
                     <div className={`space-y-6 transition ${loading ? 'opacity-60' : ''}`}>
+                        {data.unavailable?.length > 0 && (
+                            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                                <b>Part of this report could not be compiled</b> ({data.unavailable.map(titleCase).join(', ')}) and shows as empty below.
+                                The error has been logged for the administrator.
+                            </div>
+                        )}
                         <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
                             <StatCard icon={FileText} color="indigo" label="Proposals submitted" value={fmt(p.total)} hint="Excluding drafts" />
                             <StatCard icon={CheckCircle2} color="emerald" label="Proposals funded" value={fmt(p.funded)} hint={fundedRate != null ? `${fundedRate}% of submitted` : ''} />

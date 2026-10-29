@@ -36,24 +36,45 @@ class ReportService
             'from' => 'proposals as p',
             'joins' => [
                 ['colleges as c', 'p.college_id', '=', 'c.id'],
+                ['departments as d', 'p.department_id', '=', 'd.id', 'left'],
+                ['users as pi', 'p.pi_user_id', '=', 'pi.id', 'left'],
+                ['proposal_calls as pc', 'p.proposal_call_id', '=', 'pc.id', 'left'],
             ],
             'base_where' => 'p.deleted_at IS NULL',
+            'date' => ['column' => 'p.submitted_at', 'label' => 'Submitted'],
             'dimensions' => [
                 'college' => 'c.name',
+                'department' => 'd.name',
                 'category' => 'p.category',
                 'status' => 'p.status',
                 'academic_year' => 'p.academic_year',
+                'call' => 'pc.title',
+                'research_type' => 'p.research_type',
+                'focus_area' => 'p.focus_area',
+                'pi_gender' => 'pi.gender',
+                'submitted_month' => "DATE_FORMAT(p.submitted_at, '%Y-%m')",
             ],
             'metrics' => [
                 'count' => 'COUNT(*)',
+                'submitted_count' => "SUM(CASE WHEN p.status <> 'draft' THEN 1 ELSE 0 END)",
+                'under_review_count' => "SUM(CASE WHEN p.status IN ('submitted','validated','under_blind_review','blind_review_passed','under_open_defence') THEN 1 ELSE 0 END)",
                 'funded_count' => "SUM(CASE WHEN p.status IN ('funded','accepted','completed','midterm_evaluation','archived') THEN 1 ELSE 0 END)",
+                'completed_count' => "SUM(CASE WHEN p.status IN ('completed','archived') THEN 1 ELSE 0 END)",
                 'rejected_count' => "SUM(CASE WHEN p.status = 'rejected' THEN 1 ELSE 0 END)",
+                'success_rate' => "ROUND(100 * SUM(CASE WHEN p.status IN ('funded','accepted','completed','midterm_evaluation','archived') THEN 1 ELSE 0 END) / NULLIF(SUM(CASE WHEN p.status <> 'draft' THEN 1 ELSE 0 END), 0), 1)",
+                'total_budget' => 'SUM((SELECT COALESCE(SUM(pb.amount), 0) FROM proposal_budgets pb WHERE pb.proposal_id = p.id))',
+                'avg_budget' => 'ROUND(AVG((SELECT SUM(pb.amount) FROM proposal_budgets pb WHERE pb.proposal_id = p.id)), 0)',
             ],
             'filter_columns' => [
                 'college_id' => 'p.college_id',
+                'department_id' => 'p.department_id',
                 'category' => 'p.category',
                 'status' => 'p.status',
                 'academic_year' => 'p.academic_year',
+                'proposal_call_id' => 'p.proposal_call_id',
+                'research_type' => 'p.research_type',
+                'focus_area' => 'p.focus_area',
+                'pi_gender' => 'pi.gender',
             ],
         ],
         'complaints' => [
@@ -62,18 +83,26 @@ class ReportService
                 ['proposals as p', 'co.proposal_id', '=', 'p.id'],
                 ['colleges as c', 'p.college_id', '=', 'c.id'],
             ],
+            'date' => ['column' => 'co.created_at', 'label' => 'Raised'],
             'dimensions' => [
                 'college' => 'c.name',
+                'category' => 'p.category',
+                'academic_year' => 'p.academic_year',
                 'status' => 'co.status',
                 'level' => 'co.level',
                 'complaint_type' => 'co.complaint_type',
+                'raised_month' => "DATE_FORMAT(co.created_at, '%Y-%m')",
             ],
             'metrics' => [
                 'count' => 'COUNT(*)',
+                'open_count' => "SUM(CASE WHEN co.status IN ('open','under_review') THEN 1 ELSE 0 END)",
+                'resolved_count' => "SUM(CASE WHEN co.status = 'resolved' THEN 1 ELSE 0 END)",
+                'escalated_count' => 'SUM(CASE WHEN co.escalated_from_id IS NOT NULL THEN 1 ELSE 0 END)',
                 'avg_resolution_days' => 'ROUND(AVG(CASE WHEN co.resolved_at IS NOT NULL THEN DATEDIFF(co.resolved_at, co.created_at) END), 1)',
             ],
             'filter_columns' => [
                 'college_id' => 'p.college_id',
+                'category' => 'p.category',
                 'status' => 'co.status',
                 'level' => 'co.level',
                 'complaint_type' => 'co.complaint_type',
@@ -85,23 +114,42 @@ class ReportService
             'joins' => [
                 ['proposals as p', 'ra.proposal_id', '=', 'p.id'],
                 ['colleges as c', 'p.college_id', '=', 'c.id'],
+                ['evaluation_types as et', 'ra.evaluation_type_id', '=', 'et.id', 'left'],
+                ['users as r', 'ra.reviewer_id', '=', 'r.id', 'left'],
             ],
+            'date' => ['column' => 'ra.assigned_at', 'label' => 'Assigned'],
             'dimensions' => [
                 'college' => 'c.name',
+                'reviewer' => 'r.name',
+                'review_type' => self::REVIEW_TYPE_SQL,
+                'reviewer_kind' => self::REVIEWER_KIND_SQL,
+                'category' => 'p.category',
+                'academic_year' => 'p.academic_year',
                 'status' => 'ra.status',
+                'assigned_month' => "DATE_FORMAT(ra.assigned_at, '%Y-%m')",
             ],
             'metrics' => [
                 'count' => 'COUNT(*)',
                 'submitted_count' => "SUM(CASE WHEN ra.status = 'submitted' THEN 1 ELSE 0 END)",
+                'overdue_count' => "SUM(CASE WHEN ra.status IN ('pending','accepted','in_progress') AND ra.due_date < CURDATE() THEN 1 ELSE 0 END)",
+                'declined_count' => "SUM(CASE WHEN ra.status = 'declined' THEN 1 ELSE 0 END)",
+                'completion_rate' => "ROUND(100 * SUM(CASE WHEN ra.status = 'submitted' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), 0), 1)",
                 'avg_days_to_review' => 'ROUND(AVG(CASE WHEN ra.submitted_at IS NOT NULL THEN DATEDIFF(ra.submitted_at, ra.assigned_at) END), 1)',
             ],
             'filter_columns' => [
                 'college_id' => 'p.college_id',
+                'category' => 'p.category',
                 'status' => 'ra.status',
                 'academic_year' => 'p.academic_year',
+                'review_type' => self::REVIEW_TYPE_SQL,
+                'reviewer_kind' => self::REVIEWER_KIND_SQL,
             ],
         ],
     ];
+
+    private const REVIEW_TYPE_SQL = "CASE WHEN et.name LIKE 'open_defence%' THEN 'open_defence' WHEN et.name LIKE 'blind_review%' THEN 'blind_review' ELSE 'other' END";
+
+    private const REVIEWER_KIND_SQL = "CASE WHEN ra.is_external = 1 THEN 'external' ELSE 'internal' END";
 
     /**
      * Generate a report synchronously or queue it based on date range.
@@ -232,7 +280,7 @@ class ReportService
      * Available subjects/dimensions/metrics/filters for the report builder UI — the
      * client chooses only from these, never supplies raw SQL.
      *
-     * @return array<string, array{dimensions: string[], metrics: string[], filters: string[]}>
+     * @return array<string, array{dimensions: string[], metrics: string[], filters: string[], date: ?string}>
      */
     public function builderOptions(): array
     {
@@ -240,7 +288,42 @@ class ReportService
             'dimensions' => array_keys($config['dimensions']),
             'metrics' => array_keys($config['metrics']),
             'filters' => array_keys($config['filter_columns']),
+            'date' => $config['date']['label'] ?? null,
         ])->toArray();
+    }
+
+    /**
+     * The values the builder's data-driven filters can take — only values that are
+     * actually in use, and for a college-scoped user only their own college's.
+     *
+     * @return array<string, list<array{value: string, label: string, group?: string}>>
+     */
+    public function builderChoices(User $user): array
+    {
+        $scope = $user->accessScope();
+        $collegeId = $scope->isCollege() ? $scope->collegeId : null;
+        $proposals = fn () => DB::table('proposals')->whereNull('deleted_at')->when($collegeId, fn ($q) => $q->where('college_id', $collegeId));
+        $distinct = fn (string $column) => $proposals()->whereNotNull($column)->where($column, '<>', '')
+            ->distinct()->orderBy($column)->pluck($column)
+            ->map(fn ($v) => ['value' => (string) $v, 'label' => (string) $v])->values()->all();
+
+        return [
+            'department_id' => DB::table('departments as d')->join('colleges as c', 'c.id', '=', 'd.college_id')
+                ->when($collegeId, fn ($q) => $q->where('d.college_id', $collegeId))
+                ->orderBy('c.name')->orderBy('d.name')
+                ->get(['d.id', 'd.name', 'c.name as college'])
+                ->map(fn ($d) => ['value' => (string) $d->id, 'label' => $d->name, 'group' => $d->college])->all(),
+            'proposal_call_id' => DB::table('proposal_calls')->whereNull('deleted_at')
+                ->whereIn('id', $proposals()->select('proposal_call_id'))
+                ->orderByDesc('academic_year')->orderBy('title')
+                ->get(['id', 'title', 'academic_year'])
+                ->map(fn ($c) => ['value' => (string) $c->id, 'label' => $c->title, 'group' => (string) $c->academic_year])->all(),
+            'research_type' => $distinct('research_type'),
+            'focus_area' => $distinct('focus_area'),
+            'pi_gender' => [['value' => 'female', 'label' => 'Female'], ['value' => 'male', 'label' => 'Male']],
+            'review_type' => [['value' => 'blind_review', 'label' => 'Blind review'], ['value' => 'open_defence', 'label' => 'Open defence'], ['value' => 'other', 'label' => 'Other']],
+            'reviewer_kind' => [['value' => 'internal', 'label' => 'Internal'], ['value' => 'external', 'label' => 'External']],
+        ];
     }
 
     /**
@@ -273,8 +356,11 @@ class ReportService
         }
 
         $query = DB::table($config['from']);
-        foreach ($config['joins'] as [$table, $first, $operator, $second]) {
-            $query->join($table, $first, $operator, $second);
+        foreach ($config['joins'] as $join) {
+            [$table, $first, $operator, $second] = $join;
+            ($join[4] ?? 'inner') === 'left'
+                ? $query->leftJoin($table, $first, $operator, $second)
+                : $query->join($table, $first, $operator, $second);
         }
         if (! empty($config['base_where'])) {
             $query->whereRaw($config['base_where']);
@@ -290,12 +376,27 @@ class ReportService
         $query->select($selects);
 
         if (! empty($dimensions)) {
-            $query->groupBy(array_map(fn ($dim) => $config['dimensions'][$dim], $dimensions));
+            $query->groupBy(array_map(fn ($dim) => DB::raw($config['dimensions'][$dim]), $dimensions));
         }
 
+        // A filter is one value or a list of them (e.g. two colleges); lists match any.
         foreach ($config['filter_columns'] as $key => $column) {
-            if (! empty($filters[$key])) {
-                $query->where($column, $filters[$key]);
+            $value = $filters[$key] ?? null;
+            $values = is_array($value) ? $value : [$value];
+            $values = array_slice(array_values(array_filter($values, fn ($v) => is_scalar($v) && $v !== '' && $v !== null)), 0, 100);
+            if ($values !== []) {
+                $query->whereIn(DB::raw($column), $values);
+            }
+        }
+
+        // An optional date range on the subject's own date (submitted, raised, assigned).
+        if (isset($config['date'])) {
+            $range = (array) ($filters['date_range'] ?? []);
+            foreach (['from' => '>=', 'to' => '<='] as $edge => $operator) {
+                $day = $range[$edge] ?? null;
+                if (is_string($day) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $day)) {
+                    $query->whereDate(DB::raw($config['date']['column']), $operator, $day);
+                }
             }
         }
 

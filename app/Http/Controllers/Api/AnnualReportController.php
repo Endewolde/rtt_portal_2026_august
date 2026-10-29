@@ -5,11 +5,13 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Proposal;
 use App\Services\AnnualReportService;
+use App\Support\PdfAssets;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class AnnualReportController extends Controller
 {
@@ -34,7 +36,7 @@ class AnnualReportController extends Controller
             'message' => 'Report data compiled.',
             'errors' => [],
             'meta' => ['academic_years' => $years],
-        ]);
+        ], 200, [], JSON_INVALID_UTF8_SUBSTITUTE);
     }
 
     public function download(Request $request): Response|JsonResponse
@@ -49,15 +51,30 @@ class AnnualReportController extends Controller
 
         $data = $this->service->compile($startYear, $endYear);
 
-        $data['org_name'] = DB::table('app_settings')
-            ->where('key', 'organization_name')
-            ->value('value') ?? 'University';
+        $settings = DB::table('app_settings')->whereIn('key', ['organization_name', 'system_logo'])->pluck('value', 'key');
+        $data['org_name'] = $settings['organization_name'] ?? 'University';
+        $data['logo'] = PdfAssets::embeddedImage($settings['system_logo'] ?? null);
 
-        $pdf = Pdf::loadView('pdf.annual-report', $data)
-            ->setPaper('a4', 'portrait')
-            ->setOption('defaultFont', 'DejaVu Sans');
+        $filename = "RTT-Annual-Report-{$startYear}-{$endYear}.pdf";
 
-        return $pdf->download("RTT-Annual-Report-{$startYear}-{$endYear}.pdf");
+        // The Ethiopic font is prepared on first use (written to storage/fonts). If that
+        // fails on a server, fall back to the standard fonts rather than no report at all.
+        foreach ([false, true] as $standardFontsOnly) {
+            try {
+                return Pdf::loadView('pdf.annual-report', $data + ['standardFontsOnly' => $standardFontsOnly])
+                    ->setPaper('a4', 'portrait')
+                    ->setOption('defaultFont', 'DejaVu Sans')
+                    ->download($filename);
+            } catch (\Throwable $e) {
+                Log::error('Annual report PDF '.($standardFontsOnly ? 'with standard fonts ' : '')."failed for {$startYear}-{$endYear}: {$e->getMessage()}", ['exception' => $e]);
+            }
+        }
+
+        return response()->json([
+            'data' => null,
+            'message' => 'The PDF could not be generated. The error has been logged for the administrator.',
+            'errors' => [],
+        ], 500);
     }
 
     /** @return array{int, int} */

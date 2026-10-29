@@ -692,3 +692,112 @@ test('a snapshot that is not ready cannot be exported', function () {
         ->get("/api/v1/reports/{$snapshot->id}/export")
         ->assertStatus(422);
 });
+
+test('custom_builder filters accept several values and match any of them', function () {
+    [$collegeA, $deptA, $central, $callA] = rpt_makeBase();
+    rpt_proposal($collegeA, $deptA, $callA, 'research', 'funded');
+    rpt_proposal($collegeA, $deptA, $callA, 'research', 'rejected');
+    rpt_proposal($collegeA, $deptA, $callA, 'research', 'submitted');
+
+    $result = app(ReportService::class)->runReport('custom_builder', [
+        'subject' => 'proposals',
+        'dimensions' => [],
+        'metrics' => ['count'],
+        'status' => ['funded', 'rejected', ''],
+    ]);
+
+    expect((int) $result['rows'][0]['count'])->toBe(2);
+});
+
+test('custom_builder: department, PI gender, research type and the submitted-date range narrow proposals', function () {
+    [$college, $dept, $central, $call] = rpt_makeBase();
+    $otherDept = Department::create(['college_id' => $college->id, 'name' => 'Other', 'code' => 'RO'.rand(10000, 99999)]);
+
+    $match = rpt_proposal($college, $dept, $call, 'research', 'funded');
+    $match->pi->update(['gender' => 'female']);
+    $match->update(['research_type' => 'Applied Research', 'submitted_at' => '2026-03-10 09:00:00']);
+
+    $late = rpt_proposal($college, $dept, $call, 'research', 'funded');
+    $late->pi->update(['gender' => 'female']);
+    $late->update(['research_type' => 'Applied Research', 'submitted_at' => '2026-09-01 09:00:00']);
+
+    $male = rpt_proposal($college, $dept, $call, 'research', 'funded');
+    $male->pi->update(['gender' => 'male']);
+    $male->update(['research_type' => 'Applied Research', 'submitted_at' => '2026-03-10 09:00:00']);
+
+    $elsewhere = rpt_proposal($college, $otherDept, $call, 'research', 'funded');
+    $elsewhere->update(['department_id' => $otherDept->id, 'submitted_at' => '2026-03-10 09:00:00']);
+
+    $result = app(ReportService::class)->runReport('custom_builder', [
+        'subject' => 'proposals',
+        'dimensions' => ['department', 'pi_gender'],
+        'metrics' => ['count', 'success_rate'],
+        'department_id' => [$dept->id],
+        'pi_gender' => ['female'],
+        'research_type' => ['Applied Research'],
+        'date_range' => ['from' => '2026-01-01', 'to' => '2026-06-30'],
+    ]);
+
+    expect($result['rows'])->toHaveCount(1)
+        ->and((int) $result['rows'][0]['count'])->toBe(1)
+        ->and($result['rows'][0]['pi_gender'])->toBe('female')
+        ->and((float) $result['rows'][0]['success_rate'])->toBe(100.0);
+});
+
+test('custom_builder: total budget adds up each proposal\'s budget lines', function () {
+    [$college, $dept, $central, $call] = rpt_makeBase();
+    $a = rpt_proposal($college, $dept, $call);
+    $b = rpt_proposal($college, $dept, $call);
+    foreach ([[$a, 1000], [$a, 500], [$b, 2500]] as [$proposal, $amount]) {
+        DB::table('proposal_budgets')->insert(['id' => (string) Str::uuid(), 'proposal_id' => $proposal->id, 'category' => 'supplies', 'item_description' => 'x', 'amount' => $amount, 'created_at' => now(), 'updated_at' => now()]);
+    }
+
+    $result = app(ReportService::class)->runReport('custom_builder', [
+        'subject' => 'proposals', 'dimensions' => [], 'metrics' => ['total_budget', 'avg_budget'],
+    ]);
+
+    expect((float) $result['rows'][0]['total_budget'])->toBe(4000.0)
+        ->and((float) $result['rows'][0]['avg_budget'])->toBe(2000.0);
+});
+
+test('custom_builder: review workload splits by review type and counts overdue reviews', function () {
+    [$college, $dept, $central, $call] = rpt_makeBase();
+    $proposal = rpt_proposal($college, $dept, $call, 'research', 'under_blind_review');
+    $blind = EvaluationType::firstOrCreate(['name' => 'blind_review'], ['label' => 'Blind Review', 'is_active' => true]);
+    $defence = EvaluationType::firstOrCreate(['name' => 'open_defence'], ['label' => 'Open Defence', 'is_active' => true]);
+
+    foreach ([[$blind, 'pending', -3], [$blind, 'submitted', -3], [$defence, 'pending', 5]] as [$type, $status, $dueIn]) {
+        $reviewer = User::factory()->create();
+        ReviewAssignment::create([
+            'proposal_id' => $proposal->id, 'reviewer_id' => $reviewer->id, 'evaluation_type_id' => $type->id,
+            'assigned_by' => $central->id, 'status' => $status, 'assigned_at' => now()->subDays(10), 'due_date' => now()->addDays($dueIn)->toDateString(),
+        ]);
+    }
+
+    $rows = collect(app(ReportService::class)->runReport('custom_builder', [
+        'subject' => 'review_workload', 'dimensions' => ['review_type'], 'metrics' => ['count', 'overdue_count'],
+    ])['rows'])->keyBy('review_type');
+
+    expect((int) $rows['blind_review']['count'])->toBe(2)
+        ->and((int) $rows['blind_review']['overdue_count'])->toBe(1)
+        ->and((int) $rows['open_defence']['overdue_count'])->toBe(0);
+
+    $onlyDefence = app(ReportService::class)->runReport('custom_builder', [
+        'subject' => 'review_workload', 'dimensions' => [], 'metrics' => ['count'], 'review_type' => ['open_defence'],
+    ]);
+    expect((int) $onlyDefence['rows'][0]['count'])->toBe(1);
+});
+
+test('builder choices list departments and calls, only from their own college for a college officer', function () {
+    [$collegeA, $deptA, $central, $callA] = rpt_makeBase();
+    [$collegeB, $deptB] = rpt_makeBase();
+    rpt_proposal($collegeA, $deptA, $callA);
+
+    $officer = User::factory()->create(['college_id' => $collegeA->id]);
+    $officer->assignRole('college_officer');
+
+    $choices = $this->actingAs($officer, 'sanctum')->getJson('/api/v1/reports/builder-options')->assertOk()->json('meta.choices');
+
+    expect(collect($choices['department_id'])->pluck('value')->all())->toBe([(string) $deptA->id])
+        ->and(collect($choices['proposal_call_id'])->pluck('value')->all())->toBe([(string) $callA->id]);
+});
