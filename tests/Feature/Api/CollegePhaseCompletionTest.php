@@ -10,6 +10,7 @@ use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Str;
 
 uses(RefreshDatabase::class);
@@ -278,6 +279,39 @@ test('a proposal rejected, reopened, then rejected again at a different phase is
         ->and($phases['open_defence']['rejected'])->toBe(1);
 });
 
+test('a no-show defence whose panel was removed counts as rejected at open defence, not waiting for assignment', function () {
+    $admin = cpc_admin();
+    $college = cpc_college();
+    $noShow = cpc_makeProposal($college, 'rejected', $admin);
+    cpc_assign($noShow, $admin, 'blind_review');
+    cpc_logRejection($noShow, $admin, 'pass_blind_review', 'under_blind_review', 'blind_review_passed');
+    cpc_logRejection($noShow, $admin, 'fail_defence', 'under_open_defence'); // panel assignments deleted on no-show
+
+    $phases = collect($this->actingAs($admin, 'sanctum')->getJson('/api/v1/college-phase-completion')->assertOk()->json('data.colleges'))
+        ->firstWhere('college_id', $college->id)['phases'];
+
+    expect($phases['open_defence']['total'])->toBe(1)
+        ->and($phases['open_defence']['unassigned'])->toBe(0)
+        ->and($phases['open_defence']['rejected'])->toBe(1)
+        ->and($phases['open_defence']['completion_pct'])->toBe(100)
+        ->and($phases['blind_review']['reviewed'])->toBe(1);
+});
+
+test('a proposal that moved past open defence counts as reviewed even without a surviving defence assignment', function () {
+    $admin = cpc_admin();
+    $college = cpc_college();
+    cpc_makeProposal($college, 'funded', $admin);
+    cpc_makeProposal($college, 'under_open_defence', $admin); // under defence, no panel yet
+
+    $defence = collect($this->actingAs($admin, 'sanctum')->getJson('/api/v1/college-phase-completion')->assertOk()->json('data.colleges'))
+        ->firstWhere('college_id', $college->id)['phases']['open_defence'];
+
+    expect($defence['total'])->toBe(2)
+        ->and($defence['reviewed'])->toBe(1)
+        ->and($defence['unassigned'])->toBe(1)
+        ->and($defence['pending'])->toBe(0);
+});
+
 test('college_id filter narrows the result to a single college', function () {
     $admin = cpc_admin();
     $collegeA = cpc_college();
@@ -309,4 +343,49 @@ test('a college_officer scoped to one college cannot widen the view via a client
 
     $ids = collect($res->json('data.colleges'))->pluck('college_id');
     expect($ids)->toHaveCount(1)->and($ids->first())->toBe($ownCollege->id);
+});
+
+test('the report downloads as a PDF for the colleges and phase shown', function () {
+    $admin = cpc_admin();
+    $college = cpc_college();
+    cpc_makeProposal($college, 'blind_review_passed', $admin);
+
+    $this->actingAs($admin, 'sanctum')
+        ->get('/api/v1/college-phase-completion/export?phase=open_defence&college_id='.$college->id)
+        ->assertOk()
+        ->assertHeader('content-type', 'application/pdf')
+        ->assertDownload('college-phase-completion-'.now()->format('Y-m-d').'.pdf');
+});
+
+test('the PDF export is forbidden without phase completion access and rejects an unknown phase', function () {
+    $staff = User::factory()->create();
+    $staff->assignRole('staff');
+
+    $this->actingAs($staff, 'sanctum')
+        ->getJson('/api/v1/college-phase-completion/export')
+        ->assertForbidden();
+
+    $this->actingAs(cpc_admin(), 'sanctum')
+        ->getJson('/api/v1/college-phase-completion/export?phase=midterm')
+        ->assertUnprocessable();
+});
+
+test('a guest asking for the PDF without a JSON accept header gets a 401, not a server error', function () {
+    $this->get('/api/v1/college-phase-completion/export?phase=both')
+        ->assertUnauthorized()
+        ->assertJsonPath('message', 'Unauthenticated. Please log in.');
+});
+
+test('the PDF still downloads on a server whose dompdf font cache folder does not exist yet', function () {
+    $fontCache = sys_get_temp_dir().'/dompdf-fonts-'.Str::random(8);
+    config(['dompdf.options.font_cache' => $fontCache, 'dompdf.options.font_dir' => $fontCache]);
+
+    $this->actingAs(cpc_admin(), 'sanctum')
+        ->get('/api/v1/college-phase-completion/export?phase=both')
+        ->assertOk()
+        ->assertHeader('content-type', 'application/pdf');
+
+    expect(is_dir($fontCache))->toBeTrue();
+
+    File::deleteDirectory($fontCache);
 });

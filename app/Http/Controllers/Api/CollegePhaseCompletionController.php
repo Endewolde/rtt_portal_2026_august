@@ -5,9 +5,14 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\College;
 use App\Models\Proposal;
+use App\Support\PdfAssets;
+use App\Support\Terms;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class CollegePhaseCompletionController extends Controller
@@ -67,32 +72,7 @@ class CollegePhaseCompletionController extends Controller
         }
 
         $academicYear = $this->resolveAcademicYear($request);
-
-        $collegesQuery = College::query()->where('status', 'active')->select('id', 'name')->orderBy('name');
-        if ($request->_college_scope) {
-            $collegesQuery->where('id', $request->_college_scope);
-        } elseif ($request->filled('college_id')) {
-            $collegesQuery->where('id', $request->college_id);
-        }
-        $colleges = $collegesQuery->get();
-
-        $colleges = $colleges->map(function (College $college) use ($request, $academicYear) {
-            $base = $this->scopedProposalsQuery($request, $academicYear, $college->id);
-            $total = (clone $base)->count();
-
-            $phases = [];
-            foreach (self::PHASES as $key => $config) {
-                $inPhase = $this->reachedPhase((clone $base), $config);
-                $phases[$key] = $this->phaseBreakdown($inPhase, (clone $inPhase)->count(), $config);
-            }
-
-            return [
-                'college_id' => $college->id,
-                'college_name' => $college->name,
-                'total_proposals' => $total,
-                'phases' => $phases,
-            ];
-        })->values();
+        $colleges = $this->collegeRows($request, $academicYear);
 
         $academicYears = Proposal::whereNull('deleted_at')
             ->whereNotNull('academic_year')
@@ -112,6 +92,107 @@ class CollegePhaseCompletionController extends Controller
             'errors' => [],
             'meta' => [],
         ]);
+    }
+
+    /**
+     * The same report as a printable PDF — the filters on the page (academic year,
+     * college, category) and the phase tab shown, colleges ordered as on screen.
+     */
+    public function export(Request $request): Response|JsonResponse
+    {
+        if (! $request->user()?->can('phase_completion.view')) {
+            return response()->json(['data' => null, 'message' => 'Unauthorized.', 'errors' => []], 403);
+        }
+
+        $filters = $request->validate([
+            'phase' => 'nullable|in:both,blind_review,open_defence',
+            'academic_year' => 'nullable|string|max:20',
+            'college_id' => 'nullable|string',
+            'category' => 'nullable|string|max:50',
+        ]);
+
+        $academicYear = $this->resolveAcademicYear($request);
+        $phaseKeys = match ($filters['phase'] ?? 'both') {
+            'blind_review' => ['blind_review'],
+            'open_defence' => ['open_defence'],
+            default => array_keys(self::PHASES),
+        };
+
+        $colleges = $this->collegeRows($request, $academicYear)
+            ->sortByDesc(fn (array $c) => collect($phaseKeys)
+                ->map(fn ($key) => $c['phases'][$key]['completion_pct'])
+                ->filter(fn ($pct) => $pct !== null)
+                ->min() ?? -1)
+            ->values();
+
+        $overall = collect($phaseKeys)->mapWithKeys(function (string $key) use ($colleges) {
+            $sum = fn (string $field) => $colleges->sum(fn ($c) => $c['phases'][$key][$field]);
+            $total = $sum('total');
+
+            return [$key => [
+                'label' => self::PHASES[$key]['label'],
+                'total' => $total,
+                'reviewed' => $sum('reviewed'),
+                'rejected' => $sum('rejected'),
+                'pending' => $sum('pending'),
+                'unassigned' => $sum('unassigned'),
+                'completion_pct' => $total > 0 ? round((($sum('reviewed') + $sum('rejected')) / $total) * 100, 1) : null,
+                'colleges_done' => $colleges->filter(fn ($c) => $c['phases'][$key]['completion_pct'] == 100)->count(),
+            ]];
+        });
+
+        $collegeId = $request->_college_scope ?: ($filters['college_id'] ?? null);
+        $category = $request->_category_scope ?: ($filters['category'] ?? null);
+        $settings = DB::table('app_settings')->whereIn('key', ['organization_name', 'system_name', 'system_logo'])->pluck('value', 'key');
+
+        return Pdf::loadView('pdf.college-phase-completion', [
+            'colleges' => $colleges,
+            'overall' => $overall,
+            'phaseKeys' => $phaseKeys,
+            'phaseLabels' => collect(self::PHASES)->map(fn ($c) => $c['label']),
+            'scope' => [
+                Terms::academicYear() => $academicYear ?? 'All years',
+                Terms::college() => $collegeId ? (College::whereKey($collegeId)->value('name') ?? '—') : 'All '.strtolower(Terms::college(true)),
+                'Category' => $category ? ucwords(str_replace('_', ' ', $category)) : 'All categories',
+            ],
+            'orgName' => $settings['organization_name'] ?? 'Wolaita Sodo University',
+            'systemName' => $settings['system_name'] ?? 'RTT Platform',
+            'logo' => PdfAssets::embeddedImage($settings['system_logo'] ?? null),
+            'generatedAt' => now(),
+        ])->setPaper('a4', 'portrait')->download('college-phase-completion-'.now()->format('Y-m-d').'.pdf');
+    }
+
+    /**
+     * One row per active college in scope, with its breakdown for every phase.
+     *
+     * @return Collection<int, array{college_id: string, college_name: string, total_proposals: int, phases: array<string, array<string, mixed>>}>
+     */
+    private function collegeRows(Request $request, ?string $academicYear): Collection
+    {
+        $collegesQuery = College::query()->where('status', 'active')->select('id', 'name')->orderBy('name');
+        if ($request->_college_scope) {
+            $collegesQuery->where('id', $request->_college_scope);
+        } elseif ($request->filled('college_id')) {
+            $collegesQuery->where('id', $request->college_id);
+        }
+
+        return $collegesQuery->get()->map(function (College $college) use ($request, $academicYear) {
+            $base = $this->scopedProposalsQuery($request, $academicYear, $college->id);
+            $total = (clone $base)->count();
+
+            $phases = [];
+            foreach (self::PHASES as $key => $config) {
+                $inPhase = $this->reachedPhase((clone $base), $config);
+                $phases[$key] = $this->phaseBreakdown($inPhase, (clone $inPhase)->count(), $config);
+            }
+
+            return [
+                'college_id' => $college->id,
+                'college_name' => $college->name,
+                'total_proposals' => $total,
+                'phases' => $phases,
+            ];
+        })->values();
     }
 
     private function resolveAcademicYear(Request $request): ?string
@@ -181,24 +262,24 @@ class CollegePhaseCompletionController extends Controller
             return ['total' => 0, 'assigned' => 0, 'unassigned' => 0, 'reviewed' => 0, 'rejected' => 0, 'pending' => 0, 'completion_pct' => null];
         }
 
-        $assignedIds = (clone $scopedProposals)
-            ->whereHas('reviewAssignments', fn (Builder $q) => $q->whereHas(
+        // Undecided proposals are split by whether a reviewer is assigned for this phase.
+        // Decided ones (passed or rejected here) are judged by where they stand, not by
+        // their assignments — a no-show defence removes its panel's assignments yet is
+        // still a decision, not a proposal waiting for a panel.
+        $undecided = (clone $scopedProposals)
+            ->whereIn('proposals.status', [$config['entered'], $config['undecided_status']])
+            ->withExists(['reviewAssignments as has_phase_assignment' => fn (Builder $q) => $q->whereHas(
                 'evaluationType', fn (Builder $q2) => $q2->where('name', 'like', $config['eval_prefix'].'%')
-            ))
-            ->pluck('proposals.id');
+            )])
+            ->get(['proposals.id', 'proposals.status']);
 
-        $assigned = $assignedIds->count();
+        $pending = $undecided->filter(fn (Proposal $p) => $p->status === $config['undecided_status'] && $p->has_phase_assignment)->count();
         // Never assigned a reviewer for this phase yet — still counts against
         // completion, it just hasn't even started, let alone finished.
-        $unassigned = $total - $assigned;
+        $unassigned = $undecided->count() - $pending;
+        $assigned = $total - $unassigned;
 
-        $pending = $assigned > 0
-            ? Proposal::whereIn('id', $assignedIds)->where('status', $config['undecided_status'])->count()
-            : 0;
-
-        $rejectedIds = $assigned > 0
-            ? Proposal::whereIn('id', $assignedIds)->where('status', 'rejected')->pluck('id')
-            : collect();
+        $rejectedIds = (clone $scopedProposals)->where('proposals.status', 'rejected')->pluck('proposals.id');
 
         $rejected = 0;
         if ($rejectedIds->isNotEmpty()) {

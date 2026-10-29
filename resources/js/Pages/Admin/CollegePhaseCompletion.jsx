@@ -1,9 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { ListChecks, CheckCircle2, Clock, XCircle, UserX, Trophy, Building2, EyeOff, Presentation, RotateCcw } from 'lucide-react';
+import { ListChecks, CheckCircle2, Clock, XCircle, UserX, Trophy, Building2, EyeOff, Presentation, RotateCcw, FileDown, Loader2 } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import InsightsNav from '../../Components/InsightsNav';
 import { PageHeader, Select, RefreshButton, StatCard, Panel, EmptyState, StatSkeletons, Skeleton } from '../../Components/Insights/Kit';
 import { get } from '../../lib/api';
+import { downloadFile } from '../../lib/download';
+import { useToast } from '../../Components/Toast';
 import { getCategoryLabel } from '../../lib/utils';
 import { term } from '../../lib/terms';
 import { programmeKeys } from '../../lib/programmes';
@@ -84,6 +86,23 @@ export default function CollegePhaseCompletion() {
     const [collegeId, setCollegeId] = useState('');
     const [category, setCategory] = useState('');
     const [phaseTab, setPhaseTab] = useState('both');
+    const [downloading, setDownloading] = useState(false);
+    const { error } = useToast();
+
+    // The PDF mirrors what is on screen: the same filters and the phase tab selected.
+    const downloadPdf = async () => {
+        setDownloading(true);
+        try {
+            const query = new URLSearchParams(Object.entries({
+                academic_year: academicYear, college_id: collegeId, category, phase: phaseTab,
+            }).filter(([, v]) => v)).toString();
+            const date = new Date().toISOString().slice(0, 10);
+            await downloadFile(`/college-phase-completion/export?${query}`, `college-phase-completion-${date}.pdf`);
+        } catch (e) {
+            error(e.response?.data?.message ?? 'The download failed.');
+        }
+        setDownloading(false);
+    };
 
     const load = useCallback((opts = {}) => {
         opts.silent ? setRefreshing(true) : setLoading(true);
@@ -145,6 +164,10 @@ export default function CollegePhaseCompletion() {
                         {(data?.academic_years ?? []).map((y) => <option key={y} value={y}>{y}</option>)}
                     </Select>
                     <RefreshButton onClick={() => load({ silent: true })} loading={refreshing} />
+                    <button onClick={downloadPdf} disabled={downloading || loading}
+                        className="inline-flex items-center gap-1.5 rounded-xl bg-gray-900 px-3.5 py-2 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-60">
+                        {downloading ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />} Download PDF
+                    </button>
                 </PageHeader>
 
                 {loading && !data ? <StatSkeletons /> : (

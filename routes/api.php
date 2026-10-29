@@ -555,6 +555,7 @@ Route::prefix('v1')->group(function () {
 
         // College phase completion — per-college blind review / open defence completion %
         Route::get('/college-phase-completion', [CollegePhaseCompletionController::class, 'index']);
+        Route::get('/college-phase-completion/export', [CollegePhaseCompletionController::class, 'export']);
 
         // Ongoing proposals — consolidated post-award monitoring view (funded/midterm_evaluation)
         // Projects at risk — running funded projects ranked by the attention they need

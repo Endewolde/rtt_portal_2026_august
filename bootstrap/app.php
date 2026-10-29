@@ -44,6 +44,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'feature' => EnsureFeatureEnabled::class,
             'api.key' => AuthenticateApiKey::class,
         ]);
+
+        // There is no named 'login' route (the framework default), so resolving it turned
+        // every guest API call into a 500. API guests get the JSON 401 rendered below.
+        $middleware->redirectGuestsTo(fn (Request $request) => $request->is('api/*') ? null : '/login');
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

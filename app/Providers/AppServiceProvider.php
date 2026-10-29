@@ -12,6 +12,7 @@ use App\Services\IntegrationService;
 use App\Support\Programmes;
 use App\Support\Terms;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\ServiceProvider;
@@ -32,6 +33,11 @@ class AppServiceProvider extends ServiceProvider
         // registering them here as well made every one run twice (duplicate workflow
         // emails and bell notifications). Only listeners outside app/Listeners go here.
         Event::listen(SocialiteWasCalled::class, [AzureExtendSocialite::class, 'handle']);
+
+        // dompdf writes font metrics into its font cache the first time a PDF uses a font
+        // (the Ethiopic one in pdf.partials.fonts). storage/ isn't deployed, so on a fresh
+        // server that folder doesn't exist and every PDF fails until it's created.
+        $this->app->resolving('dompdf', fn () => File::ensureDirectoryExists(config('dompdf.options.font_cache', storage_path('fonts'))));
 
         $this->registerFeatureGates();
         $this->registerWebhookEvents();
