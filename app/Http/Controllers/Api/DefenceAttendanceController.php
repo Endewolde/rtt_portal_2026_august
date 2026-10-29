@@ -47,7 +47,7 @@ class DefenceAttendanceController extends Controller
 
                 return $this->respond(
                     ['proposal_status' => $proposal->status],
-                    'Recorded that the team did not appear. The proposal has been rejected, any scores submitted were voided and the team has been notified.'
+                    'Recorded that the team did not appear. The proposal has been rejected, its defence reviewers and any scores they gave have been removed, and the team has been notified.'
                 );
             }
 

@@ -22,8 +22,10 @@ use Illuminate\Support\Facades\Log;
  *            so scores submitted for a defence that never happened can't pass or
  *            fail a proposal on their own.
  *  - absent: the team did not appear. The proposal is rejected at once as having
- *            failed its defence, scores already submitted are voided (kept for the
- *            record, never counted) and the rest of the panel is stood down.
+ *            failed its defence, and every open-defence assignment is removed with
+ *            the scores already given, so nothing about a defence that never took
+ *            place stays on a reviewer's list or counts anywhere. A full copy of
+ *            what was removed is kept in the audit log.
  *
  * A panel member can flag a no-show instead of scoring; the officer confirms it.
  */
@@ -94,8 +96,8 @@ class DefenceAttendanceService
     }
 
     /**
-     * The team did not appear: void submitted scores, stand the rest of the panel
-     * down and reject the proposal as having failed its defence.
+     * The team did not appear: remove the panel's assignments and any scores they
+     * gave, and reject the proposal as having failed its defence.
      */
     public function markAbsent(DefenceSession $session, User $actor, string $note): Proposal
     {
@@ -103,17 +105,13 @@ class DefenceAttendanceService
         $date = $session->scheduled_date->format('M d, Y');
         $reason = "The proposal team did not appear for the open defence scheduled on {$date}, so the proposal could not be defended. Recorded by {$actor->name}: {$note}";
 
-        $assignments = ReviewAssignment::with('reviewer')
-            ->where('proposal_id', $proposal->id)
-            ->whereHas('evaluationType', fn ($q) => $q->where('name', 'like', 'open_defence%'))
-            ->whereIn('status', ['submitted', ...self::ACTIVE_STATUSES])
-            ->get();
-        $voided = $assignments->where('status', 'submitted');
-        $cancelled = $assignments->whereIn('status', self::ACTIVE_STATUSES);
+        $assignments = $this->defenceAssignments($proposal);
+        $scored = $assignments->where('status', 'submitted');
+        $waiting = $assignments->whereIn('status', self::ACTIVE_STATUSES);
 
         $systemActor = User::role('central_officer')->first() ?? User::role('super_admin')->first() ?? $actor;
 
-        DB::transaction(function () use ($session, $proposal, $actor, $note, $reason, $voided, $cancelled, $systemActor) {
+        DB::transaction(function () use ($session, $proposal, $actor, $note, $reason, $assignments, $scored, $systemActor) {
             $session->update([
                 'attendance' => self::ABSENT,
                 'attendance_note' => $note,
@@ -122,12 +120,7 @@ class DefenceAttendanceService
                 'status' => 'no_show',
             ]);
 
-            if ($voided->isNotEmpty()) {
-                ReviewAssignment::whereIn('id', $voided->pluck('id'))->update(['status' => 'voided', 'updated_at' => now()]);
-            }
-            if ($cancelled->isNotEmpty()) {
-                ReviewAssignment::whereIn('id', $cancelled->pluck('id'))->update(['status' => 'cancelled', 'updated_at' => now()]);
-            }
+            $this->removeAssignments($assignments);
 
             DB::table('proposals')->where('id', $proposal->id)->update(['rejection_reason' => $reason, 'rejected_at' => now()]);
 
@@ -137,28 +130,83 @@ class DefenceAttendanceService
                 'no_show' => true,
                 'defence_session_id' => $session->id,
                 'recorded_by' => $actor->id,
-                'voided_scores' => $voided->count(),
+                'removed_assignments' => $assignments->count(),
+                'removed_scores' => $scored->count(),
             ]);
         });
 
         AuditLogger::log('defence.attendance_absent', DefenceSession::class, $session->id, $actor->id, null, [
             'proposal_id' => $proposal->id,
             'note' => $note,
-            'voided_scores' => $voided->pluck('id')->all(),
-            'cancelled_assignments' => $cancelled->pluck('id')->all(),
+            'removed_assignments' => $this->snapshot($assignments),
         ]);
 
         $data = ['proposal_id' => $proposal->id, 'tracker_number' => $proposal->tracker_number, 'title' => $proposal->title];
-        foreach ($cancelled as $assignment) {
+        foreach ($waiting as $assignment) {
             $this->notify($assignment->reviewer, 'review_assignment_cancelled', $data);
         }
-        foreach ($voided as $assignment) {
+        foreach ($scored as $assignment) {
             $this->notify($assignment->reviewer, 'defence_score_voided', $data + [
-                'message' => "The team did not appear for the open defence of {$proposal->tracker_number} on {$session->scheduled_date->format('M d, Y')}. The proposal was rejected and the score you submitted no longer counts. No further action is needed.",
+                'message' => "The team did not appear for the open defence of {$proposal->tracker_number} on {$date}. The proposal was rejected, so this review has been removed from your list and the score you gave no longer counts. No further action is needed.",
             ]);
         }
 
         return $proposal->fresh();
+    }
+
+    /**
+     * Open-defence assignments still on record for a proposal, whatever their state
+     * (older no-shows left them "voided" or "cancelled").
+     *
+     * @return Collection<int, ReviewAssignment>
+     */
+    public function defenceAssignments(Proposal $proposal): Collection
+    {
+        return ReviewAssignment::with(['reviewer:id,name,email', 'scores.evaluationQuestion:id,question_text,max_score'])
+            ->where('proposal_id', $proposal->id)
+            ->whereHas('evaluationType', fn ($q) => $q->where('name', 'like', 'open_defence%'))
+            ->get();
+    }
+
+    /**
+     * Delete assignments with their scores and reminders.
+     *
+     * @param  Collection<int, ReviewAssignment>  $assignments
+     */
+    public function removeAssignments(Collection $assignments): void
+    {
+        if ($assignments->isEmpty()) {
+            return;
+        }
+
+        $ids = $assignments->pluck('id');
+        DB::table('review_scores')->whereIn('review_assignment_id', $ids)->delete();
+        DB::table('review_reminders')->whereIn('review_assignment_id', $ids)->delete();
+        ReviewAssignment::whereIn('id', $ids)->delete();
+    }
+
+    /**
+     * What was removed, in words an auditor can read later.
+     *
+     * @param  Collection<int, ReviewAssignment>  $assignments
+     * @return list<array<string, mixed>>
+     */
+    public function snapshot(Collection $assignments): array
+    {
+        return $assignments->map(fn (ReviewAssignment $a) => [
+            'assignment_id' => $a->id,
+            'reviewer' => $a->reviewer?->name,
+            'reviewer_email' => $a->reviewer?->email,
+            'status' => $a->status,
+            'submitted_at' => $a->submitted_at?->toDateTimeString(),
+            'scores' => $a->scores->map(fn ($s) => [
+                'question' => $s->evaluationQuestion?->question_text,
+                'score' => $s->score,
+                'max' => $s->evaluationQuestion?->max_score,
+                'comment' => $s->comment,
+            ])->values()->all(),
+            'recommendation' => $a->scores->firstWhere('recommendation')?->recommendation,
+        ])->values()->all();
     }
 
     /** A panel member says the team did not appear; the college officer is asked to confirm. */

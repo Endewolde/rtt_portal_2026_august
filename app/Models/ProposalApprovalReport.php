@@ -16,6 +16,13 @@ class ProposalApprovalReport extends Model
      *
      * @var array<string, string>
      */
+    /**
+     * Stages from open defence onward. A report whose proposal has reached one of
+     * them is settled history: it leaves the Approval Reports page and its menu
+     * count (it stays on the proposal's own page).
+     */
+    public const MOVED_ON_STATUSES = ['under_open_defence', 'accepted', 'funded', 'midterm_evaluation', 'completed', 'archived'];
+
     public const ISSUE_TYPES = [
         'not_anonymous' => 'Not anonymous — author identity revealed',
         'already_ongoing' => 'Already ongoing — the project is already running',

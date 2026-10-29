@@ -136,3 +136,29 @@ test('removing a person\'s personal data takes their public profile down', funct
     $this->getJson('/api/v1/researchers/almaz-bekele')->assertNotFound();
     expect($this->researcher->fresh())->public_profile->toBeFalse()->bio->toBeNull();
 });
+
+test('the directory browses A–Z ten at a time, with counts per letter and extra filters', function () {
+    $otherDept = Department::create(['college_id' => $this->college->id, 'name' => 'Animal Science', 'code' => 'RPA'.rand(10000, 99999)]);
+    foreach (range(1, 11) as $i) {
+        User::factory()->create(['name' => "Abebe Tadesse {$i}", 'public_profile' => true, 'profile_slug' => "abebe-{$i}", 'status' => 'active', 'college_id' => $this->college->id, 'department_id' => $otherDept->id]);
+    }
+    User::factory()->create(['name' => 'Bethlehem Kebede', 'public_profile' => true, 'profile_slug' => 'bethlehem', 'status' => 'active']);
+    ($this->makeProject)('funded');
+    rp_turnOn($this->researcher);
+
+    $all = $this->getJson('/api/v1/researchers')->assertOk();
+    expect($all->json('data.data'))->toHaveCount(10)
+        ->and($all->json('data.total'))->toBe(13)
+        ->and($all->json('meta.letters'))->toBe(['A' => 12, 'B' => 1]);
+
+    $this->getJson('/api/v1/researchers?letter=b')->assertOk()
+        ->assertJsonCount(1, 'data.data')->assertJsonPath('data.data.0.slug', 'bethlehem');
+
+    $this->getJson('/api/v1/researchers?department_id='.$this->dept->id)->assertOk()
+        ->assertJsonCount(1, 'data.data')->assertJsonPath('data.data.0.slug', 'almaz-bekele');
+
+    $this->getJson('/api/v1/researchers?with_projects=1')->assertOk()
+        ->assertJsonCount(1, 'data.data')->assertJsonPath('data.data.0.slug', 'almaz-bekele');
+
+    $this->getJson('/api/v1/researchers?sort=name_desc')->assertOk()->assertJsonPath('data.data.0.slug', 'bethlehem');
+});

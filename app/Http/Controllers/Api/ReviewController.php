@@ -1538,6 +1538,8 @@ class ReviewController extends Controller
             'scores.evaluationQuestion.category',
         ])
             ->where('reviewer_id', $request->user()->id)
+            // Withdrawn work (cancelled, or a defence the team never came to) is no longer the reviewer's to do.
+            ->whereNotIn('status', ['cancelled', 'voided'])
             ->orderByDesc('assigned_at')
             ->get()
             ->map(function ($a) {

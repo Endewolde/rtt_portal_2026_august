@@ -1,11 +1,13 @@
 <?php
 
 use App\Models\College;
+use App\Models\Complaint;
 use App\Models\DeadlineExtensionRequest;
 use App\Models\Department;
 use App\Models\EvaluationType;
 use App\Models\MidtermEvaluation;
 use App\Models\Proposal;
+use App\Models\ProposalApprovalReport;
 use App\Models\ProposalCall;
 use App\Models\ReviewAssignment;
 use App\Models\User;
@@ -279,7 +281,7 @@ test('open_complaints matches the officer\'s Complaints page; researchers see re
     $proposalA = ac_proposal($collegeA, $deptA, $call, 'under_blind_review');
     $proposalB = ac_proposal($collegeB, $deptB, $call, 'under_blind_review');
 
-    $complaint = fn (Proposal $p, string $status, array $extra = []) => App\Models\Complaint::create([
+    $complaint = fn (Proposal $p, string $status, array $extra = []) => Complaint::create([
         'proposal_id' => $p->id, 'complainant_id' => $p->pi_user_id, 'stage' => 'blind_review', 'level' => 'college',
         'description' => str_repeat('A clear complaint. ', 4), 'status' => $status,
     ] + $extra);
@@ -296,4 +298,22 @@ test('open_complaints matches the officer\'s Complaints page; researchers see re
     expect($this->actingAs($officerA, 'sanctum')->getJson('/api/v1/action-counts')->json('data.open_complaints'))->toBe(2)
         ->and($this->actingAs($central, 'sanctum')->getJson('/api/v1/action-counts')->json('data.open_complaints'))->toBe(3)
         ->and($this->actingAs(User::find($proposalA->pi_user_id), 'sanctum')->getJson('/api/v1/action-counts')->json('data.my_complaints_answered'))->toBe(1);
+});
+
+test('approval_reports_open matches the Approval Reports page: a report whose proposal moved on is not counted', function () {
+    [$college, $dept, $central, $call] = ac_makeBase();
+    $officer = User::factory()->create(['college_id' => $college->id]);
+    $officer->assignRole('college_officer');
+
+    $waiting = ac_proposal($college, $dept, $call, 'blind_review_passed');
+    $movedOn = ac_proposal($college, $dept, $call, 'funded');
+    foreach ([$waiting, $movedOn] as $proposal) {
+        ProposalApprovalReport::create(['proposal_id' => $proposal->id, 'reported_by' => $officer->id, 'reason' => 'Looks like a duplicate.', 'status' => 'open']);
+    }
+
+    $listed = $this->actingAs($central, 'sanctum')->getJson('/api/v1/approval-reports?status=open')->assertOk()->json('data.total');
+
+    expect($this->actingAs($central, 'sanctum')->getJson('/api/v1/action-counts')->json('data.approval_reports_open'))->toBe(1)
+        ->and($listed)->toBe(1)
+        ->and($this->actingAs($officer, 'sanctum')->getJson('/api/v1/action-counts')->json('data.approval_reports_open'))->toBe(1);
 });

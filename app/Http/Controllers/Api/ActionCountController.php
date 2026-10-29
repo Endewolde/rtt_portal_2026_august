@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\DefenceDeadlineExtension;
+use App\Models\ProposalApprovalReport;
 use App\Models\User;
 use App\Services\DefenceDeadlineService;
 use Illuminate\Http\JsonResponse;
@@ -383,13 +384,18 @@ class ActionCountController extends Controller
                 DB::table('proposal_approval_reports as par')
                     ->join('proposals as p', 'par.proposal_id', '=', 'p.id')
                     ->whereNull('p.deleted_at')
+                    ->whereNotIn('p.status', ProposalApprovalReport::MOVED_ON_STATUSES)
                     ->where('par.status', 'open'),
                 'p'
             )->count();
         } elseif ($isCollegeStaff) {
-            $approvalReportsOpen = DB::table('proposal_approval_reports')
-                ->where('status', 'open')
-                ->where('reported_by', $userId)
+            // Same rows the Approval Reports page lists for them.
+            $approvalReportsOpen = DB::table('proposal_approval_reports as par')
+                ->join('proposals as p', 'par.proposal_id', '=', 'p.id')
+                ->whereNull('p.deleted_at')
+                ->whereNotIn('p.status', ProposalApprovalReport::MOVED_ON_STATUSES)
+                ->where('par.status', 'open')
+                ->where('par.reported_by', $userId)
                 ->count();
         }
 

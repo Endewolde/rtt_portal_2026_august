@@ -42,13 +42,6 @@ class ProposalApprovalReportController extends Controller
 
     private const REPORTABLE_STATUSES = ['validated', 'under_blind_review', 'blind_review_passed'];
 
-    /**
-     * Stages from open defence onward. A report whose proposal has reached one of
-     * them is settled history and leaves the Approval Reports page (it stays on the
-     * proposal's own page).
-     */
-    private const MOVED_ON_STATUSES = ['under_open_defence', 'accepted', 'funded', 'midterm_evaluation', 'completed', 'archived'];
-
     private const OUTCOME_APPROVAL_STANDS = 'approval_stands';
 
     private const OUTCOME_APPROVAL_REVOKED = 'approval_revoked';
@@ -191,7 +184,7 @@ class ProposalApprovalReportController extends Controller
 
         // Everything the user may see, before the tab, search and issue filters.
         $scoped = fn () => ProposalApprovalReport::query()
-            ->whereHas('proposal', fn ($pq) => $pq->whereNotIn('status', self::MOVED_ON_STATUSES))
+            ->whereHas('proposal', fn ($pq) => $pq->whereNotIn('status', ProposalApprovalReport::MOVED_ON_STATUSES))
             ->when(! $isReviewer, fn ($q) => $q->where('reported_by', $user->id))
             ->when($isReviewer, function ($q) use ($request) {
                 $q->whereHas('proposal', function ($pq) use ($request) {

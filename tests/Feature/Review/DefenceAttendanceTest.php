@@ -140,7 +140,7 @@ test('the manual "process result" also needs the defence recorded as held', func
 
 // ─── The team did not appear ─────────────────────────────────────────────────
 
-test('recording that the team did not appear rejects the proposal, voids submitted scores and stands the panel down', function () {
+test('recording that the team did not appear rejects the proposal and removes the panel with any scores given', function () {
     $scored = da_assignment($this->proposal, $this->defenceType, $this->officer, 'submitted');
     $waiting = da_assignment($this->proposal, $this->defenceType, $this->officer, 'pending');
 
@@ -151,13 +151,24 @@ test('recording that the team did not appear rejects the proposal, voids submitt
     expect($proposal->status)->toBe('rejected')
         ->and($proposal->rejection_reason)->toContain('did not appear for the open defence')
         ->and($proposal->rejection_reason)->toContain('the PI did not answer two calls')
-        ->and($scored->fresh()->status)->toBe('voided')
-        ->and($waiting->fresh()->status)->toBe('cancelled')
+        ->and($scored->fresh())->toBeNull()
+        ->and($waiting->fresh())->toBeNull()
+        ->and(ReviewScore::where('review_assignment_id', $scored->id)->exists())->toBeFalse()
         ->and($this->session->fresh()->status)->toBe('no_show')
         ->and($this->session->fresh()->attendance)->toBe('absent');
 
     $log = DB::table('workflow_logs')->where('proposal_id', $proposal->id)->where('action', 'fail_defence')->first();
-    expect(json_decode($log->metadata, true))->toMatchArray(['no_show' => true, 'automatic' => true, 'recorded_by' => $this->officer->id]);
+    expect(json_decode($log->metadata, true))->toMatchArray(['no_show' => true, 'automatic' => true, 'recorded_by' => $this->officer->id, 'removed_assignments' => 2, 'removed_scores' => 1]);
+
+    // The blind-review scores stay; only the defence panel goes.
+    expect(ReviewAssignment::where('proposal_id', $proposal->id)->count())->toBe(1);
+
+    // Nothing is lost for the record: the audit log keeps who scored what.
+    $audit = json_decode(DB::table('audit_logs')->where('event', 'defence.attendance_absent')->value('new_values'), true);
+    expect(collect($audit['removed_assignments'])->firstWhere('assignment_id', $scored->id)['scores'])->toHaveCount(2);
+
+    // The removed review is gone from the reviewer's list.
+    $this->actingAs($waiting->reviewer, 'sanctum')->getJson('/api/v1/review-assignments/my')->assertOk()->assertJsonCount(0, 'data');
 
     $piNotice = DB::table('notifications')->where('notifiable_id', $this->pi->id)->where('type', 'decision_result')->latest('created_at')->first();
     expect(json_decode($piNotice->data, true)['reason'])->toContain('did not appear');
@@ -257,4 +268,36 @@ test('a defence recorded as held cannot be moved to another date', function () {
     $this->actingAs($this->officer, 'sanctum')->putJson("/api/v1/proposals/{$this->proposal->id}/defence/session", [
         'scheduled_date' => now()->addWeek()->toDateString(), 'scheduled_time' => '10:00', 'venue' => 'Hall',
     ])->assertUnprocessable();
+});
+
+test('the clean-up command removes panels left behind by no-shows recorded before, only with --force', function () {
+    $scored = da_assignment($this->proposal, $this->defenceType, $this->officer, 'submitted');
+    $this->session->update(['attendance' => 'absent', 'status' => 'no_show']);
+    $this->proposal->update(['status' => 'rejected']);
+    $scored->update(['status' => 'voided']);
+
+    $this->artisan('defence:remove-no-show-panels')->assertSuccessful();
+    expect($scored->fresh())->not->toBeNull();
+
+    $this->artisan('defence:remove-no-show-panels --force')->assertSuccessful();
+    expect($scored->fresh())->toBeNull()
+        ->and(ReviewScore::where('review_assignment_id', $scored->id)->exists())->toBeFalse()
+        ->and(DB::table('audit_logs')->where('event', 'defence.no_show_panel_removed')->exists())->toBeTrue()
+        ->and(ReviewAssignment::where('proposal_id', $this->proposal->id)->count())->toBe(1);
+});
+
+test('the clean-up command leaves a no-show proposal alone once it has been reopened', function () {
+    $scored = da_assignment($this->proposal, $this->defenceType, $this->officer, 'submitted');
+    $this->session->update(['attendance' => 'absent', 'status' => 'no_show']);
+
+    $this->artisan('defence:remove-no-show-panels --force')->assertSuccessful();
+
+    expect($scored->fresh())->not->toBeNull();
+});
+
+test('cancelled and voided assignments are not on the reviewer\'s list', function () {
+    $cancelled = da_assignment($this->proposal, $this->defenceType, $this->officer, 'cancelled');
+    da_assignment($this->proposal, $this->defenceType, $this->officer, 'pending');
+
+    $this->actingAs($cancelled->reviewer, 'sanctum')->getJson('/api/v1/review-assignments/my')->assertOk()->assertJsonCount(0, 'data');
 });

@@ -7,7 +7,7 @@ import { useToast } from './Toast';
 /**
  * College officer records whether an open defence took place: "held" lets the
  * panel's scores decide the result; "team did not appear" rejects the proposal
- * and voids any scores already submitted. `defence` is the proposal's
+ * and removes the panel's assignments and any scores already given. `defence` is the proposal's
  * defence_deadline payload.
  */
 export function DefenceAttendanceModal({ proposal, defence, initial = null, onClose, onSaved }) {
@@ -63,7 +63,7 @@ export function DefenceAttendanceModal({ proposal, defence, initial = null, onCl
                         <button type="button" onClick={() => setChoice('absent')}
                             className={`rounded-xl border-2 p-3 text-left transition-all ${absent ? 'border-red-500 bg-red-50 ring-2 ring-red-100' : 'border-gray-200 hover:border-gray-300'}`}>
                             <span className="flex items-center gap-2 text-sm font-semibold text-gray-900"><UserX size={16} className="text-red-600" /> Team did not appear</span>
-                            <span className="mt-1 block text-xs leading-relaxed text-gray-500">The proposal is rejected for failing to defend.</span>
+                            <span className="mt-1 block text-xs leading-relaxed text-gray-500">The proposal is rejected and its defence reviewers and scores are removed.</span>
                         </button>
                     </div>
 
@@ -81,7 +81,7 @@ export function DefenceAttendanceModal({ proposal, defence, initial = null, onCl
 
                     {absent && (
                         <div className="rounded-xl border border-red-100 bg-red-50/60 px-3.5 py-3 text-xs leading-relaxed text-red-800">
-                            This can&apos;t be undone. The proposal is <strong>rejected now</strong>, any scores already submitted are <strong>voided</strong>, the remaining panel members are stood down and the team is notified with your note.
+                            This can&apos;t be undone. The proposal is <strong>rejected now</strong>, every reviewer assigned to this defence is <strong>removed</strong> along with <strong>any scores already given</strong>, and the team is notified with your note.
                         </div>
                     )}
                 </div>

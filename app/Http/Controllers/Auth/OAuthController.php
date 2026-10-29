@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
 use App\Models\User;
+use App\Support\AuditLogger;
 use GuzzleHttp\Client as GuzzleClient;
+use GuzzleHttp\Exception\ConnectException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -19,6 +21,14 @@ class OAuthController extends Controller
 {
     private const SUPPORTED = ['google', 'microsoft'];
 
+    private const STATE_KEY = 'oauth-state:';
+
+    /** How long someone may take on the provider's sign-in screen. */
+    private const STATE_MINUTES = 15;
+
+    /** A repeated callback (reload, prefetch) gets the same result instead of an error. */
+    private const DONE_KEY = 'oauth-done:';
+
     public function redirect(string $provider): RedirectResponse
     {
         abort_unless(in_array($provider, self::SUPPORTED), 404);
@@ -26,9 +36,16 @@ class OAuthController extends Controller
 
         $this->applyProviderConfig($provider);
 
+        // The anti-forgery "state" is kept on the server, not in the session cookie. On
+        // phones (and in the installed app) the provider often returns to a browser context
+        // without that cookie, which made sign-in fail until a lucky retry.
+        $state = Str::random(40);
+        Cache::put(self::STATE_KEY.$state, $provider, now()->addMinutes(self::STATE_MINUTES));
+
         return Socialite::driver($this->driverName($provider))
+            ->stateless()
             ->scopes($this->scopes($provider))
-            ->with(['prompt' => 'select_account'])
+            ->with(['prompt' => 'select_account', 'state' => $state])
             ->redirect();
     }
 
@@ -39,18 +56,37 @@ class OAuthController extends Controller
 
         $this->applyProviderConfig($provider);
 
-        try {
-            $socialUser = Socialite::driver($this->driverName($provider))
-                ->setHttpClient(new GuzzleClient([
-                    'connect_timeout' => 8,
-                    'timeout' => 15,
-                    'curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4],
-                ]))
-                ->user();
-        } catch (\Exception $e) {
-            Log::warning("[SSO] OAuth callback failed for {$provider}: ".$e->getMessage());
+        // The person cancelled or the provider refused (e.g. account not allowed in the tenant).
+        if ($error = request()->query('error')) {
+            $this->auditFailure($provider, 'Provider returned: '.$error.' '.request()->query('error_description'));
 
-            return redirect('/login?sso_error='.urlencode('Authentication failed. Please try again.'));
+            return $this->fail($error === 'access_denied'
+                ? 'Sign-in was cancelled. Choose your account to continue.'
+                : 'Microsoft could not sign you in ('.Str::limit((string) request()->query('error_description', $error), 120).').');
+        }
+
+        $code = (string) request()->query('code');
+        $doneKey = self::DONE_KEY.hash('sha256', $code);
+        if ($code !== '' && ($done = Cache::get($doneKey))) {
+            return Inertia::render('Auth/OAuthSuccess', $done);
+        }
+
+        $state = (string) request()->query('state');
+        if ($state === '' || Cache::pull(self::STATE_KEY.$state) !== $provider) {
+            $this->auditFailure($provider, 'Missing or expired sign-in state');
+
+            return $this->fail('That sign-in link has expired. Please tap "Continue" again.');
+        }
+
+        try {
+            $socialUser = $this->fetchUser($provider);
+        } catch (\Throwable $e) {
+            Log::warning("[SSO] OAuth callback failed for {$provider}: ".get_class($e).': '.$e->getMessage());
+            $this->auditFailure($provider, Str::limit(get_class($e).': '.$e->getMessage(), 250));
+
+            return $this->fail($this->isNetworkProblem($e)
+                ? 'We could not reach Microsoft in time. Please check your connection and try again.'
+                : 'Authentication failed. Please try again.');
         }
 
         $email = $socialUser->getEmail();
@@ -84,13 +120,62 @@ class OAuthController extends Controller
 
         $token = $user->createToken('sso_token')->plainTextToken;
 
-        return Inertia::render('Auth/OAuthSuccess', [
+        AuditLogger::log('user.login', User::class, $user->id, $user->id, null, ['method' => 'SSO ('.Str::ucfirst($provider).')'], 200);
+
+        $props = [
             'token' => $token,
             'user' => array_merge($user->load('roles')->toArray(), [
                 'roles' => $user->getRoleNames()->values()->toArray(),
                 'permissions' => $user->getAllPermissions()->pluck('name')->values()->toArray(),
             ]),
-        ]);
+        ];
+        Cache::put($doneKey, $props, now()->addMinutes(2));
+
+        return Inertia::render('Auth/OAuthSuccess', $props);
+    }
+
+    /** Exchanges the code for the user, retrying once when the connection to the provider drops. */
+    private function fetchUser(string $provider): \Laravel\Socialite\Contracts\User
+    {
+        $attempt = 0;
+        while (true) {
+            try {
+                return Socialite::driver($this->driverName($provider))
+                    ->stateless()
+                    ->setHttpClient(new GuzzleClient([
+                        'connect_timeout' => 10,
+                        'timeout' => 25,
+                        'curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4],
+                    ]))
+                    ->user();
+            } catch (ConnectException $e) {
+                // Only a failed connection is retried: the code was never used, so it is still valid.
+                if (++$attempt >= 2) {
+                    throw $e;
+                }
+                usleep(400_000);
+            }
+        }
+    }
+
+    private function isNetworkProblem(\Throwable $e): bool
+    {
+        return $e instanceof ConnectException
+            || str_contains($e->getMessage(), 'cURL error 28')
+            || str_contains($e->getMessage(), 'timed out');
+    }
+
+    private function fail(string $message): RedirectResponse
+    {
+        return redirect('/login?sso_error='.urlencode($message));
+    }
+
+    private function auditFailure(string $provider, string $reason): void
+    {
+        AuditLogger::log('user.login_failed', 'User', 'unknown', null, null, [
+            'method' => 'SSO ('.Str::ucfirst($provider).')',
+            'reason' => $reason,
+        ], 401);
     }
 
     private function findOrCreateUser(string $provider, \Laravel\Socialite\Contracts\User $socialUser): User

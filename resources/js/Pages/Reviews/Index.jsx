@@ -2,9 +2,8 @@ import { useState, useEffect } from 'react';
 import { translate as tr, Trans } from '../../lib/i18n'
 import { Link, router } from '@inertiajs/react';
 import {
-    ClipboardCheck, Clock, AlertCircle, Download,
-    CheckCircle2, ChevronRight, BookOpen, EyeOff,
-    Presentation, Calendar, Shield, Star, ChevronDown, ChevronUp,
+    ClipboardCheck, Clock, AlertCircle, Download, ArrowRight, Search,
+    CheckCircle2, BookOpen, EyeOff, Presentation, Calendar, ChevronDown,
     MessageSquare, Loader2, ShieldAlert, Send, ExternalLink, Lock, CalendarDays, Award,
 } from 'lucide-react';
 import { createPortal } from 'react-dom';
@@ -66,6 +65,31 @@ const TABS = [
     },
 ];
 
+/** Quick status filters for the to-do tabs. */
+const STATUS_FILTERS = [
+    { key: 'all', label: 'All' },
+    { key: 'todo', label: 'To do', test: a => ['pending', 'accepted'].includes(a.status) },
+    { key: 'in_progress', label: 'In progress', test: a => a.status === 'in_progress' },
+    { key: 'overdue', label: 'Overdue', test: a => { const d = getDaysRemaining(a.due_date); return d !== null && d < 0; } },
+];
+
+const byDue = (x, y) => (x.due_date ? new Date(x.due_date) : Infinity) - (y.due_date ? new Date(y.due_date) : Infinity);
+const SORTS = [
+    { key: 'due', label: 'Due date (soonest)', compare: byDue },
+    { key: 'newest', label: 'Newest assigned', compare: (x, y) => new Date(y.assigned_at ?? 0) - new Date(x.assigned_at ?? 0) },
+    { key: 'title', label: 'Title A–Z', compare: (x, y) => (x.proposal?.title ?? '').localeCompare(y.proposal?.title ?? '') },
+];
+const COMPLETED_SORTS = [
+    { key: 'recent', label: 'Recently submitted', compare: (x, y) => new Date(y.submitted_at ?? 0) - new Date(x.submitted_at ?? 0) },
+    { key: 'score', label: 'Highest score', compare: (x, y) => scorePct(y) - scorePct(x) },
+    { key: 'title', label: 'Title A–Z', compare: (x, y) => (x.proposal?.title ?? '').localeCompare(y.proposal?.title ?? '') },
+];
+
+function scorePct(assignment) {
+    const { earned, max } = weightedScoreDisplay(assignment.scores ?? []);
+    return max > 0 ? earned / max : -1;
+}
+
 function getDaysRemaining(dueDate) {
     if (!dueDate) return null;
     return Math.ceil((new Date(dueDate) - new Date()) / (1000 * 60 * 60 * 24));
@@ -74,35 +98,11 @@ function getDaysRemaining(dueDate) {
 function DueBadge({ dueDate }) {
     const days = getDaysRemaining(dueDate);
     if (days === null) return null;
-    if (days < 0) return (
-        <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 bg-red-50 border border-red-200 px-2.5 py-1 rounded-full">
-            <AlertCircle size={11} className="animate-pulse" /> {tr("Overdue :daysd", { days: Math.abs(days) })}
-        </span>
-    );
-    if (days === 0) return (
-        <span className="inline-flex items-center gap-1 text-xs font-semibold text-orange-600 bg-orange-50 border border-orange-200 px-2.5 py-1 rounded-full">
-            <Clock size={11} className="animate-pulse" /> {tr("Due today")}
-        </span>
-    );
-    if (days <= 3) return (
-        <span className="inline-flex items-center gap-1 text-xs font-semibold text-orange-500 bg-orange-50 border border-orange-200 px-2.5 py-1 rounded-full">
-            <Clock size={11} /> {tr(":daysd left", { days: days })}
-        </span>
-    );
-    return (
-        <span className="inline-flex items-center gap-1 text-xs text-gray-400 bg-gray-50 border border-gray-200 px-2.5 py-1 rounded-full">
-            <Calendar size={11} /> {formatDate(dueDate)}
-        </span>
-    );
-}
-
-/** The colour of a card's edge: done, overdue, due soon, or on track. */
-function urgencyStripe(daysLeft, isDone) {
-    if (isDone)            return 'bg-emerald-400';
-    if (daysLeft === null) return 'bg-gray-200';
-    if (daysLeft < 0)      return 'bg-red-500';
-    if (daysLeft <= 3)     return 'bg-orange-400';
-    return 'bg-indigo-400';
+    const base = 'inline-flex items-center gap-1 whitespace-nowrap rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset';
+    if (days < 0) return <span className={`${base} bg-red-50 text-red-700 ring-red-200`}><AlertCircle size={12} /> {tr("Overdue :daysd", { days: Math.abs(days) })}</span>;
+    if (days === 0) return <span className={`${base} bg-orange-50 text-orange-700 ring-orange-200`}><Clock size={12} /> {tr("Due today")}</span>;
+    if (days <= 3) return <span className={`${base} bg-amber-50 text-amber-700 ring-amber-200`}><Clock size={12} /> {tr(":daysd left", { days: days })}</span>;
+    return <span className={`${base} bg-white text-gray-500 ring-gray-200`}><Calendar size={12} /> {tr("Due :date", { date: formatDate(dueDate) })}</span>;
 }
 
 /** A progress ring: share of something done, with the share in the middle. */
@@ -179,96 +179,77 @@ function CompletedCard({ assignment }) {
     const comments    = scores.filter(s => s.comment);
 
     const recColor = recommendation === 'accept'
-        ? 'bg-emerald-100 text-emerald-700 border-emerald-200'
+        ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
         : recommendation === 'reject'
-            ? 'bg-red-100 text-red-700 border-red-200'
+            ? 'bg-red-50 text-red-700 ring-red-200'
             : recommendation === 'revise'
-                ? 'bg-amber-100 text-amber-700 border-amber-200'
-                : 'bg-gray-100 text-gray-600 border-gray-200';
+                ? 'bg-amber-50 text-amber-700 ring-amber-200'
+                : 'bg-gray-50 text-gray-600 ring-gray-200';
 
     return (
-        <div className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition hover:shadow-md">
-            <span className="absolute inset-y-0 left-0 w-1 bg-emerald-400" />
-            <div className="p-5 pl-6">
-                <div className="flex items-start gap-4">
-                    {/* Icon */}
-                    <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${isDefence ? 'bg-blue-100' : 'bg-violet-100'}`}>
-                        {isDefence
-                            ? <Presentation size={18} className="text-blue-600" />
-                            : <EyeOff size={18} className="text-violet-600" />
-                        }
-                    </div>
+        <div className="px-4 py-4 sm:px-5">
+            <div className="flex items-start gap-3 sm:items-center sm:gap-4">
+                <TypeIcon isDefence={isDefence} done />
+                <div className="min-w-0 flex-1">
+                    <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500">
+                        <span className="font-mono font-semibold text-gray-700">{assignment.proposal?.tracker_number || 'N/A'}</span>
+                        <span>· {isDefence ? tr('Open Defence') : tr('Blind Review')}</span>
+                        {recommendation && <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold capitalize ring-1 ring-inset ${recColor}`}>{recommendation}</span>}
+                    </p>
+                    <h3 className="mt-1 line-clamp-2 text-sm font-semibold leading-snug text-gray-900">{assignment.proposal?.title || 'Untitled Proposal'}</h3>
+                    <p className="mt-0.5 text-xs text-gray-400">
+                        {tr('Submitted :date', { date: assignment.submitted_at ? formatDate(assignment.submitted_at) : '—' })}
+                        {assignment.proposal?.college?.name && <> · {assignment.proposal.college.name}</>}
+                    </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-3">
+                    {pct !== null && (
+                        <div className="hidden text-right sm:block">
+                            <p className="text-lg font-bold tabular-nums leading-none text-gray-900">{pct}%</p>
+                            <p className="mt-1 text-[11px] tabular-nums text-gray-400">{totalScore}/{maxScore} pts</p>
+                        </div>
+                    )}
+                    {pct !== null && (
+                        <ProgressRing value={pct / 100} size={40} stroke={4} track="#eef0f3" color={pct >= 70 ? '#059669' : pct >= 50 ? '#4f46e5' : '#d97706'}>
+                            <span className="text-[10px] font-bold tabular-nums text-gray-900 sm:hidden">{pct}</span>
+                        </ProgressRing>
+                    )}
+                    <button onClick={() => setExpanded(v => !v)} aria-expanded={expanded}
+                        className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 hover:text-gray-800"
+                        aria-label={expanded ? tr('Hide details') : tr('Show details')}>
+                        <ChevronDown size={16} className={`transition ${expanded ? 'rotate-180' : ''}`} />
+                    </button>
+                </div>
+            </div>
 
-                    {/* Content */}
-                    <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap mb-1">
-                            <span className="font-mono text-xs font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
-                                {assignment.proposal?.tracker_number || 'N/A'}
-                            </span>
-                            <span className="text-xs text-gray-400">{isDefence ? 'Open Defence' : 'Blind Review'}</span>
-                            {recommendation && (
-                                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border capitalize ${recColor}`}>
-                                    {recommendation}
-                                </span>
+            {expanded && scores.length > 0 && (
+                <div className="mt-4 space-y-3 rounded-xl bg-gray-50 p-4 sm:ml-14">
+                    {scores.map((sc, i) => (
+                        <div key={i}>
+                            <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-4">
+                                <p className="flex-1 text-xs leading-snug text-gray-700">{sc.evaluation_question?.question_text ?? `Question ${i + 1}`}</p>
+                                <div className="sm:w-48"><ScoreBar score={sc.score ?? 0} max={sc.evaluation_question?.max_score ?? 5} /></div>
+                            </div>
+                            {sc.comment && (
+                                <p className="mt-1 flex items-start gap-1.5 text-[11px] italic leading-snug text-gray-500">
+                                    <MessageSquare size={11} className="mt-0.5 shrink-0 text-gray-300" /> {sc.comment}
+                                </p>
                             )}
                         </div>
-                        <h3 className="text-sm font-semibold text-gray-900 leading-snug mb-1">
-                            {assignment.proposal?.title || 'Untitled Proposal'}
-                        </h3>
-                        <p className="text-xs text-gray-400">
-                            Submitted {assignment.submitted_at ? formatDate(assignment.submitted_at) : '—'}
-                            {assignment.proposal?.college?.name && (
-                                <span className="ml-2 text-gray-300">· {assignment.proposal.college.name}</span>
-                            )}
-                        </p>
-                    </div>
-
-                    {/* Score summary */}
-                    <div className="flex flex-col items-end gap-2 shrink-0">
-                        {pct !== null && (
-                            <div className="flex items-center gap-2.5">
-                                <span className="text-right text-[10px] leading-tight text-gray-400">{tr(":totalScore/:maxScore pts", { totalScore: totalScore, maxScore: maxScore })}</span>
-                                <ProgressRing value={pct / 100} size={48} stroke={5} track="#eef0f3" color={pct >= 70 ? '#059669' : pct >= 50 ? '#4f46e5' : '#d97706'}>
-                                    <span className="text-[11px] font-bold tabular-nums text-gray-900">{pct}%</span>
-                                </ProgressRing>
-                            </div>
-                        )}
-                        <button
-                            onClick={() => setExpanded(v => !v)}
-                            className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 font-semibold"
-                        >
-                            {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                            {expanded ? 'Hide' : 'Details'}
-                        </button>
-                    </div>
+                    ))}
+                    {comments.length === 0 && <p className="text-xs italic text-gray-400">{tr("No written comments provided.")}</p>}
                 </div>
-
-                {/* Expandable score breakdown */}
-                {expanded && scores.length > 0 && (
-                    <div className="mt-4 pt-4 border-t border-gray-100 space-y-2.5">
-                        {scores.map((sc, i) => (
-                            <div key={i}>
-                                <div className="flex items-center gap-3">
-                                    <p className="text-xs text-gray-600 flex-1 leading-snug">
-                                        {sc.evaluation_question?.question_text ?? `Question ${i + 1}`}
-                                    </p>
-                                    <ScoreBar score={sc.score ?? 0} max={sc.evaluation_question?.max_score ?? 5} />
-                                </div>
-                                {sc.comment && (
-                                    <div className="flex items-start gap-1.5 mt-1 ml-0 pl-0">
-                                        <MessageSquare size={11} className="text-gray-300 mt-0.5 shrink-0" />
-                                        <p className="text-[11px] text-gray-400 italic leading-snug">{sc.comment}</p>
-                                    </div>
-                                )}
-                            </div>
-                        ))}
-                        {comments.length === 0 && (
-                            <p className="text-xs text-gray-400 italic">{tr("No written comments provided.")}</p>
-                        )}
-                    </div>
-                )}
-            </div>
+            )}
         </div>
+    );
+}
+
+function TypeIcon({ isDefence, done = false }) {
+    const tone = done ? 'bg-emerald-50 text-emerald-600 ring-emerald-100' : isDefence ? 'bg-sky-50 text-sky-600 ring-sky-100' : 'bg-indigo-50 text-indigo-600 ring-indigo-100';
+    return (
+        <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-inset ${tone}`}>
+            {done ? <CheckCircle2 size={18} /> : isDefence ? <Presentation size={18} /> : <EyeOff size={18} />}
+        </span>
     );
 }
 
@@ -423,11 +404,9 @@ function CoiDeclarationModal({ assignment, onDeclared, onConflictReported, onClo
 }
 
 function AssignmentCard({ assignment, tabKey, onCoiDeclared, onConflictReported }) {
-    const daysLeft  = getDaysRemaining(assignment.due_date);
     const isDone    = assignment.status === 'submitted';
     const isNew     = isNewAssignment(assignment);
     const meta      = STATUS_META[assignment.status] ?? STATUS_META.pending;
-    const stripe    = urgencyStripe(daysLeft, isDone);
     const isDefence = tabKey === 'defence';
     const { hasSubFeature } = useFeature();
 
@@ -453,62 +432,45 @@ function AssignmentCard({ assignment, tabKey, onCoiDeclared, onConflictReported 
         onConflictReported(assignment.id);
     };
 
-    const overdue = !isDone && daysLeft !== null && daysLeft < 0;
-    const tone = isDone ? 'emerald' : isDefence ? 'blue' : 'violet';
-    const tile = { emerald: 'bg-emerald-100 text-emerald-600', blue: 'bg-blue-100 text-blue-600', violet: 'bg-violet-100 text-violet-600' }[tone];
-
     return (
         <article id={`assignment-${assignment.id}`}
-            className={`group relative scroll-mt-24 overflow-hidden rounded-2xl border bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${overdue ? 'border-red-200' : isNew ? 'border-amber-300 ring-2 ring-amber-100' : 'border-gray-200 hover:border-gray-300'}`}>
-            <span className={`absolute inset-y-0 left-0 w-1 ${stripe}`} />
-            <div className="flex flex-col gap-4 p-5 pl-6 sm:flex-row sm:items-center">
-                <div className="flex min-w-0 flex-1 items-start gap-4">
-                    <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl transition group-hover:scale-105 ${tile}`}>
-                        {isDone ? <CheckCircle2 size={20} /> : isDefence ? <Presentation size={20} /> : <EyeOff size={20} />}
-                    </span>
+            className={`group scroll-mt-28 px-4 py-4 transition-colors hover:bg-gray-50/70 sm:px-5 ${isNew ? 'bg-amber-50/40' : ''}`}>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+                <div className="flex min-w-0 flex-1 items-start gap-3 sm:gap-4">
+                    <TypeIcon isDefence={isDefence} done={isDone} />
                     <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="rounded-md bg-gray-900 px-1.5 py-0.5 font-mono text-[11px] font-bold text-white">{assignment.proposal?.tracker_number || 'N/A'}</span>
-                            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600">{getCategoryLabel(assignment.proposal?.category)}</span>
+                        <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-gray-500">
+                            <span className="font-mono font-semibold text-gray-700">{assignment.proposal?.tracker_number || 'N/A'}</span>
+                            <span>· {getCategoryLabel(assignment.proposal?.category)}</span>
                             <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${meta.bg} ${meta.text}`}>
-                                <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} /> {meta.label}
+                                <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} /> {tr(meta.label)}
                             </span>
-                            {isNew && (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800">
-                                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" /> {tr("NEW")}
-                                </span>
-                            )}
-                        </div>
-                        <h3 className="mt-1.5 line-clamp-2 text-[15px] font-semibold leading-snug text-gray-900">{assignment.proposal?.title || 'Untitled Proposal'}</h3>
-                        <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
-                            <span>{assignment.evaluation_type?.label || assignment.evaluation_type?.name || 'Evaluation'}</span>
-                            {assignment.proposal?.college?.name && <span className="text-gray-400">· {assignment.proposal.college.name}</span>}
-                            {assignment.assigned_at && <span className="text-gray-400">· {tr("Assigned :date", { date: formatDate(assignment.assigned_at) })}</span>}
+                            {isNew && <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">{tr("New")}</span>}
+                        </p>
+                        <h3 className="mt-1 line-clamp-2 text-sm font-semibold leading-snug text-gray-900 sm:text-[15px]">{assignment.proposal?.title || 'Untitled Proposal'}</h3>
+                        <p className="mt-0.5 text-xs text-gray-400">
+                            {assignment.evaluation_type?.label || assignment.evaluation_type?.name || 'Evaluation'}
+                            {assignment.proposal?.college?.name && <> · {assignment.proposal.college.name}</>}
+                            {assignment.assigned_at && <> · {tr("Assigned :date", { date: formatDate(assignment.assigned_at) })}</>}
                         </p>
                     </div>
                 </div>
 
-                <div className="flex shrink-0 items-center justify-between gap-3 border-t border-gray-100 pt-3 sm:flex-col sm:items-end sm:border-0 sm:pt-0">
+                <div className="flex shrink-0 items-center justify-between gap-3 pl-13 sm:justify-end sm:pl-0">
                     <DueBadge dueDate={assignment.due_date} />
                     {isDone ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
-                            <CheckCircle2 size={13} /> {tr("Submitted")}
+                        <span className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-emerald-700">
+                            <CheckCircle2 size={14} /> {tr("Submitted")}
                         </span>
                     ) : hasReportedConflict ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
-                            <AlertCircle size={13} /> {tr("Conflict Reported")}
+                        <span className="inline-flex items-center gap-1.5 rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 ring-1 ring-inset ring-red-200">
+                            <AlertCircle size={14} /> {tr("Conflict reported")}
                         </span>
                     ) : (
-                        <Link
-                            href={`/reviews/${assignment.id}/score`}
-                            onClick={handleScoreClick}
-                            className={`inline-flex items-center gap-1.5 rounded-xl bg-linear-to-r px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition hover:shadow-md ${
-                                isDefence ? 'from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700' : 'from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700'
-                            }`}
-                        >
-                            <ClipboardCheck size={14} />
-                            {assignment.status === 'in_progress' ? tr("Continue review") : tr("Score Review")}
-                            <ChevronRight size={14} className="transition group-hover:translate-x-0.5" />
+                        <Link href={`/reviews/${assignment.id}/score`} onClick={handleScoreClick}
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2">
+                            {assignment.status === 'in_progress' ? tr("Continue") : tr("Start review")}
+                            <ArrowRight size={14} className="transition group-hover:translate-x-0.5" />
                         </Link>
                     )}
                 </div>
@@ -594,8 +556,8 @@ function AbstractReviewCard({ item, onSubmitted, index, total }) {
 
     return (
         <div className={cn(
-            'bg-white rounded-2xl border overflow-hidden shadow-sm',
-            hasReview ? 'border-gray-100' : 'border-indigo-200 ring-1 ring-indigo-100',
+            'bg-white rounded-xl border overflow-hidden',
+            hasReview ? 'border-gray-200' : 'border-indigo-200 ring-1 ring-indigo-100',
         )}>
             {total > 1 && (
                 <div className={cn(
@@ -603,7 +565,7 @@ function AbstractReviewCard({ item, onSubmitted, index, total }) {
                     hasReview ? 'bg-gray-50 text-gray-400 border-gray-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100',
                 )}>
                     <span>{tr("Abstract :index of :total", { index: index, total: total })}</span>
-                    <span>{hasReview ? '✓ Reviewed' : '⏳ Pending review'}</span>
+                    <span>{hasReview ? tr('Reviewed') : tr('Waiting for your review')}</span>
                 </div>
             )}
 
@@ -704,8 +666,8 @@ function AbstractReviewCard({ item, onSubmitted, index, total }) {
                                         myReview.recommendation === 'reject' ? 'bg-red-100 text-red-700' :
                                         'bg-amber-100 text-amber-700',
                                     )}>
-                                        {myReview.recommendation === 'accept' ? '✓ Accept' :
-                                         myReview.recommendation === 'reject' ? '✗ Reject' : '⟳ Revise'}
+                                        {myReview.recommendation === 'accept' ? tr('Accept') :
+                                         myReview.recommendation === 'reject' ? tr('Reject') : tr('Revise')}
                                     </span>
                                 </div>
                             </div>
@@ -812,7 +774,7 @@ function AbstractReviewsPanel({ items, loading, onReload }) {
 
     return (
         <div className="space-y-5">
-            <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
+            <div className="bg-gray-50 rounded-xl border border-gray-200 p-5">
                 <div className="flex items-center justify-between mb-3">
                     <div>
                         <h3 className="text-sm font-bold text-gray-900">{tr("Your Review Progress")}</h3>
@@ -854,6 +816,17 @@ export default function ReviewIndex() {
     const [activeTab, setActiveTab]           = useState('blind');
     const [agreement, setAgreement]           = useState(null);
     const [showAgreement, setShowAgreement]   = useState(false);
+    const [search, setSearch]                 = useState('');
+    const [statusFilter, setStatusFilter]     = useState('all');
+    const [sort, setSort]                     = useState('due');
+
+    /** Each tab starts unfiltered, with its natural order. */
+    const changeTab = (key) => {
+        setActiveTab(key);
+        setSearch('');
+        setStatusFilter('all');
+        setSort(key === 'completed' ? 'recent' : 'due');
+    };
 
     useEffect(() => {
         api.get('/reviewer-agreement').then((r) => setAgreement(r.data?.data ?? null)).catch(() => {});
@@ -915,11 +888,18 @@ export default function ReviewIndex() {
     const tabItems    = currentTab?.filter ? assignments.filter(currentTab.filter) : [];
     const allTotal    = allAssignments.length + abstractItems.length;
 
+    const needle       = search.trim().toLowerCase();
+    const statusTest   = STATUS_FILTERS.find(f => f.key === statusFilter)?.test;
+    const compare      = [...SORTS, ...COMPLETED_SORTS].find(o => o.key === sort)?.compare ?? byDue;
+    const visibleItems = tabItems
+        .filter(a => !needle || [a.proposal?.title, a.proposal?.tracker_number, a.proposal?.college?.name].some(v => (v ?? '').toLowerCase().includes(needle)))
+        .filter(a => !statusTest || statusTest(a))
+        .sort(compare);
+
     const getCount   = tab => tab.key === 'abstracts' ? abstractItems.length : tab.filter ? assignments.filter(tab.filter).length : 0;
     const getPending = tab => tab.key === 'abstracts'
         ? abstractItems.filter(i => !i.reviews?.some(r => r.submitted_at)).length
         : tab.filter ? assignments.filter(tab.filter).filter(a => ['pending', 'in_progress', 'accepted'].includes(a.status)).length : 0;
-    const getNew     = tab => tab.filter && tab.key !== 'abstracts' ? assignments.filter(tab.filter).filter(isNewAssignment).length : 0;
 
     // The headline numbers for the year shown.
     const isTodo     = (a) => ['pending', 'in_progress', 'accepted'].includes(a.status) && !a.coi_has_conflict;
@@ -928,101 +908,94 @@ export default function ReviewIndex() {
     const dueWeekN   = todo.filter(a => { const d = getDaysRemaining(a.due_date); return d !== null && d >= 0 && d <= 7; }).length;
     const submittedN = assignments.filter(a => a.status === 'submitted').length;
     const progress   = assignments.length ? submittedN / assignments.length : 0;
-    const nextUp     = [...todo].sort((x, y) => (x.due_date ? new Date(x.due_date) : Infinity) - (y.due_date ? new Date(y.due_date) : Infinity))[0];
+    const nextUp     = [...todo].sort(byDue)[0];
     const nextUpTab  = nextUp ? TABS.find(t => t.filter && t.filter(nextUp))?.key : null;
     const nextUpDays = nextUp ? getDaysRemaining(nextUp.due_date) : null;
 
     const openNextUp = () => {
         if (!nextUp) return;
-        if (nextUpTab) setActiveTab(nextUpTab);
+        if (nextUpTab) changeTab(nextUpTab);
         setTimeout(() => {
             const el = document.getElementById(`assignment-${nextUp.id}`);
             el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            el?.classList.add('ring-4', 'ring-indigo-200');
-            setTimeout(() => el?.classList.remove('ring-4', 'ring-indigo-200'), 1600);
+            el?.classList.add('bg-indigo-50');
+            setTimeout(() => el?.classList.remove('bg-indigo-50'), 1600);
         }, 60);
-    };
-
-    const TONE = {
-        violet:  { text: 'text-violet-700', chip: 'bg-violet-100 text-violet-700', bar: 'bg-violet-600' },
-        blue:    { text: 'text-blue-700', chip: 'bg-blue-100 text-blue-700', bar: 'bg-blue-600' },
-        amber:   { text: 'text-amber-700', chip: 'bg-amber-100 text-amber-700', bar: 'bg-amber-500' },
-        emerald: { text: 'text-emerald-700', chip: 'bg-emerald-100 text-emerald-700', bar: 'bg-emerald-600' },
     };
 
     if (loading || abstractsLoading) {
         return (
             <AppLayout breadcrumb="Reviews">
-                <div className="mx-auto max-w-5xl space-y-5 p-4 sm:p-6">
-                    <div className="h-36 animate-pulse rounded-2xl bg-linear-to-br from-indigo-200 to-violet-200" />
-                    <div className="h-12 w-2/3 animate-pulse rounded-2xl bg-gray-100" />
-                    {[0, 1, 2].map(i => <div key={i} className="h-28 animate-pulse rounded-2xl bg-gray-100" />)}
+                <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6 lg:p-8">
+                    <div className="h-14 w-1/2 animate-pulse rounded-xl bg-gray-100" />
+                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{[0, 1, 2, 3].map(i => <div key={i} className="h-24 animate-pulse rounded-2xl bg-gray-100" />)}</div>
+                    <div className="h-96 animate-pulse rounded-2xl bg-gray-100" />
                 </div>
             </AppLayout>
         );
     }
 
+    const isAssignmentTab = activeTab !== 'abstracts' && activeTab !== 'record';
+    const kpis = [
+        { label: tr("To review"), value: todo.length, icon: ClipboardCheck, hint: todo.length ? tr("waiting for your score") : tr("all caught up"), tone: 'text-indigo-600 bg-indigo-50' },
+        { label: tr("Due this week"), value: dueWeekN, icon: Clock, hint: tr("in the next 7 days"), tone: 'text-amber-600 bg-amber-50' },
+        { label: tr("Overdue"), value: overdueN, icon: AlertCircle, hint: overdueN ? tr("past the due date") : tr("nothing late"), tone: 'text-red-600 bg-red-50', alert: overdueN > 0 },
+        { label: tr("Submitted"), value: submittedN, icon: CheckCircle2, hint: tr(":done of :total", { done: submittedN, total: assignments.length }), tone: 'text-emerald-600 bg-emerald-50', progress },
+    ];
+
     return (
         <AppLayout breadcrumb="Reviews">
-            <div className="mx-auto max-w-5xl space-y-5 p-4 sm:p-6">
-                {/* ── Header: who, how far, what is waiting ───────────────── */}
-                <section className="relative overflow-hidden rounded-2xl bg-linear-to-br from-indigo-600 via-violet-600 to-fuchsia-600 px-5 py-4 text-white shadow-lg shadow-indigo-200 sm:px-6">
-                    <span aria-hidden className="pointer-events-none absolute -right-12 -top-16 h-44 w-44 rounded-full bg-white/10" />
-                    <span aria-hidden className="pointer-events-none absolute -bottom-24 left-1/3 h-56 w-56 rounded-full bg-white/5" />
-                    <div className="relative flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="min-w-0">
-                            <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-white/70"><Shield size={12} /> {tr("Reviewer workspace")}</p>
-                            <h1 className="text-xl font-bold tracking-tight sm:text-2xl">{tr("My Review Assignments")}</h1>
-                            <p className="text-sm text-white/80">
-                                {todo.length
-                                    ? tr(":count waiting for your score", { count: todo.length })
-                                    : allTotal ? tr("You are all caught up — nothing waiting.") : tr("No assignments yet")}
-                                {yearFilter ? ` · ${yearFilter}` : availableYears.length > 1 ? ` · ${tr("All years")}` : ''}
-                            </p>
-                            <div className="mt-2.5 flex flex-wrap items-center gap-2">
-                                {availableYears.length > 1 && (
-                                    <select value={yearFilter} onChange={e => { setYearFilter(e.target.value); setActiveTab('blind'); }} aria-label={tr("Academic year")}
-                                        className="rounded-lg border border-white/25 bg-white/15 px-2.5 py-1.5 text-xs font-medium text-white backdrop-blur focus:outline-none focus:ring-2 focus:ring-white/40 [&>option]:text-gray-900">
-                                        <option value="">{tr("All Years")}</option>
-                                        {availableYears.map(y => <option key={y} value={y}>{y === latestYear ? `${y} · ${tr("latest")}` : y}</option>)}
-                                    </select>
-                                )}
-                                <a href={`/api/v1/calendar/export?token=${localStorage.getItem('rtt_token') ?? ''}`}
-                                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/25 bg-white/15 px-2.5 py-1.5 text-xs font-semibold text-white backdrop-blur transition hover:bg-white/25">
-                                    <Download size={13} /> {tr("Export iCal")}
-                                </a>
-                            </div>
-                        </div>
-                        <ProgressRing value={progress} size={72} stroke={7}>
-                            <span className="text-base font-bold tabular-nums">{Math.round(progress * 100)}%</span>
-                            <span className="mt-0.5 text-[8px] font-medium uppercase tracking-wide text-white/70">{tr(":done of :total done", { done: submittedN, total: assignments.length })}</span>
-                        </ProgressRing>
+            <div className="mx-auto max-w-6xl space-y-6 p-4 sm:p-6 lg:p-8">
+                {/* ── Header ──────────────────────────────────────────────── */}
+                <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                    <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-wider text-indigo-600">{tr("Reviewer workspace")}</p>
+                        <h1 className="mt-1 text-2xl font-bold tracking-tight text-gray-900 sm:text-3xl">{tr("My reviews")}</h1>
+                        <p className="mt-1 text-sm text-gray-500">
+                            {todo.length
+                                ? tr(":count waiting for your score", { count: todo.length })
+                                : allTotal ? tr("You are all caught up — nothing waiting.") : tr("No assignments yet")}
+                        </p>
                     </div>
-                    <div className="relative mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                        {[
-                            { label: tr("To score"), value: todo.length, icon: ClipboardCheck },
-                            { label: tr("Due this week"), value: dueWeekN, icon: Clock },
-                            { label: tr("Overdue"), value: overdueN, icon: AlertCircle, alert: overdueN > 0 },
-                            { label: tr("Submitted"), value: submittedN, icon: CheckCircle2 },
-                        ].map(t => (
-                            <div key={t.label} className={`flex items-center justify-between gap-2 rounded-xl px-3 py-1.5 backdrop-blur ${t.alert ? 'bg-red-500/30 ring-1 ring-red-200/50' : 'bg-white/15 ring-1 ring-white/15'}`}>
-                                <p className="flex items-center gap-1.5 text-[11px] font-medium text-white/80"><t.icon size={12} /> {t.label}</p>
-                                <p className="text-lg font-bold tabular-nums">{t.value}</p>
-                            </div>
-                        ))}
+                    <div className="flex flex-wrap items-center gap-2">
+                        {availableYears.length > 1 && (
+                            <label className="relative">
+                                <span className="sr-only">{tr("Academic year")}</span>
+                                <CalendarDays size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                                <select value={yearFilter} onChange={e => { setYearFilter(e.target.value); setActiveTab('blind'); }}
+                                    className="h-10 rounded-lg border border-gray-200 bg-white pl-9 pr-8 text-sm font-medium text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                    <option value="">{tr("All years")}</option>
+                                    {availableYears.map(y => <option key={y} value={y}>{y === latestYear ? `${y} · ${tr("latest")}` : y}</option>)}
+                                </select>
+                            </label>
+                        )}
+                        <a href={`/api/v1/calendar/export?token=${localStorage.getItem('rtt_token') ?? ''}`}
+                            className="inline-flex h-10 items-center gap-2 rounded-lg border border-gray-200 bg-white px-3.5 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50">
+                            <Download size={15} /> {tr("Add to calendar")}
+                        </a>
                     </div>
-                </section>
+                </header>
+
+                {availableYears.length > 1 && yearFilter !== latestYear && (
+                    <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+                        <p className="text-amber-900">
+                            <b>{yearFilter ? tr("You are viewing :year", { year: yearFilter }) : tr("You are viewing all years")}</b> · {tr("Your latest assignments are in :year (:count).", { year: latestYear, count: latestCount })}
+                            {olderCount > 0 && !yearFilter && <span className="text-amber-700"> {tr(":older from earlier years", { older: olderCount })}</span>}
+                        </p>
+                        <button onClick={() => setYearFilter(latestYear)} className="shrink-0 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-600">{tr("Go to the latest year")}</button>
+                    </div>
+                )}
 
                 {agreement && !agreement.accepted && (
-                    <div className="flex flex-col gap-3 rounded-2xl border border-indigo-200 bg-indigo-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex flex-col gap-3 rounded-xl border border-indigo-200 bg-indigo-50/60 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex items-start gap-3">
-                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white"><Lock size={16} /></span>
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white"><Lock size={16} /></span>
                             <div>
                                 <p className="text-sm font-semibold text-indigo-900">{tr("Accept the :academic_year confidentiality agreement", { academic_year: agreement.academic_year })}</p>
                                 <p className="text-xs text-indigo-700">{tr("You'll need to accept it once this year before opening any proposal to review.")}</p>
                             </div>
                         </div>
-                        <button onClick={() => setShowAgreement(true)} className="shrink-0 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700">Read &amp; accept</button>
+                        <button onClick={() => setShowAgreement(true)} className="shrink-0 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700">{tr("Read & accept")}</button>
                     </div>
                 )}
                 {showAgreement && (
@@ -1032,45 +1005,51 @@ export default function ReviewIndex() {
                     />
                 )}
 
-                {/* ── Which year is shown ──────────────────────────────────── */}
-                {availableYears.length > 1 && (
-                    <div className={`flex flex-col gap-2 rounded-2xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between ${yearFilter === latestYear ? 'border-indigo-100 bg-white' : 'border-amber-200 bg-amber-50'}`}>
-                        <p className="flex items-center gap-2 text-sm">
-                            <CalendarDays size={16} className={yearFilter === latestYear ? 'text-indigo-500' : 'text-amber-600'} />
-                            {yearFilter === latestYear ? (
-                                <span className="text-gray-700"><b className="text-gray-900">{tr("Showing your latest assignments — :year", { year: latestYear })}</b> <span className="text-gray-500">· {tr(":count this year, :older from earlier years", { count: latestCount, older: olderCount })}</span></span>
-                            ) : (
-                                <span className="text-amber-900"><b>{yearFilter ? tr("You are viewing :year", { year: yearFilter }) : tr("You are viewing all years")}</b> · {tr("Your latest assignments are in :year (:count).", { year: latestYear, count: latestCount })}</span>
-                            )}
-                        </p>
-                        {yearFilter === latestYear
-                            ? <button onClick={() => setYearFilter('')} className="shrink-0 rounded-lg px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50">{tr("Show all years")}</button>
-                            : <button onClick={() => setYearFilter(latestYear)} className="shrink-0 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-600">{tr("Go to the latest year")}</button>}
+                {/* ── Key numbers ─────────────────────────────────────────── */}
+                {allTotal > 0 && (
+                    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                        {kpis.map(k => (
+                            <div key={k.label} className={`rounded-2xl border bg-white p-4 shadow-sm ${k.alert ? 'border-red-200 ring-1 ring-red-100' : 'border-gray-200'}`}>
+                                <div className="flex items-center justify-between">
+                                    <p className="text-xs font-medium text-gray-500">{k.label}</p>
+                                    <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${k.tone}`}><k.icon size={15} /></span>
+                                </div>
+                                <p className={`mt-2 text-2xl font-bold tabular-nums tracking-tight ${k.alert ? 'text-red-600' : 'text-gray-900'}`}>{k.value}</p>
+                                {k.progress !== undefined ? (
+                                    <div className="mt-2">
+                                        <div className="h-1.5 overflow-hidden rounded-full bg-gray-100">
+                                            <div className="h-full rounded-full bg-emerald-500 transition-all duration-700" style={{ width: `${Math.round(k.progress * 100)}%` }} />
+                                        </div>
+                                        <p className="mt-1 text-[11px] text-gray-400">{k.hint}</p>
+                                    </div>
+                                ) : <p className="mt-1 text-[11px] text-gray-400">{k.hint}</p>}
+                            </div>
+                        ))}
                     </div>
                 )}
 
-                {/* ── Next up: the most urgent review ───────────────────────── */}
+                {/* ── Next up: the most urgent review ─────────────────────── */}
                 {nextUp && (
-                    <section className="flex flex-col gap-4 rounded-2xl border border-indigo-100 bg-linear-to-r from-indigo-50 via-white to-white p-5 shadow-sm sm:flex-row sm:items-center">
-                        <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-indigo-600 text-white shadow-md shadow-indigo-200"><Star size={20} /></span>
+                    <section className="flex flex-col gap-3 rounded-2xl border border-gray-200 border-l-4 border-l-indigo-500 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:gap-4 sm:p-5">
                         <div className="min-w-0 flex-1">
-                            <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-600">
-                                {tr("Next up")}{nextUpDays !== null && ` · ${nextUpDays < 0 ? tr("overdue by :d days", { d: Math.abs(nextUpDays) }) : nextUpDays === 0 ? tr("due today") : tr("due in :d days", { d: nextUpDays })}`}
+                            <p className="text-xs font-semibold text-indigo-600">
+                                {tr("Next up")}
+                                {nextUpDays !== null && <span className={nextUpDays < 0 ? 'text-red-600' : 'text-gray-500'}> · {nextUpDays < 0 ? tr("overdue by :d days", { d: Math.abs(nextUpDays) }) : nextUpDays === 0 ? tr("due today") : tr("due in :d days", { d: nextUpDays })}</span>}
                             </p>
-                            <p className="mt-0.5 line-clamp-1 text-sm font-semibold text-gray-900">{nextUp.proposal?.title || 'Untitled Proposal'}</p>
+                            <p className="mt-1 line-clamp-1 text-sm font-semibold text-gray-900 sm:text-base">{nextUp.proposal?.title || 'Untitled Proposal'}</p>
                             <p className="text-xs text-gray-500"><span className="font-mono font-semibold text-gray-700">{nextUp.proposal?.tracker_number}</span> · {nextUp.evaluation_type?.label || nextUp.evaluation_type?.name}</p>
                         </div>
-                        <button onClick={openNextUp} className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-gray-800">
-                            {tr("Go to it")} <ChevronRight size={15} />
+                        <button onClick={openNextUp} className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-gray-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-gray-800">
+                            {tr("Go to it")} <ArrowRight size={15} />
                         </button>
                     </section>
                 )}
 
-                {/* ── Empty state (no assignments at all) ──────────────────── */}
+                {/* ── Empty state (no assignments at all) ─────────────────── */}
                 {allTotal === 0 && (
-                    <div className="rounded-3xl border border-dashed border-gray-300 bg-white p-14 text-center">
-                        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50">
-                            <ClipboardCheck size={28} className="text-indigo-400" />
+                    <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-14 text-center">
+                        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-50">
+                            <ClipboardCheck size={26} className="text-indigo-400" />
                         </div>
                         <h3 className="mb-1.5 font-semibold text-gray-800">{tr("No assignments yet")}</h3>
                         <p className="mx-auto max-w-xs text-sm leading-relaxed text-gray-500">
@@ -1080,57 +1059,77 @@ export default function ReviewIndex() {
                 )}
 
                 {allTotal > 0 && (
-                    <>
-                        {/* ── Tabs ─────────────────────────────────────────── */}
-                        <div className="sticky top-0 z-10 -mx-4 bg-gray-50/90 px-4 py-2 backdrop-blur sm:mx-0 sm:rounded-2xl sm:px-0">
-                            <div className="overflow-x-auto">
-                                <div role="tablist" className="flex w-fit gap-1 rounded-2xl border border-gray-200 bg-white p-1 shadow-sm">
-                                    {TABS.map(tab => {
-                                        const count    = getCount(tab);
-                                        const pending  = getPending(tab);
-                                        const newCount = getNew(tab);
-                                        const isActive = activeTab === tab.key;
-                                        const Icon = tab.icon;
-                                        const t = TONE[tab.color];
+                    <section className="rounded-2xl border border-gray-200 bg-white shadow-sm">
+                        {/* ── Tabs ───────────────────────────────────────── */}
+                        <div className="sticky top-0 z-10 rounded-t-2xl border-b border-gray-200 bg-white/95 backdrop-blur">
+                            <div role="tablist" className="flex gap-1 overflow-x-auto px-2 sm:px-3">
+                                {TABS.map(tab => {
+                                    const count    = getCount(tab);
+                                    const pending  = getPending(tab);
+                                    const isActive = activeTab === tab.key;
+                                    const Icon = tab.icon;
 
-                                        return (
-                                            <button key={tab.key} role="tab" aria-selected={isActive} onClick={() => setActiveTab(tab.key)}
-                                                className={`relative flex items-center gap-2 whitespace-nowrap rounded-xl px-3.5 py-2 text-sm font-semibold transition-all sm:px-4 ${isActive ? 'bg-gray-900 text-white shadow' : 'text-gray-600 hover:bg-gray-100'}`}>
-                                                <Icon size={15} className={isActive ? 'text-white' : t.text} />
-                                                {tab.label}
-                                                {count > 0 && (
-                                                    <span className={`rounded-full px-1.5 py-0.5 text-[11px] font-bold tabular-nums ${isActive ? 'bg-white/20 text-white' : t.chip}`}>{count}</span>
-                                                )}
-                                                {newCount > 0 && !isActive && (
-                                                    <span className="absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5">
-                                                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
-                                                        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500" />
-                                                    </span>
-                                                )}
-                                                {pending > 0 && !isActive && newCount === 0 && (
-                                                    <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-amber-400" />
-                                                )}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
+                                    return (
+                                        <button key={tab.key} role="tab" aria-selected={isActive} onClick={() => changeTab(tab.key)}
+                                            className={`relative -mb-px flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-3.5 text-sm font-medium transition-colors ${isActive ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-800'}`}>
+                                            <Icon size={15} />
+                                            {tr(tab.label)}
+                                            {count > 0 && (
+                                                <span className={`rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums ${isActive ? 'bg-indigo-100 text-indigo-700' : pending > 0 ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-600'}`}
+                                                    title={pending > 0 ? tr(":pending waiting", { pending }) : undefined}>
+                                                    {pending > 0 && tab.key !== 'completed' ? pending : count}
+                                                </span>
+                                            )}
+                                        </button>
+                                    );
+                                })}
                             </div>
-                            {currentTab && <p className="mt-2 px-1 text-xs text-gray-500">{currentTab.description}</p>}
                         </div>
 
-                        {/* ── Abstract review panel (separate data source) ─── */}
+                        <div className="border-b border-gray-100 px-4 py-3 sm:px-5">
+                            <p className="text-xs text-gray-500">{tr(currentTab.description)}</p>
+                            {isAssignmentTab && tabItems.length > 0 && (
+                                <div className="mt-3 flex flex-col gap-2 lg:flex-row lg:items-center">
+                                    <div className="flex flex-1 items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 focus-within:bg-white focus-within:ring-2 focus-within:ring-indigo-500">
+                                        <Search size={15} className="text-gray-400" />
+                                        <input type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder={tr("Search by title, tracker number or college…")}
+                                            className="h-9 flex-1 bg-transparent text-base outline-none sm:text-sm" />
+                                    </div>
+                                    <div className="flex gap-2">
+                                        {activeTab !== 'completed' && (
+                                            <div className="flex flex-1 rounded-lg bg-gray-100 p-0.5 text-xs font-medium lg:flex-none">
+                                                {STATUS_FILTERS.map(f => (
+                                                    <button key={f.key} onClick={() => setStatusFilter(f.key)} aria-pressed={statusFilter === f.key}
+                                                        className={`flex-1 whitespace-nowrap rounded-md px-2.5 py-1.5 transition lg:flex-none ${statusFilter === f.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>
+                                                        {tr(f.label)}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                        <select value={sort} onChange={e => setSort(e.target.value)} aria-label={tr("Sort")}
+                                            className="h-9 rounded-lg border border-gray-200 bg-white px-2.5 text-xs font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                            {(activeTab === 'completed' ? COMPLETED_SORTS : SORTS).map(o => <option key={o.key} value={o.key}>{tr(o.label)}</option>)}
+                                        </select>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* ── Abstract review panel (separate data source) ── */}
                         {activeTab === 'abstracts' && (
-                            <AbstractReviewsPanel items={abstractItems} loading={abstractsLoading} onReload={loadAbstracts} />
+                            <div className="p-4 sm:p-5">
+                                <AbstractReviewsPanel items={abstractItems} loading={abstractsLoading} onReload={loadAbstracts} />
+                            </div>
                         )}
 
-                        {/* ── My record: ratings and certificates ───────────── */}
+                        {/* ── My record: ratings and certificates ──────────── */}
                         {activeTab === 'record' && (
-                            <div>
+                            <div className="p-4 sm:p-5">
                                 <div className="peer grid items-stretch gap-5 empty:hidden lg:grid-cols-2 [&>*:only-child]:lg:col-span-2">
                                     <ReviewQualityCard />
                                     <ReviewCertificatesCard />
                                 </div>
-                                <div className="hidden rounded-2xl border border-dashed border-gray-300 bg-white p-12 text-center peer-empty:block">
+                                <div className="hidden py-10 text-center peer-empty:block">
                                     <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-50"><Award size={22} className="text-amber-400" /></span>
                                     <p className="text-sm font-semibold text-gray-600">{tr("Nothing on your record yet")}</p>
                                     <p className="mt-1 text-xs text-gray-400">{tr("Ratings of your reviews and your certificates appear here once you have submitted reviews.")}</p>
@@ -1138,41 +1137,48 @@ export default function ReviewIndex() {
                             </div>
                         )}
 
-                        {/* ── Empty tab state ────────────────────────────────── */}
-                        {activeTab !== 'abstracts' && activeTab !== 'record' && tabItems.length === 0 && (
-                            <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-12 text-center">
+                        {/* ── Empty states ───────────────────────────────── */}
+                        {isAssignmentTab && visibleItems.length === 0 && (
+                            <div className="px-6 py-14 text-center">
                                 <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-gray-50"><currentTab.icon size={22} className="text-gray-300" /></span>
-                                <p className="text-sm font-semibold text-gray-600">{tr("No :label assignments", { label: currentTab.label })}</p>
-                                <p className="mt-1 text-xs text-gray-400">{tr("Assignments for this phase will appear here.")}</p>
+                                {tabItems.length === 0 ? (
+                                    <>
+                                        <p className="text-sm font-semibold text-gray-600">{tr("No :label assignments", { label: tr(currentTab.label) })}</p>
+                                        <p className="mt-1 text-xs text-gray-400">{tr("Assignments for this phase will appear here.")}</p>
+                                    </>
+                                ) : (
+                                    <>
+                                        <p className="text-sm font-semibold text-gray-600">{tr("Nothing matches these filters")}</p>
+                                        <button onClick={() => { setSearch(''); setStatusFilter('all'); }} className="mt-2 text-xs font-semibold text-indigo-600 hover:underline">{tr("Clear filters")}</button>
+                                    </>
+                                )}
                             </div>
                         )}
 
-                        {/* ── Assignment cards ────────────────────────────────── */}
-                        {activeTab !== 'abstracts' && tabItems.length > 0 && activeTab !== 'completed' && (
-                            <div className="space-y-3">
-                                {tabItems.map(assignment => (
-                                    <AssignmentCard
-                                        key={assignment.id}
-                                        assignment={assignment}
-                                        tabKey={activeTab}
-                                        onCoiDeclared={handleCoiDeclared}
-                                        onConflictReported={handleConflictReported}
-                                    />
-                                ))}
+                        {/* ── Assignment rows ──────────────────────────────── */}
+                        {isAssignmentTab && visibleItems.length > 0 && (
+                            <div className="divide-y divide-gray-100">
+                                {activeTab === 'completed'
+                                    ? visibleItems.map(assignment => <CompletedCard key={assignment.id} assignment={assignment} />)
+                                    : visibleItems.map(assignment => (
+                                        <AssignmentCard
+                                            key={assignment.id}
+                                            assignment={assignment}
+                                            tabKey={activeTab}
+                                            onCoiDeclared={handleCoiDeclared}
+                                            onConflictReported={handleConflictReported}
+                                        />
+                                    ))}
                             </div>
                         )}
 
-                        {/* ── Completed review cards ───────────────────────── */}
-                        {tabItems.length > 0 && activeTab === 'completed' && (
-                            <div className="space-y-3">
-                                {tabItems.map(assignment => (
-                                    <CompletedCard key={assignment.id} assignment={assignment} />
-                                ))}
-                            </div>
+                        {isAssignmentTab && tabItems.length > 0 && (
+                            <p className="rounded-b-2xl border-t border-gray-100 bg-gray-50/60 px-5 py-2.5 text-xs text-gray-500">
+                                {tr("Showing :shown of :total", { shown: visibleItems.length, total: tabItems.length })}
+                            </p>
                         )}
-                    </>
+                    </section>
                 )}
-
             </div>
         </AppLayout>
     );

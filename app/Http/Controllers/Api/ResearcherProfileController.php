@@ -24,19 +24,50 @@ class ResearcherProfileController extends Controller
     /** Outputs shown publicly: checked by the college or approved. */
     private const PUBLIC_OUTPUT_STATUSES = ['verified', 'approved'];
 
-    /** The public directory: researchers who have switched their profile on. */
+    /** Researchers shown on one page of the public directory. */
+    private const PER_PAGE = 10;
+
+    /**
+     * The public directory: researchers who have switched their profile on.
+     * Browsable A–Z (with how many names sit under each letter), by college and
+     * department, by search, and narrowed to people with funded projects.
+     */
     public function index(Request $request): JsonResponse
     {
-        $researchers = $this->publicResearchers()
-            ->with(['college:id,name', 'department:id,name'])
+        $filtered = $this->publicResearchers()
             ->when($request->filled('q'), function (Builder $q) use ($request) {
                 $term = '%'.Str::lower($request->string('q')->trim()).'%';
                 // expertise is JSON, which MySQL compares case-sensitively.
                 $q->where(fn ($q) => $q->whereRaw('LOWER(name) LIKE ?', [$term])->orWhereRaw('LOWER(CAST(expertise AS CHAR)) LIKE ?', [$term]));
             })
             ->when($request->filled('college_id'), fn ($q) => $q->where('college_id', $request->college_id))
-            ->orderBy('name')
-            ->paginate(24, ['id', 'name', 'title', 'avatar', 'college_id', 'department_id', 'expertise', 'profile_slug']);
+            ->when($request->filled('department_id'), fn ($q) => $q->where('department_id', $request->department_id))
+            ->when($request->boolean('with_projects'), fn ($q) => $q->where(fn ($q) => $q
+                ->whereExists(fn ($p) => $p->selectRaw('1')->from('proposals')
+                    ->whereColumn('proposals.pi_user_id', 'users.id')
+                    ->whereIn('proposals.status', ResearchOutputService::RECORDABLE_STATUSES)
+                    ->whereNull('proposals.deleted_at'))
+                ->orWhereExists(fn ($m) => $m->selectRaw('1')->from('proposal_members')
+                    ->join('proposals', 'proposals.id', '=', 'proposal_members.proposal_id')
+                    ->whereColumn('proposal_members.user_id', 'users.id')
+                    ->where('proposal_members.status', 'active')
+                    ->whereIn('proposals.status', ResearchOutputService::RECORDABLE_STATUSES)
+                    ->whereNull('proposals.deleted_at'))));
+
+        // How many names start with each letter, under the other filters, so empty letters can be greyed out.
+        $letters = (clone $filtered)->toBase()
+            ->selectRaw('UPPER(SUBSTR(TRIM(name), 1, 1)) as letter, COUNT(*) as total')
+            ->groupBy('letter')
+            ->pluck('total', 'letter')
+            ->map(fn ($n) => (int) $n);
+
+        $letter = Str::upper(Str::substr((string) $request->query('letter'), 0, 1));
+
+        $researchers = $filtered
+            ->with(['college:id,name', 'department:id,name'])
+            ->when($letter !== '', fn ($q) => $q->whereRaw('UPPER(SUBSTR(TRIM(name), 1, 1)) = ?', [$letter]))
+            ->orderBy('name', $request->query('sort') === 'name_desc' ? 'desc' : 'asc')
+            ->paginate(self::PER_PAGE, ['id', 'name', 'title', 'avatar', 'college_id', 'department_id', 'expertise', 'profile_slug']);
 
         $ids = $researchers->getCollection()->pluck('id')->all();
         $projectCounts = $this->projectsOf($ids)
@@ -56,7 +87,7 @@ class ResearcherProfileController extends Controller
             'projects' => $projectCounts[$u->id] ?? 0,
         ]);
 
-        return response()->json(['data' => $researchers, 'message' => '', 'errors' => [], 'meta' => []]);
+        return response()->json(['data' => $researchers, 'message' => '', 'errors' => [], 'meta' => ['letters' => $letters]]);
     }
 
     /** One researcher's public page. */

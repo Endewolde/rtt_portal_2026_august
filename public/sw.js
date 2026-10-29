@@ -1,7 +1,7 @@
 // RTT Platform service worker: makes the site installable and shows a friendly page when
 // offline. It deliberately caches nothing else — proposals, reviews and scores always come
 // fresh from the server, and nothing private is stored on the device.
-const CACHE = 'rtt-offline-v1';
+const CACHE = 'rtt-offline-v2';
 const OFFLINE_URL = '/offline.html';
 
 self.addEventListener('install', (event) => {
