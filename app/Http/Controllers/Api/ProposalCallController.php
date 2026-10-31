@@ -107,14 +107,25 @@ class ProposalCallController extends Controller
             return response()->json(['data' => [], 'message' => 'Forbidden.', 'errors' => [], 'meta' => []], 403);
         }
 
+        // Only the current academic year's calls (Settings) unless another year (or 'all') is
+        // asked for; the latest year with calls stands in when no current year is set.
+        $currentYear = DB::table('app_settings')->where('key', 'current_academic_year')->value('value');
+        $academicYears = ProposalCall::whereNotNull('academic_year')->distinct()->pluck('academic_year')
+            ->push($currentYear)->filter()->unique()->sortDesc()->values();
+        $academicYear = $request->filled('academic_year') ? $request->academic_year : ($currentYear ?: $academicYears->first());
+
         $calls = $this->withSubmittedCount(ProposalCall::query(), $request->user())
+            ->when($academicYear && $academicYear !== 'all', fn ($q) => $q->where('academic_year', $academicYear))
             ->when($request->search, fn ($q) => $q->where('title', 'like', '%'.$request->search.'%'))
             ->when($request->status, fn ($q) => $q->where('status', $request->status))
             ->when($request->category, fn ($q) => $q->where('category', $request->category))
             ->orderByDesc('created_at')
             ->paginate(25);
 
-        return ProposalCallResource::collection($calls);
+        return ProposalCallResource::collection($calls)->additional([
+            'academic_year' => $academicYear ?? 'all',
+            'academic_years' => $academicYears,
+        ]);
     }
 
     public function index(Request $request): JsonResponse

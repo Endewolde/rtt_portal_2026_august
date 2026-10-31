@@ -7,10 +7,12 @@ use App\Models\AppSetting;
 use App\Models\User;
 use App\Support\AuditLogger;
 use GuzzleHttp\Client as GuzzleClient;
+use GuzzleHttp\Exception\ClientException;
 use GuzzleHttp\Exception\ConnectException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Sleep;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -28,6 +30,12 @@ class OAuthController extends Controller
 
     /** A repeated callback (reload, prefetch) gets the same result instead of an error. */
     private const DONE_KEY = 'oauth-done:';
+
+    /** Held by the one request allowed to redeem a code; Microsoft accepts each code only once. */
+    private const CLAIM_KEY = 'oauth-claim:';
+
+    /** Longest a duplicate callback waits for the request that holds the claim (its token call may take up to 25s). */
+    private const AWAIT_SECONDS = 30;
 
     public function redirect(string $provider): RedirectResponse
     {
@@ -71,6 +79,14 @@ class OAuthController extends Controller
             return Inertia::render('Auth/OAuthSuccess', $done);
         }
 
+        // Two callbacks with the same code can arrive at once (prefetch plus the real visit,
+        // a double tap, the browser handing over to the installed app). Only the first may
+        // redeem it — a second redemption fails with AADSTS54005 and showed "Authentication
+        // failed" to someone who was in fact signed in — so the other waits for its result.
+        if ($code !== '' && ! Cache::add(self::CLAIM_KEY.hash('sha256', $code), true, now()->addSeconds(self::AWAIT_SECONDS * 2))) {
+            return $this->awaitOtherCallback($doneKey);
+        }
+
         $state = (string) request()->query('state');
         if ($state === '' || Cache::pull(self::STATE_KEY.$state) !== $provider) {
             $this->auditFailure($provider, 'Missing or expired sign-in state');
@@ -81,6 +97,10 @@ class OAuthController extends Controller
         try {
             $socialUser = $this->fetchUser($provider);
         } catch (\Throwable $e) {
+            if ($this->isCodeAlreadyRedeemed($e)) {
+                return $this->awaitOtherCallback($doneKey);
+            }
+
             Log::warning("[SSO] OAuth callback failed for {$provider}: ".get_class($e).': '.$e->getMessage());
             $this->auditFailure($provider, Str::limit(get_class($e).': '.$e->getMessage(), 250));
 
@@ -156,6 +176,27 @@ class OAuthController extends Controller
                 usleep(400_000);
             }
         }
+    }
+
+    /** Shows the sign-in finished by the callback that redeemed this code, once it has. */
+    private function awaitOtherCallback(string $doneKey): Response|RedirectResponse
+    {
+        $deadline = now()->addSeconds(self::AWAIT_SECONDS);
+
+        do {
+            if ($done = Cache::get($doneKey)) {
+                return Inertia::render('Auth/OAuthSuccess', $done);
+            }
+            Sleep::for(250)->milliseconds();
+        } while (now()->lessThan($deadline));
+
+        return $this->fail('This sign-in was already used. Please tap "Continue" again.');
+    }
+
+    /** Microsoft's AADSTS54005: the authorization code was already exchanged for a token. */
+    private function isCodeAlreadyRedeemed(\Throwable $e): bool
+    {
+        return $e instanceof ClientException && str_contains((string) $e->getResponse()->getBody(), 'AADSTS54005');
     }
 
     private function isNetworkProblem(\Throwable $e): bool

@@ -106,7 +106,7 @@ test('the Proposal Calls list counts only submitted proposals, not drafts', func
     pcs_proposal($this, 'draft');
     pcs_proposal($this, 'draft');
 
-    $response = $this->actingAs($this->central, 'sanctum')->getJson('/api/v1/proposal-calls/all')->assertOk();
+    $response = $this->actingAs($this->central, 'sanctum')->getJson('/api/v1/proposal-calls/all?academic_year=all')->assertOk();
 
     expect(collect($response->json('data'))->firstWhere('id', $this->call->id)['proposals_count'])->toBe(2);
 });

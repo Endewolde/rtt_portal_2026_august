@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Megaphone, Plus, X, Search, Pencil, CheckCircle, XCircle,
     Eye, RefreshCw, Trash2, Upload, FileText, Download, Filter,
-    Settings, AlertCircle, GraduationCap, Calendar, Clock,
+    Settings, AlertCircle, GraduationCap, Calendar, CalendarDays, Clock,
     AlignLeft, Users, Tag, ShieldCheck, BookOpen, ChevronRight, Wallet, Copy, Loader2, ClipboardList, Route,
 } from 'lucide-react';
 import { Link, usePage } from '@inertiajs/react';
@@ -193,7 +193,7 @@ function ProposalCallModal({ initial, defaultAcademicYear, onClose, onSaved }) {
                 setGuidelinesFile(null);
             }
 
-            onSaved();
+            onSaved(form.academic_year);
             onClose();
         } catch (err) {
             const fieldErrors = err.response?.data?.errors ?? {};
@@ -548,6 +548,10 @@ export default function ProposalCallsAdmin() {
     const [search, setSearch]             = useState('');
     const [activeTab, setActiveTab]       = useState('all');
     const [categoryFilter, setCategoryFilter] = useState('');
+    // null until the first load picks the latest academic year; 'all' shows every year.
+    const [yearFilter, setYearFilter]     = useState(null);
+    const [academicYears, setAcademicYears] = useState([]);
+    const yearRef = useRef(null);
     const [showModal, setShowModal]       = useState(false);
     const [editCall, setEditCall]         = useState(null);
     const [confirmAction, setConfirmAction] = useState(null);
@@ -558,23 +562,53 @@ export default function ProposalCallsAdmin() {
     const appSettings = usePage().props.app_settings ?? {}
     const defaultAcademicYear = appSettings.current_academic_year ?? ''
 
+    // Admins get one academic year at a time from the server (the current one from Settings
+    // unless another is chosen); everyone else gets the open calls and picks a year from those.
     const load = useCallback(() => {
         setLoading(true);
         const endpoint = canSeeAll ? '/proposal-calls/all' : '/proposal-calls';
-        get(endpoint)
+        const params = canSeeAll && yearRef.current ? { academic_year: yearRef.current } : {};
+        get(endpoint, params)
             .then((r) => {
                 const raw   = r.data ?? [];
                 const items = Array.isArray(raw) ? raw : (raw?.data ?? []);
                 setCalls(items);
+
+                const years = canSeeAll
+                    ? (r.academic_years ?? [])
+                    : [...new Set(items.map((c) => c.academic_year).filter(Boolean))].sort().reverse();
+                setAcademicYears(years);
+                if (yearRef.current === null) {
+                    yearRef.current = canSeeAll
+                        ? (r.academic_year ?? 'all')
+                        : (years.includes(defaultAcademicYear) ? defaultAcademicYear : (years[0] ?? 'all'));
+                    setYearFilter(yearRef.current);
+                }
             })
             .catch(() => {})
             .finally(() => setLoading(false));
-    }, [canSeeAll]);
+    }, [canSeeAll, defaultAcademicYear]);
 
     useEffect(() => { load(); }, [load]);
 
-    // Filtered calls — status tab + category + search
+    const changeYear = (year) => {
+        yearRef.current = year;
+        setYearFilter(year);
+        if (canSeeAll) load();
+    };
+
+    // After a call is saved or copied, show its year so it doesn't vanish from the list.
+    const reloadShowing = (year) => {
+        if (year && yearRef.current !== 'all' && year !== yearRef.current) {
+            changeYear(year);
+        } else {
+            load();
+        }
+    };
+
+    // Filtered calls — status tab + category + search (+ year, when not already filtered by the server)
     const filteredCalls = calls.filter((c) =>
+        (canSeeAll || !yearFilter || yearFilter === 'all' || c.academic_year === yearFilter) &&
         (activeTab === 'all' || c.status === activeTab) &&
         (!categoryFilter || c.category === categoryFilter) &&
         (!search || c.title?.toLowerCase().includes(search.toLowerCase()))
@@ -677,6 +711,19 @@ export default function ProposalCallsAdmin() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
+                    {/* Academic year filter — the current academic year (Settings) by default */}
+                    <div className="relative">
+                        <CalendarDays size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <select value={yearFilter ?? ''} onChange={(e) => changeYear(e.target.value)} aria-label="Academic year"
+                            className="pl-8 pr-8 py-2 rounded-lg border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white max-w-40">
+                            {yearFilter === null && <option value="">Current year</option>}
+                            {academicYears.map((y) => (
+                                <option key={y} value={y}>{y}{y === defaultAcademicYear ? ' (current)' : ''}</option>
+                            ))}
+                            <option value="all">All years</option>
+                        </select>
+                    </div>
+
                     {/* Category filter */}
                     <div className="relative">
                         <Filter size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -970,7 +1017,7 @@ export default function ProposalCallsAdmin() {
                     initial={editCall ?? undefined}
                     defaultAcademicYear={defaultAcademicYear}
                     onClose={() => { setShowModal(false); setEditCall(null); }}
-                    onSaved={load}
+                    onSaved={reloadShowing}
                 />
             )}
 
@@ -986,7 +1033,7 @@ export default function ProposalCallsAdmin() {
 
             {copying && (
                 <CopyCallModal call={copying} onClose={() => setCopying(null)}
-                    onCopied={(newCall) => { setCopying(null); load(); if (newCall?.id) openEdit(newCall); }} />
+                    onCopied={(newCall) => { setCopying(null); reloadShowing(newCall?.academic_year); if (newCall?.id) openEdit(newCall); }} />
             )}
 
             {/* Activate / close confirmation */}
