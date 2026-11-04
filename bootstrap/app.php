@@ -5,6 +5,7 @@ use App\Exceptions\ConflictingReviewerException;
 use App\Exceptions\InvalidScoreException;
 use App\Exceptions\UnauthorizedResolutionException;
 use App\Exceptions\UnauthorizedReviewException;
+use App\Http\Middleware\AdminsOnlyDuringMaintenance;
 use App\Http\Middleware\AuthenticateApiKey;
 use App\Http\Middleware\EnsureCategoryScope;
 use App\Http\Middleware\EnsureCollegeScope;
@@ -33,6 +34,9 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->web(append: [
             HandleInertiaRequests::class,
+        ]);
+        $middleware->api(append: [
+            AdminsOnlyDuringMaintenance::class,
         ]);
         $middleware->append(SecurityHeaders::class);
         $middleware->append(TrackRequestMetrics::class);

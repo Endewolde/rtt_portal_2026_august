@@ -484,7 +484,7 @@ class SettingsController extends Controller
 
         return response()->json([
             'data' => ['maintenance' => true, 'bypass_url' => $bypassUrl],
-            'message' => 'Maintenance mode enabled. You still have access in this browser; share this link with other admins who need in: '.$bypassUrl,
+            'message' => 'Maintenance mode enabled. You still have access in this browser; other administrators can get in with this link (it does not work for anyone else): '.$bypassUrl,
             'errors' => [],
             'meta' => [],
         ])->withCookie(MaintenanceModeBypassCookie::create($secret));

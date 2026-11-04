@@ -36,6 +36,13 @@ api.interceptors.response.use(
             window.location.href = '/login';
         }
 
+        // Maintenance is on and this account isn't an administrator: the access link got the
+        // browser past the maintenance page, but the system is for admins until it is back.
+        if (status === 503 && error.response?.data?.meta?.maintenance) {
+            if (window.location.pathname !== '/maintenance-preview') window.location.href = '/maintenance-preview';
+            return Promise.reject(error);
+        }
+
         if (status === 422) {
             const errors = error.response.data?.errors ?? {};
             error.validationErrors = errors;

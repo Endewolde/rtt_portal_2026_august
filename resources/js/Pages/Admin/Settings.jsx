@@ -474,7 +474,7 @@ function SystemInfoPanel({ info, onClearCache, onToggleMaintenance }) {
                     <AlertTriangle size={14} className="text-amber-500 shrink-0 mt-0.5" />
                     <p className="text-xs text-amber-700">
                         <strong>Maintenance mode</strong> shows everyone a maintenance page. You keep access in the
-                        browser you enable it from, so you can disable it here; other admins need the access link shown at the top.
+                        browser you enable it from, so you can disable it here; other administrators need the access link shown at the top. Everyone else sees the maintenance page, even with the link.
                         If you lose access, run <code className="font-mono bg-amber-100 px-1 rounded">php artisan up</code> on the server.
                     </p>
                 </div>
@@ -1470,7 +1470,7 @@ export default function SettingsPage() {
                             </div>
                             {bypassUrl && (
                                 <div className="flex max-w-full items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-600">
-                                    <span className="shrink-0 font-medium">Admin access link:</span>
+                                    <span className="shrink-0 font-medium" title="Gets a browser past the maintenance page; only administrators can then use the system.">Admin access link (administrators only):</span>
                                     <code className="truncate text-gray-800">{bypassUrl}</code>
                                     <button type="button" title="Copy link"
                                         onClick={() => navigator.clipboard?.writeText(bypassUrl).then(() => success('Link copied.'))}
