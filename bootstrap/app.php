@@ -7,6 +7,7 @@ use App\Exceptions\UnauthorizedResolutionException;
 use App\Exceptions\UnauthorizedReviewException;
 use App\Http\Middleware\AdminsOnlyDuringMaintenance;
 use App\Http\Middleware\AuthenticateApiKey;
+use App\Http\Middleware\BlockSwitchedOffPublicPages;
 use App\Http\Middleware\EnsureCategoryScope;
 use App\Http\Middleware\EnsureCollegeScope;
 use App\Http\Middleware\EnsureFeatureEnabled;
@@ -34,6 +35,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->web(append: [
             HandleInertiaRequests::class,
+            BlockSwitchedOffPublicPages::class,
         ]);
         $middleware->api(append: [
             AdminsOnlyDuringMaintenance::class,
