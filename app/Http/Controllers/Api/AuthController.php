@@ -196,6 +196,8 @@ class AuthController extends Controller
             'department_id' => ['sometimes', 'nullable', 'uuid', 'exists:departments,id'],
             'expertise' => ['sometimes', 'nullable', 'array'],
             'expertise.*' => ['string', 'max:100'],
+            // Their own theme; null follows the organisation's (Settings → Appearance).
+            'theme' => ['sometimes', 'nullable', 'in:light,dark,system'],
         ]);
 
         // College/department are locked to admin correction (see users.update via

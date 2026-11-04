@@ -74,6 +74,7 @@ export const ROUTE_ACCESS = [
     ['/admin/analytics',           'analytics.view'],
     ['/admin/turnaround',          'turnaround.view'],
     ['/admin/proposal-pipeline',   'pipeline.view'],
+    ['/admin/rejected-proposals',  ['proposals.reopen', 'pipeline.view']],
     ['/admin/college-phase-completion', 'phase_completion.view'],
     ['/reports/college-dashboard', 'reports.view_any'],
     ['/reports/annual',            'annual_report.view'],

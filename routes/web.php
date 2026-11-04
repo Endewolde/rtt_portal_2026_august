@@ -10,6 +10,15 @@ use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 
 // ── Public ────────────────────────────────────────────────────────────────────
+// The maintenance page as visitors see it: the page in use while the system is down,
+// otherwise a fresh render, so admins can check it before switching maintenance on.
+Route::get('/maintenance-preview', function () {
+    $down = storage_path('framework/down');
+    $template = is_file($down) ? (json_decode((string) file_get_contents($down), true)['template'] ?? null) : null;
+
+    return response($template ?? view('errors.503')->render())->header('X-Robots-Tag', 'noindex');
+})->middleware('throttle:30,1');
+
 Route::get('/', fn () => Inertia::render('Public/Home'));
 Route::get('/manifest.webmanifest', [PwaController::class, 'manifest']);
 Route::get('/pwa-icon/{size}.png', [PwaController::class, 'icon'])->whereNumber('size');
@@ -90,6 +99,7 @@ Route::get('/admin/blind-review', fn () => Inertia::render('Admin/BlindReview'))
 Route::get('/admin/open-defence', fn () => Inertia::render('Admin/OpenDefence'));
 Route::get('/admin/central-evaluation', fn () => Inertia::render('Admin/CentralEvaluation'));
 Route::get('/admin/proposal-pipeline', fn () => Inertia::render('Admin/ProposalPipeline'));
+Route::get('/admin/rejected-proposals', fn () => Inertia::render('Admin/RejectedProposals'));
 Route::get('/admin/college-phase-completion', fn () => Inertia::render('Admin/CollegePhaseCompletion'));
 Route::get('/admin/review-deadlines', fn () => Inertia::render('Admin/ReviewDeadlines'));
 Route::get('/admin/funding', fn () => Inertia::render('Admin/ProposalFunding'));

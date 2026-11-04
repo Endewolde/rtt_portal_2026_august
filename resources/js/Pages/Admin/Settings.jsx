@@ -2,11 +2,12 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { cn } from '../../lib/utils'
 import RichTextEditor from '../../Components/RichTextEditor'
 import BroadcastComposer from '../../Components/BroadcastComposer'
+import AppearanceSettings from '../../Components/AppearanceSettings'
 import {
     Settings, Shield, Users, Mail, HardDrive, Server,
     Palette, BookOpen, Activity, Database, Puzzle,
     Globe, Layout, FileText, Star, Bell,
-    ChevronRight, Save, RefreshCw, AlertTriangle,
+    ChevronRight, Save, RefreshCw, AlertTriangle, Copy,
     Eye, EyeOff, Upload, Info, CheckCircle2,
     ToggleLeft, ToggleRight, Zap, X, Send, Plus, MessageSquare,
 } from 'lucide-react'
@@ -65,7 +66,7 @@ const SELECT_OPTIONS = {
     backup_schedule:           [['daily', 'Daily'], ['weekly', 'Weekly'], ['monthly', 'Monthly']],
     default_user_role:         [['guest', 'Guest'], ['pi', 'Principal Investigator'], ['reviewer', 'Reviewer'], ['staff', 'Staff']],
     account_activation_method: [['email', 'Email Verification'], ['admin', 'Admin Approval'], ['none', 'Instant (no verification)']],
-    theme:                     [['light', 'Light'], ['dark', 'Dark']],
+    theme:                     [['light', 'Light'], ['dark', 'Dark'], ['system', 'System (follow each device)']],
     current_academic_year:     ACADEMIC_YEAR_OPTIONS,
 }
 
@@ -472,8 +473,9 @@ function SystemInfoPanel({ info, onClearCache, onToggleMaintenance }) {
                 <div className="flex items-start gap-2 px-3 py-2.5 bg-amber-50 border border-amber-200 rounded-xl">
                     <AlertTriangle size={14} className="text-amber-500 shrink-0 mt-0.5" />
                     <p className="text-xs text-amber-700">
-                        <strong>Maintenance mode</strong> makes the app return 503 for all users.
-                        Once enabled, you cannot disable it from this page — run <code className="font-mono bg-amber-100 px-1 rounded">php artisan up</code> in the terminal to recover.
+                        <strong>Maintenance mode</strong> shows everyone a maintenance page. You keep access in the
+                        browser you enable it from, so you can disable it here; other admins need the access link shown at the top.
+                        If you lose access, run <code className="font-mono bg-amber-100 px-1 rounded">php artisan up</code> on the server.
                     </p>
                 </div>
                 <div className="flex flex-wrap gap-3">
@@ -482,6 +484,10 @@ function SystemInfoPanel({ info, onClearCache, onToggleMaintenance }) {
                                    rounded-xl text-sm font-semibold hover:bg-blue-700">
                         <RefreshCw size={14} /> Clear Cache
                     </button>
+                    <a href="/maintenance-preview" target="_blank" rel="noopener"
+                        className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold border border-gray-200 text-gray-700 hover:bg-gray-50">
+                        <Eye size={14} /> Preview maintenance page
+                    </a>
                     <button onClick={onToggleMaintenance}
                         className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold ${
                             info.maintenance
@@ -565,98 +571,6 @@ function LogoUpload({ settingKey, value, onUploaded }) {
 }
 
 // ─── Hero slider image upload ─────────────────────────────────────────────────
-
-// ─── Sidebar color section ────────────────────────────────────────────────────
-
-const SIDEBAR_PRESETS = [
-    { value: '#ffffff', label: 'White'         },
-    { value: '#f8fafc', label: 'Slate 50'      },
-    { value: '#f0f4ff', label: 'Lavender'      },
-    { value: '#0f172a', label: 'Dark Navy'     },
-    { value: '#1e1b4b', label: 'Deep Indigo'   },
-    { value: '#312e81', label: 'Royal Indigo'  },
-    { value: '#1f2937', label: 'Slate Dark'    },
-    { value: '#1c1917', label: 'Charcoal'      },
-    { value: '#0c4a6e', label: 'Ocean'         },
-    { value: '#14532d', label: 'Forest'        },
-    { value: '#134e4a', label: 'Teal Dark'     },
-    { value: '#7c3aed', label: 'Violet'        },
-]
-
-function SidebarColorSection({ currentValue, onSave }) {
-    const [color,   setColor]   = useState(currentValue || '#ffffff')
-    const [saving,  setSaving]  = useState(false)
-    const { success } = useToast()
-
-    // Keep in sync when the parent value loads
-    useEffect(() => { if (currentValue) setColor(currentValue) }, [currentValue])
-
-    const save = async (val) => {
-        setSaving(true)
-        await onSave('sidebar_color', val ?? color)
-        success('Sidebar color saved. Reload to preview.')
-        setSaving(false)
-    }
-
-    return (
-        <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-4">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h3 className="text-sm font-bold text-gray-800">Sidebar Background Color</h3>
-                    <p className="text-xs text-gray-400 mt-0.5">Choose a preset or pick a custom color</p>
-                </div>
-
-                {/* Live preview strip */}
-                <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-gray-200"
-                    style={{ backgroundColor: color }}>
-                    <span className="text-[11px] font-mono"
-                        style={{ color: color === '#ffffff' || color === '#f8fafc' || color === '#f0f4ff' ? '#374151' : '#ffffff' }}>
-                        {color}
-                    </span>
-                </div>
-            </div>
-
-            {/* Preset swatches */}
-            <div className="flex flex-wrap gap-2">
-                {SIDEBAR_PRESETS.map(p => (
-                    <button
-                        key={p.value}
-                        title={p.label}
-                        onClick={() => { setColor(p.value); save(p.value) }}
-                        className={cn(
-                            'h-8 w-8 rounded-lg border-2 transition-all hover:scale-110',
-                            color === p.value ? 'border-indigo-500 scale-110 shadow-md' : 'border-gray-200 hover:border-gray-400'
-                        )}
-                        style={{ backgroundColor: p.value }}
-                    />
-                ))}
-            </div>
-
-            {/* Custom color picker row */}
-            <div className="flex items-center gap-3 pt-1 border-t border-gray-100">
-                <label className="text-xs font-medium text-gray-600">Custom color</label>
-                <input
-                    type="color"
-                    value={color}
-                    onChange={e => setColor(e.target.value)}
-                    onBlur={e => save(e.target.value)}
-                    className="w-10 h-8 rounded cursor-pointer border border-gray-300"
-                />
-                <span className="text-xs font-mono text-gray-400 flex-1">{color}</span>
-                <button
-                    onClick={() => save()}
-                    disabled={saving}
-                    className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-600 text-white
-                               rounded-xl text-xs font-semibold hover:bg-indigo-700 disabled:opacity-50">
-                    {saving
-                        ? <><RefreshCw size={12} className="animate-spin" /> Saving…</>
-                        : <><Save size={12} /> Apply</>
-                    }
-                </button>
-            </div>
-        </div>
-    )
-}
 
 // ─── Public Site panel ───────────────────────────────────────────────────────
 
@@ -1395,6 +1309,8 @@ export default function SettingsPage() {
     const [values,        setValues]        = useState({})
     const [loading,       setLoading]       = useState(true)
     const [systemInfo,    setSystemInfo]    = useState(null)
+    // Only known right after switching maintenance on — the link that lets other admins in.
+    const [bypassUrl,     setBypassUrl]     = useState(null)
     const [colleges,      setColleges]      = useState([])
 
     const loadSettings = useCallback(async () => {
@@ -1449,6 +1365,20 @@ export default function SettingsPage() {
         }
     }
 
+    // Several settings saved together, with one message — used by the Appearance panel.
+    const handleSaveMany = async (entries) => {
+        try {
+            for (const [key, val] of Object.entries(entries)) {
+                await api.put(`/settings/app/${key}`, { value: val })
+            }
+            success(Object.keys(entries).length === 1 ? `"${label(Object.keys(entries)[0])}" saved.` : 'Changes saved.')
+            return true
+        } catch (e) {
+            error(e.response?.data?.message ?? 'Failed to save.')
+            return false
+        }
+    }
+
     const handleClearCache = async () => {
         const ok = await confirm({
             title: 'Clear all cache?',
@@ -1468,14 +1398,15 @@ export default function SettingsPage() {
             title: isMaintenance ? 'Disable Maintenance Mode?' : 'Enable Maintenance Mode?',
             description: isMaintenance
                 ? 'The system will become accessible to all users.'
-                : 'All users except super_admin will be locked out until you disable it.',
+                : 'Everyone else will see a maintenance page until you disable it. You keep access in this browser, and you get a link to let other admins in.',
             confirmLabel: isMaintenance ? 'Disable' : 'Enable',
             variant: isMaintenance ? 'default' : 'destructive',
         })
         if (!ok) return
         try {
             const res = await api.post('/settings/toggle-maintenance')
-            success(res.data?.message)
+            setBypassUrl(res.data?.data?.bypass_url ?? null)
+            success(res.data?.data?.maintenance ? 'Maintenance mode enabled. You still have access in this browser.' : res.data?.message)
             loadSystemInfo()
         } catch { error('Failed to toggle maintenance mode.') }
     }
@@ -1531,10 +1462,23 @@ export default function SettingsPage() {
                         <p className="text-sm text-gray-500 mt-1">Configure all aspects of the RTT Platform</p>
                     </div>
                     {systemInfo?.maintenance && (
-                        <div className="flex items-center gap-2 px-4 py-2 bg-red-100 border border-red-300
-                                        rounded-xl text-red-700 text-sm font-semibold">
-                            <AlertTriangle size={15} />
-                            Maintenance Mode Active
+                        <div className="flex flex-col items-end gap-1.5">
+                            <div className="flex items-center gap-2 px-4 py-2 bg-red-100 border border-red-300
+                                            rounded-xl text-red-700 text-sm font-semibold">
+                                <AlertTriangle size={15} />
+                                Maintenance Mode Active
+                            </div>
+                            {bypassUrl && (
+                                <div className="flex max-w-full items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-600">
+                                    <span className="shrink-0 font-medium">Admin access link:</span>
+                                    <code className="truncate text-gray-800">{bypassUrl}</code>
+                                    <button type="button" title="Copy link"
+                                        onClick={() => navigator.clipboard?.writeText(bypassUrl).then(() => success('Link copied.'))}
+                                        className="shrink-0 rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-800">
+                                        <Copy size={13} />
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -1688,8 +1632,8 @@ export default function SettingsPage() {
                                     </div>
                                 )}
 
-                                {/* Settings fields */}
-                                {Object.keys(groupData).filter(k => groupData[k]?.type !== 'file').length > 0 && (
+                                {/* Settings fields (Appearance has its own panel) */}
+                                {activeSection !== 'appearance' && Object.keys(groupData).filter(k => groupData[k]?.type !== 'file').length > 0 && (
                                     <div className="bg-white border border-gray-200 rounded-2xl px-5 py-2">
                                         {Object.entries(groupData)
                                             .filter(([k, s]) => s.type !== 'file' && !HIDDEN_KEYS.has(k) && !(isAdmin && ADMIN_HIDDEN_GENERAL_KEYS.has(k)))
@@ -1770,194 +1714,20 @@ export default function SettingsPage() {
                                     </div>
                                 )}
 
-                                {/* ── Sidebar color ─────────────────────────────── */}
+                                {/* ── Appearance: brand, colours, wording, live preview ── */}
                                 {activeSection === 'appearance' && (
-                                    <SidebarColorSection
-                                        currentValue={values.sidebar_color}
-                                        onSave={handleSave}
-                                    />
-                                )}
-
-                                {/* ── Sidebar tagline ───────────────────────────── */}
-                                {activeSection === 'appearance' && (
-                                    <div className="bg-white border border-gray-200 rounded-2xl p-5">
-                                        <h3 className="text-sm font-bold text-gray-800 mb-1">Sidebar Tagline</h3>
-                                        <p className="text-xs text-gray-400 mb-4">
-                                            Small text shown below the logo name in the sidebar.
-                                        </p>
-                                        <div className="flex gap-2">
-                                            <input
-                                                type="text"
-                                                value={values.system_tagline ?? ''}
-                                                onChange={e => handleChange('system_tagline', e.target.value)}
-                                                placeholder="Research & Tech Transfer"
-                                                className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm
-                                                           focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                            />
-                                            <button
-                                                onClick={() => handleSave('system_tagline', values.system_tagline ?? '')}
-                                                className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white
-                                                           rounded-xl text-xs font-semibold hover:bg-blue-700 shrink-0">
-                                                <Save size={13} /> Save
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* ── Login institution text ────────────────── */}
-                                {activeSection === 'appearance' && (
-                                    <div className="bg-white border border-gray-200 rounded-2xl p-5">
-                                        <h3 className="text-sm font-bold text-gray-800 mb-1">Login Panel Institution Text</h3>
-                                        <p className="text-xs text-gray-400 mb-4">
-                                            Footer text displayed at the bottom of the login/register panel.
-                                        </p>
-                                        <div className="flex gap-2">
-                                            <input
-                                                type="text"
-                                                value={values.login_institution_text ?? ''}
-                                                onChange={e => handleChange('login_institution_text', e.target.value)}
-                                                placeholder="Haramaya University — Research & Technology Transfer Office"
-                                                className="flex-1 border border-gray-200 rounded-xl px-3 py-2.5 text-sm
-                                                           focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                            />
-                                            <button
-                                                onClick={() => handleSave('login_institution_text', values.login_institution_text ?? '')}
-                                                className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white
-                                                           rounded-xl text-xs font-semibold hover:bg-blue-700 shrink-0">
-                                                <Save size={13} /> Save
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* ── Auth panel colors ────────────────────── */}
-                                {activeSection === 'appearance' && (
-                                    <div className="bg-white border border-gray-200 rounded-2xl p-5">
-                                        <h3 className="text-sm font-bold text-gray-800 mb-1">Login / Register Panel Colors</h3>
-                                        <p className="text-xs text-gray-400 mb-4">
-                                            Gradient colors for the left branding panel on the login and register pages.
-                                        </p>
-                                        <div className="flex items-center gap-4">
-                                            <div className="flex-1">
-                                                <label className="text-xs text-gray-500 mb-1.5 block">Start Color</label>
-                                                <div className="flex items-center gap-2">
-                                                    <input type="color"
-                                                        value={values.auth_panel_from_color || '#047857'}
-                                                        onChange={e => handleChange('auth_panel_from_color', e.target.value)}
-                                                        onBlur={e => handleSave('auth_panel_from_color', e.target.value)}
-                                                        className="w-10 h-9 rounded cursor-pointer border border-gray-300"
-                                                    />
-                                                    <input type="text"
-                                                        value={values.auth_panel_from_color || '#047857'}
-                                                        onChange={e => handleChange('auth_panel_from_color', e.target.value)}
-                                                        className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                    />
-                                                </div>
-                                            </div>
-                                            <div className="flex-1">
-                                                <label className="text-xs text-gray-500 mb-1.5 block">End Color</label>
-                                                <div className="flex items-center gap-2">
-                                                    <input type="color"
-                                                        value={values.auth_panel_to_color || '#0e7490'}
-                                                        onChange={e => handleChange('auth_panel_to_color', e.target.value)}
-                                                        onBlur={e => handleSave('auth_panel_to_color', e.target.value)}
-                                                        className="w-10 h-9 rounded cursor-pointer border border-gray-300"
-                                                    />
-                                                    <input type="text"
-                                                        value={values.auth_panel_to_color || '#0e7490'}
-                                                        onChange={e => handleChange('auth_panel_to_color', e.target.value)}
-                                                        className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                    />
-                                                </div>
-                                            </div>
-                                            <div className="pt-5">
-                                                <button
-                                                    onClick={async () => {
-                                                        await handleSave('auth_panel_from_color', values.auth_panel_from_color || '#047857')
-                                                        await handleSave('auth_panel_to_color',   values.auth_panel_to_color   || '#0e7490')
-                                                    }}
-                                                    className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 text-white
-                                                               rounded-xl text-xs font-semibold hover:bg-blue-700 shrink-0">
-                                                    <Save size={13} /> Save
-                                                </button>
-                                            </div>
-                                        </div>
-                                        {/* Preview swatch */}
-                                        <div className="mt-3 h-8 rounded-xl"
-                                            style={{ background: `linear-gradient(135deg, ${values.auth_panel_from_color || '#047857'}, ${values.auth_panel_to_color || '#0e7490'})` }}
-                                        />
-                                    </div>
-                                )}
-
-                                {/* ── Logo size ─────────────────────────────── */}
-                                {activeSection === 'appearance' && (
-                                    <div className="bg-white border border-gray-200 rounded-2xl p-5">
-                                        <h3 className="text-sm font-bold text-gray-800 mb-1">Logo Size</h3>
-                                        <p className="text-xs text-gray-400 mb-4">
-                                            Width and height of the logo in the sidebar and login panel (pixels).
-                                        </p>
-                                        <div className="flex items-center gap-3">
-                                            <div className="flex-1">
-                                                <label className="text-xs text-gray-500 mb-1 block">Width (px)</label>
-                                                <input
-                                                    type="number"
-                                                    min="16" max="96"
-                                                    value={values.logo_width ?? '32'}
-                                                    onChange={e => handleChange('logo_width', e.target.value)}
-                                                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm
-                                                               focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                />
-                                            </div>
-                                            <div className="flex-1">
-                                                <label className="text-xs text-gray-500 mb-1 block">Height (px)</label>
-                                                <input
-                                                    type="number"
-                                                    min="16" max="96"
-                                                    value={values.logo_height ?? '32'}
-                                                    onChange={e => handleChange('logo_height', e.target.value)}
-                                                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm
-                                                               focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                />
-                                            </div>
-                                            <div className="pt-5">
-                                                <button
-                                                    onClick={async () => {
-                                                        await handleSave('logo_width',  values.logo_width  ?? '32')
-                                                        await handleSave('logo_height', values.logo_height ?? '32')
-                                                    }}
-                                                    className="flex items-center gap-1.5 px-4 py-2.5 bg-blue-600 text-white
-                                                               rounded-xl text-xs font-semibold hover:bg-blue-700 shrink-0">
-                                                    <Save size={13} /> Save
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* ── Logo/favicon ──────────────────────────── */}
-                                {activeSection === 'appearance' && (
-                                    <div className="bg-white border border-gray-200 rounded-2xl p-5">
-                                        <h3 className="text-sm font-bold text-gray-800 mb-4">Logo & Favicon</h3>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <LogoUpload
-                                                settingKey="system_logo"
-                                                value={values.system_logo}
-                                                onUploaded={handleChange}
-                                            />
-                                            <LogoUpload
-                                                settingKey="favicon"
-                                                value={values.favicon}
-                                                onUploaded={handleChange}
-                                            />
-                                        </div>
-                                        {(values.system_logo || values.favicon) && (
-                                            <div className="mt-3 flex items-center gap-2 text-xs text-green-700 bg-green-50
-                                                            border border-green-200 rounded-lg px-3 py-2">
-                                                <CheckCircle2 size={13} />
-                                                Assets saved. Changes reflect after the next page reload.
-                                            </div>
+                                    <AppearanceSettings
+                                        values={values}
+                                        onChange={handleChange}
+                                        onSaveMany={handleSaveMany}
+                                        renderLogoUpload={(key) => (
+                                            <LogoUpload key={key} settingKey={key} value={values[key]} onUploaded={handleChange} />
                                         )}
-                                    </div>
+                                        renderField={(key) => groupData[key] ? (
+                                            <SettingField key={key} settingKey={key} setting={groupData[key]}
+                                                value={values[key] ?? groupData[key].value} onChange={handleChange} onSave={handleSave} />
+                                        ) : null}
+                                    />
                                 )}
 
                                 {/* ── Backup schedule (times + enable toggle) ───── */}

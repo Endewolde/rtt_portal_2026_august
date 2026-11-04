@@ -77,7 +77,7 @@ class AppSettingsSeeder extends Seeder
             // Appearance
             ['key' => 'primary_color',   'value' => '#2563EB',                                 'type' => 'color',    'group' => 'appearance'],
             ['key' => 'secondary_color', 'value' => '#7C3AED',                                 'type' => 'color',    'group' => 'appearance'],
-            ['key' => 'footer_text',     'value' => '© 2026 RTT Platform. All rights reserved.', 'type' => 'string', 'group' => 'appearance'],
+            ['key' => 'footer_text',     'value' => '© {year} {system}. All rights reserved.', 'type' => 'string', 'group' => 'appearance'],
             ['key' => 'custom_css',      'value' => '',                                         'type' => 'code',     'group' => 'appearance'],
             ['key' => 'homepage_banner', 'value' => '',                                         'type' => 'textarea', 'group' => 'appearance'],
             ['key' => 'theme',           'value' => 'light',                                    'type' => 'select',   'group' => 'appearance'],

@@ -20,8 +20,10 @@ class RevertEmptyBlindReviewProposals extends Command
     {
         $force = (bool) $this->option('force');
 
+        // A submitted review counts too: such a proposal is waiting for its decision,
+        // not empty (leaving 'submitted' out sent finished reviews back to validated).
         $stuck = Proposal::where('status', 'under_blind_review')
-            ->whereDoesntHave('reviewAssignments', fn ($q) => $q->whereIn('status', ['pending', 'accepted', 'in_progress']))
+            ->whereDoesntHave('reviewAssignments', fn ($q) => $q->whereIn('status', ['pending', 'accepted', 'in_progress', 'submitted']))
             ->get();
 
         if ($stuck->isEmpty()) {

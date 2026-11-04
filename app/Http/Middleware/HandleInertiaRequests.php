@@ -24,6 +24,9 @@ class HandleInertiaRequests extends Middleware
             ...parent::share($request),
             // The organisation's programmes, for every form and filter (see App\Support\Programmes).
             'programmes' => fn () => Programmes::all()->values(),
+            // Only someone holding the bypass cookie reaches the app while it is down, so
+            // every page can say so plainly instead of looking as if nothing happened.
+            'maintenance' => fn () => app()->isDownForMaintenance(),
             'app_settings' => Cache::remember('inertia_app_settings', 300, function () {
                 return AppSetting::whereIn('key', [
                     'system_name',
@@ -42,6 +45,7 @@ class HandleInertiaRequests extends Middleware
                     'announcement_active',
                     'announcement_message',
                     'footer_text',
+                    'theme',
                     'current_academic_year',
                     'term_college',
                     'term_department',

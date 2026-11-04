@@ -12,7 +12,7 @@ import {
     BadgeDollarSign, Trophy, Archive, ListChecks, ShieldCheck,
     User, ChevronDown, ChevronUp, Lock, Clock, UserX,
     CalendarDays, Banknote, Landmark, MessageSquareHeart, LogIn, Scale, ScrollText, Milestone, FileBarChart2, FolderSearch,
-    HelpCircle, Sliders, FileSignature, ShieldAlert, CalendarClock, CalendarPlus, Timer, UserPlus,
+    HelpCircle, Sliders, FileSignature, ShieldAlert, CalendarClock, CalendarPlus, Timer, UserPlus, Wrench, ExternalLink, RotateCcw, Sun, Moon, Monitor, Palette,
 } from 'lucide-react'
 import NotificationBell from '../Components/NotificationBell'
 import FeedbackPopup from '../Components/FeedbackPopup'
@@ -35,6 +35,8 @@ import { cn } from '../lib/utils'
 import api from '../lib/api'
 import { canOpenPath } from '../lib/routeAccess'
 import { translate as tr } from '../lib/i18n'
+import { resolveFooterText } from '../lib/footerText'
+import { setThemePreference, useThemePreference } from '../lib/theme'
 import LanguageSwitch from '../Components/LanguageSwitch'
 import { term } from '../lib/terms'
 import { roleLabel, rememberRoleLabels } from '../lib/roles';
@@ -260,7 +262,7 @@ const ICONS = {
     BadgeDollarSign, Trophy, Archive, ListChecks, ShieldCheck,
     Globe, CalendarDays, Banknote, Landmark,
     FlaskConical, Brain, MessageSquareHeart, Scale, ScrollText, Milestone, FileBarChart2, FolderSearch,
-    HelpCircle, Sliders, Clock, FileSignature, ShieldAlert, CalendarClock, CalendarPlus, Timer, UserPlus, Handshake, Webhook, Layers,
+    HelpCircle, Sliders, Clock, FileSignature, ShieldAlert, CalendarClock, CalendarPlus, Timer, UserPlus, Handshake, Webhook, Layers, RotateCcw,
     BuildingOffice: Building2,
 }
 
@@ -299,6 +301,35 @@ const ROLE_COLORS = {
 }
 
 // ─── User Menu dropdown ───────────────────────────────────────────────────────
+
+// ─── Personal theme switch ────────────────────────────────────────────────────
+// Each person's own theme, saved on their account; "Organisation default" follows
+// Settings → Appearance.
+
+const THEME_CHOICES = [
+    { value: null, icon: Palette, label: 'Organisation default' },
+    { value: 'light', icon: Sun, label: 'Light' },
+    { value: 'dark', icon: Moon, label: 'Dark' },
+    { value: 'system', icon: Monitor, label: 'System (follow this device)' },
+]
+
+function ThemeSwitch() {
+    const preference = useThemePreference()
+    return (
+        <div className="flex items-center rounded-lg bg-gray-100 p-0.5" role="radiogroup" aria-label={tr('Theme')}>
+            {THEME_CHOICES.map(({ value, icon: Icon, label }) => {
+                const active = preference === value
+                return (
+                    <button key={label} type="button" role="radio" aria-checked={active} title={tr(label)}
+                        onClick={() => !active && setThemePreference(value)}
+                        className={`flex h-7 w-7 items-center justify-center rounded-md transition ${active ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>
+                        <Icon size={14} />
+                    </button>
+                )
+            })}
+        </div>
+    )
+}
 
 function UserMenu({ user, logout, unreadNotifications, isSuperAdmin, collapsed, canImpersonate, onSwitchLogin }) {
     const [open, setOpen] = useState(false)
@@ -395,6 +426,10 @@ function UserMenu({ user, logout, unreadNotifications, isSuperAdmin, collapsed, 
                             <span>{tr('Language')}</span>
                             <LanguageSwitch reload className="text-gray-500" />
                         </div>
+                        <div className="flex items-center justify-between gap-3 px-4 py-2 text-sm text-gray-700">
+                            <span>{tr('Theme')}</span>
+                            <ThemeSwitch />
+                        </div>
                         {isSuperAdmin && (
                             <Link href="/admin/settings" onClick={() => setOpen(false)}
                                 className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors">
@@ -436,6 +471,39 @@ function NavBadge({ count, collapsed }) {
                          bg-rose-500 text-[10px] font-bold text-white px-1 shrink-0">
             {count > 99 ? '99+' : count}
         </span>
+    )
+}
+
+// ─── Maintenance banner ───────────────────────────────────────────────────────
+// Shown on every page while the system is in maintenance. Only admins holding the
+// bypass cookie get this far, so without it the system looks as if nothing changed.
+
+function MaintenanceBanner() {
+    return (
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 py-2.5
+                        bg-red-600 text-white shrink-0">
+            <div className="flex items-center gap-2.5 min-w-0">
+                <span className="relative flex h-2.5 w-2.5 shrink-0">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white/70" />
+                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-white" />
+                </span>
+                <Wrench size={15} className="shrink-0" />
+                <p className="text-xs leading-snug sm:text-sm">
+                    <span className="font-semibold">{tr("Maintenance mode is on.")}</span>
+                    {' '}{tr("Everyone else sees the maintenance page — you can still work because you have admin access.")}
+                </p>
+            </div>
+            <div className="flex items-center gap-2">
+                <a href="/maintenance-preview" target="_blank" rel="noopener"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold hover:bg-white/25">
+                    <ExternalLink size={13} /> {tr("See what visitors see")}
+                </a>
+                <Link href="/admin/settings"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50">
+                    {tr("Turn off")}
+                </Link>
+            </div>
+        </div>
     )
 }
 
@@ -591,6 +659,7 @@ export default function AppLayout({ children, breadcrumb }) {
 
     // All appearance / general settings come from the Inertia shared props
     const appSettings = usePage().props.app_settings ?? {}
+    const maintenanceOn = !!usePage().props.maintenance
     const sidebarBg          = appSettings.sidebar_color      || '#ffffff'
     const systemName         = appSettings.system_name        || 'RTT Platform'
     const systemTagline      = appSettings.system_tagline     || 'Research & Tech Transfer'
@@ -599,7 +668,7 @@ export default function AppLayout({ children, breadcrumb }) {
     const logoH              = parseInt(appSettings.logo_height || '28', 10)
     const announcementActive = appSettings.announcement_active === 'true'
     const announcementMsg    = appSettings.announcement_message || ''
-    const footerText         = appSettings.footer_text        || ''
+    const footerText         = resolveFooterText(appSettings.footer_text, appSettings)
     const sessionTimeoutMins = parseInt(appSettings.session_timeout_minutes ?? '0', 10)
 
     const [announcementDismissed, setAnnouncementDismissed] = useState(false)
@@ -765,6 +834,10 @@ export default function AppLayout({ children, breadcrumb }) {
                 {
                     label: 'Completed Archive', href: '/admin/completed-archive', icon: 'Archive',
                     show: canOpen('/admin/completed-archive') && hasSubFeature('proposals.archive'),
+                },
+                {
+                    label: 'Rejected Proposals', href: '/admin/rejected-proposals', icon: 'RotateCcw',
+                    show: canOpen('/admin/rejected-proposals'),
                 },
             ],
         },
@@ -1499,6 +1572,9 @@ export default function AppLayout({ children, breadcrumb }) {
                         </button>
                     </div>
                 )}
+
+                {/* Maintenance banner */}
+                {maintenanceOn && <MaintenanceBanner />}
 
                 {/* Guest access banner */}
                 {primaryRole === 'guest' && <GuestBanner />}

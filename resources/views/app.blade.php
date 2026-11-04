@@ -7,15 +7,39 @@
 
     @php
         $meta = \Illuminate\Support\Facades\Cache::remember('blade_app_meta', 300, function () {
-            $rows = \App\Models\AppSetting::whereIn('key', ['system_name', 'favicon', 'custom_css'])
+            $rows = \App\Models\AppSetting::whereIn('key', ['system_name', 'favicon', 'custom_css', 'theme'])
                 ->get()->keyBy('key');
             return [
-                'system_name' => $rows['system_name']?->value ?? 'RTT Platform',
-                'favicon'     => $rows['favicon']?->value ?? null,
-                'custom_css'  => $rows['custom_css']?->value ?? null,
+                'system_name' => $rows->get('system_name')?->value ?? 'RTT Platform',
+                'favicon'     => $rows->get('favicon')?->value,
+                'custom_css'  => $rows->get('custom_css')?->value,
+                'theme'       => in_array($rows->get('theme')?->value, ['light', 'dark', 'system'], true) ? $rows->get('theme')->value : 'light',
             ];
         });
     @endphp
+
+    {{-- Theme (Settings → Appearance): applied before anything is drawn, so there is no light flash. --}}
+    <script>
+        (function () {
+            // The person's own choice (kept on the device, saved on their account) wins;
+            // otherwise the organisation's theme from Settings → Appearance.
+            var theme = @json($meta['theme']);
+            document.documentElement.dataset.orgTheme = theme;
+            try {
+                var own = localStorage.getItem('rtt_theme');
+                if (own === 'light' || own === 'dark' || own === 'system') theme = own;
+            } catch (e) {}
+            var root = document.documentElement;
+            function apply() {
+                var dark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+                root.classList.toggle('dark', dark);
+            }
+            apply();
+            if (theme === 'system' && window.matchMedia) {
+                window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', apply);
+            }
+        })();
+    </script>
 
     <meta name="app-name" content="{{ $meta['system_name'] }}">
     <title inertia>{{ $meta['system_name'] }}</title>

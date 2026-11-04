@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, usePage } from '@inertiajs/react';
-import { FlaskConical, Menu, X, Search, Download, ChevronDown, Clock, Calendar, ArrowRight, Flame, CalendarDays, MapPin, Video, Building2, Globe, Star, FileText, ShieldCheck, UserPlus, Users } from 'lucide-react';
+import { FlaskConical, Menu, X, Search, Download, ChevronDown, Clock, Calendar, ArrowRight, Flame, CalendarDays, MapPin, Video, Building2, Globe, Star, FileText, ShieldCheck, UserPlus, Users, Wrench, ExternalLink } from 'lucide-react';
 import { get } from '../lib/api';
 import { useT } from '../lib/i18n';
 import LanguageSwitch from '../Components/LanguageSwitch';
 import { NAV_DEFAULTS } from '../lib/publicSite';
+import { resolveFooterText } from '../lib/footerText';
 
 // ─── Inline social SVG icons ──────────────────────────────────────────────────
 
@@ -504,6 +505,7 @@ export default function PublicLayout({ children }) {
     const token = typeof window !== 'undefined' ? localStorage.getItem('rtt_token') : null;
 
     const s             = usePage().props.app_settings ?? {};
+    const maintenanceOn = !!usePage().props.maintenance;
     const systemName    = s.system_name        || 'RTT Platform';
     const systemLogo    = s.system_logo        || null;
     const logoWidth     = s.logo_width         || null;
@@ -516,7 +518,7 @@ export default function PublicLayout({ children }) {
     const developerCredits = (() => {
         try { return JSON.parse(s.developer_credits || '[]'); } catch { return []; }
     })();
-    const footerText    = s.footer_text        || `© ${new Date().getFullYear()} All rights reserved.`;
+    const footerText    = resolveFooterText(s.footer_text || '© {year} All rights reserved.', s);
     const annActive     = s.announcement_active === 'true';
     const annMsg        = s.announcement_message || '';
     const headerTagline  = s.public_header_tagline  || `${orgName} — Research & Technology Transfer Platform`;
@@ -569,6 +571,33 @@ export default function PublicLayout({ children }) {
             .finally(() => setConfsLoading(false));
     }, []);
 
+    // While the system is down the public site is the maintenance page, even in the browser
+    // of the admin who switched it on (their bypass cookie is for the admin area). They get
+    // a thin strip to go back to work or switch maintenance off.
+    if (maintenanceOn) {
+        return (
+            <div className="keep-theme-colors fixed inset-0 flex flex-col bg-slate-950">
+                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2 bg-red-600 text-white shrink-0">
+                    <p className="flex items-center gap-2 text-xs sm:text-sm">
+                        <Wrench size={14} className="shrink-0" />
+                        <span><span className="font-semibold">{t('Maintenance mode is on.')}</span> {t('This is what visitors see. Only you see this bar.')}</span>
+                    </p>
+                    <div className="flex items-center gap-2">
+                        <a href="/dashboard"
+                            className="inline-flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold hover:bg-white/25">
+                            <ExternalLink size={13} /> {t('Go to admin area')}
+                        </a>
+                        <a href="/admin/settings"
+                            className="inline-flex items-center rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50">
+                            {t('Turn off')}
+                        </a>
+                    </div>
+                </div>
+                <iframe src="/maintenance-preview" title={t('Maintenance page')} className="w-full flex-1 border-0" />
+            </div>
+        );
+    }
+
     return (
         <div className="min-h-screen flex flex-col bg-white">
 
@@ -587,7 +616,7 @@ export default function PublicLayout({ children }) {
             <div className="sticky top-0 z-50 bg-white shadow-sm">
 
                 {/* ── Top utility bar (dark slim strip) — hidden after scroll ── */}
-                <div className={`text-xs hidden md:block overflow-hidden transition-all duration-300 ${scrolled ? 'max-h-0' : 'max-h-9'}`}
+                <div className={`keep-theme-colors text-xs hidden md:block overflow-hidden transition-all duration-300 ${scrolled ? 'max-h-0' : 'max-h-9'}`}
                      style={{ backgroundColor: topbarBg }}>
                     <div className="max-w-7xl mx-auto px-6 flex items-center justify-between h-9">
 
@@ -847,7 +876,7 @@ export default function PublicLayout({ children }) {
             <main className="flex-1 bg-gray-50">{children}</main>
 
             {/* ── Footer ───────────────────────────────────────────────────────── */}
-            <footer style={{ backgroundColor: footerBg }} className="text-slate-400">
+            <footer style={{ backgroundColor: footerBg }} className="keep-theme-colors text-slate-400">
                 <div className="max-w-7xl mx-auto px-6 py-14">
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-10 pb-10 border-b border-white/10">
 

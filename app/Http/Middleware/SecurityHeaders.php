@@ -24,17 +24,21 @@ class SecurityHeaders
             );
         }
 
+        // The maintenance page is shown inside the public site for the admin who switched
+        // maintenance on, so it alone may be framed — by this site only.
+        $frameAncestors = $request->is('maintenance-preview') ? "'self'" : "'none'";
+
         $response->headers->set(
             'Content-Security-Policy',
-            "default-src 'self'; " .
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; " .
-            "style-src 'self' 'unsafe-inline'; " .
-            "img-src 'self' data: blob:; " .
-            "font-src 'self'; " .
-            "connect-src 'self'; " .
-            "frame-src 'self' blob:; " .
-            "object-src 'self' blob:; " .
-            "frame-ancestors 'none';"
+            "default-src 'self'; ".
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; ".
+            "style-src 'self' 'unsafe-inline'; ".
+            "img-src 'self' data: blob:; ".
+            "font-src 'self'; ".
+            "connect-src 'self'; ".
+            "frame-src 'self' blob:; ".
+            "object-src 'self' blob:; ".
+            "frame-ancestors {$frameAncestors};"
         );
 
         return $response;

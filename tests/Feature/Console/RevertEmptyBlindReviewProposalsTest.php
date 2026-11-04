@@ -96,3 +96,19 @@ test('reports nothing to do when there are no stuck proposals', function () {
     Artisan::call('reviews:revert-empty-blind-review');
     expect(Artisan::output())->toContain('nothing to do');
 });
+
+test('a proposal whose only reviewer has submitted is waiting for its decision, not empty — it is never reverted', function () {
+    $proposal = rebr_makeProposal('under_blind_review');
+    $reviewer = User::factory()->create();
+    $reviewer->assignRole('reviewer');
+    $type = EvaluationType::create(['name' => 'blind_review_rebr', 'label' => 'T', 'proposal_category' => 'research', 'is_active' => true]);
+    ReviewAssignment::create([
+        'proposal_id' => $proposal->id, 'reviewer_id' => $reviewer->id,
+        'evaluation_type_id' => $type->id, 'assigned_by' => $proposal->created_by,
+        'status' => 'submitted', 'assigned_at' => now(), 'submitted_at' => now(),
+    ]);
+
+    Artisan::call('reviews:revert-empty-blind-review', ['--force' => true]);
+
+    expect(Proposal::find($proposal->id)->status)->toBe('under_blind_review');
+});

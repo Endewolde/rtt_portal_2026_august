@@ -278,6 +278,54 @@ class ReviewScoreService
     }
 
     /**
+     * What processBlindReviewResult() would decide for this proposal's blind reviews, without
+     * changing anything — for audits and dry runs. Mirrors its checks in the same order:
+     * every reviewer submitted, the call's panel size, reviewer disagreement, then the score.
+     *
+     * @return array{outcome: 'pass'|'fail'|'waiting'|'needs_reviewers'|'disagreement'|'manual'|'no_reviews', submitted: int, required: ?int, score_label: ?string, threshold: ?float}
+     */
+    public function predictBlindReviewOutcome(Proposal $proposal): array
+    {
+        $assignments = ReviewAssignment::where('proposal_id', $proposal->id)
+            ->whereHas('evaluationType', fn ($q) => $q->where('name', 'like', 'blind_review%'))
+            ->get();
+        $required = ReviewRoute::for($proposal)['blind_reviewers'] ?: null;
+        $result = fn (string $outcome, ?string $label = null, ?float $threshold = null) => [
+            'outcome' => $outcome,
+            'submitted' => $assignments->where('status', 'submitted')->count(),
+            'required' => $required,
+            'score_label' => $label,
+            'threshold' => $threshold,
+        ];
+
+        if ($assignments->isEmpty()) {
+            return $result('no_reviews');
+        }
+        if (! $assignments->every(fn ($a) => $a->status === 'submitted')) {
+            return $result('waiting');
+        }
+        if ($required && $assignments->count() < $required) {
+            return $result('needs_reviewers');
+        }
+
+        $threshold = $this->thresholdValue('blind_threshold', $proposal);
+
+        // A pending second opinion is settled by an officer-facing rule — leave it to them.
+        if ($proposal->review_disagreement_flagged_at && ! $proposal->review_disagreement_resolved_at
+            && $assignments->contains(fn ($a) => $a->is_second_opinion)) {
+            return $result('manual', null, $threshold);
+        }
+        if (! $proposal->review_disagreement_resolved_at && $this->blindDisagreement($assignments, $threshold)) {
+            return $result('disagreement', null, $threshold);
+        }
+
+        $phase = $this->phaseScore($assignments->filter(fn ($a) => ! $a->set_aside_at)->map(fn ($a) => $this->calculateWeightedDisplay($a)));
+        $label = $phase && $phase['max'] > 0 ? "{$phase['score']}/{$phase['max']}" : (string) ($phase['score'] ?? 0);
+
+        return $result(($phase['score'] ?? 0) >= $threshold ? 'pass' : 'fail', $label, $threshold);
+    }
+
+    /**
      * Read a threshold setting's live, user-configured value — no hardcoded fallback
      * number. If it isn't configured, that's a real misconfiguration: it's logged and
      * treated as 0 (a fail-safe "no bar set" rather than guessing a business number).

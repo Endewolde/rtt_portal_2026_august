@@ -32,6 +32,7 @@ api.interceptors.response.use(
         if (status === 401) {
             localStorage.removeItem('rtt_token');
             localStorage.removeItem('rtt_user');
+            localStorage.removeItem('rtt_theme');
             window.location.href = '/login';
         }
 

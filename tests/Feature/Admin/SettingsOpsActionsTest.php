@@ -5,6 +5,7 @@ use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 
@@ -49,6 +50,43 @@ test('a non-super_admin cannot toggle maintenance mode', function () {
     $this->actingAs($admin, 'sanctum')
         ->postJson('/api/v1/settings/toggle-maintenance')
         ->assertStatus(403);
+});
+
+test('enabling maintenance shows the branded page, uses an unguessable secret and keeps the admin in', function () {
+    $superAdmin = User::factory()->create();
+    $superAdmin->assignRole('super_admin');
+
+    // Artisan is faked: a real `down` would put this whole checkout into maintenance.
+    $secret = null;
+    Artisan::shouldReceive('call')->once()->withArgs(function (string $command, array $options) use (&$secret) {
+        $secret = $options['--secret'] ?? null;
+
+        return $command === 'down'
+            && $options['--render'] === 'errors::503'
+            && $options['--refresh'] === 60
+            && preg_match('/^rtt-bypass-[A-Za-z0-9]{32}$/', (string) $secret) === 1;
+    })->andReturn(0);
+
+    $response = $this->actingAs($superAdmin, 'sanctum')
+        ->postJson('/api/v1/settings/toggle-maintenance')
+        ->assertOk()
+        ->assertJsonPath('data.maintenance', true)
+        ->assertCookie('laravel_maintenance', null, false);
+
+    expect($response->json('data.bypass_url'))->toBe(url($secret));
+});
+
+test('the maintenance page carries the institution\'s branding and checks back by itself', function () {
+    AppSetting::updateOrCreate(['key' => 'organization_name'], ['value' => 'Wolaita Sodo University', 'type' => 'string', 'group' => 'general']);
+    AppSetting::updateOrCreate(['key' => 'public_social_telegram'], ['value' => 'https://t.me/rttwsu', 'type' => 'string', 'group' => 'public']);
+
+    $html = view('errors.503')->render();
+
+    expect($html)->toContain('Wolaita Sodo University')
+        ->toContain('Scheduled maintenance')
+        ->toContain('https://t.me/rttwsu')
+        ->toContain('id="countdown"')
+        ->not->toContain('Service Unavailable');
 });
 
 // ─── test-email ──────────────────────────────────────────────────────────────

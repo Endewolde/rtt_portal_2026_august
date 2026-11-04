@@ -679,7 +679,7 @@ function HeroSlider({ stats, primaryColor, heroBg, orgName, ctaPrimary, ctaSecon
 
     return (
         <section
-            className="relative overflow-hidden"
+            className="keep-theme-colors relative overflow-hidden"
             style={{ background: heroBg }}
             onMouseEnter={() => setPaused(true)}
             onMouseLeave={() => setPaused(false)}

@@ -71,6 +71,7 @@ use App\Http\Controllers\Api\ProposalPipelineController;
 use App\Http\Controllers\Api\ProposalTemplateController;
 use App\Http\Controllers\Api\ProposalValidationController;
 use App\Http\Controllers\Api\ProposalWizardController;
+use App\Http\Controllers\Api\RejectedProposalController;
 use App\Http\Controllers\Api\ReportController;
 use App\Http\Controllers\Api\ReportSubscriptionController;
 use App\Http\Controllers\Api\RepositoryController;
@@ -556,6 +557,10 @@ Route::prefix('v1')->group(function () {
         // College phase completion — per-college blind review / open defence completion %
         Route::get('/college-phase-completion', [CollegePhaseCompletionController::class, 'index']);
         Route::get('/college-phase-completion/export', [CollegePhaseCompletionController::class, 'export']);
+
+        // Rejected proposals — every rejection in one place; restoring uses POST /proposals/{id}/reopen
+        Route::get('/rejected-proposals', [RejectedProposalController::class, 'index']);
+        Route::post('/proposals/{id}/restore-blind-review', [RejectedProposalController::class, 'restoreBlindReview']);
 
         // Ongoing proposals — consolidated post-award monitoring view (funded/midterm_evaluation)
         // Projects at risk — running funded projects ranked by the attention they need

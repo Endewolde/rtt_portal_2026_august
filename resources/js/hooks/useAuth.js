@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { get, post } from '../lib/api';
+import { syncThemeFromUser } from '../lib/theme';
 
 export function useAuth() {
     const [user, setUser] = useState(() => {
@@ -13,6 +14,7 @@ export function useAuth() {
         const { token: t, user: u, evicted_session: evictedSession } = res.data ?? res;
         localStorage.setItem('rtt_token', t);
         localStorage.setItem('rtt_user', JSON.stringify(u));
+        syncThemeFromUser(u);
         if (evictedSession) {
             localStorage.setItem('rtt_session_evicted_notice', '1');
         }
@@ -30,6 +32,7 @@ export function useAuth() {
             const freshUser = res.data?.user ?? res.data;
             if (freshUser) {
                 localStorage.setItem('rtt_user', JSON.stringify(freshUser));
+                syncThemeFromUser(freshUser);
                 setUser(freshUser);
             }
             return freshUser;
@@ -49,6 +52,7 @@ export function useAuth() {
         localStorage.removeItem('rtt_user');
         localStorage.removeItem('rtt_admin_token');
         localStorage.removeItem('rtt_admin_user');
+        localStorage.removeItem('rtt_theme'); // the next person on this device starts on the organisation theme
         setToken(null);
         setUser(null);
         window.location.href = '/login';

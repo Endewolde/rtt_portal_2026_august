@@ -73,6 +73,7 @@ class User extends Authenticatable
         'phone',
         'gender',
         'locale',
+        'theme',
         'avatar',
         'status',
         'registration_method',

@@ -12,6 +12,7 @@ use App\Services\MailConfigService;
 use App\Services\ReviewScoreService;
 use App\Services\SmsService;
 use App\Support\Terms;
+use Illuminate\Foundation\Http\MaintenanceModeBypassCookie;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
@@ -469,19 +470,24 @@ class SettingsController extends Controller
 
         if ($isDown) {
             Artisan::call('up');
-            $message = 'Maintenance mode disabled.';
-        } else {
-            $secret = 'rtt-bypass-'.rand(1000, 9999);
-            Artisan::call('down', ['--secret' => $secret]);
-            $message = 'Maintenance mode enabled. Bypass secret: '.$secret;
+
+            return response()->json(['data' => ['maintenance' => false, 'bypass_url' => null], 'message' => 'Maintenance mode disabled.', 'errors' => [], 'meta' => []]);
         }
 
+        // The branded page (errors/503) is rendered now and served as static HTML while down;
+        // browsers retry on their own every minute. A long random secret — a short one could
+        // be guessed — and the admin who switched it on keeps access through the bypass cookie,
+        // so they can still reach Settings to switch it off again.
+        $secret = 'rtt-bypass-'.Str::random(32);
+        Artisan::call('down', ['--secret' => $secret, '--render' => 'errors::503', '--retry' => 60, '--refresh' => 60]);
+        $bypassUrl = url($secret);
+
         return response()->json([
-            'data' => ['maintenance' => ! $isDown],
-            'message' => $message,
+            'data' => ['maintenance' => true, 'bypass_url' => $bypassUrl],
+            'message' => 'Maintenance mode enabled. You still have access in this browser; share this link with other admins who need in: '.$bypassUrl,
             'errors' => [],
             'meta' => [],
-        ]);
+        ])->withCookie(MaintenanceModeBypassCookie::create($secret));
     }
 
     /** Send a test text message to check the Africa's Talking settings. */
