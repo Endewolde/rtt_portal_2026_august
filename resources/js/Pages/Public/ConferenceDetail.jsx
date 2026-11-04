@@ -106,10 +106,13 @@ function CountdownBlock({ startDate }) {
 // ─── Registration Form ────────────────────────────────────────────────────────
 
 function RegistrationForm({ conference, onSuccess }) {
-    const [form, setForm]     = useState({ name: '', email: '', organization: '', phone: '' });
+    const types = conference.registration_types ?? [];
+    const questions = conference.registration_questions ?? [];
+    const [form, setForm]     = useState({ name: '', email: '', organization: '', phone: '', registration_type_id: types.length === 1 ? types[0].id : '' });
+    const [answers, setAnswers] = useState({});
     const [errors, setErrors] = useState({});
     const [loading, setLoading] = useState(false);
-    const [done, setDone]     = useState(false);
+    const [done, setDone]     = useState(null);
 
     const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
@@ -118,8 +121,8 @@ function RegistrationForm({ conference, onSuccess }) {
         setErrors({});
         setLoading(true);
         try {
-            await api.post(`/conferences/${conference.slug}/register`, form);
-            setDone(true);
+            const r = await api.post(`/conferences/${conference.slug}/register`, { ...form, registration_type_id: form.registration_type_id || null, answers });
+            setDone(r.data?.data ?? { status: 'confirmed' });
             onSuccess?.();
         } catch (err) {
             if (err.response?.status === 422) {
@@ -138,11 +141,17 @@ function RegistrationForm({ conference, onSuccess }) {
                 <div className="w-16 h-16 rounded-full bg-green-50 flex items-center justify-center mx-auto mb-4">
                     <CheckCircle2 size={32} className="text-green-500" />
                 </div>
-                <h3 className="text-lg font-bold text-gray-900 mb-1">You're registered!</h3>
+                <h3 className="text-lg font-bold text-gray-900 mb-1">{done.status === 'waitlisted' ? "You're on the waiting list" : "You're registered!"}</h3>
                 <p className="text-sm text-gray-500 leading-relaxed">
-                    A confirmation email has been sent to <strong>{form.email}</strong>.
-                    We look forward to seeing you!
+                    {done.status === 'waitlisted'
+                        ? <>Every place is taken right now. If one opens up, it is yours and we email <strong>{form.email}</strong>.</>
+                        : <>Your ticket has been emailed to <strong>{form.email}</strong>. Show its QR code at the registration desk.</>}
                 </p>
+                {done.ticket_code && (
+                    <Link href={`/conferences/ticket/${done.ticket_code}`} className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700">
+                        {done.status === 'waitlisted' ? 'See your place on the list' : 'Open your ticket'} <ChevronRight size={14} />
+                    </Link>
+                )}
             </div>
         );
     }
@@ -181,6 +190,58 @@ function RegistrationForm({ conference, onSuccess }) {
             {field('Email Address', 'email', 'email', 'you@example.com')}
             {field('Organization', 'organization', 'text', 'University / Company (optional)')}
             {field('Phone Number', 'phone', 'tel', '+251… (optional)')}
+            {types.length > 0 && (
+                <fieldset>
+                    <legend className="block text-xs font-semibold text-gray-600 mb-1.5">Attending as <span className="text-red-400">*</span></legend>
+                    <div className="space-y-2">
+                        {types.map(t => (
+                            <label key={t.id} className={`flex cursor-pointer items-start gap-3 rounded-xl border px-3.5 py-2.5 text-sm transition-colors ${form.registration_type_id === t.id ? 'border-indigo-400 bg-indigo-50/60' : 'border-gray-200 hover:border-gray-300'}`}>
+                                <input type="radio" name="registration_type" checked={form.registration_type_id === t.id} onChange={() => set('registration_type_id', t.id)} className="mt-0.5 text-indigo-600" />
+                                <span className="min-w-0 flex-1">
+                                    <span className="flex items-center justify-between gap-2 font-semibold text-gray-900">
+                                        {t.name}
+                                        {t.is_full
+                                            ? <span className="text-[10px] font-semibold text-amber-700">Full · waiting list</span>
+                                            : t.spots_remaining != null && <span className={`text-[10px] font-semibold ${t.spots_remaining <= 5 ? 'text-orange-600' : 'text-green-600'}`}>{t.spots_remaining} left</span>}
+                                    </span>
+                                    {t.description && <span className="mt-0.5 block text-xs text-gray-500">{t.description}</span>}
+                                </span>
+                            </label>
+                        ))}
+                    </div>
+                    {errors.registration_type_id && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle size={11} /> {errors.registration_type_id[0]}</p>}
+                </fieldset>
+            )}
+            {questions.map(q => {
+                const err = errors[`answers.${q.id}`]?.[0];
+                const setAnswer = (v) => setAnswers(a => ({ ...a, [q.id]: v }));
+                const cls = `w-full px-3.5 py-2.5 rounded-xl border text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 ${err ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-gray-50 focus:bg-white'}`;
+                return (
+                    <div key={q.id}>
+                        {q.type === 'checkbox' ? (
+                            <label className="flex items-start gap-2.5 text-sm text-gray-700">
+                                <input type="checkbox" checked={!!answers[q.id]} onChange={e => setAnswer(e.target.checked)} className="mt-0.5 rounded text-indigo-600" />
+                                <span>{q.label}{q.required && <span className="text-red-400"> *</span>}</span>
+                            </label>
+                        ) : (
+                            <>
+                                <label className="block text-xs font-semibold text-gray-600 mb-1.5">{q.label}{q.required && <span className="text-red-400"> *</span>}</label>
+                                {q.type === 'select' ? (
+                                    <select value={answers[q.id] ?? ''} onChange={e => setAnswer(e.target.value)} className={cls}>
+                                        <option value="">Choose…</option>
+                                        {(q.options ?? []).map(o => <option key={o} value={o}>{o}</option>)}
+                                    </select>
+                                ) : q.type === 'textarea' ? (
+                                    <textarea rows={3} value={answers[q.id] ?? ''} onChange={e => setAnswer(e.target.value)} className={cls} />
+                                ) : (
+                                    <input value={answers[q.id] ?? ''} onChange={e => setAnswer(e.target.value)} className={cls} />
+                                )}
+                            </>
+                        )}
+                        {err && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle size={11} /> {err}</p>}
+                    </div>
+                );
+            })}
             <button
                 type="submit"
                 disabled={loading}
@@ -188,7 +249,7 @@ function RegistrationForm({ conference, onSuccess }) {
                            hover:bg-indigo-700 active:scale-95 transition-all duration-150
                            disabled:opacity-60 disabled:cursor-not-allowed"
             >
-                {loading ? 'Registering…' : 'Register Now — It\'s Free'}
+                {loading ? 'Registering…' : conference.is_full ? 'Join the waiting list' : 'Register Now — It\'s Free'}
             </button>
         </form>
     );
@@ -196,78 +257,120 @@ function RegistrationForm({ conference, onSuccess }) {
 
 // ─── Session Track ────────────────────────────────────────────────────────────
 
-function AgendaTrack({ sessions }) {
-    const tracks = [...new Set(sessions.map(s => s.track || 'Main'))];
-    const [activeTrack, setActiveTrack] = useState(tracks[0]);
+const PROGRAMME_VIEWS = [
+    { key: 'day', label: 'By day' },
+    { key: 'track', label: 'By track' },
+    { key: 'room', label: 'By room' },
+];
 
-    const filtered = sessions.filter(s => (s.track || 'Main') === activeTrack);
+const dayKey = (d) => d ? new Date(d).toDateString() : 'Unscheduled';
+const fmtDay = (d) => d ? new Date(d).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }) : 'Time to be announced';
+
+/** The programme, grouped by day, track or room, with each session's accepted talks. */
+function AgendaTrack({ sessions, slug, bookUrl }) {
+    const hasTracks = sessions.some(s => s.track);
+    const hasRooms = sessions.some(s => s.room);
+    const views = PROGRAMME_VIEWS.filter(v => v.key === 'day' || (v.key === 'track' && hasTracks) || (v.key === 'room' && hasRooms));
+    const [view, setView] = useState('day');
+
+    const groupOf = (s) => view === 'day' ? dayKey(s.starts_at) : view === 'track' ? (s.track || 'General') : (s.room || 'Room to be announced');
+    const groups = [];
+    sessions.forEach((s) => {
+        const key = groupOf(s);
+        let g = groups.find(x => x.key === key);
+        if (!g) { g = { key, label: view === 'day' ? fmtDay(s.starts_at) : key, items: [] }; groups.push(g); }
+        g.items.push(s);
+    });
 
     return (
         <div>
-            {tracks.length > 1 && (
-                <div className="flex gap-2 mb-5 overflow-x-auto pb-1">
-                    {tracks.map(t => (
-                        <button key={t} onClick={() => setActiveTrack(t)}
-                            className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-semibold transition-colors ${
-                                activeTrack === t
-                                    ? 'bg-indigo-600 text-white'
-                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                            }`}>
-                            {t}
-                        </button>
-                    ))}
-                </div>
-            )}
-            <div className="space-y-3">
-                {filtered.map((session, idx) => {
-                    const cfg = SESSION_TYPE_CFG[session.type] ?? SESSION_TYPE_CFG.other;
-                    const SIcon = cfg.Icon;
-                    return (
-                        <div key={session.id ?? idx}
-                            className="flex gap-4 p-4 bg-white rounded-xl border border-gray-100 hover:shadow-sm transition-shadow">
-                            {/* Time column */}
-                            <div className="w-20 shrink-0 text-right">
-                                <span className="text-xs font-bold text-gray-900">{fmtTime(session.starts_at)}</span>
-                                {session.ends_at && (
-                                    <span className="block text-[10px] text-gray-400">{fmtTime(session.ends_at)}</span>
-                                )}
-                            </div>
+            <div className="mb-5 flex flex-wrap items-center gap-2">
+                {views.length > 1 && (
+                    <div className="inline-flex rounded-full bg-gray-100 p-0.5" role="tablist" aria-label="Programme view">
+                        {views.map(v => (
+                            <button key={v.key} role="tab" aria-selected={view === v.key} onClick={() => setView(v.key)}
+                                className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${view === v.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>
+                                {v.label}
+                            </button>
+                        ))}
+                    </div>
+                )}
+                {bookUrl && (
+                    <a href={bookUrl} className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 px-3.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50">
+                        <FileText size={12} /> Book of abstracts (PDF)
+                    </a>
+                )}
+                <a href={`/api/v1/conferences/${slug}/calendar.ics`}
+                    className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-gray-200 px-3.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50">
+                    <CalendarDays size={12} /> Add the programme to your calendar
+                </a>
+            </div>
 
-                            {/* Accent line */}
-                            <div className="w-0.5 self-stretch rounded-full shrink-0"
-                                style={{ backgroundColor: cfg.color }} />
-
-                            {/* Content */}
-                            <div className="flex-1 min-w-0">
-                                <div className="flex items-start justify-between gap-2">
-                                    <h4 className="text-sm font-semibold text-gray-900 leading-snug">{session.title}</h4>
-                                    <span className="shrink-0 flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full"
-                                        style={{ color: cfg.color, backgroundColor: cfg.bg }}>
-                                        <SIcon size={9} /> {cfg.label}
-                                    </span>
-                                </div>
-                                {session.description && (
-                                    <p className="text-xs text-gray-500 mt-1 line-clamp-2 leading-relaxed">
-                                        {session.description}
-                                    </p>
-                                )}
-                                {session.speakers?.length > 0 && (
-                                    <div className="flex items-center gap-1.5 mt-2">
-                                        <Mic size={10} className="text-gray-400" />
-                                        <span className="text-[11px] text-gray-500">
-                                            {session.speakers.map(s => s.name).join(', ')}
-                                        </span>
-                                    </div>
-                                )}
-                                {session.room && (
-                                    <span className="inline-block mt-1.5 text-[10px] px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full">
-                                        {session.room}
-                                    </span>
-                                )}
-                            </div>
+            <div className="space-y-7">
+                {groups.map(g => (
+                    <section key={g.key}>
+                        <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-gray-500">{g.label}</h3>
+                        <div className="space-y-3">
+                            {g.items.map((session, idx) => <SessionRow key={session.id ?? idx} session={session} slug={slug} showDay={view !== 'day'} />)}
                         </div>
-                    );
-                })}
+                    </section>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function SessionRow({ session, slug, showDay }) {
+    const cfg = SESSION_TYPE_CFG[session.type] ?? SESSION_TYPE_CFG.other;
+    const SIcon = cfg.Icon;
+    const talks = session.abstracts ?? [];
+
+    return (
+        <div className="flex gap-4 rounded-xl border border-gray-100 bg-white p-4 transition-shadow hover:shadow-sm">
+            <div className="w-20 shrink-0 text-right">
+                {showDay && session.starts_at && <span className="block text-[10px] font-semibold uppercase text-gray-400">{new Date(session.starts_at).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })}</span>}
+                <span className="text-xs font-bold text-gray-900">{fmtTime(session.starts_at)}</span>
+                {session.ends_at && <span className="block text-[10px] text-gray-400">{fmtTime(session.ends_at)}</span>}
+            </div>
+
+            <div className="w-0.5 shrink-0 self-stretch rounded-full" style={{ backgroundColor: cfg.color }} />
+
+            <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                    <h4 className="text-sm font-semibold leading-snug text-gray-900">{session.title}</h4>
+                    <span className="flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ color: cfg.color, backgroundColor: cfg.bg }}>
+                        <SIcon size={9} /> {cfg.label}
+                    </span>
+                </div>
+                {session.description && <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-gray-500">{session.description}</p>}
+                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-500">
+                    {session.room && <span className="inline-flex items-center gap-1"><MapPin size={10} /> {session.room}</span>}
+                    {session.track && <span className="inline-flex items-center gap-1"><Layers size={10} /> {session.track}</span>}
+                    {session.chair && <span>Chair: <span className="font-medium text-gray-700">{session.chair}</span></span>}
+                    {session.speakers?.length > 0 && <span className="inline-flex items-center gap-1"><Mic size={10} /> {session.speakers.map(s => s.name).join(', ')}</span>}
+                    {session.starts_at && (
+                        <a href={`/api/v1/conferences/${slug}/calendar.ics?session=${session.id}`} className="inline-flex items-center gap-1 font-semibold text-indigo-600 hover:underline">
+                            <CalendarDays size={10} /> Add to calendar
+                        </a>
+                    )}
+                </div>
+                {talks.length > 0 && (
+                    <ol className="mt-3 divide-y divide-gray-50 rounded-lg bg-gray-50/70 px-3">
+                        {talks.map((t) => (
+                            <li key={t.id} className="flex gap-2.5 py-2">
+                                <FileText size={12} className="mt-0.5 shrink-0 text-gray-400" />
+                                <div className="min-w-0">
+                                    <p className="text-xs font-medium leading-snug text-gray-900">{t.title}</p>
+                                    <p className="mt-0.5 text-[11px] text-gray-500">
+                                        <span className="font-medium text-gray-700">{t.presenter}</span>
+                                        {t.authors?.length > 1 && <> · {t.authors.filter(a => a !== t.presenter).join(', ')}</>}
+                                        <span className="ml-1.5 rounded bg-white px-1.5 py-px text-[10px] capitalize text-gray-500 ring-1 ring-gray-100">{t.type}</span>
+                                    </p>
+                                </div>
+                            </li>
+                        ))}
+                    </ol>
+                )}
             </div>
         </div>
     );
@@ -594,9 +697,9 @@ export default function ConferenceDetail() {
                             <div>
                                 <h2 className="text-base font-bold text-gray-900 mb-5 flex items-center gap-2">
                                     <Calendar size={16} className="text-indigo-500" />
-                                    Agenda <span className="text-gray-400 font-normal">· {c.sessions.length} sessions</span>
+                                    Programme <span className="text-gray-400 font-normal">· {c.sessions.length} sessions</span>
                                 </h2>
-                                <AgendaTrack sessions={c.sessions} />
+                                <AgendaTrack sessions={c.sessions} slug={c.slug} bookUrl={c.book_published ? `/api/v1/conferences/${c.slug}/book-of-abstracts.pdf` : null} />
                             </div>
                         )}
                     </div>
@@ -619,7 +722,7 @@ export default function ConferenceDetail() {
                             }`}>
                                 <div className={`px-5 py-4 border-b ${c.is_full ? 'border-red-50 bg-red-50/60' : 'border-gray-50'}`}>
                                     <h3 className="font-bold text-gray-900 text-sm">
-                                        {c.is_full ? 'Registration Closed' : 'Register'}
+                                        {c.is_full ? (c.waitlist_enabled ? 'Waiting list' : 'Registration Closed') : 'Register'}
                                     </h3>
                                     {c.is_full
                                         ? <p className="text-xs text-red-600 mt-0.5 font-medium">This event has reached full capacity</p>
@@ -638,7 +741,12 @@ export default function ConferenceDetail() {
                                     }
                                 </div>
                                 <div className="p-5">
-                                    {c.is_full ? (
+                                    {c.is_full && c.waitlist_enabled ? (
+                                        <>
+                                            <p className="mb-4 rounded-xl bg-amber-50 px-3.5 py-2.5 text-xs leading-relaxed text-amber-800">Every place is taken. Join the waiting list — if someone cancels, the next person on the list gets their place automatically.</p>
+                                            <RegistrationForm conference={c} onSuccess={() => {}} />
+                                        </>
+                                    ) : c.is_full ? (
                                         <div className="text-center py-3">
                                             <div className="w-14 h-14 rounded-2xl bg-red-50 flex items-center justify-center mx-auto mb-3">
                                                 <Users size={24} className="text-red-400" />

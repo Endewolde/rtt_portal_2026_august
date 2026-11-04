@@ -21,7 +21,9 @@ use App\Http\Controllers\Api\CollegeController;
 use App\Http\Controllers\Api\CollegePhaseCompletionController;
 use App\Http\Controllers\Api\ComplaintController;
 use App\Http\Controllers\Api\CompletionWorkshopController;
+use App\Http\Controllers\Api\ConferenceAttendanceController;
 use App\Http\Controllers\Api\ConferenceController;
+use App\Http\Controllers\Api\ConferenceWorkspaceController;
 use App\Http\Controllers\Api\ContractController;
 use App\Http\Controllers\Api\DashboardController;
 use App\Http\Controllers\Api\DeadlineExtensionController;
@@ -149,6 +151,17 @@ Route::prefix('v1')->group(function () {
     Route::get('/abstracts/mine', [AbstractController::class, 'mine']);
     Route::get('/abstracts/track/{token}', [AbstractController::class, 'track']);
     Route::post('/abstracts/withdraw/{token}', [AbstractController::class, 'withdraw']);
+    Route::get('/abstracts/letter/{token}', [AbstractController::class, 'letter']);
+    Route::middleware('throttle:10,10')->post('/abstracts/camera-ready/{token}', [AbstractController::class, 'cameraReady']);
+    Route::get('/conferences/{slug}/calendar.ics', [ConferenceController::class, 'calendar']);
+    Route::get('/conferences/{slug}/book-of-abstracts.pdf', [ConferenceWorkspaceController::class, 'publicBook']);
+    // Conference tickets — the ticket code is the attendee's key
+    Route::middleware('throttle:30,1')->group(function () {
+        Route::get('/conference-tickets/{code}', [ConferenceAttendanceController::class, 'ticket']);
+        Route::post('/conference-tickets/{code}/cancel', [ConferenceAttendanceController::class, 'cancel']);
+        Route::post('/conference-tickets/{code}/feedback', [ConferenceAttendanceController::class, 'feedback']);
+        Route::get('/conference-certificates/{code}/pdf', [ConferenceAttendanceController::class, 'certificatePdf']);
+    });
     Route::get('/repository', [RepositoryController::class, 'index']);
     Route::get('/repository/{id}', [RepositoryController::class, 'show']);
     Route::get('/tracker/{number}', [RepositoryController::class, 'tracker']);
@@ -265,18 +278,35 @@ Route::prefix('v1')->group(function () {
         Route::get('/admin/conferences/{id}/registrations', [ConferenceController::class, 'registrations']);
         Route::get('/admin/conferences/{id}/registrations/export', [ConferenceController::class, 'exportRegistrations']);
         Route::patch('/admin/conferences/{id}/registrations/{registrationId}', [ConferenceController::class, 'updateRegistration']);
+        Route::get('/admin/conferences/{id}/attendance', [ConferenceAttendanceController::class, 'attendance']);
+        Route::post('/admin/conferences/{id}/check-in', [ConferenceAttendanceController::class, 'checkIn']);
+        Route::get('/admin/conferences/{id}/certificates', [ConferenceAttendanceController::class, 'certificates']);
+        Route::post('/admin/conferences/{id}/certificates', [ConferenceAttendanceController::class, 'issueCertificates']);
+        Route::patch('/admin/conferences/{id}/certificates/{certificateId}', [ConferenceAttendanceController::class, 'revokeCertificate']);
+        Route::get('/admin/conferences/{id}/feedback', [ConferenceAttendanceController::class, 'feedbackSummary']);
+        Route::get('/admin/conferences/{id}/overview', [ConferenceWorkspaceController::class, 'overview']);
+        Route::get('/admin/conferences/{id}/history', [ConferenceWorkspaceController::class, 'history']);
+        Route::get('/admin/conferences/{id}/book-of-abstracts', [ConferenceWorkspaceController::class, 'book']);
+        Route::post('/admin/conferences/{id}/duplicate', [ConferenceWorkspaceController::class, 'duplicate']);
+        Route::get('/admin/conferences/{id}/committee', [ConferenceWorkspaceController::class, 'committee']);
+        Route::post('/admin/conferences/{id}/committee', [ConferenceWorkspaceController::class, 'addMember']);
+        Route::delete('/admin/conferences/{id}/committee/{memberId}', [ConferenceWorkspaceController::class, 'removeMember']);
         // Abstracts — admin
         Route::get('/admin/abstracts', [AbstractAdminController::class, 'index']);
         // export before {id}, or "export" is read as an abstract's id
         Route::get('/admin/abstracts/export', [AbstractAdminController::class, 'export']);
+        Route::post('/admin/abstracts/bulk-decision', [AbstractAdminController::class, 'bulkDecision']);
         Route::get('/admin/abstracts/{id}', [AbstractAdminController::class, 'show']);
         Route::patch('/admin/abstracts/{id}/status', [AbstractAdminController::class, 'updateStatus']);
+        Route::get('/admin/abstracts/{id}/letter', [AbstractAdminController::class, 'letter']);
+        Route::patch('/admin/abstracts/{id}/schedule', [AbstractAdminController::class, 'schedule']);
         Route::post('/admin/abstracts/{id}/assign-reviewer', [AbstractAdminController::class, 'assignReviewer']);
         Route::delete('/admin/abstracts/{id}/reviewers/{reviewerId}', [AbstractAdminController::class, 'removeReviewer']);
         // Abstracts — reviewer
         Route::post('/admin/abstracts/{id}/next-steps', [AbstractAdminController::class, 'sendNextSteps']);
         Route::get('/reviewer/abstracts', [AbstractAdminController::class, 'reviewerIndex']);
         Route::post('/reviewer/abstracts/{id}/review', [AbstractAdminController::class, 'submitReview']);
+        Route::post('/reviewer/abstracts/{id}/conflict', [AbstractAdminController::class, 'declareConflict']);
 
         // Audit logs
         Route::get('/audit-logs', [AuditLogController::class, 'index']);

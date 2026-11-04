@@ -98,7 +98,11 @@ export default function AbstractSubmit() {
         name: '',
         email: '',
         affiliation: '',
-        coAuthors: [{ name: '', affiliation: '' }],
+        orcid: '',
+        country: '',
+        presenting: true,
+        trackId: '',
+        coAuthors: [{ name: '', email: '', affiliation: '', country: '', orcid: '', presenting: false }],
         title: '',
         body: '',
         keywords: [],
@@ -132,7 +136,11 @@ export default function AbstractSubmit() {
                     name:             a.submitter_name        ?? '',
                     email:            a.submitter_email       ?? '',
                     affiliation:      a.submitter_affiliation ?? '',
-                    coAuthors:        a.co_authors?.length ? a.co_authors : [{ name: '', affiliation: '' }],
+                    orcid:            a.submitter_orcid       ?? '',
+                    country:          a.submitter_country     ?? '',
+                    presenting:       a.submitter_presenting  ?? true,
+                    trackId:          a.track_id              ?? '',
+                    coAuthors:        a.co_authors?.length ? a.co_authors.map(c => ({ ...{ name: '', email: '', affiliation: '', country: '', orcid: '', presenting: false }, ...c })) : [{ name: '', email: '', affiliation: '', country: '', orcid: '', presenting: false }],
                     title:            a.title                 ?? '',
                     body:             a.body                  ?? '',
                     keywords:         a.keywords              ?? [],
@@ -149,7 +157,7 @@ export default function AbstractSubmit() {
 
     // ── Co-authors ──
     const addCoAuthor = () => {
-        set('coAuthors', [...form.coAuthors, { name: '', affiliation: '' }]);
+        set('coAuthors', [...form.coAuthors, { name: '', email: '', affiliation: '', country: '', orcid: '', presenting: false }]);
     };
     const removeCoAuthor = (idx) => {
         set('coAuthors', form.coAuthors.filter((_, i) => i !== idx));
@@ -186,6 +194,10 @@ export default function AbstractSubmit() {
             fd.append('submitter_name',        form.name);
             fd.append('submitter_email',       form.email);
             fd.append('submitter_affiliation', form.affiliation);
+            if (form.orcid.trim()) fd.append('submitter_orcid', form.orcid.trim().toUpperCase());
+            if (form.country.trim()) fd.append('submitter_country', form.country.trim());
+            fd.append('submitter_presenting', form.presenting ? '1' : '0');
+            if (form.trackId) fd.append('track_id', form.trackId);
             if (revisionToken) fd.append('revision_token', revisionToken);
             fd.append('title',                 form.title);
             fd.append('body',                  form.body);
@@ -194,8 +206,10 @@ export default function AbstractSubmit() {
             form.coAuthors
                 .filter(a => a.name.trim())
                 .forEach((a, i) => {
-                    fd.append(`co_authors[${i}][name]`,        a.name);
-                    fd.append(`co_authors[${i}][affiliation]`, a.affiliation);
+                    fd.append(`co_authors[${i}][name]`, a.name);
+                    ['email', 'affiliation', 'country'].forEach(k => { if (a[k]?.trim()) fd.append(`co_authors[${i}][${k}]`, a[k].trim()); });
+                    if (a.orcid?.trim()) fd.append(`co_authors[${i}][orcid]`, a.orcid.trim().toUpperCase());
+                    fd.append(`co_authors[${i}][presenting]`, a.presenting ? '1' : '0');
                 });
             if (form.file) fd.append('file', form.file);
 
@@ -214,14 +228,17 @@ export default function AbstractSubmit() {
                     name:        raw.submitter_name        ?? raw.name,
                     email:       raw.submitter_email       ?? raw.email,
                     affiliation: raw.submitter_affiliation ?? raw.affiliation,
+                    orcid:       raw.submitter_orcid,
+                    country:     raw.submitter_country,
+                    track:       raw.track_id,
                 };
                 setErrors(mapped);
 
                 // Scroll to the first section that has an error
                 const SECTION_FIELD_MAP = [
-                    { sectionId: 'section-submitter',     fields: ['name', 'email', 'affiliation'] },
+                    { sectionId: 'section-submitter',     fields: ['name', 'email', 'affiliation', 'orcid', 'country'] },
                     { sectionId: 'section-coauthors',     fields: ['co_authors'] },
-                    { sectionId: 'section-content',       fields: ['title', 'body', 'keywords'] },
+                    { sectionId: 'section-content',       fields: ['track', 'title', 'body', 'keywords'] },
                     { sectionId: 'section-type',          fields: ['presentation_type'] },
                     { sectionId: 'section-file',          fields: ['file'] },
                 ];
@@ -446,6 +463,16 @@ export default function AbstractSubmit() {
                                 />
                             </Field>
                         </div>
+                        <Field label="Country" error={errors.country}>
+                            <Input value={form.country} onChange={e => set('country', e.target.value)} placeholder="e.g. Ethiopia" error={errors.country} />
+                        </Field>
+                        <Field label="ORCID iD" hint="(optional)" error={errors.orcid}>
+                            <Input value={form.orcid} onChange={e => set('orcid', e.target.value)} placeholder="0000-0000-0000-0000" error={errors.orcid} />
+                        </Field>
+                        <label className="sm:col-span-2 flex items-center gap-2.5 text-sm text-gray-700">
+                            <input type="checkbox" checked={form.presenting} onChange={e => set('presenting', e.target.checked)} className="h-4 w-4 rounded text-indigo-600" />
+                            I will present this work at the conference
+                        </label>
                     </div>
                 </Section>
                 </div>
@@ -455,18 +482,22 @@ export default function AbstractSubmit() {
                 <Section step="2" title="Co-Authors">
                     <div className="space-y-3">
                         {form.coAuthors.map((author, idx) => (
-                            <div key={idx} className="flex gap-3 items-start">
+                            <div key={idx} className="flex gap-3 items-start rounded-xl border border-gray-100 p-3">
                                 <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    <Input
-                                        value={author.name}
-                                        onChange={e => updateCoAuthor(idx, 'name', e.target.value)}
-                                        placeholder="Co-author name"
-                                    />
-                                    <Input
-                                        value={author.affiliation}
-                                        onChange={e => updateCoAuthor(idx, 'affiliation', e.target.value)}
-                                        placeholder="Affiliation / Institution"
-                                    />
+                                    <Input value={author.name} onChange={e => updateCoAuthor(idx, 'name', e.target.value)} placeholder="Co-author name" />
+                                    <Input type="email" value={author.email ?? ''} onChange={e => updateCoAuthor(idx, 'email', e.target.value)} placeholder="Email (for the programme and certificates)" />
+                                    <Input value={author.affiliation ?? ''} onChange={e => updateCoAuthor(idx, 'affiliation', e.target.value)} placeholder="Affiliation / Institution" />
+                                    <Input value={author.country ?? ''} onChange={e => updateCoAuthor(idx, 'country', e.target.value)} placeholder="Country" />
+                                    <Input value={author.orcid ?? ''} onChange={e => updateCoAuthor(idx, 'orcid', e.target.value)} placeholder="ORCID iD (optional)" />
+                                    <label className="flex items-center gap-2 text-sm text-gray-700">
+                                        <input type="checkbox" checked={!!author.presenting} onChange={e => updateCoAuthor(idx, 'presenting', e.target.checked)} className="h-4 w-4 rounded text-indigo-600" />
+                                        Presenting author
+                                    </label>
+                                    {(errors[`co_authors.${idx}.orcid`] || errors[`co_authors.${idx}.email`]) && (
+                                        <p className="sm:col-span-2 flex items-center gap-1 text-xs text-red-500">
+                                            <AlertCircle size={11} /> {(errors[`co_authors.${idx}.orcid`] ?? errors[`co_authors.${idx}.email`])[0]}
+                                        </p>
+                                    )}
                                 </div>
                                 {form.coAuthors.length > 1 && (
                                     <button
@@ -501,6 +532,18 @@ export default function AbstractSubmit() {
                 <div id="section-content">
                 <Section step="3" title="Abstract Content">
                     <div className="space-y-5">
+                        {conference?.tracks?.length > 0 && (
+                            <Field label="Track" required error={errors.track}>
+                                <select value={form.trackId} onChange={e => set('trackId', e.target.value)}
+                                    className={`w-full rounded-xl border px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 ${errors.track ? 'border-red-300' : 'border-gray-200'}`}>
+                                    <option value="">Choose the track that fits your work…</option>
+                                    {conference.tracks.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                </select>
+                                {form.trackId && conference.tracks.find(t => t.id === form.trackId)?.description && (
+                                    <p className="mt-1.5 text-xs text-gray-500">{conference.tracks.find(t => t.id === form.trackId).description}</p>
+                                )}
+                            </Field>
+                        )}
                         <Field label="Abstract Title" required error={errors.title}>
                             <Input
                                 value={form.title}

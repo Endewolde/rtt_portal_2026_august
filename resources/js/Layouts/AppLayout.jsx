@@ -743,7 +743,7 @@ export default function AppLayout({ children, breadcrumb }) {
     const requiredSubFeature = getRequiredSubFeature(currentPath)
     // Pages are opened by permission. A path under /admin/ with no entry is denied
     // (safety net); any other unlisted path is open to every signed-in user.
-    const canOpen = (path) => canOpenPath(path, hasPermission)
+    const canOpen = (path) => canOpenPath(path, hasPermission, user?.conference_roles)
     const roleAndPermAllowed = !user || canOpen(currentPath)
     // A page whose sub-feature has been switched off in Feature Management is
     // blocked even for a user who otherwise has the role/permission to view it —

@@ -35,7 +35,7 @@ function mp_proposal(object $ctx, string $status, string $title, string $year = 
     ]);
 }
 
-test('the maintenance page data counts this year\'s proposals at each stage of the journey', function () {
+test('the maintenance page figures count this year\'s submitted proposals, those in review and all funded projects', function () {
     mp_proposal($this, 'submitted', 'A');
     mp_proposal($this, 'under_blind_review', 'B');
     mp_proposal($this, 'under_open_defence', 'C');
@@ -45,28 +45,25 @@ test('the maintenance page data counts this year\'s proposals at each stage of t
     mp_proposal($this, 'funded', 'Last year project', '2025-2026');
 
     $data = MaintenancePageData::collect();
-    $journey = collect($data['journey'])->pluck('count', 'key');
 
     expect($data['academic_year'])->toBe('2026-2027')
         ->and($data['stats']['submitted'])->toBe(5) // every submitted proposal this year, the rejected one too — not drafts or other years
         ->and($data['stats']['in_review'])->toBe(2)
-        ->and($data['stats']['funded'])->toBe(2) // all years
-        ->and($journey->all())->toBe(['submitted' => 1, 'blind' => 1, 'defence' => 1, 'approval' => 0, 'running' => 1, 'completed' => 0])
-        ->and($data['open_calls'][0]['title'])->toBe('Research Grants Round 2026')
-        ->and($data['open_calls'][0]['days_left'])->toBe(10);
+        ->and($data['stats']['funded'])->toBe(2); // all years
 });
 
-test('the maintenance page shows funded projects and open calls but never applicants or unfunded work', function () {
+test('the maintenance page shows the figures but no proposal titles or applicants', function () {
     mp_proposal($this, 'funded', 'Solar irrigation for smallholder farms');
     mp_proposal($this, 'under_blind_review', 'Confidential proposal under review');
 
     $html = strtolower(view('errors.503')->render()); // titles are stored in title case
 
-    expect($html)->toContain('solar irrigation for smallholder farms')
-        ->toContain('research grants round 2026')
-        ->toContain('proposal journey')
+    expect($html)->toContain('proposals this year')
+        ->toContain('projects funded')
+        ->not->toContain('solar irrigation for smallholder farms')
+        ->not->toContain('confidential proposal under review')
         ->not->toContain('private applicant name')
-        ->not->toContain('confidential proposal under review');
+        ->not->toContain('how proposals move');
 });
 
 test('admins can preview the maintenance page before switching it on', function () {

@@ -1,11 +1,13 @@
 <?php
 
+use App\Jobs\SendRawMailJob;
 use App\Models\AppSetting;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 
@@ -74,6 +76,29 @@ test('enabling maintenance shows the branded page, uses an unguessable secret an
         ->assertCookie('laravel_maintenance', null, false);
 
     expect($response->json('data.bypass_url'))->toBe(url($secret));
+});
+
+test('switching maintenance on emails the access link to every active super admin straight away', function () {
+    $superAdmin = User::factory()->create(['name' => 'Switcher']);
+    $superAdmin->assignRole('super_admin');
+    $otherSuper = User::factory()->create(['email' => 'second@wsu.edu.et', 'status' => 'active']);
+    $otherSuper->assignRole('super_admin');
+    $inactiveSuper = User::factory()->create(['email' => 'gone@wsu.edu.et', 'status' => 'inactive']);
+    $inactiveSuper->assignRole('super_admin');
+    $admin = User::factory()->create(['email' => 'admin@wsu.edu.et']);
+    $admin->assignRole('admin');
+
+    Artisan::shouldReceive('call')->once()->andReturn(0);
+    Bus::fake([SendRawMailJob::class]);
+
+    $response = $this->actingAs($superAdmin, 'sanctum')->postJson('/api/v1/settings/toggle-maintenance')->assertOk();
+    $url = $response->json('data.bypass_url');
+
+    // Sent now, not queued: queue workers pause while the app is in maintenance.
+    Bus::assertDispatchedSync(SendRawMailJob::class, fn ($job) => $job->to === 'second@wsu.edu.et' && str_contains($job->html, $url) && str_contains($job->html, 'Switcher'));
+    Bus::assertDispatchedSync(SendRawMailJob::class, fn ($job) => $job->to === $superAdmin->email);
+    Bus::assertNotDispatchedSync(SendRawMailJob::class, fn ($job) => in_array($job->to, ['gone@wsu.edu.et', 'admin@wsu.edu.et'], true));
+    expect($response->json('data.emailed'))->toBe(2);
 });
 
 test('the maintenance page carries the institution\'s branding and checks back by itself', function () {

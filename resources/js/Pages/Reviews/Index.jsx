@@ -525,23 +525,53 @@ const RECOMMENDATION_OPTIONS = [
 
 function AbstractReviewCard({ item, onSubmitted, index, total }) {
     const { success, error } = useToast();
+    const myAssignment = item.reviews?.[0] ?? null;
     const myReview  = item.reviews?.find(r => r.submitted_at) ?? null;
     const hasReview = Boolean(myReview);
+    const conflictDeclared = Boolean(myAssignment?.conflict_declared_at);
+    // The conference's rubric: each criterion scored 1–5, weighted into the overall score out of 10.
+    const criteria = item.conference?.review_criteria ?? [];
 
     const [score, setScore]                   = useState(myReview?.score ?? 5);
+    const [criteriaScores, setCriteriaScores] = useState({});
     const [recommendation, setRecommendation] = useState(myReview?.recommendation ?? '');
     const [comments, setComments]             = useState(myReview?.comments ?? '');
+    const [confidential, setConfidential]     = useState(myReview?.confidential_comments ?? '');
     const [submitting, setSubmitting]         = useState(false);
+    const [conflictOpen, setConflictOpen]     = useState(false);
+    const [conflictReason, setConflictReason] = useState('');
+
+    const totalWeight = criteria.reduce((sum, c) => sum + (c.weight || 1), 0) || 1;
+    const allScored = criteria.every(c => criteriaScores[c.id]);
+    const rubricScore = criteria.length && allScored
+        ? Math.max(1, Math.round(criteria.reduce((sum, c) => sum + criteriaScores[c.id] * (c.weight || 1), 0) / totalWeight / 5 * 10))
+        : null;
 
     const submit = async () => {
         if (!recommendation) { error('Please select a recommendation.'); return; }
+        if (criteria.length && !allScored) { error('Please score every criterion.'); return; }
         setSubmitting(true);
         try {
-            const res = await api.post(`/reviewer/abstracts/${item.id}/review`, { score, recommendation, comments });
+            const res = await api.post(`/reviewer/abstracts/${item.id}/review`, {
+                ...(criteria.length ? { criteria_scores: criteriaScores } : { score }),
+                recommendation, comments, confidential_comments: confidential,
+            });
             success(res.data?.message ?? 'Review submitted.');
             onSubmitted();
         } catch (e) {
             error(e.response?.data?.message || 'Failed to submit review.');
+        }
+        setSubmitting(false);
+    };
+
+    const declareConflict = async () => {
+        setSubmitting(true);
+        try {
+            const res = await api.post(`/reviewer/abstracts/${item.id}/conflict`, { reason: conflictReason });
+            success(res.data?.message ?? 'Conflict declared.');
+            onSubmitted();
+        } catch (e) {
+            error(e.response?.data?.message || 'Could not record the conflict.');
         }
         setSubmitting(false);
     };
@@ -580,6 +610,14 @@ function AbstractReviewCard({ item, onSubmitted, index, total }) {
                                 </span>
                             )}
                             {item.presentation_type && <AbstractTypeBadge type={item.presentation_type} />}
+                            {item.track?.name && (
+                                <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[11px] font-semibold">{item.track.name}</span>
+                            )}
+                            {item.blind && (
+                                <span className="inline-flex items-center gap-1 bg-slate-800 text-white px-2 py-0.5 rounded-full text-[11px] font-semibold">
+                                    <ShieldAlert size={9} /> {tr("Double-blind — authors hidden")}
+                                </span>
+                            )}
                         </div>
                     </div>
                     {hasReview && (
@@ -589,15 +627,17 @@ function AbstractReviewCard({ item, onSubmitted, index, total }) {
                     )}
                 </div>
 
-                {item.submitter_name && (
-                    <div className="flex items-center gap-2.5 mb-5 pb-5 border-b border-gray-50">
-                        <AbstractAvatar name={item.submitter_name} />
-                        <div>
-                            <p className="text-sm font-semibold text-gray-800">{item.submitter_name}</p>
-                            {item.submitter_affiliation && (
-                                <p className="text-xs text-gray-400">{item.submitter_affiliation}</p>
-                            )}
-                        </div>
+                {!item.blind && item.authors?.length > 0 && (
+                    <div className="mb-5 pb-5 border-b border-gray-50 space-y-2">
+                        {item.authors.map((a, i) => (
+                            <div key={i} className="flex items-center gap-2.5">
+                                <AbstractAvatar name={a.name} />
+                                <div className="min-w-0">
+                                    <p className="text-sm font-semibold text-gray-800">{a.name}{a.presenting && <span className="ml-2 text-[10px] font-bold uppercase text-indigo-600">{tr("Presenting")}</span>}</p>
+                                    <p className="text-xs text-gray-400">{[a.affiliation, a.country].filter(Boolean).join(' · ')}</p>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 )}
 
@@ -672,6 +712,17 @@ function AbstractReviewCard({ item, onSubmitted, index, total }) {
                                 </div>
                             </div>
 
+                            {myReview.criteria_scores?.length > 0 && (
+                                <div className="rounded-xl border border-gray-100 divide-y divide-gray-100">
+                                    {myReview.criteria_scores.map(c => (
+                                        <div key={c.criterion_id ?? c.name} className="flex items-center justify-between px-4 py-2.5 text-sm">
+                                            <span className="text-gray-700">{c.name} <span className="text-xs text-gray-400">×{c.weight}</span></span>
+                                            <span className="font-semibold text-gray-900">{c.score}/5</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
                             {myReview.comments && (
                                 <div>
                                     <p className="text-xs font-semibold text-gray-500 mb-2">{tr("Your Comments")}</p>
@@ -686,11 +737,46 @@ function AbstractReviewCard({ item, onSubmitted, index, total }) {
                                 {tr("This review is locked. Contact an admin if a correction is needed.")}
                             </div>
                         </div>
+                    ) : conflictDeclared ? (
+                        <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+                            <ShieldAlert size={16} className="mt-0.5 shrink-0 text-amber-600" />
+                            <div>
+                                <p className="text-sm font-bold text-amber-800">{tr("You declared a conflict of interest")}</p>
+                                <p className="mt-0.5 text-xs text-amber-700">{myAssignment.conflict_reason} — {tr("the committee will assign someone else.")}</p>
+                            </div>
+                        </div>
                     ) : (
                         <div className="space-y-5">
                             <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">{tr("Submit Your Review")}</p>
 
-                            <div>
+                            {criteria.length > 0 && (
+                                <div className="space-y-3">
+                                    {criteria.map(c => (
+                                        <div key={c.id}>
+                                            <div className="mb-1.5 flex items-baseline justify-between gap-3">
+                                                <label className="text-xs font-semibold text-gray-700">{c.name} <span className="font-normal text-gray-400">×{c.weight}</span></label>
+                                                {c.description && <span className="text-[11px] text-gray-400">{c.description}</span>}
+                                            </div>
+                                            <div className="grid grid-cols-5 gap-1.5" role="radiogroup" aria-label={c.name}>
+                                                {[1, 2, 3, 4, 5].map(n => (
+                                                    <button key={n} type="button" role="radio" aria-checked={criteriaScores[c.id] === n}
+                                                        onClick={() => setCriteriaScores(s => ({ ...s, [c.id]: n }))}
+                                                        className={cn('rounded-lg border py-2 text-sm font-bold transition',
+                                                            criteriaScores[c.id] === n ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-gray-200 bg-white text-gray-600 hover:border-gray-300')}>
+                                                        {n}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                    <div className="flex items-center justify-between rounded-xl bg-indigo-50 px-4 py-2.5">
+                                        <span className="text-xs font-semibold text-indigo-700">{tr("Overall score (weighted)")}</span>
+                                        <span className="text-lg font-bold text-indigo-700">{rubricScore ?? '—'}<span className="text-xs font-normal text-indigo-400">/10</span></span>
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className={criteria.length ? 'hidden' : ''}>
                                 <div className="flex items-center justify-between mb-2">
                                     <label className="text-xs font-semibold text-gray-600">{tr("Score")}</label>
                                     <span className="text-lg font-bold text-indigo-600">
@@ -722,9 +808,17 @@ function AbstractReviewCard({ item, onSubmitted, index, total }) {
                             </div>
 
                             <div>
-                                <label className="block text-xs font-semibold text-gray-600 mb-1.5">{tr("Comments")}</label>
+                                <label className="block text-xs font-semibold text-gray-600 mb-1.5">{tr("Comments for the author")}</label>
                                 <textarea value={comments} onChange={e => setComments(e.target.value)}
-                                    rows={4} placeholder={tr("Provide detailed feedback for the author…")}
+                                    rows={4} placeholder={tr("Feedback the committee may share with the author…")}
+                                    className="w-full border border-gray-200 bg-gray-50 rounded-xl px-3.5 py-2.5 text-sm
+                                               focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:bg-white transition-colors resize-none" />
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-600 mb-1.5">{tr("Confidential comments to the committee")}</label>
+                                <textarea value={confidential} onChange={e => setConfidential(e.target.value)}
+                                    rows={3} placeholder={tr("Only the committee sees this — never the author.")}
                                     className="w-full border border-gray-200 bg-gray-50 rounded-xl px-3.5 py-2.5 text-sm
                                                focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:bg-white transition-colors resize-none" />
                             </div>
@@ -735,6 +829,25 @@ function AbstractReviewCard({ item, onSubmitted, index, total }) {
                                 {submitting ? <Loader2 size={14} className="animate-spin" /> : <Send size={13} />}
                                 {submitting ? 'Submitting…' : 'Submit Review'}
                             </button>
+
+                            {conflictOpen ? (
+                                <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
+                                    <label className="block text-xs font-semibold text-amber-800">{tr("Why can't you review this fairly?")}</label>
+                                    <textarea value={conflictReason} onChange={e => setConflictReason(e.target.value)} rows={2}
+                                        placeholder={tr("e.g. I know the authors, or I worked on this project.")}
+                                        className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+                                    <div className="flex justify-end gap-2">
+                                        <button type="button" onClick={() => setConflictOpen(false)} className="rounded-lg px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-white">{tr("Cancel")}</button>
+                                        <button type="button" onClick={declareConflict} disabled={submitting || conflictReason.trim().length < 5}
+                                            className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-700 disabled:opacity-50">{tr("Declare conflict")}</button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <button type="button" onClick={() => setConflictOpen(true)}
+                                    className="w-full text-center text-xs font-semibold text-gray-500 hover:text-amber-700">
+                                    {tr("I have a conflict of interest with this abstract")}
+                                </button>
+                            )}
                         </div>
                     )}
                 </div>
@@ -898,7 +1011,7 @@ export default function ReviewIndex() {
 
     const getCount   = tab => tab.key === 'abstracts' ? abstractItems.length : tab.filter ? assignments.filter(tab.filter).length : 0;
     const getPending = tab => tab.key === 'abstracts'
-        ? abstractItems.filter(i => !i.reviews?.some(r => r.submitted_at)).length
+        ? abstractItems.filter(i => !i.reviews?.some(r => r.submitted_at || r.conflict_declared_at)).length
         : tab.filter ? assignments.filter(tab.filter).filter(a => ['pending', 'in_progress', 'accepted'].includes(a.status)).length : 0;
 
     // The headline numbers for the year shown.

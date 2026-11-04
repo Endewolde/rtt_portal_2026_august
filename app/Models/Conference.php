@@ -18,8 +18,12 @@ class Conference extends Model
         'start_date', 'end_date', 'timezone', 'location_type',
         'location_address', 'virtual_link', 'status', 'publish_at',
         'max_capacity', 'registration_link', 'is_featured', 'tags', 'created_by',
-        'abstract_submission_open', 'abstract_deadline',
+        'abstract_submission_open', 'abstract_deadline', 'camera_ready_deadline', 'review_mode',
+        'registration_questions', 'waitlist_enabled', 'feedback_open', 'book_published',
     ];
+
+    /** Who sees whom during abstract review. */
+    public const REVIEW_MODES = ['double_blind', 'single_blind', 'open'];
 
     /** The online join link is for registrants (sent by email) and organisers, not the public. */
     protected $hidden = ['virtual_link'];
@@ -29,9 +33,14 @@ class Conference extends Model
         'end_date' => 'datetime',
         'publish_at' => 'datetime',
         'abstract_deadline' => 'datetime',
+        'camera_ready_deadline' => 'datetime',
         'is_featured' => 'boolean',
         'abstract_submission_open' => 'boolean',
         'tags' => 'array',
+        'registration_questions' => 'array',
+        'waitlist_enabled' => 'boolean',
+        'feedback_open' => 'boolean',
+        'book_published' => 'boolean',
         'max_capacity' => 'integer',
     ];
 
@@ -67,6 +76,42 @@ class Conference extends Model
     public function abstracts(): HasMany
     {
         return $this->hasMany(ConferenceAbstract::class);
+    }
+
+    public function registrationTypes(): HasMany
+    {
+        return $this->hasMany(ConferenceRegistrationType::class)->orderBy('sort_order');
+    }
+
+    public function committee(): HasMany
+    {
+        return $this->hasMany(ConferenceCommitteeMember::class);
+    }
+
+    public function certificates(): HasMany
+    {
+        return $this->hasMany(ConferenceCertificate::class);
+    }
+
+    public function feedback(): HasMany
+    {
+        return $this->hasMany(ConferenceFeedback::class);
+    }
+
+    public function tracks(): HasMany
+    {
+        return $this->hasMany(ConferenceTrack::class)->orderBy('sort_order')->orderBy('name');
+    }
+
+    public function reviewCriteria(): HasMany
+    {
+        return $this->hasMany(ConferenceReviewCriterion::class)->orderBy('sort_order');
+    }
+
+    /** Reviewers don't see who wrote an abstract (the default). */
+    public function hidesAuthorsFromReviewers(): bool
+    {
+        return ($this->review_mode ?? 'double_blind') === 'double_blind';
     }
 
     public function getIsUpcomingAttribute(): bool

@@ -3,7 +3,7 @@ import { Link } from '@inertiajs/react';
 import {
     Search, Mail, AlertCircle, CalendarDays, ArrowRight, CheckCircle2,
     Copy, Check, X, ChevronDown, FileText, Clock, Layers,
-    Mic, ImageIcon, Users2, MoreHorizontal,
+    Mic, ImageIcon, Users2, MoreHorizontal, Download, Upload, Loader2, MapPin,
 } from 'lucide-react';
 import PublicLayout from '../../Layouts/PublicLayout';
 import { get } from '../../lib/api';
@@ -141,6 +141,67 @@ function TokenButton({ token }) {
     );
 }
 
+// ─── Accepted: letter, final version, programme slot ─────────────────────────
+
+const fmtDateTime = (d) => d ? new Date(d).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+
+function AcceptedPanel({ abstract }) {
+    const [finalAt, setFinalAt] = useState(abstract.camera_ready_at);
+    const [uploading, setUploading] = useState(false);
+    const [uploadError, setUploadError] = useState('');
+    const deadline = abstract.conference?.camera_ready_deadline;
+    const closed = deadline && new Date(deadline) < new Date();
+    const session = abstract.session;
+
+    const upload = async (file) => {
+        if (!file) return;
+        setUploading(true);
+        setUploadError('');
+        try {
+            const fd = new FormData();
+            fd.append('file', file);
+            const r = await api.post(`/abstracts/camera-ready/${abstract.submission_token}`, fd, { skipErrorToast: true });
+            setFinalAt(r.data?.data?.camera_ready_at ?? new Date().toISOString());
+        } catch (e) {
+            setUploadError(e.response?.data?.errors?.file?.[0] ?? e.response?.data?.message ?? 'The upload failed. Please try again.');
+        }
+        setUploading(false);
+    };
+
+    return (
+        <div className="mb-3 space-y-2.5 rounded-xl border border-emerald-100 bg-emerald-50/60 px-3.5 py-3">
+            {abstract.accepted_type && (
+                <p className="text-xs text-emerald-900">Accepted as a <b>{abstract.accepted_type}</b> presentation (you asked for {abstract.presentation_type}).</p>
+            )}
+            {session && (
+                <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-emerald-900">
+                    <span className="font-semibold">{session.title}</span>
+                    {session.starts_at && <span className="inline-flex items-center gap-1"><CalendarDays size={11} /> {fmtDateTime(session.starts_at)}</span>}
+                    {session.room && <span className="inline-flex items-center gap-1"><MapPin size={11} /> {session.room}</span>}
+                </p>
+            )}
+            <div className="flex flex-wrap items-center gap-2">
+                <a href={`/api/v1/abstracts/letter/${abstract.submission_token}`}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-800">
+                    <Download size={12} /> Letter of acceptance
+                </a>
+                {!closed && (
+                    <label className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-50 ${uploading ? 'pointer-events-none opacity-60' : ''}`}>
+                        {uploading ? <Loader2 size={12} className="animate-spin" /> : <Upload size={12} />}
+                        {finalAt ? 'Replace final version' : 'Upload final version'}
+                        <input type="file" accept=".pdf,.doc,.docx,.ppt,.pptx" className="sr-only" onChange={(e) => { upload(e.target.files?.[0]); e.target.value = ''; }} />
+                    </label>
+                )}
+            </div>
+            <p className="text-[11px] text-emerald-800/80">
+                {finalAt ? <>Final version received {fmtDate(finalAt)}.</> : 'Paper, slides or poster — PDF, Word or PowerPoint, up to 20 MB.'}
+                {deadline && <> {closed ? 'Final versions closed' : 'Due by'} {fmtDate(deadline)}.</>}
+            </p>
+            {uploadError && <p className="text-[11px] font-medium text-red-600">{uploadError}</p>}
+        </div>
+    );
+}
+
 // ─── Abstract Card ────────────────────────────────────────────────────────────
 
 function AbstractCard({ abstract, onWithdraw }) {
@@ -203,6 +264,7 @@ function AbstractCard({ abstract, onWithdraw }) {
                         <p className="mt-1 whitespace-pre-line text-xs leading-relaxed text-gray-700">{abstract.feedback}</p>
                     </div>
                 )}
+                {abstract.status === 'accepted' && <AcceptedPanel abstract={abstract} />}
                 {['draft', 'revision_requested'].includes(abstract.status) && abstract.conference?.slug && (
                     <Link href={`/conferences/${abstract.conference.slug}/submit-abstract?token=${abstract.submission_token}`}
                         className="mb-3 inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700">

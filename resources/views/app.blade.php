@@ -7,9 +7,14 @@
 
     @php
         $meta = \Illuminate\Support\Facades\Cache::remember('blade_app_meta', 300, function () {
-            $rows = \App\Models\AppSetting::whereIn('key', ['system_name', 'favicon', 'custom_css', 'theme'])
+            $rows = \App\Models\AppSetting::whereIn('key', ['system_name', 'favicon', 'custom_css', 'theme', 'organization_name', 'system_logo', 'public_hero_subtitle'])
                 ->get()->keyBy('key');
+            $org = $rows->get('organization_name')?->value ?: 'Wolaita Sodo University';
             return [
+                'organization_name' => $org,
+                'system_logo' => $rows->get('system_logo')?->value,
+                'description' => $rows->get('public_hero_subtitle')?->value
+                    ?: "Submit research, community engagement and technology transfer proposals to {$org}, follow blind review and open defence, and manage funded projects in one place.",
                 'system_name' => $rows->get('system_name')?->value ?? 'RTT Platform',
                 'favicon'     => $rows->get('favicon')?->value,
                 'custom_css'  => $rows->get('custom_css')?->value,
@@ -42,7 +47,26 @@
     </script>
 
     <meta name="app-name" content="{{ $meta['system_name'] }}">
-    <title inertia>{{ $meta['system_name'] }}</title>
+    <title inertia>{{ $meta['system_name'] }} · {{ $meta['organization_name'] }} Research &amp; Technology Transfer</title>
+
+    {{-- Search results and link previews (Telegram, Facebook, WhatsApp read these; they don't run JavaScript). --}}
+    @php
+        $pageUrl = url()->current();
+        $shareTitle = $meta['system_name'].' · '.$meta['organization_name'].' Research & Technology Transfer';
+        $shareImage = $meta['system_logo'] ? url($meta['system_logo']) : null;
+    @endphp
+    <meta name="description" content="{{ $meta['description'] }}">
+    <link rel="canonical" href="{{ $pageUrl }}">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="{{ $meta['system_name'] }}">
+    <meta property="og:title" content="{{ $shareTitle }}">
+    <meta property="og:description" content="{{ $meta['description'] }}">
+    <meta property="og:url" content="{{ $pageUrl }}">
+    @if ($shareImage)<meta property="og:image" content="{{ $shareImage }}">@endif
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="{{ $shareTitle }}">
+    <meta name="twitter:description" content="{{ $meta['description'] }}">
+    @if ($shareImage)<meta name="twitter:image" content="{{ $shareImage }}">@endif
 
     @if($meta['favicon'])
         <link rel="icon" href="{{ $meta['favicon'] }}">

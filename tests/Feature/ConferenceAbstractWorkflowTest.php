@@ -118,13 +118,14 @@ test('the public page hides the join link and registration is race-safe, case-in
     $this->postJson("/api/v1/conferences/{$this->conference->slug}/register", ['name' => 'A', 'email' => 'A@Example.com'])->assertCreated();
     $this->postJson("/api/v1/conferences/{$this->conference->slug}/register", ['name' => 'A', 'email' => 'a@example.com'])->assertUnprocessable();
     $this->postJson("/api/v1/conferences/{$this->conference->slug}/register", ['name' => 'B', 'email' => 'b@example.com'])->assertCreated();
+    // Full: the next person waits (the waiting list is on by default).
     $this->postJson("/api/v1/conferences/{$this->conference->slug}/register", ['name' => 'C', 'email' => 'c@example.com'])
-        ->assertUnprocessable()->assertJsonPath('message', 'This conference is fully booked.');
+        ->assertCreated()->assertJsonPath('data.status', 'waitlisted');
 
-    // Cancelling a registration frees the seat.
+    // Cancelling a registration frees the seat, and it goes to the person waiting.
     $reg = ConferenceRegistration::where('email', 'b@example.com')->first();
     $this->actingAs($this->admin, 'sanctum')->patchJson("/api/v1/admin/conferences/{$this->conference->id}/registrations/{$reg->id}", ['status' => 'cancelled'])->assertOk();
-    $this->postJson("/api/v1/conferences/{$this->conference->slug}/register", ['name' => 'C', 'email' => 'c@example.com'])->assertCreated();
+    expect(ConferenceRegistration::where('email', 'c@example.com')->value('status'))->toBe('confirmed');
 
     $this->conference->update(['start_date' => now()->subDays(3), 'end_date' => now()->subDay()]);
     $this->postJson("/api/v1/conferences/{$this->conference->slug}/register", ['name' => 'D', 'email' => 'd@example.com'])->assertUnprocessable();

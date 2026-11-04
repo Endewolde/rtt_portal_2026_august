@@ -77,6 +77,19 @@
     </div>
     @endif
 
+    @if($abstract->accepted_type)
+    <p style="font-size:14px;color:#4b5563;line-height:1.7;margin:0 0 18px;">
+      You asked for <strong>{{ $abstract->presentation_type }}</strong> presentation; the committee has accepted it as a <strong>{{ $abstract->accepted_type }}</strong>.
+    </p>
+    @endif
+
+    <p style="text-align:center;margin:24px 0;">
+      <a href="{{ rtrim(config('app.url'), '/') }}/api/v1/abstracts/letter/{{ $abstract->submission_token }}" style="display:inline-block;background:#065f46;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 22px;border-radius:10px;">Download your letter of acceptance (PDF)</a>
+    </p>
+    <p style="font-size:13px;color:#4b5563;line-height:1.7;margin:0 0 18px;text-align:center;">
+      Upload your final version (paper, slides or poster) from <a href="{{ rtrim(config('app.url'), '/') }}/my-abstracts" style="color:#065f46;font-weight:600;">My abstracts</a>@if($conference->camera_ready_deadline) by <strong>{{ $conference->camera_ready_deadline->format('j F Y') }}</strong>@endif.
+    </p>
+
     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px;margin:20px 0;">
       <p style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin:0 0 5px;">Tracking Token</p>
       <p style="font-size:13px;font-family:monospace;color:#374151;word-break:break-all;margin:0;">{{ $abstract->submission_token }}</p>

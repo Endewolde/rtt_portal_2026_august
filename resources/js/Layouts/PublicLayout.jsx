@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, usePage } from '@inertiajs/react';
-import { FlaskConical, Menu, X, Search, Download, ChevronDown, Clock, Calendar, ArrowRight, Flame, CalendarDays, MapPin, Video, Building2, Globe, Star, FileText, ShieldCheck, UserPlus, Users, Wrench, ExternalLink } from 'lucide-react';
+import { FlaskConical, Menu, X, Search, Download, ChevronDown, Clock, Calendar, ArrowRight, Flame, CalendarDays, MapPin, Video, Building2, Globe, Star, FileText, ShieldCheck, UserPlus, Users } from 'lucide-react';
 import { get } from '../lib/api';
 import { useT } from '../lib/i18n';
 import LanguageSwitch from '../Components/LanguageSwitch';
@@ -572,29 +572,11 @@ export default function PublicLayout({ children }) {
     }, []);
 
     // While the system is down the public site is the maintenance page, even in the browser
-    // of the admin who switched it on (their bypass cookie is for the admin area). They get
-    // a thin strip to go back to work or switch maintenance off.
+    // of the admin who switched it on (their bypass cookie is for the admin area): they see
+    // exactly what visitors see.
     if (maintenanceOn) {
         return (
-            <div className="keep-theme-colors fixed inset-0 flex flex-col bg-slate-950">
-                <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2 bg-red-600 text-white shrink-0">
-                    <p className="flex items-center gap-2 text-xs sm:text-sm">
-                        <Wrench size={14} className="shrink-0" />
-                        <span><span className="font-semibold">{t('Maintenance mode is on.')}</span> {t('This is what visitors see. Only you see this bar.')}</span>
-                    </p>
-                    <div className="flex items-center gap-2">
-                        <a href="/dashboard"
-                            className="inline-flex items-center gap-1.5 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-semibold hover:bg-white/25">
-                            <ExternalLink size={13} /> {t('Go to admin area')}
-                        </a>
-                        <a href="/admin/settings"
-                            className="inline-flex items-center rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50">
-                            {t('Turn off')}
-                        </a>
-                    </div>
-                </div>
-                <iframe src="/maintenance-preview" title={t('Maintenance page')} className="w-full flex-1 border-0" />
-            </div>
+            <iframe src="/maintenance-preview" title={t('Maintenance page')} className="fixed inset-0 h-full w-full border-0" />
         );
     }
 
@@ -606,7 +588,7 @@ export default function PublicLayout({ children }) {
                 <div className="flex items-center justify-between gap-3 px-4 py-2 text-white text-xs font-medium shrink-0"
                     style={{ backgroundColor: primaryColor }}>
                     <p className="flex-1 text-center">{annMsg}</p>
-                    <button onClick={() => setBannerDismissed(true)} className="shrink-0 opacity-70 hover:opacity-100">
+                    <button onClick={() => setBannerDismissed(true)} aria-label={t('Dismiss announcement')} className="shrink-0 opacity-70 hover:opacity-100">
                         <X size={13} />
                     </button>
                 </div>
@@ -664,7 +646,7 @@ export default function PublicLayout({ children }) {
                                      transition-all duration-300 ${scrolled ? 'h-14' : 'h-20'}`}>
 
                         {/* Logo */}
-                        <Link href="/" className="flex items-center gap-2.5 shrink-0">
+                        <Link href="/" className="flex min-w-0 items-center gap-2.5 sm:shrink-0">
                             {systemLogo ? (
                                 <img
                                     src={systemLogo}
@@ -680,12 +662,12 @@ export default function PublicLayout({ children }) {
                                 />
                             ) : null}
                             {systemLogo ? (
-                                <div className="hidden sm:block border-l border-gray-200 pl-3">
-                                    <div className={`font-bold leading-tight text-slate-900 transition-all duration-300 ${scrolled ? 'text-sm' : 'text-base'}`}>
+                                <div className="min-w-0 border-l border-gray-200 pl-3">
+                                    <div className={`truncate font-bold leading-tight text-slate-900 transition-all duration-300 ${scrolled ? 'text-sm' : 'text-sm sm:text-base'}`}>
                                         {orgName}
                                     </div>
                                     {!scrolled && (
-                                        <div className="text-xs font-medium tracking-wide text-slate-500 mt-0.5">
+                                        <div className="truncate text-[11px] sm:text-xs font-medium tracking-wide text-slate-500 mt-0.5">
                                             {t(headerSubtitle)}
                                         </div>
                                     )}
@@ -737,6 +719,7 @@ export default function PublicLayout({ children }) {
 
                         {/* Mobile toggle */}
                         <button className="md:hidden p-2 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+                            aria-label={mobileOpen ? t('Close menu') : t('Open menu')} aria-expanded={mobileOpen}
                             onClick={() => setMobileOpen(!mobileOpen)}>
                             {mobileOpen ? <X size={22} /> : <Menu size={22} />}
                         </button>
@@ -1002,7 +985,7 @@ export default function PublicLayout({ children }) {
                         {/* Header */}
                         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-gray-100">
                             <h3 className="text-sm font-bold text-gray-900">{t('Built by')}</h3>
-                            <button onClick={() => setDeveloperModal(false)}
+                            <button onClick={() => setDeveloperModal(false)} aria-label={t('Close')}
                                 className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
                                 <X size={16} />
                             </button>

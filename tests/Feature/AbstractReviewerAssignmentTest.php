@@ -52,7 +52,7 @@ test('admin cannot assign a reviewer who submitted the abstract', function () {
         ]);
 
     $response->assertStatus(422);
-    expect($response->json('message'))->toContain('submitted this abstract');
+    expect($response->json('message'))->toContain('an author of this abstract');
 
     expect(ConferenceAbstractReview::where('abstract_id', $abstract->id)
         ->where('reviewer_id', $staffReviewer->id)

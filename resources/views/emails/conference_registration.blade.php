@@ -44,16 +44,24 @@
         <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
       </svg>
     </div>
-    <h1>Registration Confirmed!</h1>
-    <p>You're all set for the conference.</p>
-    <span class="badge">Confirmed</span>
+    @php($waitlisted = $registration->status === 'waitlisted')
+    <h1>{{ $waitlisted ? "You're on the waiting list" : (($promoted ?? false) ? 'A place opened up for you!' : 'Registration Confirmed!') }}</h1>
+    <p>{{ $waitlisted ? 'The conference is full right now.' : "You're all set for the conference." }}</p>
+    <span class="badge">{{ $waitlisted ? 'Waiting list' : 'Confirmed' }}</span>
   </div>
 
   <div class="body">
     <p class="greeting">Dear <strong>{{ $registration->name }}</strong>,</p>
     <p style="color:#4b5563;font-size:14px;line-height:1.7;margin:0 0 20px;">
-      Great news — your registration for the following conference has been confirmed.
-      We look forward to seeing you there!
+      @if($waitlisted)
+        Thank you for registering. Every place is taken at the moment, so you are on the waiting list.
+        If someone cancels, the next person on the list gets their place and we email you straight away.
+      @elseif($promoted ?? false)
+        Good news — a place has opened up and your registration is now confirmed. Your ticket is below.
+      @else
+        Great news — your registration for the following conference has been confirmed.
+        We look forward to seeing you there!
+      @endif
     </p>
 
     <div class="conf-card">
@@ -93,7 +101,15 @@
             @else Hybrid Event @endif
           </span>
         </div>
-        @if($conference->virtual_link && $conference->location_type !== 'physical')
+        @if($registration->type)
+        <div class="conf-meta-row">
+          <div class="icon-circle">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </div>
+          <span><strong>Attending as:</strong> {{ $registration->type->name }}</span>
+        </div>
+        @endif
+        @if(! $waitlisted && $conference->virtual_link && $conference->location_type !== 'physical')
         <div class="conf-meta-row">
           <div class="icon-circle">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5">
@@ -117,9 +133,12 @@
     </div>
 
     <div class="reg-box">
-      <p class="reg-label">Your Registration ID</p>
-      <p class="reg-id">{{ strtoupper(substr($registration->id, 0, 8)) }}</p>
+      <p class="reg-label">{{ $waitlisted ? 'Your reference' : 'Your ticket code' }}</p>
+      <p class="reg-id">{{ $registration->ticket_code }}</p>
     </div>
+    <p style="text-align:center;margin:0 0 24px;">
+      <a href="{{ $registration->ticketUrl() }}" style="display:inline-block;background:#4338ca;color:#fff;text-decoration:none;font-weight:700;font-size:14px;padding:12px 22px;border-radius:10px;">{{ $waitlisted ? 'See your place on the list' : 'Open your ticket (QR code for check-in)' }}</a>
+    </p>
 
     <div class="steps">
       <h3>What's next?</h3>
@@ -129,7 +148,7 @@
       </div>
       <div class="step">
         <div class="step-num">2</div>
-        <div class="step-text">Keep this email handy — your registration ID confirms your spot.</div>
+        <div class="step-text">{{ $waitlisted ? 'Keep this email — the same link becomes your ticket if a place opens.' : 'Show the QR code on your ticket at the registration desk to check in. You can also cancel from the ticket page if your plans change.' }}</div>
       </div>
       <div class="step">
         <div class="step-num">3</div>

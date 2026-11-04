@@ -53,7 +53,7 @@
 
     <div class="abstract-card">
       <h2>{{ $abstract->title }}</h2>
-      <div class="meta-row"><span class="meta-label">Submitted by</span><span>{{ $abstract->submitter_name }}{{ $abstract->submitter_affiliation ? ', '.$abstract->submitter_affiliation : '' }}</span></div>
+      @unless ($blind ?? true)<div class="meta-row"><span class="meta-label">Submitted by</span><span>{{ $abstract->submitter_name }}{{ $abstract->submitter_affiliation ? ', '.$abstract->submitter_affiliation : '' }}</span></div>@endunless
       <div class="meta-row"><span class="meta-label">Type</span><span>{{ ucfirst($abstract->presentation_type) }} presentation</span></div>
       @if($abstract->keywords && count($abstract->keywords))<div class="meta-row"><span class="meta-label">Keywords</span><span>{{ implode(', ', $abstract->keywords) }}</span></div>@endif
       @if($abstract->word_count)<div class="meta-row"><span class="meta-label">Length</span><span>{{ number_format($abstract->word_count) }} words</span></div>@endif

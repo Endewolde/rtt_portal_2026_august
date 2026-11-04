@@ -481,13 +481,51 @@ class SettingsController extends Controller
         $secret = 'rtt-bypass-'.Str::random(32);
         Artisan::call('down', ['--secret' => $secret, '--render' => 'errors::503', '--retry' => 60, '--refresh' => 60]);
         $bypassUrl = url($secret);
+        $emailed = $this->emailMaintenanceAccessLink($bypassUrl, $request->user());
 
         return response()->json([
-            'data' => ['maintenance' => true, 'bypass_url' => $bypassUrl],
-            'message' => 'Maintenance mode enabled. You still have access in this browser; other administrators can get in with this link (it does not work for anyone else): '.$bypassUrl,
+            'data' => ['maintenance' => true, 'bypass_url' => $bypassUrl, 'emailed' => $emailed],
+            'message' => 'Maintenance mode enabled. You still have access in this browser; other administrators can get in with this link (it does not work for anyone else): '.$bypassUrl
+                .($emailed > 0 ? " The link was emailed to {$emailed} super admin".($emailed === 1 ? '' : 's').'.' : ''),
             'errors' => [],
             'meta' => [],
         ])->withCookie(MaintenanceModeBypassCookie::create($secret));
+    }
+
+    /**
+     * Email the maintenance access link to every active super admin, so they can get in
+     * while the system is down. Sent straight away rather than through deliver(): queue
+     * workers pause while the app is in maintenance, so a queued email would only arrive
+     * once maintenance is over. A failed send never stops maintenance from switching on.
+     */
+    private function emailMaintenanceAccessLink(string $url, User $enabledBy): int
+    {
+        $systemName = AppSetting::where('key', 'system_name')->value('value') ?? config('mail.from.name');
+        $sent = 0;
+
+        User::role('super_admin')->where('status', 'active')->whereNotNull('email')->get(['id', 'name', 'email'])
+            ->each(function (User $admin) use ($url, $enabledBy, $systemName, &$sent) {
+                try {
+                    SendRawMailJob::dispatchSync(
+                        view('emails.maintenance_access', [
+                            'url' => $url,
+                            'name' => $admin->name,
+                            'enabledBy' => $enabledBy->name,
+                            'startedAt' => now()->format('j M Y, H:i'),
+                            'systemName' => $systemName,
+                            'senderName' => $systemName,
+                        ])->render(),
+                        $admin->email,
+                        $admin->name,
+                        "Maintenance access link — {$systemName}",
+                    );
+                    $sent++;
+                } catch (\Throwable $e) {
+                    Log::warning("Maintenance access link not emailed to {$admin->email}: {$e->getMessage()}");
+                }
+            });
+
+        return $sent;
     }
 
     /** Send a test text message to check the Africa's Talking settings. */

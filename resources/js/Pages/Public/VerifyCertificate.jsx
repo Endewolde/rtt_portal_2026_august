@@ -107,7 +107,7 @@ export default function VerifyCertificate() {
                         </div>
                         <Details rows={[
                             ['Issued to', c.reviewer],
-                            ['Academic year', c.academic_year],
+                            c.kind === 'conference' ? ['Conference', c.conference] : ['Academic year', c.academic_year],
                             ['Revoked', formatDate(c.revoked_at)],
                             ['Certificate no.', c.code],
                         ]} />
@@ -134,10 +134,17 @@ export default function VerifyCertificate() {
                             <ShieldCheck size={28} className="text-emerald-600" />
                             <div>
                                 <p className="text-lg font-bold text-emerald-900">{t('Certificate verified')}</p>
-                                <p className="text-sm text-emerald-700">{t('This certificate of review service is genuine.')}</p>
+                                <p className="text-sm text-emerald-700">{c.kind === 'conference' ? 'This conference certificate is genuine.' : t('This certificate of review service is genuine.')}</p>
                             </div>
                         </div>
-                        <Details rows={[
+                        <Details rows={c.kind === 'conference' ? [
+                            ['Issued to', c.reviewer],
+                            ['Certificate', c.certificate_type],
+                            ['Conference', c.conference],
+                            ...(c.detail ? [['For', c.detail]] : []),
+                            ['Issued', formatDate(c.issued_at)],
+                            ['Certificate no.', c.code],
+                        ] : [
                             ['Reviewer', c.reviewer],
                             ['Academic year', c.academic_year],
                             ['Reviews completed', breakdown(c)],

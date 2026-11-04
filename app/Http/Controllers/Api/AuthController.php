@@ -172,6 +172,8 @@ class AuthController extends Controller
             'roles' => $user->getRoleNames()->values()->toArray(),
             'role_labels' => $user->roles->mapWithKeys(fn ($r) => [$r->name => $r->label ?? str($r->name)->headline()->toString()])->all(),
             'permissions' => $user->getAllPermissions()->pluck('name')->values()->toArray(),
+            // Committee roles on single conferences, which open the conference pages for that conference only.
+            'conference_roles' => $user->conferenceRoles()->get(['conference_id', 'role', 'track_id'])->toArray(),
             'access_scope' => $user->accessScope()->toArray(),
             'subscription' => $subscription,
             'feedback_submitted' => FeedbackSubmission::hasSubmittedCurrentRound($user->id),

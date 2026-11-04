@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\ConferenceCertificate;
 use App\Models\ReviewCertificate;
 use App\Services\ReviewCertificateService;
 use Illuminate\Http\JsonResponse;
@@ -142,6 +143,20 @@ class ReviewCertificateController extends Controller
     public function verify(string $code): JsonResponse
     {
         $certificate = ReviewCertificate::with(['user:id,name,title', 'release'])->where('code', strtoupper($code))->first();
+
+        if (! $certificate && ($conferenceCertificate = ConferenceCertificate::with('conference:id,title,start_date,end_date')->where('code', strtoupper($code))->first())) {
+            return $this->ok([
+                'kind' => 'conference',
+                'code' => $conferenceCertificate->code,
+                'status' => $conferenceCertificate->revoked_at ? 'revoked' : 'valid',
+                'reviewer' => $conferenceCertificate->recipient_name,
+                'certificate_type' => ['attendance' => 'Attendance', 'presentation' => 'Presentation', 'reviewer' => 'Peer review'][$conferenceCertificate->kind],
+                'conference' => $conferenceCertificate->conference?->title,
+                'detail' => $conferenceCertificate->detail,
+                'issued_at' => $conferenceCertificate->issued_at->toIso8601String(),
+                'revoked_at' => $conferenceCertificate->revoked_at?->toIso8601String(),
+            ]);
+        }
 
         // Only certificates of a released year were ever valid.
         if (! $certificate || ! $certificate->release) {

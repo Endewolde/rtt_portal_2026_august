@@ -6,6 +6,7 @@ import {
     Calendar, Clock, HelpCircle, TrendingUp, Users, Layers,
     Microscope, Zap, Handshake, Rocket, Lightbulb, ClipboardList, Sprout, HeartPulse,
     Globe2, GraduationCap, Telescope, Laptop, BarChart3, Scale, Wallet, Landmark,
+    Play, Pause, UserPlus, Trophy,
 } from 'lucide-react';
 import {
     PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
@@ -342,8 +343,7 @@ function CallCard({ call }) {
                                 text-xs font-bold tracking-wide text-white transition-all duration-200
                                 ${deadline?.closed
                                     ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                                    : `bg-linear-to-r ${cfg.gradient} shadow-sm
-                                       hover:shadow-md hover:opacity-95 active:scale-[0.98]`}`}>
+                                    : 'bg-blue-600 shadow-sm hover:bg-blue-700 hover:shadow-md active:scale-[0.98]'}`}>
                     {deadline?.closed
                         ? 'Call Closed'
                         : <><span>{t('Apply Now')}</span> <ArrowRight size={13} /></>}
@@ -357,6 +357,14 @@ function CallCard({ call }) {
 
 
 const DEFAULT_STEPS = STEP_DEFAULTS;
+
+// Open calls sit in as many columns as there are calls (up to four), so none are left empty.
+const CALL_GRID = {
+    1: 'max-w-md mx-auto',
+    2: 'sm:grid-cols-2 max-w-3xl mx-auto',
+    3: 'sm:grid-cols-2 lg:grid-cols-3',
+    4: 'sm:grid-cols-2 lg:grid-cols-4',
+};
 
 // ─── Section heading ──────────────────────────────────────────────────────────
 
@@ -510,7 +518,7 @@ function ValidatedByCategory({ items }) {
 
 // ─── Hero Stat Card ───────────────────────────────────────────────────────────
 
-function HeroStatCard({ stat, label, color, icon, inView, secondaryStats, ringPct, categoryBreakdown }) {
+function HeroStatCard({ stat, label, color, icon, inView, ringPct, categoryBreakdown }) {
     const t = useT();
     const num      = parseInt(String(stat ?? 0).replace(/\D/g, ''), 10);
     const animated = useCountUp(num, inView && num > 0, 1400);
@@ -571,28 +579,15 @@ function HeroStatCard({ stat, label, color, icon, inView, secondaryStats, ringPc
             </div>
 
             {/* Divider */}
-            <div className="my-5 h-px" style={{ background: `linear-gradient(90deg, ${color}50, transparent 80%)` }} />
-
-            {categoryBreakdown ? (
+            {/* The other figures are in the stats bar under the hero — not repeated here. */}
+            {categoryBreakdown && (
                 <>
+                    <div className="my-5 h-px" style={{ background: `linear-gradient(90deg, ${color}50, transparent 80%)` }} />
                     <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-500 mb-3">
                         {t('Validated by Category')}
                     </div>
                     <ValidatedByCategory items={categoryBreakdown} />
                 </>
-            ) : (
-                /* Secondary stats */
-                <div className="grid grid-cols-2 gap-3">
-                    {secondaryStats.map((s, i) => (
-                        <div key={i} className="rounded-xl px-3.5 py-3 border border-white/5"
-                            style={{ background: 'rgba(255,255,255,0.03)' }}>
-                            <div className="text-xl font-bold text-white tabular-nums">
-                                {parseInt(String(s.value ?? 0)) > 0 ? parseInt(String(s.value ?? 0)).toLocaleString() : '—'}
-                            </div>
-                            <div className="text-[11px] text-slate-400 mt-0.5 font-medium">{t(s.label)}</div>
-                        </div>
-                    ))}
-                </div>
             )}
         </div>
     );
@@ -637,6 +632,8 @@ function HeroSlider({ stats, primaryColor, heroBg, orgName, ctaPrimary, ctaSecon
     const [current, setCurrent]   = useState(0);
     const [progress, setProgress] = useState(0);
     const [paused, setPaused]     = useState(false);
+    // Stopped by the visitor (pause button) — or from the start for people who ask their device for less motion.
+    const [stopped, setStopped]   = useState(() => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
     const { ref: statsRef, inView: statsInView } = useInView(0.2);
 
     const slide = SLIDES[current];
@@ -648,11 +645,11 @@ function HeroSlider({ stats, primaryColor, heroBg, orgName, ctaPrimary, ctaSecon
 
     // Auto-advance + progress bar
     useEffect(() => {
-        if (paused) return;
+        if (paused || stopped) return;
         setProgress(0);
         const start = performance.now();
         let raf;
-        const DURATION = 5800;
+        const DURATION = 9000;
         const tick = (now) => {
             const p = Math.min((now - start) / DURATION, 1);
             setProgress(p * 100);
@@ -664,15 +661,8 @@ function HeroSlider({ stats, primaryColor, heroBg, orgName, ctaPrimary, ctaSecon
         };
         raf = requestAnimationFrame(tick);
         return () => cancelAnimationFrame(raf);
-    }, [current, paused]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [current, paused, stopped]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const allStatsMeta = [
-        { key: 'total_proposals', value: stats.total_proposals, label: 'Proposals'       },
-        { key: 'funded',          value: stats.funded,          label: 'Funded Projects'  },
-        { key: 'colleges',        value: stats.colleges,        label: 'Colleges'         },
-        { key: 'departments',     value: stats.departments,     label: 'Departments'      },
-    ];
-    const secondaryStats = allStatsMeta.filter(s => s.key !== slide.statKey).slice(0, 2);
     // The Total Proposals card breaks validated proposals down per category instead of a
     // single count, since validation no longer shrinks the headline number itself.
     const validatedByCategory = stats.validated_by_category ?? [];
@@ -785,9 +775,8 @@ function HeroSlider({ stats, primaryColor, heroBg, orgName, ctaPrimary, ctaSecon
                             style={{ animationDelay: '230ms' }}>
                             <a href={slide.cta1.href}
                                 className="inline-flex items-center gap-2 px-7 py-3.5 rounded-xl text-sm font-bold
-                                           text-white shadow-xl transition-all duration-200 hover:scale-105"
-                                style={{ background: `linear-gradient(135deg, ${slide.color}, ${slide.color}bb)`,
-                                         boxShadow: `0 8px 30px ${slide.color}40` }}>
+                                           text-white shadow-xl transition-all duration-200 hover:brightness-110"
+                                style={{ backgroundColor: primaryColor, boxShadow: `0 8px 24px ${primaryColor}40` }}>
                                 {t(slide.cta1.text)} <ArrowRight size={15} />
                             </a>
                             <a href={slide.cta2.href}
@@ -804,6 +793,7 @@ function HeroSlider({ stats, primaryColor, heroBg, orgName, ctaPrimary, ctaSecon
                             <div className="flex items-center gap-2">
                                 {SLIDES.map((_, i) => (
                                     <button key={i} onClick={() => goTo(i)}
+                                        aria-label={t('Show slide :n', { n: i + 1 })} aria-current={i === current ? 'true' : undefined}
                                         className="rounded-full transition-all duration-400 hover:opacity-80"
                                         style={{
                                             width:      i === current ? '30px' : '8px',
@@ -817,18 +807,27 @@ function HeroSlider({ stats, primaryColor, heroBg, orgName, ctaPrimary, ctaSecon
                             {/* Arrows */}
                             <div className="flex items-center gap-2">
                                 <button onClick={() => goTo((current - 1 + SLIDES.length) % SLIDES.length)}
+                                    aria-label={t('Previous slide')}
                                     className="w-9 h-9 rounded-full border border-white/15 bg-white/5 backdrop-blur-sm
                                                flex items-center justify-center text-white/50 transition-all
                                                hover:bg-white/12 hover:text-white/80">
                                     <ChevronLeft size={16} />
                                 </button>
                                 <button onClick={() => goTo((current + 1) % SLIDES.length)}
+                                    aria-label={t('Next slide')}
                                     className="w-9 h-9 rounded-full border border-white/15 bg-white/5 backdrop-blur-sm
                                                flex items-center justify-center text-white/50 transition-all
                                                hover:bg-white/12 hover:text-white/80">
                                     <ChevronRight size={16} />
                                 </button>
-                                <span className="text-xs text-white/25 ml-1 tabular-nums font-mono">
+                                <button onClick={() => setStopped((v) => !v)}
+                                    aria-label={stopped ? t('Play slideshow') : t('Pause slideshow')} title={stopped ? t('Play') : t('Pause')}
+                                    className="w-9 h-9 rounded-full border border-white/15 bg-white/5 backdrop-blur-sm
+                                               flex items-center justify-center text-white/50 transition-all
+                                               hover:bg-white/12 hover:text-white/80">
+                                    {stopped ? <Play size={14} /> : <Pause size={14} />}
+                                </button>
+                                <span className="text-xs text-white/40 ml-1 tabular-nums font-mono">
                                     {String(current + 1).padStart(2, '0')} / {String(SLIDES.length).padStart(2, '0')}
                                 </span>
                             </div>
@@ -844,7 +843,6 @@ function HeroSlider({ stats, primaryColor, heroBg, orgName, ctaPrimary, ctaSecon
                                 color={slide.color}
                                 icon={slide.icon}
                                 inView={true}
-                                secondaryStats={secondaryStats}
                                 categoryBreakdown={slide.statKey === 'total_proposals' && validatedByCategory.length > 0 ? validatedByCategory : null}
                                 ringPct={
                                     slide.statKey === 'total_proposals' ? (stats.validated_rate ?? null)
@@ -861,14 +859,14 @@ function HeroSlider({ stats, primaryColor, heroBg, orgName, ctaPrimary, ctaSecon
             <div ref={statsRef} className="relative z-10 max-w-7xl mx-auto px-6 lg:px-8 pb-10">
                 <div className="border border-white/8 rounded-2xl px-6 py-5 backdrop-blur-xl"
                     style={{ background: 'rgba(255,255,255,0.035)' }}>
-                    <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-white/8">
+                    <div className="grid grid-cols-2 gap-y-5 lg:grid-cols-4 lg:gap-y-0 lg:divide-x lg:divide-white/8">
                         {[
-                            { value: stats.total_proposals, label: stats.academic_year ? t(':year Proposals', { year: stats.academic_year }) : 'Proposals', color: primaryColor,  icon: <FileText  size={13} /> },
+                            { value: stats.total_proposals, label: 'Proposals this year', color: primaryColor,  icon: <FileText  size={13} /> },
                             { value: stats.funded,          label: 'Funded Projects',    color: '#10b981', icon: <Award     size={13} /> },
                             { value: stats.colleges,        label: 'Colleges',           color: '#f59e0b', icon: <Layers    size={13} /> },
                             { value: stats.departments,     label: 'Departments',        color: '#8b5cf6', icon: <Users     size={13} /> },
                         ].map((s, i) => (
-                            <div key={i} className={`flex items-center gap-4 ${i > 0 ? 'pl-6' : ''} ${i < 3 ? 'pr-6' : ''}`}>
+                            <div key={i} className={`flex min-w-0 items-center gap-3 lg:gap-4 ${i > 0 ? 'lg:pl-6' : ''} ${i < 3 ? 'lg:pr-6' : ''}`}>
                                 <div className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
                                     style={{ background: `${s.color}20`, color: s.color }}>
                                     {s.icon}
@@ -885,8 +883,6 @@ function HeroSlider({ stats, primaryColor, heroBg, orgName, ctaPrimary, ctaSecon
                 <div className="h-full" style={{ width: `${progress}%`, background: slide.color, transition: 'width 0.1s linear' }} />
             </div>
 
-            {/* Page fade to next section */}
-            <div className="h-12" style={{ background: 'linear-gradient(to bottom, transparent, rgb(249 250 251))' }} />
         </section>
     );
 }
@@ -896,6 +892,7 @@ function HeroSlider({ stats, primaryColor, heroBg, orgName, ctaPrimary, ctaSecon
 export default function Home() {
     const t = useT();
     const [calls, setCalls]               = useState([]);
+    const [funded, setFunded]             = useState([]);
     const [stats, setStats]               = useState({});
     const [thematicAreas, setThematicAreas] = useState([]);
     const [faqs, setFaqs]                 = useState(null); // null = loading
@@ -921,7 +918,7 @@ export default function Home() {
     const showFaq      = s.public_show_faq          !== 'false';
     const showCTA      = s.public_show_cta          !== 'false';
 
-    const featTitle = s.public_features_title    || 'Everything You Need to Manage RTT';
+    const featTitle = s.public_features_title    || 'From proposal to impact, in one place';
     const featSub   = s.public_features_subtitle || 'A complete platform for the full research lifecycle.';
     const ctaTitle  = s.public_cta_title         || 'Ready to Start Your Research Journey?';
     const ctaSub    = s.public_cta_subtitle      || `Join researchers from ${orgName} and transform your ideas into impactful funded work.`;
@@ -952,6 +949,10 @@ export default function Home() {
             .catch(() => setFaqs([]));
         get('/thematic-areas/public')
             .then(r => setThematicAreas(r?.data ?? []))
+            .catch(() => {});
+        // The latest funded projects — the same public list the Research Showcase uses.
+        get('/proposals/public', { status: 'funded,midterm_evaluation,completed' })
+            .then(r => setFunded((r?.data?.data ?? []).slice(0, 3)))
             .catch(() => {});
     }, []);
 
@@ -987,7 +988,7 @@ export default function Home() {
                                 <p className="text-sm mt-1">Check back soon for new research opportunities.</p>
                             </div>
                         ) : (
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+                            <div className={`grid grid-cols-1 border border-gray-200 rounded-2xl overflow-hidden shadow-sm ${CALL_GRID[Math.min(calls.length, 4)]}`}>
                                 {calls.slice(0, 4).map((call, i) => (
                                     <div key={call.id}
                                         className={i < Math.min(calls.length, 4) - 1 ? 'border-r border-gray-200' : ''}>
@@ -1028,11 +1029,6 @@ export default function Home() {
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                             {steps.map((step, i) => (
                                 <div key={i} className="relative group">
-                                    {/* Connector line (desktop, within a row of three) */}
-                                    {i < steps.length - 1 && i % 3 !== 2 && (
-                                        <div className="hidden lg:block absolute top-5 left-full w-6 h-px z-10"
-                                            style={{ background: `linear-gradient(90deg, ${primaryColor}40, transparent)` }} />
-                                    )}
                                     <div className="p-6 rounded-2xl border border-gray-100 hover:border-gray-200
                                                     hover:shadow-md transition-all duration-200 h-full bg-gray-50/50">
                                         {/* Step number */}
@@ -1057,12 +1053,14 @@ export default function Home() {
                     <div className="max-w-7xl mx-auto px-6">
                         <SectionHead eyebrow="Research Focus" title="Thematic Areas" />
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {/* On phones the areas scroll sideways rather than stacking into a very long column. */}
+                        <div className="-mx-6 flex snap-x snap-mandatory gap-4 overflow-x-auto px-6 pb-2
+                                        sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 sm:pb-0 lg:grid-cols-3">
                             {thematicAreas.map((area) => (
                                 <div
                                     key={area.id}
-                                    className="group p-5 rounded-2xl border border-gray-100 hover:border-gray-200
-                                               hover:shadow-md transition-all duration-200 bg-gray-50/50 flex flex-col gap-3"
+                                    className="group w-[82%] shrink-0 snap-start p-5 rounded-2xl border border-gray-100 hover:border-gray-200
+                                               hover:shadow-md transition-all duration-200 bg-gray-50/50 flex flex-col gap-3 sm:w-auto"
                                 >
                                     <div
                                         className="w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
@@ -1082,6 +1080,35 @@ export default function Home() {
                                     </div>
                                 </div>
                             ))}
+                        </div>
+                    </div>
+                </section>
+            )}
+
+            {/* ── Recently funded ───────────────────────────────────────────── */}
+            {funded.length > 0 && (
+                <section className="bg-gray-50 py-14 border-t border-gray-100">
+                    <div className="max-w-7xl mx-auto px-6">
+                        <SectionHead eyebrow="Research Impact" title="Recently Funded Research"
+                            action="Research Showcase" actionHref="/research/showcase" />
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {funded.map((p) => {
+                                const meta = CAT[p.category] ?? CAT.research;
+                                return (
+                                    <article key={p.id} className="flex flex-col rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                                                <Trophy size={12} /> {t('Funded')}
+                                            </span>
+                                            <span className="text-[11px] font-medium text-slate-400">{p.academic_year}</span>
+                                        </div>
+                                        <h3 className="mt-3 line-clamp-2 text-sm font-bold leading-snug text-slate-900">{p.title}</h3>
+                                        <p className="mt-auto pt-3 text-xs text-slate-500">
+                                            {[meta?.label ?? p.category, p.college?.name].filter(Boolean).join(' · ')}
+                                        </p>
+                                    </article>
+                                );
+                            })}
                         </div>
                     </div>
                 </section>
@@ -1144,19 +1171,45 @@ export default function Home() {
                             <div className="flex-1 text-center sm:text-left">
                                 <p className="font-semibold text-slate-800 text-sm">{t('Still have questions?')}</p>
                                 <p className="text-xs text-slate-500 mt-0.5">
-                                    {t('Contact the Research & Technology Transfer office or use the feedback form below.')}
+                                    {s.public_social_telegram
+                                        ? t('Contact the Research & Technology Transfer office, or message us on Telegram.')
+                                        : t('Contact the Research & Technology Transfer office, or sign in to use the Help Centre.')}
                                 </p>
                             </div>
-                            <a href="/tracker"
+                            <a href={s.public_social_telegram || '/help'}
+                                {...(s.public_social_telegram ? { target: '_blank', rel: 'noopener' } : {})}
                                 className="shrink-0 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl
                                            text-xs font-bold text-white transition-all hover:opacity-90"
-                                style={{ background: `linear-gradient(135deg, ${primaryColor}, ${primaryColor}cc)` }}>
-                                {t('Track Your Proposal')} <ArrowRight size={13} />
+                                style={{ backgroundColor: primaryColor }}>
+                                {s.public_social_telegram ? t('Message us on Telegram') : t('Help Centre')} <ArrowRight size={13} />
                             </a>
                         </div>
                     </div>
                 </section>
             )}
+
+            {/* ── Become a reviewer ──────────────────────────────────────────── */}
+            <section className="bg-white py-14 border-t border-gray-100">
+                <div className="max-w-7xl mx-auto px-6">
+                    <div className="flex flex-col items-start gap-5 rounded-2xl border border-gray-200 p-6 sm:flex-row sm:items-center sm:p-8">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl"
+                            style={{ backgroundColor: `${primaryColor}15`, color: primaryColor }}>
+                            <UserPlus size={22} />
+                        </div>
+                        <div className="flex-1">
+                            <h2 className="text-lg font-bold text-slate-900">{t('Share your expertise — become a reviewer')}</h2>
+                            <p className="mt-1 text-sm text-slate-500">
+                                {t('Help decide which research gets funded. Reviewers score proposals blind and earn a certificate of service.')}
+                            </p>
+                        </div>
+                        <Link href="/reviewers/apply"
+                            className="inline-flex shrink-0 items-center gap-2 rounded-xl px-5 py-3 text-sm font-bold text-white transition hover:brightness-110"
+                            style={{ backgroundColor: primaryColor }}>
+                            {t('Apply to review')} <ArrowRight size={14} />
+                        </Link>
+                    </div>
+                </div>
+            </section>
 
             {/* ── CTA ───────────────────────────────────────────────────────── */}
             {showCTA && (

@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ConferenceSession extends Model
 {
@@ -13,7 +14,7 @@ class ConferenceSession extends Model
 
     protected $fillable = [
         'conference_id', 'track', 'title', 'description',
-        'starts_at', 'ends_at', 'room', 'type', 'sort_order',
+        'starts_at', 'ends_at', 'room', 'chair', 'type', 'sort_order',
     ];
 
     protected $casts = [
@@ -25,6 +26,12 @@ class ConferenceSession extends Model
     public function conference(): BelongsTo
     {
         return $this->belongsTo(Conference::class);
+    }
+
+    /** Accepted abstracts presented in this session, in running order. */
+    public function abstracts(): HasMany
+    {
+        return $this->hasMany(ConferenceAbstract::class, 'session_id')->orderBy('session_order');
     }
 
     public function speakers(): BelongsToMany

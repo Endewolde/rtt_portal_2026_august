@@ -11,12 +11,15 @@ class ConferenceAbstractReview extends Model
     use HasUuids;
 
     protected $fillable = [
-        'abstract_id', 'reviewer_id', 'score', 'comments', 'recommendation', 'submitted_at',
+        'abstract_id', 'reviewer_id', 'score', 'criteria_scores', 'comments', 'confidential_comments',
+        'recommendation', 'submitted_at', 'conflict_declared_at', 'conflict_reason',
     ];
 
     protected $casts = [
         'score' => 'integer',
+        'criteria_scores' => 'array',
         'submitted_at' => 'datetime',
+        'conflict_declared_at' => 'datetime',
     ];
 
     public function abstract(): BelongsTo

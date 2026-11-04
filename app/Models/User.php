@@ -37,6 +37,12 @@ class User extends Authenticatable
      * person, it is the one they were given most recently. Assignments from before
      * this was recorded fall back to the newest role.
      */
+    /** Committee roles on individual conferences (chair, track chair, check-in). */
+    public function conferenceRoles(): HasMany
+    {
+        return $this->hasMany(ConferenceCommitteeMember::class);
+    }
+
     public function roles(): BelongsToMany
     {
         return $this->spatieRoles()

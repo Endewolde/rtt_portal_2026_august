@@ -100,13 +100,30 @@ export function getRequiredAccess(path) {
 }
 
 /**
+ * A conference committee role opens that conference's pages without the platform-wide
+ * permission: any role opens its conference page, a chair or track chair the abstracts.
+ *
+ * @param {string} path
+ * @param {Array<{conference_id: string, role: string}>} roles
+ */
+export function committeeOpens(path, roles = []) {
+    if (!roles?.length) return false
+    const bare = (path || '').split('?')[0]
+    if (bare === '/admin/abstracts') return roles.some(r => r.role === 'chair' || r.role === 'track_chair')
+    const m = bare.match(/^\/admin\/conferences\/([^/]+)\/attendance$/)
+    return !!m && roles.some(r => r.conference_id === m[1])
+}
+
+/**
  * Can someone with these permissions open a page? Paths under /admin/ with no
  * entry are denied; any other unlisted path is open to every signed-in user.
  *
  * @param {string} path
  * @param {(permission: string) => boolean} hasPermission
+ * @param {Array<{conference_id: string, role: string}>} [conferenceRoles] the user's committee roles
  */
-export function canOpenPath(path, hasPermission) {
+export function canOpenPath(path, hasPermission, conferenceRoles = []) {
+    if (committeeOpens(path, conferenceRoles)) return true
     const required = getRequiredAccess(path)
     if (required === null) return !(path || '').startsWith('/admin/')
     return Array.isArray(required) ? required.some(p => hasPermission(p)) : hasPermission(required)

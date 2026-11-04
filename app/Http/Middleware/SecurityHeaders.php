@@ -15,7 +15,9 @@ class SecurityHeaders
         $response->headers->set('X-Frame-Options', 'SAMEORIGIN');
         $response->headers->set('X-XSS-Protection', '1; mode=block');
         $response->headers->set('Referrer-Policy', 'strict-origin-when-cross-origin');
-        $response->headers->set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+        // The conference check-in desk scans tickets with the camera; nothing else may use it.
+        $camera = $request->is('admin/conferences/*/attendance') ? '(self)' : '()';
+        $response->headers->set('Permissions-Policy', "camera={$camera}, microphone=(), geolocation=()");
 
         if ($request->isSecure()) {
             $response->headers->set(

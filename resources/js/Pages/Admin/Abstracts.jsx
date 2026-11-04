@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from '@inertiajs/react';
 import {
     FileText, Search, X, Download, UserPlus, CheckCircle2, XCircle, Clock, AlertCircle, Star, Tag, Users,
-    Send, Loader2, ExternalLink, ChevronLeft, ChevronRight, Inbox, Gavel, Trash2, ClipboardCheck, Undo2,
+    Send, Loader2, ExternalLink, CalendarDays, Square, CheckSquare, Mic, ShieldAlert, Lock, Layers, ChevronLeft, ChevronRight, Inbox, Gavel, Trash2, ClipboardCheck, Undo2,
 } from 'lucide-react';
 import AppLayout from '../../Layouts/AppLayout';
 import { PageHeader, Panel, EmptyState, Select, RefreshButton, Skeleton } from '../../Components/Insights/Kit';
@@ -117,17 +117,21 @@ function ReviewerPicker({ abstract, onAssigned }) {
         return () => clearTimeout(t);
     }, [search]);
 
-    const assign = async (user, reset = false) => {
+    const [askConflict, setAskConflict] = useState(null);
+
+    const assign = async (user, reset = false, acknowledgeConflict = false) => {
         setBusy(user.id);
         try {
-            const r = await api.post(`/admin/abstracts/${abstract.id}/assign-reviewer`, { reviewer_id: user.id, reset });
+            const r = await api.post(`/admin/abstracts/${abstract.id}/assign-reviewer`, { reviewer_id: user.id, reset, acknowledge_conflict: acknowledgeConflict });
             success(r.data?.message ?? 'Reviewer assigned.');
             setSearch('');
             setUsers([]);
             onAssigned();
         } catch (e) {
             if (e.response?.data?.meta?.code === 'already_reviewed') {
-                setAskReset({ user, message: e.response.data.message });
+                setAskReset({ user, message: e.response.data.message, acknowledgeConflict });
+            } else if (e.response?.data?.meta?.code === 'possible_conflict') {
+                setAskConflict({ user, message: e.response.data.message, reset });
             } else {
                 error(e.response?.data?.message ?? 'Could not assign the reviewer.');
             }
@@ -167,31 +171,44 @@ function ReviewerPicker({ abstract, onAssigned }) {
             <ConfirmDialog open={!!askReset} title="Ask this reviewer again?"
                 description={`${askReset?.message ?? ''} Their score and comments will be cleared and they will be asked to review again.`}
                 confirmLabel="Clear and ask again" confirmVariant="danger"
-                onConfirm={() => { const u = askReset.user; setAskReset(null); assign(u, true); }}
+                onConfirm={() => { const { user: u, acknowledgeConflict } = askReset; setAskReset(null); assign(u, true, acknowledgeConflict); }}
                 onCancel={() => setAskReset(null)} />
+            <ConfirmDialog open={!!askConflict} title="Possible conflict of interest"
+                description={`${askConflict?.message ?? ''} Assign anyway only if you are sure they can review it fairly.`}
+                confirmLabel="Assign anyway" confirmVariant="danger"
+                onConfirm={() => { const { user: u, reset } = askConflict; setAskConflict(null); assign(u, reset, true); }}
+                onCancel={() => setAskConflict(null)} />
         </div>
     );
 }
 
 // ─── Decision dialog ───────────────────────────────────────────────────────────
 
-function DecisionDialog({ abstract, onDone, onClose }) {
+const MERGE_FIELDS = ['{name}', '{title}', '{conference}', '{type}', '{track}', '{session}', '{session_time}', '{room}'];
+
+/** One abstract's decision, or — with `bulk` ({ ids }) — the same decision for many. */
+function DecisionDialog({ abstract = {}, bulk = null, onDone, onClose }) {
     const { success, error } = useToast();
     const [status, setStatus] = useState(DECISIONS.some((d) => d.key === abstract.status) ? abstract.status : 'accepted');
-    const [notes, setNotes] = useState(abstract.admin_notes ?? '');
+    const [notes, setNotes] = useState(bulk ? '' : (abstract.admin_notes ?? ''));
+    const [acceptedType, setAcceptedType] = useState(abstract.accepted_type ?? abstract.presentation_type ?? '');
+    const notesRef = useRef(null);
     const [busy, setBusy] = useState(false);
     const cfg = NOTES_CFG[status];
     const done = (abstract.reviews ?? []).filter((r) => r.submitted_at);
     const average = done.length ? done.reduce((s, r) => s + (r.score ?? 0), 0) / done.length : null;
     const tally = done.reduce((m, r) => ({ ...m, [r.recommendation]: (m[r.recommendation] ?? 0) + 1 }), {});
-    const pending = (abstract.reviews ?? []).length - done.length;
+    const pending = (abstract.reviews ?? []).filter((r) => !r.submitted_at && !r.conflict_declared_at).length;
     const decision = DECISIONS.find((d) => d.key === status);
 
     const save = async () => {
         if (cfg?.required && !notes.trim()) { error(`Add "${cfg.label}" first.`); return; }
         setBusy(true);
         try {
-            const r = await api.patch(`/admin/abstracts/${abstract.id}/status`, { status, admin_notes: notes });
+            const payload = { status, admin_notes: notes, accepted_type: status === 'accepted' && acceptedType ? acceptedType : null };
+            const r = bulk
+                ? await api.post('/admin/abstracts/bulk-decision', { ...payload, ids: bulk.ids })
+                : await api.patch(`/admin/abstracts/${abstract.id}/status`, payload);
             success(r.data?.message ?? 'Saved.');
             onDone();
         } catch (e) {
@@ -207,14 +224,14 @@ function DecisionDialog({ abstract, onDone, onClose }) {
                     <div className="flex items-center gap-3">
                         <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-100 text-indigo-600"><Gavel size={18} /></span>
                         <div className="min-w-0">
-                            <h2 className="text-lg font-bold text-gray-900">Committee decision</h2>
-                            <p className="line-clamp-1 text-xs text-gray-500">{abstract.title}</p>
+                            <h2 className="text-lg font-bold text-gray-900">{bulk ? 'Decision for the selected abstracts' : 'Committee decision'}</h2>
+                            <p className="line-clamp-1 text-xs text-gray-500">{bulk ? `${bulk.ids.length} abstract${bulk.ids.length === 1 ? '' : 's'} · each submitter is emailed separately` : abstract.title}</p>
                         </div>
                     </div>
                     <button onClick={onClose} aria-label="Close" className="rounded-lg p-1 text-gray-400 hover:bg-gray-100"><X size={16} /></button>
                 </div>
                 <div className="flex-1 space-y-4 overflow-y-auto px-6 py-5">
-                    <div className="rounded-xl bg-gray-50 px-4 py-3 ring-1 ring-gray-100">
+                    {!bulk && <div className="rounded-xl bg-gray-50 px-4 py-3 ring-1 ring-gray-100">
                         {done.length ? (
                             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm">
                                 <span className="inline-flex items-center gap-1 font-bold text-gray-900"><Star size={14} className="text-amber-500" /> {average.toFixed(1)}<span className="text-xs font-normal text-gray-500">/10 average</span></span>
@@ -224,7 +241,7 @@ function DecisionDialog({ abstract, onDone, onClose }) {
                         ) : (
                             <p className="flex items-center gap-1.5 text-sm text-amber-700"><AlertCircle size={14} /> No reviews yet — you can still decide.</p>
                         )}
-                    </div>
+                    </div>}
                     <div className="grid grid-cols-3 gap-2">
                         {DECISIONS.map((d) => (
                             <button key={d.key} type="button" onClick={() => setStatus(d.key)}
@@ -233,15 +250,39 @@ function DecisionDialog({ abstract, onDone, onClose }) {
                             </button>
                         ))}
                     </div>
+                    {status === 'accepted' && (
+                        <label className="block">
+                            <span className="mb-1 block text-xs font-semibold text-gray-700">Accept as</span>
+                            <select value={acceptedType} onChange={(e) => setAcceptedType(e.target.value)}
+                                className="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm capitalize focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100">
+                                {bulk && <option value="">The format each submitter asked for</option>}
+                                {TYPES.map((t) => <option key={t} value={t}>{t}{!bulk && t === abstract.presentation_type ? ' (as asked)' : ''}</option>)}
+                            </select>
+                            {!bulk && acceptedType && acceptedType !== abstract.presentation_type && <span className="mt-1 block text-[11px] text-amber-700">The submitter asked for {abstract.presentation_type}; the email and letter will say {acceptedType}.</span>}
+                        </label>
+                    )}
                     <label className="block">
                         <span className="mb-1 flex items-center justify-between text-xs font-semibold text-gray-700">
                             <span>{cfg.label}{cfg.required && <span className="text-red-500"> *</span>}</span>
                             <span className="font-normal text-gray-400">{notes.length}/2000</span>
                         </span>
-                        <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={5} maxLength={2000} placeholder={cfg.placeholder}
+                        <textarea ref={notesRef} value={notes} onChange={(e) => setNotes(e.target.value)} rows={5} maxLength={2000} placeholder={cfg.placeholder}
                             className="w-full resize-y rounded-xl border border-gray-200 px-3.5 py-3 text-base focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 sm:text-sm" />
                         <span className="mt-1 block text-[11px] text-gray-500">{cfg.hint}</span>
                     </label>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[11px] text-gray-500">Insert:</span>
+                        {MERGE_FIELDS.map((f) => (
+                            <button key={f} type="button" title="Filled in for each submitter"
+                                onClick={() => {
+                                    const el = notesRef.current;
+                                    const at = el?.selectionStart ?? notes.length;
+                                    setNotes((v) => v.slice(0, at) + f + v.slice(el?.selectionEnd ?? at));
+                                    requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(at + f.length, at + f.length); });
+                                }}
+                                className="rounded-md bg-gray-100 px-1.5 py-0.5 font-mono text-[10px] text-gray-600 hover:bg-indigo-50 hover:text-indigo-700">{f}</button>
+                        ))}
+                    </div>
                 </div>
                 <div className="flex gap-3 border-t border-gray-100 px-6 py-4">
                     <button onClick={onClose} className="flex-1 rounded-xl border border-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50">Cancel</button>
@@ -304,6 +345,63 @@ function NextStepsDialog({ abstract, onClose }) {
 }
 
 // ─── Detail drawer ─────────────────────────────────────────────────────────────
+
+/** Where an accepted abstract is presented: its session, slot order and final version. */
+function ProgrammeSection({ abs, onSaved }) {
+    const { success, error } = useToast();
+    const [sessionId, setSessionId] = useState(abs.session_id ?? '');
+    const [order, setOrder] = useState(abs.session_order ?? '');
+    const [busy, setBusy] = useState(false);
+    const sessions = abs.conference?.sessions ?? [];
+    const dirty = String(sessionId) !== String(abs.session_id ?? '') || String(order) !== String(abs.session_order ?? '');
+
+    const save = async () => {
+        setBusy(true);
+        try {
+            const r = await api.patch(`/admin/abstracts/${abs.id}/schedule`, { session_id: sessionId || null, session_order: sessionId && order ? Number(order) : null });
+            success(r.data?.message ?? 'Saved.');
+            onSaved();
+        } catch (e) {
+            error(e.response?.data?.message ?? 'Could not place the abstract.');
+        }
+        setBusy(false);
+    };
+
+    return (
+        <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+            <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500"><CalendarDays size={12} /> Programme</p>
+            {abs.accepted_type && <p className="mb-2 text-xs text-gray-600">Accepted as <b className="capitalize">{abs.accepted_type}</b> (asked for {abs.presentation_type}).</p>}
+            {sessions.length === 0 ? (
+                <p className="text-sm text-gray-500">This conference has no sessions yet. Add them under Conferences → Sessions, then place the abstract here.</p>
+            ) : (
+                <div className="flex flex-col gap-2 sm:flex-row">
+                    <select value={sessionId} onChange={(e) => setSessionId(e.target.value)} aria-label="Session"
+                        className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100">
+                        <option value="">Not in the programme yet</option>
+                        {sessions.map((se) => (
+                            <option key={se.id} value={se.id}>
+                                {se.title}{se.starts_at ? ` — ${new Date(se.starts_at).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}{se.room ? ` · ${se.room}` : ''}
+                            </option>
+                        ))}
+                    </select>
+                    {sessionId && (
+                        <input type="number" min={1} value={order} onChange={(e) => setOrder(e.target.value)} placeholder="Slot" aria-label="Slot in the session"
+                            className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm sm:w-20" />
+                    )}
+                    <button onClick={save} disabled={!dirty || busy}
+                        className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-indigo-600 px-3.5 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-40">
+                        {busy && <Loader2 size={13} className="animate-spin" />} Save
+                    </button>
+                </div>
+            )}
+            <p className="mt-3 text-xs text-gray-600">
+                {abs.camera_ready_path
+                    ? <a href={abs.camera_ready_path} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 font-semibold text-indigo-600 hover:underline"><ExternalLink size={12} /> Final version, received {formatDate(abs.camera_ready_at)}</a>
+                    : <span className="text-gray-500">No final version uploaded yet.</span>}
+            </p>
+        </section>
+    );
+}
 
 function AbstractDrawer({ id, onClose, onChanged }) {
     const { success, error } = useToast();
@@ -370,11 +468,23 @@ function AbstractDrawer({ id, onClose, onChanged }) {
                                     <p>{abs.word_count ? `${abs.word_count.toLocaleString()} words` : ''}</p>
                                 </div>
                             </div>
-                            {abs.co_authors?.length > 0 && (
-                                <p className="mt-3 flex flex-wrap items-center gap-1.5 text-xs text-gray-600">
-                                    <Users size={12} className="text-gray-400" />
-                                    {abs.co_authors.map((c, i) => <span key={i} className="rounded-full bg-gray-100 px-2 py-0.5">{c.name ?? c}{c.affiliation ? ` · ${c.affiliation}` : ''}</span>)}
-                                </p>
+                            {abs.track && <p className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-violet-50 px-2.5 py-0.5 text-xs font-semibold text-violet-700"><Layers size={11} /> {abs.track.name}</p>}
+                            {(abs.authors ?? []).length > 0 && (
+                                <div className="mt-3 border-t border-gray-100 pt-3">
+                                    <p className="mb-2 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-500"><Users size={12} /> Authors</p>
+                                    <ol className="space-y-1.5">
+                                        {abs.authors.map((au, i) => (
+                                            <li key={i} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-700">
+                                                <span className="w-4 text-right tabular-nums text-gray-400">{i + 1}.</span>
+                                                <span className="font-medium text-gray-900">{au.name}</span>
+                                                {au.affiliation && <span className="text-gray-500">{au.affiliation}</span>}
+                                                {au.country && <span className="text-gray-400">· {au.country}</span>}
+                                                {au.orcid && <a href={`https://orcid.org/${au.orcid}`} target="_blank" rel="noreferrer" className="font-mono text-[11px] text-emerald-700 hover:underline">ORCID {au.orcid}</a>}
+                                                {au.presenting && <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-indigo-700"><Mic size={10} /> Presenting</span>}
+                                            </li>
+                                        ))}
+                                    </ol>
+                                </div>
                             )}
                         </section>
 
@@ -405,7 +515,9 @@ function AbstractDrawer({ id, onClose, onChanged }) {
                                         <div className="flex items-center gap-2.5">
                                             <Avatar name={r.reviewer?.name} />
                                             <span className="min-w-0 flex-1 truncate text-sm font-medium text-gray-900">{r.reviewer?.name ?? 'Reviewer'}</span>
-                                            {r.submitted_at ? (
+                                            {r.conflict_declared_at ? (
+                                                <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700"><ShieldAlert size={11} /> Conflict declared</span>
+                                            ) : r.submitted_at ? (
                                                 <>
                                                     <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-bold text-indigo-700">{r.score}/10</span>
                                                     {REC[r.recommendation] && <span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', REC[r.recommendation].cls)}>{REC[r.recommendation].label}</span>}
@@ -415,12 +527,31 @@ function AbstractDrawer({ id, onClose, onChanged }) {
                                             )}
                                             {open && <button onClick={() => setRemoving(r)} aria-label="Remove reviewer" className="rounded-md p-1 text-gray-400 hover:bg-red-50 hover:text-red-600"><Trash2 size={13} /></button>}
                                         </div>
+                                        {r.conflict_declared_at && r.conflict_reason && <p className="mt-2 text-xs text-red-700">{r.conflict_reason}</p>}
+                                        {r.submitted_at && (r.criteria_scores ?? []).length > 0 && (
+                                            <dl className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
+                                                {r.criteria_scores.map((c, i) => (
+                                                    <div key={i} className="flex items-center justify-between gap-2 text-[11px]">
+                                                        <dt className="truncate text-gray-500">{c.name}{c.weight > 1 && <span className="text-gray-400"> ×{c.weight}</span>}</dt>
+                                                        <dd className="font-semibold tabular-nums text-gray-800">{c.score}/5</dd>
+                                                    </div>
+                                                ))}
+                                            </dl>
+                                        )}
                                         {r.comments && <p className="mt-2 whitespace-pre-line text-xs leading-relaxed text-gray-600">{r.comments}</p>}
+                                        {r.confidential_comments && (
+                                            <div className="mt-2 rounded-lg border border-amber-100 bg-amber-50/70 px-2.5 py-2">
+                                                <p className="mb-0.5 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-amber-700"><Lock size={10} /> For the committee only</p>
+                                                <p className="whitespace-pre-line text-xs leading-relaxed text-amber-900">{r.confidential_comments}</p>
+                                            </div>
+                                        )}
                                     </div>
                                 ))}
                             </div>
                             {open && <div className="mt-3"><ReviewerPicker abstract={abs} onAssigned={changed} /></div>}
                         </section>
+
+                        {abs.status === 'accepted' && abs.can_decide && <ProgrammeSection abs={abs} onSaved={changed} />}
 
                         {abs.admin_notes && (
                             <section className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
@@ -436,8 +567,19 @@ function AbstractDrawer({ id, onClose, onChanged }) {
                         A draft is the submitter's unfinished work — it can be reviewed and decided once they submit it.
                     </footer>
                 )}
-                {abs && !['withdrawn', 'draft'].includes(abs.status) && (
+                {abs && !abs.can_decide && !['withdrawn', 'draft'].includes(abs.status) && (
+                    <footer className="border-t border-gray-200 bg-white px-6 py-3 text-xs text-gray-500">
+                        As track chair you choose the reviewers; the conference chairs make the decision.
+                    </footer>
+                )}
+                {abs && abs.can_decide && !['withdrawn', 'draft'].includes(abs.status) && (
                     <footer className="flex flex-wrap gap-2 border-t border-gray-200 bg-white px-6 py-3">
+                        {abs.status === 'accepted' && (
+                            <button onClick={() => downloadFile(`/admin/abstracts/${abs.id}/letter`, 'acceptance-letter.pdf').catch(() => error('Could not create the letter.'))}
+                                className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+                                <Download size={14} /> Letter
+                            </button>
+                        )}
                         {abs.status === 'accepted' && (
                             <button onClick={() => setMailing(true)} className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-100">
                                 <Send size={14} /> Email next steps
@@ -473,7 +615,7 @@ const STAGES = [
 ];
 
 export default function AdminAbstracts() {
-    const { hasPermission } = useAuth();
+    const { hasPermission, user } = useAuth();
     const { error } = useToast();
     const [rows, setRows] = useState(null);
     const [meta, setMeta] = useState(null);
@@ -482,15 +624,21 @@ export default function AdminAbstracts() {
     const [query, setQuery] = useState('');
     const [status, setStatus] = useState('');
     const [type, setType] = useState('');
+    const [trackId, setTrackId] = useState('');
     const [sort, setSort] = useState('newest');
     const [conferenceId, setConferenceId] = useState(() => new URLSearchParams(window.location.search).get('conference_id') ?? '');
     const [conferences, setConferences] = useState([]);
     const [page, setPage] = useState(1);
     const [openId, setOpenId] = useState(null);
     const [exporting, setExporting] = useState(false);
+    const [selected, setSelected] = useState(() => new Set());
+    const [bulkDeciding, setBulkDeciding] = useState(false);
     const searchTimer = useRef(null);
 
-    const isAdmin = hasPermission('conferences.manage');
+    // Organisers see every conference; a chair or track chair sees what their role covers.
+    const committeeRoles = user?.conference_roles ?? [];
+    const isAdmin = hasPermission('conferences.manage') || committeeRoles.some((r) => ['chair', 'track_chair'].includes(r.role));
+    const canDecideSome = hasPermission('conferences.manage') || committeeRoles.some((r) => r.role === 'chair');
 
     useEffect(() => {
         if (!isAdmin) return;
@@ -499,7 +647,8 @@ export default function AdminAbstracts() {
             .catch(() => {});
     }, [isAdmin]);
 
-    const params = { page, search: query || undefined, status: status || undefined, type: type || undefined, conference_id: conferenceId || undefined, sort };
+    const params = { page, search: query || undefined, status: status || undefined, type: type || undefined, conference_id: conferenceId || undefined, track_id: trackId || undefined, sort };
+    const tracks = conferences.find((c) => String(c.id) === String(conferenceId))?.tracks ?? [];
 
     const load = useCallback(async () => {
         if (!isAdmin) return;
@@ -509,12 +658,13 @@ export default function AdminAbstracts() {
             const pg = r.data?.data ?? {};
             setRows(pg.data ?? []);
             setMeta(pg);
+            setSelected(new Set());
         } catch {
             setRows((v) => v ?? []);
             error('Could not load abstracts.');
         }
         setLoading(false);
-    }, [page, query, status, type, conferenceId, sort, isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
+    }, [page, query, status, type, conferenceId, trackId, sort, isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => { load(); }, [load]);
 
@@ -537,7 +687,10 @@ export default function AdminAbstracts() {
 
     const counts = meta?.counts ?? {};
     const lastPage = meta?.last_page ?? 1;
-    const filtersOn = !!(query || status || type || conferenceId);
+    const filtersOn = !!(query || status || type || conferenceId || trackId);
+    const decidable = (rows ?? []).filter((a) => !['draft', 'withdrawn'].includes(a.status));
+    const allPicked = decidable.length > 0 && decidable.every((a) => selected.has(a.id));
+    const toggle = (id) => setSelected((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
 
     if (!isAdmin) {
         return (
@@ -558,6 +711,12 @@ export default function AdminAbstracts() {
             <div className="mx-auto max-w-7xl space-y-5">
                 <PageHeader icon={FileText} color="violet" title="Abstracts"
                     description="Conference submissions: assign reviewers, read their reviews, then decide — the submitter only hears the committee's decision.">
+                    {conferenceId && (hasPermission('conferences.manage') || committeeRoles.some((r) => r.conference_id === conferenceId && r.role !== 'track_chair')) && (
+                        <a href={`/admin/conferences/${conferenceId}/attendance`}
+                            className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                            <CalendarDays size={14} /> <span className="hidden sm:inline">Conference page</span>
+                        </a>
+                    )}
                     <button onClick={exportCsv} disabled={exporting}
                         className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
                         {exporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} <span className="hidden sm:inline">Export CSV</span>
@@ -590,10 +749,16 @@ export default function AdminAbstracts() {
                             className="w-full rounded-xl border border-gray-200 py-2 pl-9 pr-3 text-base focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100 sm:text-sm" />
                     </label>
                     <div className="grid grid-cols-2 gap-2 sm:flex">
-                        <Select label="Conference" value={conferenceId} onChange={(v) => { setConferenceId(v); setPage(1); }} className="sm:w-56">
+                        <Select label="Conference" value={conferenceId} onChange={(v) => { setConferenceId(v); setTrackId(''); setPage(1); }} className="sm:w-56">
                             <option value="">All conferences</option>
                             {conferences.map((c) => <option key={c.id} value={c.id}>{c.title}</option>)}
                         </Select>
+                        {tracks.length > 0 && (
+                            <Select label="Track" value={trackId} onChange={(v) => { setTrackId(v); setPage(1); }} className="sm:w-44">
+                                <option value="">All tracks</option>
+                                {tracks.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                            </Select>
+                        )}
                         <Select label="Type" value={type} onChange={(v) => { setType(v); setPage(1); }} className="sm:w-36">
                             <option value="">All types</option>
                             {TYPES.map((t) => <option key={t} value={t} className="capitalize">{t}</option>)}
@@ -617,10 +782,20 @@ export default function AdminAbstracts() {
                         )}
                     </p>
                     {filtersOn && (
-                        <button onClick={() => { setSearch(''); setQuery(''); setStatus(''); setType(''); setConferenceId(''); setPage(1); }}
+                        <button onClick={() => { setSearch(''); setQuery(''); setStatus(''); setType(''); setConferenceId(''); setTrackId(''); setPage(1); }}
                             className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-semibold text-gray-600 hover:bg-gray-100"><X size={12} /> Clear filters</button>
                     )}
                 </div>
+
+                {canDecideSome && selected.size > 0 && (
+                    <div className="sticky top-2 z-10 flex flex-wrap items-center gap-3 rounded-2xl bg-gray-900 px-4 py-2.5 text-sm text-white shadow-lg">
+                        <span><b>{selected.size}</b> selected</span>
+                        <button onClick={() => setSelected(new Set())} className="text-xs text-gray-300 hover:text-white">Clear</button>
+                        <button onClick={() => setBulkDeciding(true)} className="ml-auto inline-flex items-center gap-1.5 rounded-xl bg-white px-3.5 py-1.5 text-sm font-semibold text-gray-900 hover:bg-gray-100">
+                            <Gavel size={14} /> Decide for all
+                        </button>
+                    </div>
+                )}
 
                 {/* List */}
                 {rows === null ? (
@@ -635,6 +810,12 @@ export default function AdminAbstracts() {
                             <table className="w-full min-w-225 text-sm">
                                 <thead>
                                     <tr className="border-b border-gray-100 bg-gray-50/80 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                                        <th className="w-10 py-3 pl-4">
+                                            {canDecideSome && (<button type="button" aria-label="Select all on this page" onClick={() => setSelected(allPicked ? new Set() : new Set(decidable.map((a) => a.id)))}
+                                                className="text-gray-400 hover:text-indigo-600 disabled:opacity-30" disabled={decidable.length === 0}>
+                                                {allPicked ? <CheckSquare size={15} className="text-indigo-600" /> : <Square size={15} />}
+                                            </button>)}
+                                        </th>
                                         <th className="w-10 px-4 py-3 text-gray-400">#</th>
                                         <th className="px-4 py-3">Abstract</th>
                                         <th className="px-4 py-3">Submitter</th>
@@ -646,11 +827,18 @@ export default function AdminAbstracts() {
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
                                     {rows.map((a, i) => (
-                                        <tr key={a.id} className="cursor-pointer transition-colors hover:bg-indigo-50/30" onClick={() => setOpenId(a.id)}>
+                                        <tr key={a.id} className={cn('cursor-pointer transition-colors hover:bg-indigo-50/30', selected.has(a.id) && 'bg-indigo-50/50')} onClick={() => setOpenId(a.id)}>
+                                            <td className="py-3 pl-4" onClick={(e) => e.stopPropagation()}>
+                                                {canDecideSome && !['draft', 'withdrawn'].includes(a.status) && (
+                                                    <button type="button" aria-label={`Select ${a.title}`} onClick={() => toggle(a.id)} className="text-gray-400 hover:text-indigo-600">
+                                                        {selected.has(a.id) ? <CheckSquare size={15} className="text-indigo-600" /> : <Square size={15} />}
+                                                    </button>
+                                                )}
+                                            </td>
                                             <td className="px-4 py-3 text-xs tabular-nums text-gray-400">{((meta?.current_page ?? 1) - 1) * (meta?.per_page ?? 25) + i + 1}</td>
                                             <td className="max-w-sm px-4 py-3">
                                                 <p className="line-clamp-1 font-medium text-gray-900">{a.title}</p>
-                                                <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-gray-500"><TypeBadge type={a.presentation_type} /> <span className="truncate">{a.conference?.title}</span></p>
+                                                <p className="mt-0.5 flex items-center gap-1.5 text-[11px] text-gray-500"><TypeBadge type={a.presentation_type} />{a.track && <span className="shrink-0 rounded-full bg-violet-50 px-1.5 py-px text-[10px] font-semibold text-violet-700">{a.track.name}</span>} <span className="truncate">{a.conference?.title}</span></p>
                                             </td>
                                             <td className="px-4 py-3">
                                                 <span className="flex items-center gap-2"><Avatar name={a.submitter_name} />
@@ -663,8 +851,8 @@ export default function AdminAbstracts() {
                                             <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-500">{formatDate(a.submitted_at)}</td>
                                             <td className="px-4 py-3 text-right">
                                                 <span className={cn('inline-flex items-center gap-1 whitespace-nowrap rounded-lg px-2.5 py-1 text-xs font-semibold',
-                                                    a.status === 'submitted' ? 'bg-blue-50 text-blue-700' : a.reviews_count && a.reviews_done_count === a.reviews_count && a.status === 'under_review' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700')}>
-                                                    {a.status === 'submitted' ? <><UserPlus size={12} /> Assign</> : a.reviews_count && a.reviews_done_count === a.reviews_count && a.status === 'under_review' ? <><Gavel size={12} /> Decide</> : <><ClipboardCheck size={12} /> Open</>}
+                                                    a.status === 'submitted' ? 'bg-blue-50 text-blue-700' : a.reviews_done_count > 0 && a.reviews_done_count + (a.reviews_conflict_count ?? 0) === a.reviews_count && a.status === 'under_review' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700')}>
+                                                    {a.status === 'submitted' ? <><UserPlus size={12} /> Assign</> : a.reviews_done_count > 0 && a.reviews_done_count + (a.reviews_conflict_count ?? 0) === a.reviews_count && a.status === 'under_review' ? <><Gavel size={12} /> Decide</> : <><ClipboardCheck size={12} /> Open</>}
                                                 </span>
                                             </td>
                                         </tr>
@@ -678,7 +866,7 @@ export default function AdminAbstracts() {
                                     <button onClick={() => setOpenId(a.id)} className="w-full space-y-2 px-4 py-3 text-left hover:bg-gray-50">
                                         <p className="line-clamp-2 text-sm font-semibold text-gray-900">{a.title}</p>
                                         <p className="text-xs text-gray-500">{a.submitter_name} · {a.conference?.title}</p>
-                                        <div className="flex flex-wrap items-center gap-2"><StatusDot status={a.status} /><TypeBadge type={a.presentation_type} /></div>
+                                        <div className="flex flex-wrap items-center gap-2"><StatusDot status={a.status} /><TypeBadge type={a.presentation_type} />{a.track && <span className="rounded-full bg-violet-50 px-1.5 py-px text-[10px] font-semibold text-violet-700">{a.track.name}</span>}</div>
                                         <ReviewProgress done={a.reviews_done_count} asked={a.reviews_count} average={a.average_score} />
                                     </button>
                                 </li>
@@ -699,6 +887,7 @@ export default function AdminAbstracts() {
             </div>
 
             {openId && <AbstractDrawer id={openId} onClose={() => setOpenId(null)} onChanged={load} />}
+            {bulkDeciding && <DecisionDialog bulk={{ ids: [...selected] }} onClose={() => setBulkDeciding(false)} onDone={() => { setBulkDeciding(false); load(); }} />}
         </AppLayout>
     );
 }

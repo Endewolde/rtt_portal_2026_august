@@ -8,12 +8,15 @@ use App\Models\AppSetting;
 use App\Models\Conference;
 use App\Models\ConferenceAbstract;
 use App\Models\User;
+use App\Support\AbstractAcceptanceLetter;
 use App\Support\AuditLogger;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 /**
  * Public side of conference abstracts: submit, save a draft, resubmit after a revision
@@ -21,6 +24,9 @@ use Illuminate\Support\Str;
  */
 class AbstractController extends Controller
 {
+    /** An ORCID iD as written: 0000-0002-1825-0097 (the last character may be X). */
+    private const ORCID = '/^\d{4}-\d{4}-\d{4}-\d{3}[\dX]$/';
+
     /** Statuses a submitter may still edit through their token. */
     private const EDITABLE = ['draft', 'revision_requested'];
 
@@ -32,9 +38,17 @@ class AbstractController extends Controller
             'submitter_name' => 'required|string|max:255',
             'submitter_email' => 'required|email|max:255',
             'submitter_affiliation' => 'nullable|string|max:255',
+            'submitter_orcid' => ['nullable', 'string', 'regex:'.self::ORCID],
+            'submitter_country' => 'nullable|string|max:80',
+            'submitter_presenting' => 'nullable|boolean',
+            'track_id' => [$conference->tracks()->exists() ? 'required' : 'nullable', 'uuid', Rule::exists('conference_tracks', 'id')->where('conference_id', $conference->id)],
             'co_authors' => 'nullable|array|max:20',
             'co_authors.*.name' => 'required|string|max:255',
+            'co_authors.*.email' => 'nullable|email|max:255',
             'co_authors.*.affiliation' => 'nullable|string|max:255',
+            'co_authors.*.country' => 'nullable|string|max:80',
+            'co_authors.*.orcid' => ['nullable', 'string', 'regex:'.self::ORCID],
+            'co_authors.*.presenting' => 'nullable|boolean',
             'title' => 'required|string|max:500',
             'body' => 'required|string|min:50|max:5000',
             'keywords' => 'nullable|array|max:10',
@@ -49,6 +63,9 @@ class AbstractController extends Controller
         $revisionToken = $data['revision_token'] ?? null;
         unset($data['action'], $data['revision_token'], $data['file']);
         $data['submitter_email'] = Str::lower(trim($data['submitter_email']));
+        // Someone has to present it: with nobody marked, the submitter does.
+        $data['co_authors'] = array_values(array_map(fn ($a) => array_filter([...$a, 'presenting' => (bool) ($a['presenting'] ?? false)], fn ($v) => $v !== null), $data['co_authors'] ?? []));
+        $data['submitter_presenting'] = (bool) ($data['submitter_presenting'] ?? ! collect($data['co_authors'])->contains('presenting', true));
         $data['word_count'] = str_word_count(strip_tags($data['body']));
 
         $abstract = $revisionToken
@@ -107,7 +124,7 @@ class AbstractController extends Controller
         if ($status === 'submitted') {
             if ($wasRevision) {
                 // The revised version is reviewed afresh by the same reviewers.
-                $abstract->reviews()->update(['score' => null, 'recommendation' => null, 'comments' => null, 'submitted_at' => null]);
+                $abstract->reviews()->whereNull('conflict_declared_at')->update(['score' => null, 'criteria_scores' => null, 'recommendation' => null, 'comments' => null, 'confidential_comments' => null, 'submitted_at' => null]);
             }
             $this->sendSubmissionConfirmation($abstract->refresh(), $conference);
             $this->notifyOrganisers($abstract, $conference, $wasRevision);
@@ -126,7 +143,7 @@ class AbstractController extends Controller
 
     public function track(string $token): JsonResponse
     {
-        $abstract = ConferenceAbstract::with('conference:id,title,slug,start_date')
+        $abstract = ConferenceAbstract::with(['conference:id,title,slug,start_date,camera_ready_deadline', 'session:id,title,starts_at,ends_at,room'])
             ->where('submission_token', $token)
             ->firstOrFail()
             ->makeVisible('submission_token');
@@ -134,6 +151,40 @@ class AbstractController extends Controller
         return response()->json(['data' => $abstract->makeHidden('admin_notes')->toArray() + [
             'feedback' => in_array($abstract->status, ['accepted', 'rejected', 'revision_requested'], true) ? $abstract->admin_notes : null,
         ], 'message' => '', 'errors' => []]);
+    }
+
+    /** The author's letter of acceptance, opened with their tracking token. */
+    public function letter(string $token): Response
+    {
+        $abstract = ConferenceAbstract::where('submission_token', $token)->where('status', 'accepted')->firstOrFail();
+
+        return AbstractAcceptanceLetter::download($abstract);
+    }
+
+    /**
+     * The final version of an accepted abstract — full paper, slides or poster — for the
+     * proceedings. It can be replaced until the conference's camera-ready deadline.
+     */
+    public function cameraReady(Request $request, string $token): JsonResponse
+    {
+        $abstract = ConferenceAbstract::with('conference')->where('submission_token', $token)->firstOrFail();
+
+        if ($abstract->status !== 'accepted') {
+            return response()->json(['message' => 'Only accepted abstracts take a final version.', 'errors' => []], 422);
+        }
+        $deadline = $abstract->conference?->camera_ready_deadline;
+        if ($deadline && $deadline->isPast()) {
+            return response()->json(['message' => 'The deadline for final versions was '.$deadline->format('j F Y').'. Please contact the organisers.', 'errors' => []], 422);
+        }
+
+        $request->validate(['file' => 'required|file|mimes:pdf,doc,docx,ppt,pptx|max:20480']);
+
+        $path = $request->file('file')->store("abstracts/{$abstract->conference_id}/final", 'public');
+        $abstract->update(['camera_ready_path' => Storage::url($path), 'camera_ready_at' => now()]);
+
+        AuditLogger::log('abstract.camera_ready', 'ConferenceAbstract', $abstract->id, null, [], ['target_name' => $abstract->title], 200);
+
+        return response()->json(['data' => ['camera_ready_path' => $abstract->camera_ready_path, 'camera_ready_at' => $abstract->camera_ready_at], 'message' => 'Your final version has been received.', 'errors' => []]);
     }
 
     public function withdraw(string $token): JsonResponse
@@ -186,7 +237,7 @@ class AbstractController extends Controller
             return response()->json(['data' => null, 'message' => 'This link has expired. Ask for a new one.', 'errors' => []], 403);
         }
 
-        $abstracts = ConferenceAbstract::with('conference:id,title,slug,start_date')
+        $abstracts = ConferenceAbstract::with(['conference:id,title,slug,start_date,camera_ready_deadline', 'session:id,title,starts_at,ends_at,room'])
             ->where('submitter_email', $email)
             ->orderByDesc('created_at')
             ->get()
