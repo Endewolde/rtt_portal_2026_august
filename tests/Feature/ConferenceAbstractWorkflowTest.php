@@ -23,6 +23,7 @@ beforeEach(function () {
         'status' => 'published', 'location_type' => 'hybrid', 'virtual_link' => 'https://meet.example.com/secret',
         'abstract_submission_open' => true, 'abstract_deadline' => now()->addWeeks(2), 'created_by' => $this->admin->id,
         'max_capacity' => 2,
+        'abstract_min_words' => 5, // the sample abstracts here are short
     ]);
 
     $this->abstract = ConferenceAbstract::create([

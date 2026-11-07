@@ -141,6 +141,7 @@ const KEY_LABELS = {
     auto_backup_enabled: 'Auto Backup',
     backup_notify_email: 'Notify via Email', backup_notify_telegram: 'Notify via Telegram',
     backup_email_recipient: 'Backup Email Recipient', backup_telegram_chat_id: 'Telegram Chat ID',
+    backup_include_files: 'Back Up Uploaded Files Too', backup_offsite_path: 'Off-site Copy (user@host:/path or mounted folder)',
     sso_enabled: 'SSO Enabled',
     google_client_id: 'Google Client ID', google_client_secret: 'Google Client Secret',
     microsoft_client_id: 'Microsoft Client ID', microsoft_client_secret: 'Microsoft Client Secret',
@@ -1406,7 +1407,10 @@ export default function SettingsPage() {
         try {
             const res = await api.post('/settings/toggle-maintenance')
             setBypassUrl(res.data?.data?.bypass_url ?? null)
-            success(res.data?.data?.maintenance ? 'Maintenance mode enabled. You still have access in this browser.' : res.data?.message)
+            const emailed = res.data?.data?.emailed ?? 0
+            success(res.data?.data?.maintenance
+                ? `Maintenance mode enabled. You still have access in this browser.${emailed ? ` The access link was emailed to ${emailed} super admin${emailed === 1 ? '' : 's'}.` : ''}`
+                : res.data?.message)
             loadSystemInfo()
         } catch { error('Failed to toggle maintenance mode.') }
     }

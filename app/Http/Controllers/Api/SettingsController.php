@@ -246,6 +246,7 @@ class SettingsController extends Controller
         // Bust all caches so the new value is served on the next request
         Cache::forget('inertia_app_settings');
         Cache::forget('public_closed_pages');
+        Cache::forget('token_idle_minutes');
         Cache::forget('blade_app_meta');
         Terms::forget();
         Cache::forget(SmsService::CACHE_KEY);
@@ -385,6 +386,7 @@ class SettingsController extends Controller
 
         Cache::forget('inertia_app_settings');
         Cache::forget('public_closed_pages');
+        Cache::forget('token_idle_minutes');
         Cache::forget('blade_app_meta');
 
         return response()->json(['data' => ['saved' => count($settings)], 'message' => count($settings).' change'.(count($settings) === 1 ? '' : 's').' saved — live on the public site now.', 'errors' => []]);
@@ -418,6 +420,7 @@ class SettingsController extends Controller
 
         Cache::forget('inertia_app_settings');
         Cache::forget('public_closed_pages');
+        Cache::forget('token_idle_minutes');
         Cache::forget('blade_app_meta');
         Terms::forget();
         Cache::forget(SmsService::CACHE_KEY);
@@ -617,6 +620,7 @@ class SettingsController extends Controller
 
         Cache::forget('inertia_app_settings');
         Cache::forget('public_closed_pages');
+        Cache::forget('token_idle_minutes');
         Cache::forget('blade_app_meta');
 
         return response()->json([

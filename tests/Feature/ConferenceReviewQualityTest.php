@@ -16,6 +16,7 @@ beforeEach(function () {
     $this->conference = Conference::create([
         'title' => 'Research Week', 'start_date' => now()->addMonth(), 'end_date' => now()->addMonth()->addDay(),
         'status' => 'published', 'created_by' => $this->admin->id, 'abstract_submission_open' => true, 'location_type' => 'physical',
+        'abstract_min_words' => 5, // the sample abstracts here are short
     ]);
 });
 
@@ -146,4 +147,17 @@ test('a reviewer who declares a conflict cannot review, and the abstract is read
     expect($list['counts']['ready_for_decision'])->toBe(1)
         ->and($list['data'][0])->toMatchArray(['reviews_count' => 2, 'reviews_done_count' => 1, 'reviews_conflict_count' => 1])
         ->and($this->actingAs($this->admin, 'sanctum')->getJson("/api/v1/admin/abstracts/{$abstract->id}")->json('data.conflicts'))->toBe(1);
+});
+
+test('an abstract is held to the conference\'s word limits when submitted, counting Amharic words too, but a draft may be short', function () {
+    $this->conference->update(['abstract_min_words' => 5, 'abstract_max_words' => 8]);
+    $base = ['submitter_name' => 'Hana', 'submitter_email' => 'hana@example.com', 'title' => 'T', 'presentation_type' => 'oral'];
+    $post = fn (string $body, string $action) => $this->postJson("/api/v1/conferences/{$this->conference->slug}/abstracts", $base + ['body' => $body, 'action' => $action]);
+
+    $post('Too short here', 'submit')->assertJsonValidationErrors(['body' => 'at least 5']);
+    $post('one two three four five six seven eight nine', 'submit')->assertJsonValidationErrors(['body' => 'at most 8']);
+    $post('Too short here', 'draft')->assertSuccessful();
+    // Six Amharic words: PHP's own word count would make this zero.
+    $post('የአፈር ለምነት በወላይታ ዞን ጥናት ውጤት', 'submit')->assertSuccessful();
+    expect(ConferenceAbstract::where('body', 'የአፈር ለምነት በወላይታ ዞን ጥናት ውጤት')->value('word_count'))->toBe(6);
 });

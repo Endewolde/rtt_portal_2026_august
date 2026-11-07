@@ -183,6 +183,8 @@ export default function AbstractSubmit() {
     };
 
     const wordCount = countWords(form.body);
+    const minWords = conference?.abstract_min_words ?? 50;
+    const maxWords = conference?.abstract_max_words ?? 800;
 
     // ── Submit ──
     const handleSubmit = async (action) => {
@@ -553,7 +555,7 @@ export default function AbstractSubmit() {
                             />
                         </Field>
 
-                        <Field label="Abstract Body" required hint="(min 50 / max 800 words)" error={errors.body}>
+                        <Field label="Abstract Body" required hint={`(${minWords}–${maxWords} words)`} error={errors.body}>
                             <div className="relative">
                                 <textarea
                                     value={form.body}
@@ -565,14 +567,15 @@ export default function AbstractSubmit() {
                                                 ${errors.body ? 'border-red-300 bg-red-50' : 'border-gray-200 bg-gray-50 focus:bg-white'}`}
                                 />
                                 <div className={`flex items-center justify-end mt-1.5 text-xs font-medium ${
-                                    wordCount < 50 || wordCount > 800 ? 'text-red-500' : 'text-green-600'
+                                    wordCount < minWords || wordCount > maxWords ? 'text-red-500' : 'text-green-600'
                                 }`}>
                                     <span className={`px-2.5 py-1 rounded-full ${
-                                        wordCount < 50 || wordCount > 800 ? 'bg-red-50' : 'bg-green-50'
+                                        wordCount < minWords || wordCount > maxWords ? 'bg-red-50' : 'bg-green-50'
                                     }`}>
-                                        {wordCount} / 800 words
-                                        {wordCount < 50 && wordCount > 0 && ` · ${50 - wordCount} more needed`}
-                                        {wordCount === 0 && ' · minimum 50'}
+                                        {wordCount} / {maxWords} words
+                                        {wordCount < minWords && wordCount > 0 && ` · ${minWords - wordCount} more needed`}
+                                        {wordCount > maxWords && ` · ${wordCount - maxWords} too many`}
+                                        {wordCount === 0 && ` · minimum ${minWords}`}
                                     </span>
                                 </div>
                             </div>

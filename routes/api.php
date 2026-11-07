@@ -30,6 +30,7 @@ use App\Http\Controllers\Api\DeadlineExtensionController;
 use App\Http\Controllers\Api\DefenceAttendanceController;
 use App\Http\Controllers\Api\DefenceDeadlineController;
 use App\Http\Controllers\Api\DisbursementController;
+use App\Http\Controllers\Api\EquipmentController;
 use App\Http\Controllers\Api\EthicalClearanceController;
 use App\Http\Controllers\Api\ExternalFund\AgencyController as EFAgencyController;
 use App\Http\Controllers\Api\ExternalFund\ApplicationController as EFApplicationController;
@@ -61,6 +62,7 @@ use App\Http\Controllers\Api\PersonalDataController;
 use App\Http\Controllers\Api\ProgrammeController;
 use App\Http\Controllers\Api\ProgressReportController;
 use App\Http\Controllers\Api\ProjectRiskController;
+use App\Http\Controllers\Api\ProjectTimelineController;
 use App\Http\Controllers\Api\ProposalAiScoreController;
 use App\Http\Controllers\Api\ProposalAppealController;
 use App\Http\Controllers\Api\ProposalApprovalReportController;
@@ -93,7 +95,10 @@ use App\Http\Controllers\Api\SettingsController;
 use App\Http\Controllers\Api\SettlementController;
 use App\Http\Controllers\Api\SimilarityController;
 use App\Http\Controllers\Api\StatsController;
+use App\Http\Controllers\Api\StrategicTargetsController;
+use App\Http\Controllers\Api\SupportGrantController;
 use App\Http\Controllers\Api\SystemMonitorController;
+use App\Http\Controllers\Api\TechTransferController;
 use App\Http\Controllers\Api\ThematicAreaController;
 use App\Http\Controllers\Api\TurnaroundController;
 use App\Http\Controllers\Api\UserController;
@@ -190,6 +195,8 @@ Route::prefix('v1')->group(function () {
     Route::middleware(['auth:sanctum', 'user.active', 'throttle:300,1', 'college.scope', 'category.scope', AuditCrudMiddleware::class])->group(function () {
         Route::post('/auth/logout', [AuthController::class, 'logout']);
         Route::get('/auth/me', [AuthController::class, 'me']);
+        // Keeps an active person's sign-in alive on the server while they read (see TokenLifetime).
+        Route::get('/auth/ping', fn () => response()->noContent());
         Route::put('/auth/profile', [AuthController::class, 'updateProfile']);
         Route::post('/auth/avatar', [AuthController::class, 'uploadAvatar']);
         Route::post('/auth/change-password', [AuthController::class, 'changePassword']);
@@ -284,6 +291,39 @@ Route::prefix('v1')->group(function () {
         Route::post('/admin/conferences/{id}/certificates', [ConferenceAttendanceController::class, 'issueCertificates']);
         Route::patch('/admin/conferences/{id}/certificates/{certificateId}', [ConferenceAttendanceController::class, 'revokeCertificate']);
         Route::get('/admin/conferences/{id}/feedback', [ConferenceAttendanceController::class, 'feedbackSummary']);
+        // Research equipment register and booking
+        Route::get('/equipment', [EquipmentController::class, 'index']);
+        Route::post('/equipment', [EquipmentController::class, 'save']);
+        Route::put('/equipment/{id}', [EquipmentController::class, 'save']);
+        Route::post('/equipment/{id}/bookings', [EquipmentController::class, 'book']);
+        Route::post('/equipment-bookings/{bookingId}/decide', [EquipmentController::class, 'decide']);
+        Route::post('/equipment-bookings/{bookingId}/cancel', [EquipmentController::class, 'cancel']);
+        // A funded project's milestones, reports, evaluations and releases on one timeline
+        Route::get('/projects/{id}/timeline', [ProjectTimelineController::class, 'show']);
+        // Support schemes — publication incentives, article fees, travel grants
+        Route::get('/support-grants/mine', [SupportGrantController::class, 'mine']);
+        Route::post('/support-grants', [SupportGrantController::class, 'apply']);
+        Route::post('/support-grants/{id}/withdraw', [SupportGrantController::class, 'withdraw']);
+        Route::get('/support-grants/{id}/evidence', [SupportGrantController::class, 'evidence']);
+        Route::get('/admin/support-grants', [SupportGrantController::class, 'schemes']);
+        Route::post('/admin/support-schemes', [SupportGrantController::class, 'saveScheme']);
+        Route::put('/admin/support-schemes/{id}', [SupportGrantController::class, 'saveScheme']);
+        Route::post('/admin/support-grants/{id}/decide', [SupportGrantController::class, 'decide']);
+        // Strategic targets — the year's targets beside the actuals
+        Route::get('/insights/targets', [StrategicTargetsController::class, 'index']);
+        Route::put('/insights/targets', [StrategicTargetsController::class, 'update']);
+        // Technology transfer — partnerships register and innovation pipeline
+        Route::get('/tech-transfer/partnerships', [TechTransferController::class, 'partnerships']);
+        Route::post('/tech-transfer/partnerships', [TechTransferController::class, 'storePartnership']);
+        Route::post('/tech-transfer/partnerships/{id}', [TechTransferController::class, 'updatePartnership']);
+        Route::delete('/tech-transfer/partnerships/{id}', [TechTransferController::class, 'destroyPartnership']);
+        Route::get('/tech-transfer/partnerships/{id}/document', [TechTransferController::class, 'partnershipDocument']);
+        Route::get('/tech-transfer/innovations', [TechTransferController::class, 'innovations']);
+        Route::post('/tech-transfer/innovations', [TechTransferController::class, 'storeInnovation']);
+        Route::put('/tech-transfer/innovations/{id}', [TechTransferController::class, 'updateInnovation']);
+        Route::delete('/tech-transfer/innovations/{id}', [TechTransferController::class, 'destroyInnovation']);
+        Route::post('/tech-transfer/innovations/{id}/incomes', [TechTransferController::class, 'addIncome']);
+        Route::delete('/tech-transfer/innovations/{id}/incomes/{incomeId}', [TechTransferController::class, 'removeIncome']);
         Route::get('/admin/conferences/{id}/overview', [ConferenceWorkspaceController::class, 'overview']);
         Route::get('/admin/conferences/{id}/history', [ConferenceWorkspaceController::class, 'history']);
         Route::get('/admin/conferences/{id}/book-of-abstracts', [ConferenceWorkspaceController::class, 'book']);
@@ -774,6 +814,7 @@ Route::prefix('v1')->group(function () {
             Route::get('/research-outputs/stats', [ResearchOutputController::class, 'stats']);
             Route::get('/research-outputs/eligible-proposals', [ResearchOutputController::class, 'eligibleProposals']);
             Route::get('/research-outputs/doi-lookup', [ResearchOutputController::class, 'lookupDoi']);
+            Route::get('/research-outputs/orcid-works', [ResearchOutputController::class, 'orcidWorks']);
             Route::get('/research-outputs', [ResearchOutputController::class, 'index']);
             Route::post('/research-outputs', [ResearchOutputController::class, 'store']);
             Route::get('/research-outputs/{id}', [ResearchOutputController::class, 'show']);

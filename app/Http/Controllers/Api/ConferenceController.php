@@ -57,6 +57,8 @@ class ConferenceController extends Controller
         'waitlist_enabled' => 'sometimes|boolean',
         'feedback_open' => 'sometimes|boolean',
         'book_published' => 'sometimes|boolean',
+        'abstract_min_words' => 'sometimes|integer|min:0|max:5000',
+        'abstract_max_words' => 'sometimes|integer|min:10|max:5000|gte:abstract_min_words',
     ];
 
     public function publicIndex(Request $request): JsonResponse

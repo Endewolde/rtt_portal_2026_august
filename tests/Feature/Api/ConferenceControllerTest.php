@@ -84,10 +84,10 @@ test('cannot register twice with the same email', function () {
     ])->assertStatus(422);
 });
 
-test('registration is rejected once the conference is fully booked', function () {
+test('registration is rejected once the conference is fully booked and keeps no waiting list', function () {
     $admin = User::factory()->create();
     $admin->assignRole('admin');
-    $conference = cf_conference($admin, ['max_capacity' => 1]);
+    $conference = cf_conference($admin, ['max_capacity' => 1, 'waitlist_enabled' => false]);
     $conference->registrations()->create(['name' => 'First', 'email' => 'first@example.com', 'status' => 'confirmed', 'registered_at' => now()]);
 
     $this->postJson("/api/v1/conferences/{$conference->slug}/register", [

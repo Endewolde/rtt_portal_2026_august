@@ -18,7 +18,7 @@ class Conference extends Model
         'start_date', 'end_date', 'timezone', 'location_type',
         'location_address', 'virtual_link', 'status', 'publish_at',
         'max_capacity', 'registration_link', 'is_featured', 'tags', 'created_by',
-        'abstract_submission_open', 'abstract_deadline', 'camera_ready_deadline', 'review_mode',
+        'abstract_submission_open', 'abstract_deadline', 'camera_ready_deadline', 'abstract_min_words', 'abstract_max_words', 'review_mode',
         'registration_questions', 'waitlist_enabled', 'feedback_open', 'book_published',
     ];
 
@@ -41,6 +41,8 @@ class Conference extends Model
         'waitlist_enabled' => 'boolean',
         'feedback_open' => 'boolean',
         'book_published' => 'boolean',
+        'abstract_min_words' => 'integer',
+        'abstract_max_words' => 'integer',
         'max_capacity' => 'integer',
     ];
 

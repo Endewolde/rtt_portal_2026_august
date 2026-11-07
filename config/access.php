@@ -204,7 +204,24 @@ return [
             'pipeline.view' => ['label' => 'Proposal pipeline', 'description' => 'Every proposal by stage.', 'roles' => [...$A, ...$D, $CO, $M]],
             'phase_completion.view' => ['label' => 'College phase completion', 'description' => 'Blind review and open defence progress per college.', 'roles' => [...$A, ...$D, $CO]],
             'annual_report.view' => ['label' => 'Annual RTT report', 'description' => 'The yearly summary report.', 'roles' => [...$A, $CO]],
+            'targets.view' => ['label' => 'Strategic targets', 'description' => 'The year\'s targets beside what has actually been achieved.', 'roles' => [...$A, ...$D]],
+            'targets.manage' => ['label' => 'Set strategic targets', 'description' => 'Set each year\'s targets for the strategic targets page.', 'roles' => ['super_admin', 'admin', 'central_officer']],
             'calendar.all' => ['label' => 'See all deadlines in the calendar', 'description' => 'Calendar shows every college\'s defences and deadlines within scope.', 'roles' => [...$A, ...$D]],
+        ],
+
+        'Support schemes' => [
+            'support_grants.manage' => ['label' => 'Run support schemes', 'description' => 'Set up publication incentives, article fees and travel grants, and decide and pay applications.', 'roles' => [...$A, ...$D]],
+        ],
+
+        'Research equipment' => [
+            'equipment.manage' => ['label' => 'Manage research equipment', 'description' => 'Add equipment to the register and approve bookings (custodians approve their own equipment).', 'roles' => [...$A, ...$D, $CO, $M]],
+        ],
+
+        'Technology transfer' => [
+            'partnerships.view' => ['label' => 'See partnerships and agreements', 'description' => 'The register of MoUs and agreements with universities, industry, government and NGOs.', 'roles' => [...$A, ...$D]],
+            'partnerships.manage' => ['label' => 'Manage partnerships and agreements', 'description' => 'Add and edit agreements, link them to projects, and get expiry reminders.', 'roles' => [...$A, 'technology_officer']],
+            'innovations.view' => ['label' => 'See the technology transfer pipeline', 'description' => 'Invention disclosures, patents, licences, spin-offs and the income they bring.', 'roles' => [...$A, ...$D]],
+            'innovations.manage' => ['label' => 'Manage the technology transfer pipeline', 'description' => 'Record disclosures, move them through patenting and licensing, and log income.', 'roles' => [...$A, 'technology_officer']],
         ],
 
         'Events' => [

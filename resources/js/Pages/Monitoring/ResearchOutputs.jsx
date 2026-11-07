@@ -5,7 +5,7 @@ import {
     FlaskConical, Layers, Search, Pencil, Trash2,
     Calendar, Building2, BarChart3, TrendingUp,
     CheckCircle2, AlertCircle, Sparkles, Clock, XCircle, ShieldCheck, ThumbsUp,
-    Wand2, Link2, AlertTriangle as AlertTriangleIcon,
+    Wand2, Link2, AlertTriangle as AlertTriangleIcon, Loader2, Quote,
 } from 'lucide-react'
 import AppLayout from '../../Layouts/AppLayout'
 import { useAuth } from '../../hooks/useAuth'
@@ -406,7 +406,7 @@ function outputToForm(output) {
     }
 }
 
-function OutputFormModal({ editing, proposals, onClose, onSuccess }) {
+function OutputFormModal({ editing, proposals, onClose, onSuccess, initialDoi = '' }) {
     const { error }        = useToast()
     const isEdit           = !!editing
     const [saving, setSaving] = useState(false)
@@ -415,9 +415,12 @@ function OutputFormModal({ editing, proposals, onClose, onSuccess }) {
     const t = form.output_type
 
     // ── DOI lookup (new outputs only) ──
-    const [doiInput, setDoiInput]   = useState('')
+    const [doiInput, setDoiInput]   = useState(initialDoi)
     const [looking, setLooking]     = useState(false)
     const [lookup, setLookup]       = useState(null)
+
+    // Opened from the ORCID import: look the DOI up straight away.
+    useEffect(() => { if (initialDoi) lookUpDoi() }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
     const lookUpDoi = async () => {
         if (!doiInput.trim()) return
@@ -738,6 +741,87 @@ function OutputFormModal({ editing, proposals, onClose, onSuccess }) {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
+// ─── ORCID import ─────────────────────────────────────────────────────────────
+
+/** The researcher's publications by ORCID iD; one click opens the form with the DOI looked up. */
+function OrcidImportModal({ onClose, onRecord }) {
+    const { user } = useAuth()
+    const [orcid, setOrcid]     = useState(user?.orcid ?? '')
+    const [data, setData]       = useState(null)
+    const [loading, setLoading] = useState(false)
+    const [problem, setProblem] = useState('')
+
+    const find = async (id = orcid) => {
+        setLoading(true)
+        setProblem('')
+        try {
+            const r = await api.get('/research-outputs/orcid-works', { params: { orcid: id || undefined }, skipErrorToast: true })
+            setData(r.data?.data)
+        } catch (e) {
+            setProblem(e.response?.data?.message ?? 'Could not load the publications.')
+            setData(null)
+        }
+        setLoading(false)
+    }
+    useEffect(() => { if (user?.orcid) find(user.orcid) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+    const works = data?.works ?? []
+    const toRecord = works.filter(w => !w.recorded)
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 backdrop-blur-sm sm:items-center sm:p-4">
+            <div role="dialog" aria-modal="true" className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
+                <div className="flex items-start justify-between gap-3 border-b border-gray-100 px-6 py-4">
+                    <div>
+                        <h2 className="text-lg font-bold text-gray-900">Import from ORCID</h2>
+                        <p className="text-xs text-gray-500">Your publications from OpenAlex, the open index of scholarly works. Pick one to record it as an output of your project.</p>
+                    </div>
+                    <button onClick={onClose} aria-label="Close" className="rounded-lg p-1 text-gray-400 hover:bg-gray-100"><X size={16} /></button>
+                </div>
+                <form onSubmit={(e) => { e.preventDefault(); find() }} className="flex gap-2 border-b border-gray-100 px-6 py-3">
+                    <input value={orcid} onChange={(e) => setOrcid(e.target.value)} placeholder="Your ORCID iD, e.g. 0000-0002-1825-0097" aria-label="ORCID iD"
+                        className="min-w-0 flex-1 rounded-xl border border-gray-200 px-3.5 py-2 font-mono text-sm focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+                    <button disabled={loading || !orcid.trim()} className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50">
+                        {loading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />} Find
+                    </button>
+                </form>
+                <div className="flex-1 overflow-y-auto px-6 py-4">
+                    {problem && <p className="rounded-xl bg-red-50 px-3.5 py-2.5 text-sm text-red-700">{problem}</p>}
+                    {loading && !data && <div className="space-y-2">{[0, 1, 2].map(i => <div key={i} className="h-16 animate-pulse rounded-xl bg-gray-100" />)}</div>}
+                    {data && works.length === 0 && <p className="py-8 text-center text-sm text-gray-500">No publications are linked to this ORCID iD yet.</p>}
+                    {data && works.length > 0 && (
+                        <>
+                            <p className="mb-3 text-xs text-gray-500">{works.length} publication{works.length === 1 ? '' : 's'} · {toRecord.length} not recorded yet{data.projects === 0 ? ' · you have no funded project to record outputs on' : ''}</p>
+                            <ul className="space-y-2">
+                                {works.map((w, i) => (
+                                    <li key={w.doi ?? i} className="flex items-start gap-3 rounded-xl border border-gray-100 px-3.5 py-3">
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-sm font-medium leading-snug text-gray-900">{w.title}</p>
+                                            <p className="mt-0.5 text-xs text-gray-500">
+                                                {[w.venue, w.year].filter(Boolean).join(' · ')}
+                                                {w.cited_by > 0 && <span className="ml-2 inline-flex items-center gap-1"><Quote size={10} /> {w.cited_by} citations</span>}
+                                            </p>
+                                            {w.suggestion && <p className="mt-1 text-[11px] text-indigo-700">Likely project: {w.suggestion.reason}</p>}
+                                        </div>
+                                        {w.recorded ? (
+                                            <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700"><CheckCircle2 size={12} /> Recorded</span>
+                                        ) : w.doi ? (
+                                            <button onClick={() => onRecord(w.doi)} disabled={data.projects === 0}
+                                                className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-40">Record</button>
+                                        ) : (
+                                            <span className="shrink-0 text-[11px] text-gray-400" title="Record it by hand with Record Output">No DOI</span>
+                                        )}
+                                    </li>
+                                ))}
+                            </ul>
+                        </>
+                    )}
+                </div>
+            </div>
+        </div>
+    )
+}
+
 export default function ResearchOutputs() {
     const { hasPermission, hasAnyPermission } = useAuth()
     const { success, error } = useToast()
@@ -747,6 +831,8 @@ export default function ResearchOutputs() {
     const [proposals,  setProposals]  = useState([])
     const [loading,    setLoading]    = useState(true)
     const [modal,      setModal]      = useState(null)   // null | 'create' | output-object
+    const [importing,  setImporting]  = useState(false)
+    const [prefillDoi, setPrefillDoi] = useState('')
     const [typeFilter, setTypeFilter] = useState('')
     const [search,     setSearch]     = useState('')
 
@@ -808,7 +894,13 @@ export default function ResearchOutputs() {
                     <p className="text-sm text-gray-500">Track, record, and manage outputs from funded and completed proposals</p>
                 </div>
                 {canAdd && (
-                    <button onClick={() => setModal('create')}
+                    <button onClick={() => setImporting(true)}
+                        className="flex items-center gap-2 px-4 py-2.5 border border-gray-200 bg-white hover:bg-gray-50 text-gray-700 text-sm font-semibold rounded-2xl transition-all shrink-0">
+                        <Link2 size={15} /> Import from ORCID
+                    </button>
+                )}
+                {canAdd && (
+                    <button onClick={() => { setPrefillDoi(''); setModal('create') }}
                         className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-2xl transition-all shadow-sm shadow-indigo-200 shrink-0">
                         <Plus size={16} /> Record Output
                     </button>
@@ -906,9 +998,14 @@ export default function ResearchOutputs() {
                 <OutputFormModal
                     editing={modal === 'create' ? null : modal}
                     proposals={proposals}
+                    initialDoi={modal === 'create' ? prefillDoi : ''}
                     onClose={() => setModal(null)}
                     onSuccess={(msg) => { success(msg); setModal(null); load() }}
                 />
+            )}
+            {importing && (
+                <OrcidImportModal onClose={() => setImporting(false)}
+                    onRecord={(doi) => { setImporting(false); setPrefillDoi(doi); setModal('create') }} />
             )}
         </AppLayout>
     )

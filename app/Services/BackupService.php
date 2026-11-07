@@ -18,9 +18,11 @@ class BackupService
     // ── Public API ────────────────────────────────────────────────────────────
 
     /**
-     * Run a full database backup, optionally deliver via email and/or Telegram.
+     * Run a full database backup, optionally deliver via email and/or Telegram. Once a
+     * day it also archives the uploaded files (documents, letters, images), and every
+     * run copies the backups to the off-site location when one is set.
      *
-     * @return array{filename:string, size_mb:float, path:string, delivered:array}
+     * @return array{filename:string, size_mb:float, path:string, delivered:array, files:?string, offsite:?bool}
      *
      * @throws \Exception
      */
@@ -56,10 +58,49 @@ class BackupService
             }
         }
 
+        // The uploads are too large to email: a weekly archive stays here, and the
+        // off-site copy mirrors them on every run (only what changed is sent).
+        $files = null;
+        if ($this->setting('backup_include_files', 'true') === 'true' && ! $this->hasRecentFilesArchive()) {
+            try {
+                $files = basename($this->archiveFiles());
+            } catch (\Exception $e) {
+                Log::error('[Backup] Files archive failed: '.$e->getMessage());
+                $this->saveSetting('last_files_backup_status', 'failed: '.$e->getMessage());
+            }
+        }
+
         $this->cleanup();
+        $offsite = $this->copyOffsite();
         $this->recordMeta($filename, $sizeStr, 'success');
 
-        return compact('filename', 'sizeMb', 'path', 'delivered');
+        return compact('filename', 'sizeMb', 'path', 'delivered', 'files', 'offsite');
+    }
+
+    /**
+     * Check that the newest backups can actually be restored from: the database dump
+     * decompresses and holds the tables, and the files archive opens.
+     *
+     * @return array{database: string, files: string}
+     */
+    public function verify(): array
+    {
+        $result = ['database' => 'missing', 'files' => 'missing'];
+
+        if ($db = $this->newest('.sql.gz')) {
+            exec('gzip -t '.escapeshellarg($db).' 2>&1', $out, $code);
+            $tables = (int) trim((string) shell_exec('gzip -dc '.escapeshellarg($db).' | grep -c "^CREATE TABLE"'));
+            $result['database'] = $code === 0 && $tables > 0 ? "ok — {$tables} tables in ".basename($db) : 'corrupt: '.basename($db);
+        }
+        if ($archive = $this->newest('.tar.gz')) {
+            exec('tar -tzf '.escapeshellarg($archive).' > /dev/null 2>&1', $out, $code);
+            $result['files'] = $code === 0 ? 'ok — '.basename($archive) : 'corrupt: '.basename($archive);
+        }
+
+        $this->saveSetting('last_backup_verify_at', now()->toDateTimeString());
+        $this->saveSetting('last_backup_verify_status', $result['database'].' | '.$result['files']);
+
+        return $result;
     }
 
     /**
@@ -75,7 +116,7 @@ class BackupService
 
         $files = [];
         foreach (scandir($this->backupDir) as $file) {
-            if (! str_ends_with($file, '.sql.gz')) {
+            if (! str_ends_with($file, '.sql.gz') && ! str_ends_with($file, '.tar.gz')) {
                 continue;
             }
             $full = $this->backupDir.'/'.$file;
@@ -83,6 +124,7 @@ class BackupService
             $sizeMb = round($bytes / 1024 / 1024, 2);
             $sizeStr = $sizeMb < 0.1 ? round($bytes / 1024, 1).' KB' : $sizeMb.' MB';
             $files[] = [
+                'kind' => str_ends_with($file, '.tar.gz') ? 'files' : 'database',
                 'filename' => $file,
                 'size' => $sizeStr,
                 'created_at' => date('Y-m-d H:i:s', filemtime($full)),
@@ -209,15 +251,102 @@ class BackupService
         $cutoff = time() - ($retainDays * 86400);
 
         foreach (scandir($this->backupDir) as $file) {
-            if (! str_ends_with($file, '.sql.gz')) {
+            if (! str_ends_with($file, '.sql.gz') && ! str_ends_with($file, '.tar.gz')) {
                 continue;
             }
             $full = $this->backupDir.'/'.$file;
-            if (filemtime($full) < $cutoff) {
+            if (str_ends_with($file, '.sql.gz') && filemtime($full) < $cutoff) {
                 unlink($full);
                 Log::info("[Backup] Deleted old backup: {$file}");
             }
         }
+
+        // Files archives are large (every uploaded document): keep only the newest two here.
+        $archives = glob($this->backupDir.'/*.tar.gz') ?: [];
+        usort($archives, fn ($a, $b) => filemtime($b) <=> filemtime($a));
+        foreach (array_slice($archives, 2) as $old) {
+            unlink($old);
+            Log::info('[Backup] Deleted old files archive: '.basename($old));
+        }
+    }
+
+    /**
+     * Archive everything people uploaded — storage/app (public and private) — except the
+     * backups themselves.
+     */
+    private function archiveFiles(): string
+    {
+        $path = $this->backupDir.'/rtt_files_'.now()->format('Y-m-d_H-i-s').'.tar.gz';
+        $cmd = 'tar -czf '.escapeshellarg($path).' -C '.escapeshellarg(storage_path('app'))
+            .' --exclude='.escapeshellarg('private/backups').' . 2>&1';
+        exec($cmd, $output, $exitCode);
+
+        // tar exits 1 when a file changed while being read: the archive is still usable.
+        if ($exitCode > 1 || ! file_exists($path)) {
+            @unlink($path);
+            throw new \Exception("tar failed (exit {$exitCode}): ".implode(' ', array_slice($output, -2)));
+        }
+        $this->saveSetting('last_files_backup_at', now()->toDateTimeString());
+        $this->saveSetting('last_files_backup_status', 'success');
+
+        return $path;
+    }
+
+    private function hasRecentFilesArchive(): bool
+    {
+        $newest = $this->newest('.tar.gz');
+
+        return $newest && filemtime($newest) > time() - 6 * 86400;
+    }
+
+    /**
+     * Copy the backup folder to the off-site location: another server over SSH
+     * ("user@host:/path", key-based login) or a mounted drive path. A failure is
+     * recorded, never thrown: the local backup still stands.
+     */
+    private function copyOffsite(): ?bool
+    {
+        $target = trim((string) $this->setting('backup_offsite_path', ''));
+        if ($target === '') {
+            return null;
+        }
+
+        $rsync = fn (string $from, string $to, string $extra = '') => 'rsync -a --timeout=600 '.$extra.'-e '
+            .escapeshellarg('ssh -o BatchMode=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=accept-new')
+            .' '.escapeshellarg(rtrim($from, '/').'/').' '.escapeshellarg(rtrim($target, '/').'/'.$to.'/').' 2>&1';
+
+        // The dumps and archives, then a live mirror of the uploads themselves.
+        exec($rsync($this->backupDir, 'backups'), $output, $exitCode);
+        if ($exitCode === 0 && $this->setting('backup_include_files', 'true') === 'true') {
+            exec($rsync(storage_path('app'), 'files', '--exclude='.escapeshellarg('private/backups').' '), $output, $exitCode);
+        }
+        $ok = $exitCode === 0;
+
+        $this->saveSetting('last_offsite_at', now()->toDateTimeString());
+        $this->saveSetting('last_offsite_status', $ok ? 'success' : 'failed: '.implode(' ', array_slice($output, -2)));
+        if (! $ok) {
+            Log::error("[Backup] Off-site copy to {$target} failed (exit {$exitCode}): ".implode(' ', $output));
+        }
+
+        return $ok;
+    }
+
+    private function newest(string $suffix): ?string
+    {
+        $found = is_dir($this->backupDir) ? glob($this->backupDir.'/*'.$suffix) : [];
+        usort($found, fn ($a, $b) => filemtime($b) <=> filemtime($a));
+
+        return $found[0] ?? null;
+    }
+
+    private function setting(string $key, ?string $default = null): ?string
+    {
+        return AppSetting::where('key', $key)->value('value') ?? $default;
+    }
+
+    private function saveSetting(string $key, string $value): void
+    {
+        AppSetting::updateOrCreate(['key' => $key], ['value' => $value, 'type' => 'string', 'group' => 'backup', 'description' => $key]);
     }
 
     private function ensureDirectory(): void

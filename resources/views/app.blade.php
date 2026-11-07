@@ -47,26 +47,39 @@
     </script>
 
     <meta name="app-name" content="{{ $meta['system_name'] }}">
-    <title inertia>{{ $meta['system_name'] }} · {{ $meta['organization_name'] }} Research &amp; Technology Transfer</title>
+    {{-- A page with its own subject (a repository record) names it in the title and description. --}}
+    @php
+        $pageMeta = $pageMeta ?? null;
+    @endphp
+    <title inertia>{{ $pageMeta ? $pageMeta['title'].' · '.$meta['organization_name'] : $meta['system_name'].' · '.$meta['organization_name'].' Research & Technology Transfer' }}</title>
 
     {{-- Search results and link previews (Telegram, Facebook, WhatsApp read these; they don't run JavaScript). --}}
     @php
         $pageUrl = url()->current();
-        $shareTitle = $meta['system_name'].' · '.$meta['organization_name'].' Research & Technology Transfer';
+        $shareTitle = $pageMeta['title'] ?? $meta['system_name'].' · '.$meta['organization_name'].' Research & Technology Transfer';
+        $shareDescription = $pageMeta['description'] ?? $meta['description'];
         $shareImage = $meta['system_logo'] ? url($meta['system_logo']) : null;
     @endphp
-    <meta name="description" content="{{ $meta['description'] }}">
+    <meta name="description" content="{{ $shareDescription }}">
     <link rel="canonical" href="{{ $pageUrl }}">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="{{ $meta['system_name'] }}">
     <meta property="og:title" content="{{ $shareTitle }}">
-    <meta property="og:description" content="{{ $meta['description'] }}">
+    <meta property="og:description" content="{{ $shareDescription }}">
     <meta property="og:url" content="{{ $pageUrl }}">
     @if ($shareImage)<meta property="og:image" content="{{ $shareImage }}">@endif
     <meta name="twitter:card" content="summary">
     <meta name="twitter:title" content="{{ $shareTitle }}">
-    <meta name="twitter:description" content="{{ $meta['description'] }}">
+    <meta name="twitter:description" content="{{ $shareDescription }}">
     @if ($shareImage)<meta name="twitter:image" content="{{ $shareImage }}">@endif
+    @if ($pageMeta)
+        @foreach ($pageMeta['tags'] ?? [] as $name => $content)
+            <meta name="{{ $name }}" content="{{ $content }}">
+        @endforeach
+        @if (! empty($pageMeta['jsonLd']))
+            <script type="application/ld+json">{!! json_encode(array_filter($pageMeta['jsonLd']), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG) !!}</script>
+        @endif
+    @endif
 
     @if($meta['favicon'])
         <link rel="icon" href="{{ $meta['favicon'] }}">

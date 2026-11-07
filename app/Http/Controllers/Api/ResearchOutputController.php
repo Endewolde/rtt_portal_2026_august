@@ -8,6 +8,7 @@ use App\Models\RepositoryRecord;
 use App\Models\ResearchOutput;
 use App\Models\User;
 use App\Services\DoiLookupService;
+use App\Services\OrcidWorksService;
 use App\Services\ResearchOutputService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -86,6 +87,42 @@ class ResearchOutputController extends Controller
     }
 
     /** Projects this user may record outputs for. */
+    /**
+     * The person's publications from their ORCID iD, each marked as already recorded or
+     * not, with the project it most likely belongs to.
+     */
+    public function orcidWorks(Request $request, OrcidWorksService $orcid): JsonResponse
+    {
+        $user = $request->user();
+        $request->validate(['orcid' => ['nullable', 'string', 'max:40']]);
+        $id = $request->string('orcid')->toString() ?: (string) $user->orcid;
+        if ($id === '') {
+            return response()->json(['data' => null, 'message' => 'Add your ORCID iD first.', 'errors' => [], 'meta' => ['code' => 'no_orcid']], 422);
+        }
+
+        $result = $orcid->works($id);
+        if (! $result['ok']) {
+            return response()->json(['data' => null, 'message' => $result['message'], 'errors' => [], 'meta' => []], 422);
+        }
+
+        // Remember a valid iD the person typed for themselves.
+        if (! $user->orcid && $request->filled('orcid')) {
+            $user->forceFill(['orcid' => strtoupper(trim(preg_replace('~^(https?://)?orcid\.org/~i', '', $id)))])->save();
+        }
+
+        $candidates = $this->eligibleQuery($user)->get(['id', 'title', 'tracker_number']);
+        $works = collect($result['works'])->map(function (array $w) use ($candidates) {
+            $existing = $w['doi'] ? $this->doiLookup->existingOutputId($w['doi']) : null;
+
+            return $w + [
+                'recorded' => (bool) $existing,
+                'suggestion' => $existing ? null : $this->doiLookup->suggestProject($candidates, $w['title'], $w['grants']),
+            ];
+        });
+
+        return response()->json(['data' => ['orcid' => $id, 'works' => $works->values(), 'projects' => $candidates->count()], 'message' => '', 'errors' => [], 'meta' => []]);
+    }
+
     private function eligibleQuery(User $user): Builder
     {
         $query = Proposal::whereIn('status', ResearchOutputService::RECORDABLE_STATUSES)

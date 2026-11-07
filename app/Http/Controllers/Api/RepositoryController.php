@@ -24,14 +24,9 @@ class RepositoryController extends Controller
 
     public function show(string $id): JsonResponse
     {
-        $record = RepositoryRecord::with([
-            'college:id,name',
-            'proposal.outputs.publication',
-            'proposal.outputs.patent',
-            'proposal.outputs.conferencePresentation',
-            'proposal.outputs.technology',
-            'proposal.outputs.communityImpact',
-        ])->findOrFail($id);
+        // Published records only, and only what the public page shows: archived records
+        // and the underlying proposal (budget, team, internal notes) are not public.
+        $record = RepositoryRecord::with('college:id,name')->where('status', 'published')->findOrFail($id);
 
         return response()->json(['data' => $record], 200);
     }

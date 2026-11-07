@@ -82,6 +82,9 @@ const DEFAULT_CRITERIA = [
 ];
 
 /** A small editable list: add, change, reorder and remove rows. */
+/** "1 speaker", "3 speakers". */
+const plural = (n, word) => `${n ?? 0} ${word}${(n ?? 0) === 1 ? '' : 's'}`;
+
 function ListEditor({ title, hint, items, onChange, blank, addLabel, render }) {
     const update = (i, patch) => onChange(items.map((it, n) => (n === i ? { ...it, ...patch } : it)));
     const move = (i, d) => {
@@ -134,6 +137,8 @@ function ConferenceModal({ conf, onSave, onClose }) {
         abstract_submission_open: conf.abstract_submission_open ?? false,
         abstract_deadline: toInput(conf.abstract_deadline),
         camera_ready_deadline: toInput(conf.camera_ready_deadline),
+        abstract_min_words: conf.abstract_min_words ?? 50,
+        abstract_max_words: conf.abstract_max_words ?? 800,
         review_mode: conf.review_mode ?? 'double_blind',
         tracks: (conf.tracks ?? []).map(t => ({ id: t.id, name: t.name, description: t.description ?? '' })),
         review_criteria: (conf.review_criteria ?? []).map(c => ({ id: c.id, name: c.name, description: c.description ?? '', weight: c.weight ?? 1 })),
@@ -145,7 +150,7 @@ function ConferenceModal({ conf, onSave, onClose }) {
         timezone: 'UTC', location_type: 'physical',
         location_address: '', virtual_link: '', status: 'draft',
         max_capacity: '', registration_link: '', is_featured: false, tags: '',
-        abstract_submission_open: false, abstract_deadline: '', camera_ready_deadline: '', publish_at: '',
+        abstract_submission_open: false, abstract_deadline: '', camera_ready_deadline: '', abstract_min_words: 50, abstract_max_words: 800, publish_at: '',
         review_mode: 'double_blind', tracks: [], registration_types: [], registration_questions: [], waitlist_enabled: true,
         review_criteria: DEFAULT_CRITERIA.map(c => ({ ...c })),
     });
@@ -191,6 +196,8 @@ function ConferenceModal({ conf, onSave, onClose }) {
                 publish_at: form.publish_at || null,
                 abstract_deadline: form.abstract_submission_open ? (form.abstract_deadline || null) : null,
                 camera_ready_deadline: form.camera_ready_deadline || null,
+                abstract_min_words: parseInt(form.abstract_min_words, 10) || 0,
+                abstract_max_words: parseInt(form.abstract_max_words, 10) || 800,
                 virtual_link: form.location_type === 'physical' ? null : (form.virtual_link || null),
                 location_address: form.location_type === 'virtual' ? null : (form.location_address || null),
                 registration_link: form.registration_link || null,
@@ -363,6 +370,16 @@ function ConferenceModal({ conf, onSave, onClose }) {
                                        className={inputCls('camera_ready_deadline')} />
                                 <p className="mt-1 text-[11px] text-gray-400">Accepted authors can upload their paper, slides or poster until then. Leave empty for no deadline.</p>
                             </Field>
+                        )}
+                        {form.abstract_submission_open && (
+                            <div className="grid grid-cols-2 gap-3">
+                                <Field label="Fewest words" err={errors.abstract_min_words}>
+                                    <input type="number" min="0" value={form.abstract_min_words} onChange={e => set('abstract_min_words', e.target.value)} className={inputCls('abstract_min_words')} />
+                                </Field>
+                                <Field label="Most words" err={errors.abstract_max_words}>
+                                    <input type="number" min="10" value={form.abstract_max_words} onChange={e => set('abstract_max_words', e.target.value)} className={inputCls('abstract_max_words')} />
+                                </Field>
+                            </div>
                         )}
                     </div>
 
@@ -1257,11 +1274,11 @@ export default function AdminConferences() {
 
                                             {/* Stats + capacity */}
                                             <div className="space-y-1.5">
-                                                <div className="flex items-center gap-3 text-xs text-gray-400">
-                                                    <span className="flex items-center gap-1"><Users size={10} />{conf.speakers_count}</span>
-                                                    <span className="flex items-center gap-1"><Clock size={10} />{conf.sessions_count}</span>
-                                                    <span className="flex items-center gap-1"><UserPlus size={10} />{conf.registrations_count}</span>
-                                                    <a href={`/admin/abstracts?conference_id=${conf.id}`} title="Abstracts" className="flex items-center gap-1 hover:text-violet-600"><FileText size={10} />{conf.abstracts_count ?? 0}</a>
+                                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+                                                    <span className="flex items-center gap-1"><Users size={10} />{plural(conf.speakers_count, 'speaker')}</span>
+                                                    <span className="flex items-center gap-1"><Clock size={10} />{plural(conf.sessions_count, 'session')}</span>
+                                                    <span className="flex items-center gap-1"><UserPlus size={10} />{conf.registrations_count ?? 0} registered</span>
+                                                    <a href={`/admin/abstracts?conference_id=${conf.id}`} className="flex items-center gap-1 hover:text-violet-600"><FileText size={10} />{plural(conf.abstracts_count, 'abstract')}</a>
                                                 </div>
                                                 {conf.max_capacity > 0 && (
                                                     <div>
@@ -1371,10 +1388,10 @@ export default function AdminConferences() {
                                             </div>
                                             <div>
                                                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Stats</p>
-                                                <div className="flex items-center gap-3 text-gray-500">
-                                                    <span className="flex items-center gap-1"><Users size={10} />{conf.speakers_count}</span>
-                                                    <span className="flex items-center gap-1"><Clock size={10} />{conf.sessions_count}</span>
-                                                    <span className="flex items-center gap-1"><UserPlus size={10} />{conf.registrations_count}</span>
+                                                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-gray-500">
+                                                    <span className="flex items-center gap-1"><Users size={10} />{plural(conf.speakers_count, 'speaker')}</span>
+                                                    <span className="flex items-center gap-1"><Clock size={10} />{plural(conf.sessions_count, 'session')}</span>
+                                                    <span className="flex items-center gap-1"><UserPlus size={10} />{conf.registrations_count ?? 0} registered</span>
                                                 </div>
                                             </div>
                                         </div>

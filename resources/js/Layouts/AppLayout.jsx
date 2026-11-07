@@ -5,7 +5,7 @@ import {
     CheckSquare, ClipboardCheck, AlertCircle, AlertTriangle,
     PieChart, DollarSign, CreditCard, CheckCircle,
     Activity, Award, BookOpen, Database, FileLock2, LifeBuoy,
-    BarChart, BarChart2, TrendingUp, TrendingDown, ChartNoAxesCombined, Handshake, Webhook, Layers,
+    BarChart, BarChart2, TrendingUp, TrendingDown, ChartNoAxesCombined, Handshake, Webhook, Layers, Target,
     Users, Building, Building2, Shield, Settings, Bell, Key,
     Globe, LogOut, FlaskConical, Brain, ChevronLeft, ChevronRight, X, Menu,
     FolderOpen, EyeOff, Presentation, ClipboardList,
@@ -262,7 +262,7 @@ const ICONS = {
     BadgeDollarSign, Trophy, Archive, ListChecks, ShieldCheck,
     Globe, CalendarDays, Banknote, Landmark,
     FlaskConical, Brain, MessageSquareHeart, Scale, ScrollText, Milestone, FileBarChart2, FolderSearch,
-    HelpCircle, Sliders, Clock, FileSignature, ShieldAlert, CalendarClock, CalendarPlus, Timer, UserPlus, Handshake, Webhook, Layers, RotateCcw,
+    HelpCircle, Sliders, Clock, FileSignature, ShieldAlert, CalendarClock, CalendarPlus, Timer, UserPlus, Handshake, Webhook, Layers, Target, RotateCcw,
     BuildingOffice: Building2,
 }
 
@@ -277,6 +277,7 @@ const GROUP_ICONS = {
     'Insights':            ChartNoAxesCombined,
     'User':                Bell,
     'Events':              CalendarDays,
+    'Technology Transfer': Handshake,
     'External Funds':      Banknote,
     'Administration':      Shield,
     'Settings':            Settings,
@@ -811,6 +812,9 @@ export default function AppLayout({ children, breadcrumb }) {
                     label: 'Funded Proposals', href: '/my-research', icon: 'Trophy',
                     show: perm('proposals.submit'),
                 },
+                // Publication incentives, article fees and travel grants — for anyone who can submit proposals.
+                { label: 'Support Grants', href: '/support-grants', icon: 'Banknote', show: perm('proposals.submit') || perm('support_grants.manage') },
+                { label: 'Research Equipment', href: '/equipment', icon: 'FlaskConical', show: perm('proposals.submit') || perm('equipment.manage') },
                 {
                     label: 'My Complaints', href: '/complaints', icon: 'AlertCircle',
                     show: perm('complaints.create') && !perm('complaints.respond') && hasSubFeature('complaints.manage'),
@@ -1054,6 +1058,7 @@ export default function AppLayout({ children, breadcrumb }) {
                     label: 'Annual RTT Report', href: '/reports/annual', icon: 'FileBarChart2',
                     show: canOpen('/reports/annual') && hasSubFeature('reports.generate'),
                 },
+                { label: 'Strategic Targets', href: '/reports/targets', icon: 'Target', show: canOpen('/reports/targets') },
                 {
                     label: 'Report Builder', href: '/reports/builder', icon: 'Sliders',
                     show: canOpen('/reports/builder') && hasSubFeature('reports.generate'),
@@ -1077,6 +1082,12 @@ export default function AppLayout({ children, breadcrumb }) {
                     label: 'Abstracts', href: '/admin/abstracts', icon: 'FileText',
                     show: canOpen('/admin/abstracts') && hasSubFeature('events.abstracts'),
                 },
+            ],
+        },
+        {
+            group: 'Technology Transfer',
+            items: [
+                { label: 'Partnerships & IP', href: '/admin/tech-transfer', icon: 'Handshake', show: canOpen('/admin/tech-transfer') },
             ],
         },
         {

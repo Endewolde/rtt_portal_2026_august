@@ -14,7 +14,7 @@ use Illuminate\Console\Command;
     {--no-email : Skip email delivery}
     {--no-telegram : Skip Telegram delivery}
 ')]
-#[Description('Run a full database backup and deliver via configured channels.')]
+#[Description('Back up the database (and once a day the uploaded files), deliver it via the configured channels and copy it off-site.')]
 class RunBackup extends Command
 {
     public function handle(BackupService $backup): int
@@ -28,6 +28,12 @@ class RunBackup extends Command
             $result = $backup->run($sendEmail, $sendTelegram);
 
             $this->info("[Backup] ✓ {$result['filename']} ({$result['sizeMb']} MB)");
+            if ($result['files']) {
+                $this->info("[Backup] ✓ Uploaded files archived: {$result['files']}");
+            }
+            if ($result['offsite'] !== null) {
+                $result['offsite'] ? $this->info('[Backup] ✓ Copied off-site.') : $this->warn('[Backup] Off-site copy failed — see the log.');
+            }
 
             if (! empty($result['delivered'])) {
                 $this->info('[Backup] Delivered via: '.implode(', ', $result['delivered']));

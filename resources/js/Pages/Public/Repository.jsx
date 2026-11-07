@@ -339,7 +339,7 @@ function EmptyState({ hasFilters, onClear }) {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
-export default function Repository() {
+export default function Repository({ recordId = null }) {
     const appSettings  = usePage().props.app_settings ?? {};
     const primaryColor = appSettings.primary_color || '#4f46e5';
     const orgName      = appSettings.organization_name || 'University';
@@ -356,7 +356,12 @@ export default function Repository() {
     const [yearTo,      setYearTo]      = useState('');
     const [showAdv,     setShowAdv]     = useState(false);
     const [colleges,    setColleges]    = useState([]);
-    const [selected,    setSelected]    = useState(null);
+    // /repository/{id} opens that record; opening one gives it its own shareable address.
+    const [selected,    setSelectedState] = useState(recordId ? { id: recordId } : null);
+    const setSelected = (record) => {
+        setSelectedState(record);
+        window.history.replaceState(window.history.state, '', record ? `/repository/${record.id}` : '/repository');
+    };
 
     const searchTimer = useRef(null);
 

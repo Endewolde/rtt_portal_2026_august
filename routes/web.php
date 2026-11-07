@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Auth\OAuthController;
 use App\Http\Controllers\DocumentController;
+use App\Http\Controllers\OpenAccessController;
 use App\Http\Controllers\PwaController;
 use App\Models\AppSetting;
 use Illuminate\Http\Request;
@@ -26,6 +27,10 @@ Route::get('/download', fn () => Inertia::render('Public/Download'));
 Route::get('/explore', fn () => Inertia::render('Public/Explore'));
 Route::get('/funding-opportunities', fn () => Inertia::render('Public/FundingOpportunities'));
 Route::get('/repository', fn () => Inertia::render('Public/Repository'));
+// Open access: a page per record for search engines, a sitemap, and OAI-PMH for harvesters.
+Route::get('/repository/{id}', [OpenAccessController::class, 'record']);
+Route::get('/sitemap.xml', [OpenAccessController::class, 'sitemap']);
+Route::get('/oai', [OpenAccessController::class, 'oai'])->middleware('throttle:60,1');
 Route::get('/tracker', fn () => Inertia::render('Public/Tracker'));
 Route::get('/certificates/verify', fn () => Inertia::render('Public/VerifyCertificate'));
 Route::get('/certificates/verify/{code}', fn () => Inertia::render('Public/VerifyCertificate'));
@@ -119,6 +124,11 @@ Route::get('/admin/faqs', fn () => Inertia::render('Admin/Faqs'));
 Route::get('/admin/feedback', fn () => Inertia::render('Admin/Feedback'));
 Route::get('/complaints', fn () => Inertia::render('Complaints/Index'));
 Route::get('/admin/conferences', fn () => Inertia::render('Admin/Conferences'));
+Route::get('/admin/tech-transfer', fn () => Inertia::render('Admin/TechTransfer'));
+Route::get('/reports/targets', fn () => Inertia::render('Reports/Targets'));
+Route::get('/support-grants', fn () => Inertia::render('SupportGrants/Index'));
+Route::get('/projects/{id}/timeline', fn () => Inertia::render('Projects/Timeline'));
+Route::get('/equipment', fn () => Inertia::render('Equipment/Index'));
 Route::get('/admin/conferences/{id}/attendance', fn () => Inertia::render('Admin/ConferenceAttendance'));
 Route::get('/admin/abstracts', fn () => Inertia::render('Admin/Abstracts'));
 Route::get('/admin/external-funds', fn () => Inertia::render('Admin/ExternalFunds'));

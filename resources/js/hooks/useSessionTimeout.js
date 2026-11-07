@@ -1,4 +1,9 @@
 import { useEffect, useRef, useCallback } from 'react'
+import api from '../lib/api'
+
+// The server ends a sign-in that goes unused for a while; someone reading without
+// clicking anything is still active, so the browser tells it so now and then.
+const KEEP_ALIVE_MS = 10 * 60 * 1000
 
 /**
  * Tracks user inactivity and calls:
@@ -11,10 +16,15 @@ export function useSessionTimeout({ timeoutMinutes, onWarn, onLogout }) {
     const lastActivityRef = useRef(Date.now())
     const warnFiredRef    = useRef(false)
     const intervalRef     = useRef(null)
+    const lastPingRef     = useRef(Date.now())
 
     const resetActivity = useCallback(() => {
         lastActivityRef.current = Date.now()
         warnFiredRef.current    = false
+        if (Date.now() - lastPingRef.current > KEEP_ALIVE_MS && localStorage.getItem('rtt_token')) {
+            lastPingRef.current = Date.now()
+            api.get('/auth/ping', { skipErrorToast: true }).catch(() => {})
+        }
     }, [])
 
     useEffect(() => {

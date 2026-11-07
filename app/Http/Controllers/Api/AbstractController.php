@@ -50,7 +50,21 @@ class AbstractController extends Controller
             'co_authors.*.orcid' => ['nullable', 'string', 'regex:'.self::ORCID],
             'co_authors.*.presenting' => 'nullable|boolean',
             'title' => 'required|string|max:500',
-            'body' => 'required|string|min:50|max:5000',
+            'body' => [
+                'required', 'string', 'max:40000',
+                // The conference's word limits apply when it is submitted; a draft can be any length.
+                function (string $attribute, mixed $value, \Closure $fail) use ($request, $conference) {
+                    if ($request->input('action') !== 'submit') {
+                        return;
+                    }
+                    $words = ConferenceAbstract::countWords((string) $value);
+                    if ($words < $conference->abstract_min_words) {
+                        $fail("The abstract has {$words} words — at least {$conference->abstract_min_words} are needed.");
+                    } elseif ($words > $conference->abstract_max_words) {
+                        $fail("The abstract has {$words} words — at most {$conference->abstract_max_words} are allowed.");
+                    }
+                },
+            ],
             'keywords' => 'nullable|array|max:10',
             'keywords.*' => 'string|max:80',
             'presentation_type' => 'required|in:oral,poster,workshop,panel,other',
@@ -66,7 +80,7 @@ class AbstractController extends Controller
         // Someone has to present it: with nobody marked, the submitter does.
         $data['co_authors'] = array_values(array_map(fn ($a) => array_filter([...$a, 'presenting' => (bool) ($a['presenting'] ?? false)], fn ($v) => $v !== null), $data['co_authors'] ?? []));
         $data['submitter_presenting'] = (bool) ($data['submitter_presenting'] ?? ! collect($data['co_authors'])->contains('presenting', true));
-        $data['word_count'] = str_word_count(strip_tags($data['body']));
+        $data['word_count'] = ConferenceAbstract::countWords($data['body']);
 
         $abstract = $revisionToken
             ? ConferenceAbstract::where('submission_token', $revisionToken)->where('conference_id', $conference->id)->first()

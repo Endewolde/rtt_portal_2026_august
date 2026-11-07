@@ -11,11 +11,13 @@ use App\Services\FeatureService;
 use App\Services\IntegrationService;
 use App\Support\Programmes;
 use App\Support\Terms;
+use App\Support\TokenLifetime;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Sanctum\Sanctum;
 use SocialiteProviders\Azure\AzureExtendSocialite;
 use SocialiteProviders\Manager\SocialiteWasCalled;
 use Spatie\Permission\Models\Role;
@@ -23,6 +25,23 @@ use Spatie\Permission\Models\Role;
 class AppServiceProvider extends ServiceProvider
 {
     public function register(): void {}
+
+    /** A php.ini size such as "128M" in bytes; -1 means no limit. */
+    private static function bytes(string|false $value): int
+    {
+        $value = trim((string) $value);
+        if ($value === '' || $value === '-1') {
+            return -1;
+        }
+        $number = (int) $value;
+
+        return match (strtolower(substr($value, -1))) {
+            'g' => $number * 1024 ** 3,
+            'm' => $number * 1024 ** 2,
+            'k' => $number * 1024,
+            default => $number,
+        };
+    }
 
     public function boot(): void
     {
@@ -34,10 +53,25 @@ class AppServiceProvider extends ServiceProvider
         // emails and bell notifications). Only listeners outside app/Listeners go here.
         Event::listen(SocialiteWasCalled::class, [AzureExtendSocialite::class, 'handle']);
 
+        // Sign-ins expire on the server too, not only in the browser (see TokenLifetime).
+        Sanctum::authenticateAccessTokensUsing(fn ($token, bool $isValid) => $isValid && TokenLifetime::isAlive($token));
+
         // dompdf writes font metrics into its font cache the first time a PDF uses a font
         // (the Ethiopic one in pdf.partials.fonts). storage/ isn't deployed, so on a fresh
         // server that folder doesn't exist and every PDF fails until it's created.
-        $this->app->resolving('dompdf', fn () => File::ensureDirectoryExists(config('dompdf.options.font_cache', storage_path('fonts'))));
+        $this->app->resolving('dompdf', function () {
+            File::ensureDirectoryExists(config('dompdf.options.font_cache', storage_path('fonts')));
+            // A long PDF (a conference's book of abstracts, the annual report) outgrows PHP's
+            // default 128 MB; give PDF requests room, never less than the server allows.
+            if (self::bytes(ini_get('memory_limit')) !== -1 && self::bytes(ini_get('memory_limit')) < 768 * 1024 * 1024) {
+                @ini_set('memory_limit', '768M');
+            }
+            // Only for a web request: in a queue worker or the scheduler this would end the whole
+            // long-running process three minutes later, not just the PDF.
+            if (! $this->app->runningInConsole()) {
+                @set_time_limit(180);
+            }
+        });
 
         $this->registerFeatureGates();
         $this->registerWebhookEvents();

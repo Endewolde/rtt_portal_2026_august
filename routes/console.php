@@ -2,6 +2,7 @@
 
 use App\Jobs\QueueHeartbeatJob;
 use App\Models\AppSetting;
+use App\Support\TokenLifetime;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Log;
@@ -39,6 +40,15 @@ foreach ($backupTimeDefaults as $settingKey => $default) {
         ->when($autoBackupEnabled)
         ->onFailure(fn () => Log::error("[Scheduler] Backup failed (scheduled {$backupRunTime})."));
 }
+
+// A backup is only worth something if it restores: check the newest ones each week.
+Schedule::command('backup:verify')->weeklyOn(0, '07:00')->when($autoBackupEnabled);
+
+// Sign-ins that have expired (see TokenLifetime) are cleared out every hour.
+Schedule::call(fn () => TokenLifetime::prune())->name('prune-expired-tokens')->hourly();
+
+// Agreements with partners that end within 90 days: remind the office and the focal person.
+Schedule::command('rtt:partnership-reminders')->dailyAt('08:15');
 
 // Lets the app see whether a queue worker is running (mail is queued only while one is).
 Schedule::call(fn () => QueueHeartbeatJob::queueIfIdle())->name('queue-worker-heartbeat')->everyMinute()->withoutOverlapping();

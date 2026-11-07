@@ -162,3 +162,45 @@ test('DOIs are normalised from links and prefixes', function () {
         ->and(DoiLookupService::normalize(' doi: 10.1000/xyz '))->toBe('10.1000/xyz')
         ->and(DoiLookupService::normalize('hello'))->toBeNull();
 });
+
+// ─── ORCID import ────────────────────────────────────────────────────────────
+
+function dl_openalex(array $works): void
+{
+    Http::fake(['api.openalex.org/*' => Http::response(['results' => $works])]);
+}
+
+test('a researcher\'s ORCID works are listed, recorded ones marked, the rest matched to a project', function () {
+    $recorded = ResearchOutput::create(['proposal_id' => $this->water->id, 'output_type' => 'journal_article', 'title' => 'Old paper', 'recorded_by' => $this->pi->id]);
+    Publication::create(['research_output_id' => $recorded->id, 'doi' => '10.1000/old']);
+    dl_openalex([
+        ['doi' => 'https://doi.org/10.1000/OLD', 'title' => 'Old paper', 'publication_year' => 2025, 'type' => 'article', 'cited_by_count' => 4],
+        ['doi' => 'https://doi.org/10.1000/new', 'title' => 'Sorghum yield under drought tolerant varieties', 'publication_year' => 2026, 'type' => 'article',
+            'primary_location' => ['source' => ['display_name' => 'Field Crops Research']], 'cited_by_count' => 0],
+        ['doi' => null, 'title' => 'A talk with no DOI', 'publication_year' => 2026, 'type' => 'other'],
+    ]);
+
+    $res = $this->actingAs($this->pi, 'sanctum')->getJson('/api/v1/research-outputs/orcid-works?orcid=https://orcid.org/0000-0002-1825-0097')->assertOk();
+    $works = collect($res->json('data.works'));
+
+    expect($works->firstWhere('doi', '10.1000/old')['recorded'])->toBeTrue()
+        ->and($works->firstWhere('doi', '10.1000/new'))->toMatchArray(['recorded' => false, 'venue' => 'Field Crops Research', 'type' => 'journal_article'])
+        ->and($works->firstWhere('doi', '10.1000/new')['suggestion']['proposal_id'])->toBe($this->crops->id)
+        ->and($works->firstWhere('title', 'A talk with no DOI')['doi'])->toBeNull()
+        // The iD they typed is remembered on their profile.
+        ->and($this->pi->fresh()->orcid)->toBe('0000-0002-1825-0097');
+    Http::assertSent(fn ($r) => str_contains(urldecode($r->url()), 'author.orcid:0000-0002-1825-0097'));
+});
+
+test('an ORCID iD with a wrong check digit is refused before anything is fetched', function () {
+    Http::fake();
+
+    $this->actingAs($this->pi, 'sanctum')->getJson('/api/v1/research-outputs/orcid-works?orcid=0000-0002-1825-0098')
+        ->assertUnprocessable()->assertJsonPath('message', fn ($m) => str_contains($m, 'not a valid ORCID'));
+    Http::assertNothingSent();
+});
+
+test('without an ORCID iD on the profile the person is asked for one', function () {
+    $this->actingAs($this->pi, 'sanctum')->getJson('/api/v1/research-outputs/orcid-works')
+        ->assertUnprocessable()->assertJsonPath('meta.code', 'no_orcid');
+});

@@ -78,9 +78,11 @@ export const ROUTE_ACCESS = [
     ['/admin/college-phase-completion', 'phase_completion.view'],
     ['/reports/college-dashboard', 'reports.view_any'],
     ['/reports/annual',            'annual_report.view'],
+    ['/reports/targets',           'targets.view'],
     ['/reports/builder',           'reports.create'],
     ['/reports',                   'reports.view_any'],
     // Events
+    ['/admin/tech-transfer',       ['partnerships.view', 'innovations.view']],
     ['/admin/conferences',         'conferences.manage'],
     ['/admin/abstracts',           'conferences.manage'],
     // Researcher & reviewer pages

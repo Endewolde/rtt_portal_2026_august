@@ -50,6 +50,17 @@ class ConferenceAbstract extends Model
         return $this->belongsTo(Conference::class);
     }
 
+    /**
+     * Words separated by spaces — so Amharic and other non-Latin text is counted too,
+     * which PHP's str_word_count does not do.
+     */
+    public static function countWords(string $text): int
+    {
+        $text = trim(strip_tags($text));
+
+        return $text === '' ? 0 : count(preg_split('/\s+/u', $text));
+    }
+
     public function session(): BelongsTo
     {
         return $this->belongsTo(ConferenceSession::class, 'session_id');

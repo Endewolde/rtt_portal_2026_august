@@ -2343,6 +2343,11 @@ export default function ProposalShow() {
 
                 {/* Running projects: time, money and progress against each other */}
                 {['funded', 'midterm_evaluation'].includes(proposal.status) && <ProjectHealthCard proposalId={proposal.id} />}
+                {FUNDED_STATUSES.includes(proposal.status) && (
+                    <Link href={`/projects/${proposal.id}/timeline`} className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3.5 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+                        Project timeline — milestones, reports and fund releases →
+                    </Link>
+                )}
 
                 {/* Tabs */}
                 {isProposalMember && (
