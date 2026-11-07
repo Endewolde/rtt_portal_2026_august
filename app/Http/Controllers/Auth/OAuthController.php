@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
 use App\Models\User;
 use App\Support\AuditLogger;
+use App\Support\PinnedHosts;
 use GuzzleHttp\Client as GuzzleClient;
 use GuzzleHttp\Exception\ClientException;
 use GuzzleHttp\Exception\ConnectException;
@@ -159,13 +160,21 @@ class OAuthController extends Controller
     {
         $attempt = 0;
         while (true) {
+            // The first try uses the provider's addresses found in the background (see
+            // PinnedHosts), so it never waits on a slow DNS lookup; the retry looks them up
+            // afresh in case those addresses have gone stale.
+            $curl = [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4];
+            if ($attempt === 0 && ($resolve = PinnedHosts::curlResolve($provider)) !== []) {
+                $curl[CURLOPT_RESOLVE] = $resolve;
+            }
+
             try {
                 return Socialite::driver($this->driverName($provider))
                     ->stateless()
                     ->setHttpClient(new GuzzleClient([
                         'connect_timeout' => 10,
                         'timeout' => 25,
-                        'curl' => [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4],
+                        'curl' => $curl,
                     ]))
                     ->user();
             } catch (ConnectException $e) {

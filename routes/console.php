@@ -2,6 +2,7 @@
 
 use App\Jobs\QueueHeartbeatJob;
 use App\Models\AppSetting;
+use App\Support\PinnedHosts;
 use App\Support\TokenLifetime;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -49,6 +50,9 @@ Schedule::call(fn () => TokenLifetime::prune())->name('prune-expired-tokens')->h
 
 // Agreements with partners that end within 90 days: remind the office and the focal person.
 Schedule::command('rtt:partnership-reminders')->dailyAt('08:15');
+
+// Sign-in providers' addresses, looked up ahead of time so signing in never waits on DNS.
+Schedule::call(fn () => PinnedHosts::refresh())->name('pin-sign-in-hosts')->everyFiveMinutes()->withoutOverlapping();
 
 // Lets the app see whether a queue worker is running (mail is queued only while one is).
 Schedule::call(fn () => QueueHeartbeatJob::queueIfIdle())->name('queue-worker-heartbeat')->everyMinute()->withoutOverlapping();
